@@ -1,0 +1,2296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tax Operations & Claim Control Center Demo</title>
+  <style>
+    :root {
+      --canvas: #f2f0ea;
+      --panel: rgba(255, 255, 255, 0.9);
+      --panel-solid: #ffffff;
+      --ink: #182630;
+      --muted: #62717d;
+      --line: #d8d4ca;
+      --accent: #0f766e;
+      --accent-soft: #d9f1ed;
+      --warning: #b76a0a;
+      --warning-soft: #fdf1da;
+      --danger: #be123c;
+      --danger-soft: #ffe1ea;
+      --neutral-soft: #edf1f5;
+      --shadow: 0 10px 24px rgba(24, 38, 48, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.1), transparent 28%),
+        radial-gradient(circle at top right, rgba(183, 106, 10, 0.08), transparent 22%),
+        var(--canvas);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    h1, h2, h3, h4, p {
+      margin: 0;
+    }
+
+    .shell {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 14px;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 14px;
+    }
+
+    .sidebar,
+    .panel,
+    .metric,
+    .kanban-column,
+    .kanban-card,
+    .detail-card {
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 14px;
+      height: calc(100vh - 28px);
+      padding: 16px;
+      border-radius: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .sidebar h1 {
+      margin-top: 8px;
+      font-size: 28px;
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .sidebar p {
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #485864;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+    }
+
+    .nav-btn {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 11px 13px;
+      border-radius: 15px;
+      background: transparent;
+      color: #4c5a68;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .nav-btn.active {
+      background: var(--ink);
+      color: white;
+    }
+
+    .sidebar-note {
+      margin-top: auto;
+      padding: 14px;
+      border-radius: 18px;
+      background: var(--accent-soft);
+      color: #124944;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .main {
+      display: grid;
+      gap: 12px;
+    }
+
+    .panel {
+      border-radius: 22px;
+      padding: 14px;
+    }
+
+    .hero,
+    .section-title,
+    .toolbar,
+    .toolbar-left,
+    .toolbar-right,
+    .chips,
+    .inline-controls,
+    .info-grid,
+    .claim-grid,
+    .role-bar,
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .hero {
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .hero h2 {
+      margin-top: 8px;
+      font-size: 33px;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin-top: 10px;
+      max-width: 920px;
+      font-size: 13px;
+      line-height: 1.65;
+      color: #485864;
+    }
+
+    .badge,
+    .pill,
+    .status-dot {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .warning {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+
+    .danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .neutral {
+      background: var(--neutral-soft);
+      color: #55636f;
+    }
+
+    .view.hidden {
+      display: none;
+    }
+
+    .section-title {
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .section-title h3 {
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .section-title p {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border-radius: 18px;
+      padding: 13px;
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .metric .sub {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 12px;
+    }
+
+    .dashboard-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .attention-list,
+    .list-grid,
+    .detail-list,
+    .timeline-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .attention-item,
+    .list-item,
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 11px;
+      border-radius: 14px;
+      background: var(--neutral-soft);
+    }
+
+    .attention-item .meta,
+    .list-item .meta,
+    .timeline-item .meta,
+    .subline {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .timeline-item {
+      grid-template-columns: 1fr;
+    }
+
+    .date-line {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .toolbar {
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+      gap: 8px;
+    }
+
+    .field,
+    .filter-input,
+    .filter-select,
+    .inline-input,
+    .inline-select,
+    .inline-textarea {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+      color: var(--ink);
+      padding: 7px 9px;
+      min-height: 32px;
+      font-size: 12px;
+    }
+
+    .filter-input {
+      min-width: 220px;
+    }
+
+    .filter-select {
+      min-width: 130px;
+    }
+
+    .inline-input {
+      width: 130px;
+    }
+
+    .inline-textarea {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+    }
+
+    .ghost-btn,
+    .solid-btn,
+    .tiny-btn,
+    .matrix-action {
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .ghost-btn,
+    .tiny-btn,
+    .matrix-action {
+      background: #eef2f6;
+      color: #42515e;
+    }
+
+    .solid-btn {
+      background: var(--ink);
+      color: white;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      border-radius: 18px;
+      background: var(--panel-solid);
+    }
+
+    table {
+      width: 100%;
+      min-width: 1400px;
+      border-collapse: collapse;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f5f4f0;
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      text-align: left;
+      color: #556470;
+    }
+
+    td {
+      border-bottom: 1px solid rgba(216, 212, 202, 0.72);
+      padding: 8px;
+      font-size: 12px;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover {
+      background: rgba(15, 118, 110, 0.03);
+    }
+
+    .client-link {
+      background: none;
+      padding: 0;
+      color: var(--ink);
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .matrix-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 32px;
+      border-radius: 10px;
+      background: var(--neutral-soft);
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .matrix-cell.done { background: #e7f6ee; }
+    .matrix-cell.awaiting { background: var(--warning-soft); }
+    .matrix-cell.temporary { background: #fff4e5; }
+    .matrix-cell.revision { background: var(--danger-soft); }
+    .matrix-cell.missing { background: #f3d9df; }
+    .matrix-cell.na { background: #edf1f5; color: #94a3af; }
+
+    .attention-flag {
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+
+    .matrix-layout {
+      display: grid;
+      grid-template-columns: 1.65fr 420px;
+      gap: 12px;
+    }
+
+    .detail-card {
+      border-radius: 18px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .detail-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .detail-stat {
+      padding: 10px;
+      border-radius: 14px;
+      background: var(--neutral-soft);
+    }
+
+    .detail-stat strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 15px;
+    }
+
+    .kanban-board {
+      display: flex;
+      gap: 10px;
+      overflow: auto;
+      padding-bottom: 4px;
+    }
+
+    .kanban-column {
+      min-width: 250px;
+      max-width: 270px;
+      border-radius: 18px;
+      padding: 11px;
+    }
+
+    .kanban-card {
+      border-radius: 14px;
+      padding: 10px;
+      margin-top: 8px;
+      background: white;
+    }
+
+    .kanban-card h4 {
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .kanban-card .meta {
+      margin-top: 5px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .claim-table table {
+      min-width: 1180px;
+    }
+
+    .empty-state {
+      padding: 18px;
+      border-radius: 16px;
+      background: var(--neutral-soft);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1380px) {
+      .metric-grid,
+      .dashboard-grid,
+      .dashboard-grid-3,
+      .matrix-layout,
+      .detail-grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div>
+        <div class="eyebrow">Tax Ops</div>
+        <h1>Control Center</h1>
+        <p>Client-centric compliance matrix plus claim and payment coordination. Built to replace fragmented Excel control sheets without losing scanning speed.</p>
+      </div>
+
+      <div class="nav">
+        <button class="nav-btn active" data-view="matrix-view">Operations <span>Recurring</span></button>
+        <button class="nav-btn" data-view="cases-view">Cases <span>Non-Recurring</span></button>
+        <button class="nav-btn" data-view="client-management-view">Clients <span>Master</span></button>
+        <button class="nav-btn" data-view="dashboard-view">Management <span>Oversight</span></button>
+      </div>
+
+      <div class="sidebar-note">
+        Core rule: one client per row. Obligation cells stay compact. Daily work happens in the matrix, not in cards.
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="panel hero">
+        <div>
+          <div class="eyebrow">Tax Operations & Claim Control Center</div>
+          <h2>Centralized like Excel, faster than Excel</h2>
+          <p>
+            The app is now structured around client rows, grouped monthly obligations, payable visibility, billing extraction,
+            claim generation, and payment tracking. It keeps the dense scanning behavior staff already rely on while giving supervisors one centralized view.
+          </p>
+        </div>
+        <div class="chips">
+          <span class="badge accent">1 client = 1 row</span>
+          <span class="badge warning">Compact obligation cells</span>
+          <span class="badge danger">Claim + payment track separated</span>
+        </div>
+      </section>
+
+      <section class="panel role-bar">
+        <div class="eyebrow">Visibility Mode</div>
+        <select id="role-select" class="filter-select">
+          <option value="staff">Normal Staff</option>
+          <option value="supervisor">Supervisor</option>
+        </select>
+        <select id="pic-select" class="filter-select">
+          <option value="Nadia">Nadia</option>
+          <option value="Raka">Raka</option>
+          <option value="Mira">Mira</option>
+        </select>
+        <span class="pill neutral" id="role-description">Staff only sees assigned clients.</span>
+      </section>
+
+      <section id="matrix-view" class="view"></section>
+      <section id="cases-view" class="view hidden"></section>
+      <section id="client-management-view" class="view hidden"></section>
+      <section id="dashboard-view" class="view hidden"></section>
+      <section id="kanban-view" class="view hidden"></section>
+      <section id="client-view" class="view hidden"></section>
+    </main>
+  </div>
+
+  <script>
+    const OBLIGATIONS = ["pph21", "unifikasi", "pph25", "phrpb1", "ppn"];
+
+    const OBLIGATION_LABELS = {
+      pph21: "PPh 21",
+      unifikasi: "Unifikasi",
+      pph25: "PPh 25 / PP55",
+      phrpb1: "PHR / PB1",
+      ppn: "PPN"
+    };
+
+    const STATUS_ICON = {
+      done: "✅",
+      awaiting: "⏳",
+      temporary: "⚠️",
+      revision: "🔁",
+      missing: "❌",
+      na: "-"
+    };
+
+    const STATUS_LABEL = {
+      done: "Done",
+      awaiting: "Awaiting Data",
+      temporary: "Temporary Submission",
+      revision: "Revision Pending",
+      missing: "Missing",
+      na: "Not Applicable"
+    };
+
+    const CLAIM_STATUSES = [
+      "Draft",
+      "Billing Ready",
+      "Claim Generated",
+      "Sent to Client",
+      "Payment Received",
+      "Tax Paid",
+      "Reported"
+    ];
+
+    const PROPOSAL_STATUSES = ["New Lead", "Proposal Sent", "Negotiation", "Won", "Lost"];
+
+    const clients = [
+      {
+        id: "client-001",
+        name: "PT Qalm Retreat",
+        pic: "Nadia",
+        followUpCount: 4,
+        notes: "Reference client using the real billing and claim document format.",
+        lastUpdated: "2026-05-20 10:25",
+        year: 2026,
+        month: "January",
+        npwp: "0614597029902000",
+        address: "Dusun Kundalini, Umeanyar, Seririt, Buleleng, Bali",
+        serviceFee: 2500000,
+        claimStatus: "Billing Ready",
+        paymentStatus: "Waiting Client Payment",
+        billingUploaded: true,
+        drivePath: "Clients/PT Qalm Retreat/2026/January/",
+        obligations: {
+          pph21: {
+            status: "done",
+            receiptNumber: "040504419477933",
+            revisionRequired: false,
+            quickNotes: "Reference amount from billing and claim PDF.",
+            payableAmount: 20513,
+            taxBreakdown: "PPH Pasal 21 Bukan Pegawai",
+            billingCode: "040504419477933",
+            kapkjs: "411618 / 100",
+            expirationDate: "2025-02-24 14:20:41"
+          },
+          unifikasi: {
+            status: "temporary",
+            receiptNumber: "",
+            revisionRequired: false,
+            quickNotes: "Mapped as PPh 23 for grouped withholding bucket in this demo.",
+            payableAmount: 56697,
+            taxBreakdown: "PPH Pasal 23",
+            billingCode: "040504419477933",
+            kapkjs: "411618 / 100",
+            expirationDate: "2025-02-24 14:20:41"
+          },
+          pph25: {
+            status: "na",
+            receiptNumber: "",
+            revisionRequired: false,
+            quickNotes: "",
+            payableAmount: 0,
+            taxBreakdown: "",
+            billingCode: "",
+            kapkjs: "",
+            expirationDate: ""
+          },
+          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          ppn: {
+            status: "na",
+            receiptNumber: "",
+            revisionRequired: false,
+            quickNotes: "",
+            payableAmount: 0,
+            taxBreakdown: "",
+            billingCode: "",
+            kapkjs: "",
+            expirationDate: ""
+          }
+        }
+      },
+      {
+        id: "client-002",
+        name: "CV Bumi Niaga",
+        pic: "Raka",
+        followUpCount: 6,
+        notes: "High rework. Sales recap often incomplete.",
+        lastUpdated: "2026-05-20 11:18",
+        year: 2026,
+        month: "May",
+        npwp: "019283746500000",
+        address: "Denpasar, Bali",
+        serviceFee: 1800000,
+        claimStatus: "Claim Generated",
+        paymentStatus: "Client Reviewing Claim",
+        billingUploaded: true,
+        drivePath: "Clients/CV Bumi Niaga/2026/May/",
+        obligations: {
+          pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          unifikasi: {
+            status: "revision",
+            receiptNumber: "REV-77821",
+            revisionRequired: true,
+            quickNotes: "Need corrected client withholding detail.",
+            payableAmount: 3100000,
+            taxBreakdown: "Vendor withholding adjustment",
+            billingCode: "11281918281",
+            kapkjs: "411128 / 402",
+            expirationDate: "2026-05-26"
+          },
+          pph25: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          phrpb1: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "Still waiting local tax base data.", payableAmount: 1500000, taxBreakdown: "PB1 estimate", billingCode: "", kapkjs: "", expirationDate: "" },
+          ppn: {
+            status: "temporary",
+            receiptNumber: "TMP-88214",
+            revisionRequired: true,
+            quickNotes: "Temporary filed pending final sales invoice list.",
+            payableAmount: 14500000,
+            taxBreakdown: "VAT output pending adjustment",
+            billingCode: "67381928122",
+            kapkjs: "411211 / 100",
+            expirationDate: "2026-05-22"
+          }
+        }
+      },
+      {
+        id: "client-003",
+        name: "PT Nusa Prima Karya",
+        pic: "Nadia",
+        followUpCount: 2,
+        notes: "Generally manageable. One open VAT concern.",
+        lastUpdated: "2026-05-20 09:42",
+        year: 2026,
+        month: "May",
+        npwp: "012345678900000",
+        address: "Badung, Bali",
+        serviceFee: 2100000,
+        claimStatus: "Sent to Client",
+        paymentStatus: "Awaiting Payment",
+        billingUploaded: false,
+        drivePath: "Clients/PT Nusa Prima Karya/2026/May/",
+        obligations: {
+          pph21: {
+            status: "done",
+            receiptNumber: "PPH21-22318",
+            revisionRequired: false,
+            quickNotes: "Finalized.",
+            payableAmount: 9800000,
+            taxBreakdown: "Payroll monthly",
+            billingCode: "98001238121",
+            kapkjs: "411121 / 100",
+            expirationDate: "2026-05-25"
+          },
+          unifikasi: { status: "done", receiptNumber: "UNI-89213", revisionRequired: false, quickNotes: "Done.", payableAmount: 1800000, taxBreakdown: "Unifikasi routine", billingCode: "12712781231", kapkjs: "411128 / 420", expirationDate: "2026-05-27" },
+          pph25: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Need installment confirmation.", payableAmount: 4900000, taxBreakdown: "Installment basis", billingCode: "", kapkjs: "", expirationDate: "" },
+          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          ppn: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "Input VAT support not sent.", payableAmount: 5400000, taxBreakdown: "Expected VAT payable", billingCode: "", kapkjs: "", expirationDate: "" }
+        }
+      },
+      {
+        id: "client-004",
+        name: "PT Samudra Retail",
+        pic: "Mira",
+        followUpCount: 3,
+        notes: "Temporary filings common on VAT cycle.",
+        lastUpdated: "2026-05-20 11:03",
+        year: 2026,
+        month: "May",
+        npwp: "098765432100000",
+        address: "Gianyar, Bali",
+        serviceFee: 2300000,
+        claimStatus: "Payment Received",
+        paymentStatus: "Ready to Pay Tax",
+        billingUploaded: true,
+        drivePath: "Clients/PT Samudra Retail/2026/May/",
+        obligations: {
+          pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          unifikasi: { status: "done", receiptNumber: "UNI-10092", revisionRequired: false, quickNotes: "No issue.", payableAmount: 900000, taxBreakdown: "Routine", billingCode: "18181928191", kapkjs: "411128 / 420", expirationDate: "2026-05-22" },
+          pph25: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          ppn: {
+            status: "temporary",
+            receiptNumber: "",
+            revisionRequired: true,
+            quickNotes: "Temporary reporting first, waiting purchase correction.",
+            payableAmount: 8800000,
+            taxBreakdown: "VAT needs final source doc",
+            billingCode: "55189129122",
+            kapkjs: "411211 / 100",
+            expirationDate: "2026-05-22"
+          }
+        }
+      },
+      {
+        id: "client-005",
+        name: "PT Delta Boga",
+        pic: "Raka",
+        followUpCount: 1,
+        notes: "Payment usually smooth once claim is sent.",
+        lastUpdated: "2026-05-20 08:55",
+        year: 2026,
+        month: "May",
+        npwp: "087654321000000",
+        address: "Denpasar, Bali",
+        serviceFee: 1950000,
+        claimStatus: "Tax Paid",
+        paymentStatus: "Waiting Reporting Finalization",
+        billingUploaded: true,
+        drivePath: "Clients/PT Delta Boga/2026/May/",
+        obligations: {
+          pph21: { status: "done", receiptNumber: "P21-99121", revisionRequired: false, quickNotes: "Paid.", payableAmount: 7100000, taxBreakdown: "Payroll", billingCode: "11127819219", kapkjs: "411121 / 100", expirationDate: "2026-05-24" },
+          unifikasi: { status: "done", receiptNumber: "UNI-22019", revisionRequired: false, quickNotes: "Done.", payableAmount: 1400000, taxBreakdown: "Standard", billingCode: "99271828122", kapkjs: "411128 / 420", expirationDate: "2026-05-24" },
+          pph25: { status: "done", receiptNumber: "P25-77100", revisionRequired: false, quickNotes: "Paid and logged.", payableAmount: 5200000, taxBreakdown: "Monthly installment", billingCode: "92128192817", kapkjs: "411125 / 100", expirationDate: "2026-05-24" },
+          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          ppn: { status: "done", receiptNumber: "PPN-87122", revisionRequired: false, quickNotes: "Waiting report close only.", payableAmount: 11300000, taxBreakdown: "VAT monthly", billingCode: "77281912819", kapkjs: "411211 / 100", expirationDate: "2026-05-24" }
+        }
+      },
+      {
+        id: "client-006",
+        name: "CV Merah Putih Logistik",
+        pic: "Mira",
+        followUpCount: 5,
+        notes: "Supervisor should watch. Claim often delayed by billing upload.",
+        lastUpdated: "2026-05-19 17:40",
+        year: 2026,
+        month: "May",
+        npwp: "076543210900000",
+        address: "Tabanan, Bali",
+        serviceFee: 1750000,
+        claimStatus: "Draft",
+        paymentStatus: "No Billing Yet",
+        billingUploaded: false,
+        drivePath: "Clients/CV Merah Putih Logistik/2026/May/",
+        obligations: {
+          pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+          unifikasi: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Awaiting payment base support.", payableAmount: 2250000, taxBreakdown: "Routine withholding", billingCode: "", kapkjs: "", expirationDate: "" },
+          pph25: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "No billing PDF yet.", payableAmount: 4100000, taxBreakdown: "Installment estimate", billingCode: "", kapkjs: "", expirationDate: "" },
+          phrpb1: {
+            status: "revision",
+            receiptNumber: "",
+            revisionRequired: true,
+            quickNotes: "Need revised hotel tax support.",
+            payableAmount: 2700000,
+            taxBreakdown: "PHR monthly",
+            billingCode: "",
+            kapkjs: "",
+            expirationDate: ""
+          },
+          ppn: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Input VAT recap not submitted.", payableAmount: 9600000, taxBreakdown: "VAT expected", billingCode: "", kapkjs: "", expirationDate: "" }
+        }
+      }
+    ];
+
+    const proposals = [
+      {
+        id: "proposal-001",
+        name: "PT Langit Wellness",
+        npwp: "031234567890000",
+        address: "Badung, Bali",
+        proposedPic: "Nadia",
+        team: "Tax Team",
+        obligations: ["pph21", "ppn"],
+        monthlyFee: 3500000,
+        annualFee: 12000000,
+        includeVat: true,
+        includePph23: true,
+        notes: "Hospitality group, wants bundled monthly compliance plus annual filing.",
+        status: "Proposal Sent"
+      },
+      {
+        id: "proposal-002",
+        name: "CV Taman Pesisir",
+        npwp: "041234567890000",
+        address: "Singaraja, Bali",
+        proposedPic: "Mira",
+        team: "Tax Team",
+        obligations: ["unifikasi", "phrpb1"],
+        monthlyFee: 2400000,
+        annualFee: 8000000,
+        includeVat: false,
+        includePph23: true,
+        notes: "Local tax-heavy client, still discussing fee scope.",
+        status: "Negotiation"
+      }
+    ];
+
+    clients.forEach((client, index) => {
+      if (!client.taxPic) client.taxPic = client.pic;
+      if (!client.accountingPic) {
+        client.accountingPic = ["Mira", "Raka", "Nadia"][index % 3];
+      }
+    });
+
+    const taxCases = [
+      {
+        id: "case-001",
+        clientId: "client-001",
+        clientName: "PT Qalm Retreat",
+        caseType: "SP2DK",
+        taxPic: "Nadia",
+        accountingPic: "Mira",
+        stage: "Document Review",
+        priority: "High",
+        dueDate: "2026-05-27",
+        notes: "Need supporting ledger and clarification memo."
+      },
+      {
+        id: "case-002",
+        clientId: "client-003",
+        clientName: "PT Nusa Prima Karya",
+        caseType: "Restitusi",
+        taxPic: "Nadia",
+        accountingPic: "Raka",
+        stage: "Submission Prep",
+        priority: "Medium",
+        dueDate: "2026-06-05",
+        notes: "Compile VAT support before filing."
+      },
+      {
+        id: "case-003",
+        clientId: "client-004",
+        clientName: "PT Samudra Retail",
+        caseType: "PKP Registration",
+        taxPic: "Mira",
+        accountingPic: "Raka",
+        stage: "Waiting Client Docs",
+        priority: "Medium",
+        dueDate: "2026-05-30",
+        notes: "Client still missing deed update."
+      },
+      {
+        id: "case-004",
+        clientId: "client-006",
+        clientName: "CV Merah Putih Logistik",
+        caseType: "Pemeriksaan",
+        taxPic: "Mira",
+        accountingPic: "Nadia",
+        stage: "Ongoing Review",
+        priority: "High",
+        dueDate: "2026-05-25",
+        notes: "Supervisor attention required this week."
+      }
+    ];
+
+    const state = {
+      currentView: "matrix-view",
+      role: "staff",
+      selectedPic: "Nadia",
+      selectedClientId: "client-001",
+      selectedObligationKey: "pph21",
+      clientManagementTab: "active",
+      autoHideCompleted: true,
+      showCompletedRows: false,
+      completionPromptClientId: "",
+      historyFilters: {
+        query: "",
+        month: "all",
+        year: "all"
+      },
+      attendance: {
+        status: "Not attended yet",
+        lastTime: "No record today",
+        message: "Attendance utility ready.",
+        credentialsSaved: true
+      },
+      filters: {
+        query: "",
+        needsAttentionOnly: false
+      }
+    };
+
+    function currency(amount) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0
+      }).format(amount || 0);
+    }
+
+    function feeModel(baseFee, includeVat, includePph23) {
+      const dpp = Number(baseFee || 0);
+      const vat = includeVat ? dpp * 0.11 : 0;
+      const pph23 = includePph23 ? dpp * 0.02 : 0;
+      const invoiceValue = dpp + vat;
+      const estimatedNetReceived = invoiceValue - pph23;
+      return { dpp, vat, pph23, invoiceValue, estimatedNetReceived };
+    }
+
+    function obligationLabelsFromKeys(keys) {
+      return keys.map((key) => OBLIGATION_LABELS[key]).join(", ");
+    }
+
+    function visibleClients() {
+      const scoped = state.role === "supervisor"
+        ? clients
+        : clients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
+
+      return scoped.filter((client) => {
+        const query = state.filters.query.trim().toLowerCase();
+        const attention = clientNeedsAttention(client).length > 0;
+        const completed = isClientCompleted(client);
+        const matchesQuery = !query || [
+          client.name,
+          client.taxPic,
+          client.accountingPic,
+          client.notes,
+          client.claimStatus,
+          client.paymentStatus
+        ].join(" ").toLowerCase().includes(query);
+        const matchesAttention = !state.filters.needsAttentionOnly || attention;
+        const matchesCompleted = state.showCompletedRows || !state.autoHideCompleted || !completed;
+        return matchesQuery && matchesAttention && matchesCompleted;
+      });
+    }
+
+    function allVisibleClientsIncludingCompleted() {
+      const scoped = state.role === "supervisor"
+        ? clients
+        : clients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
+      const query = state.filters.query.trim().toLowerCase();
+      return scoped.filter((client) => {
+        const matchesQuery = !query || [
+          client.name,
+          client.taxPic,
+          client.accountingPic,
+          client.notes,
+          client.claimStatus,
+          client.paymentStatus
+        ].join(" ").toLowerCase().includes(query);
+        return matchesQuery;
+      });
+    }
+
+    function filteredCompletedHistory() {
+      return allVisibleClientsIncludingCompleted().filter((client) => {
+        if (!isClientCompleted(client)) return false;
+        const matchesQuery = !state.historyFilters.query.trim() ||
+          `${client.name} ${client.taxPic} ${client.accountingPic}`.toLowerCase().includes(state.historyFilters.query.trim().toLowerCase());
+        const matchesMonth = state.historyFilters.month === "all" || client.month === state.historyFilters.month;
+        const matchesYear = state.historyFilters.year === "all" || String(client.year) === state.historyFilters.year;
+        return matchesQuery && matchesMonth && matchesYear;
+      });
+    }
+
+    function clientNeedsAttention(client) {
+      const reasons = [];
+      const values = Object.values(client.obligations);
+      if (values.some((item) => item.status === "awaiting")) reasons.push("Awaiting client data");
+      if (values.some((item) => item.status === "temporary")) reasons.push("Temporary submission pending");
+      if (values.some((item) => item.status === "revision")) reasons.push("Revision pending");
+      if (values.some((item) => item.status === "missing")) reasons.push("Missing obligation info");
+      if (client.followUpCount > 3) reasons.push("High follow-up burden");
+      if (client.claimStatus === "Draft" || client.claimStatus === "Billing Ready") reasons.push("Claim workflow not advanced");
+      if (!client.billingUploaded) reasons.push("Billing PDF not uploaded");
+      return reasons;
+    }
+
+    function isClientCompleted(client) {
+      const obligationsDone = Object.values(client.obligations).every((item) => ["done", "na"].includes(item.status));
+      const claimDone = ["Tax Paid", "Reported"].includes(client.claimStatus);
+      const paymentDone = ["Waiting Reporting Finalization", "Reported"].includes(client.paymentStatus);
+      return obligationsDone && claimDone && paymentDone;
+    }
+
+    function clientNotesCount(client) {
+      const obligationNotes = Object.values(client.obligations).filter((item) => item.quickNotes).length;
+      return (client.notes ? 1 : 0) + obligationNotes;
+    }
+
+    function clientNotesPreview(client) {
+      const obligationNote = Object.values(client.obligations).find((item) => item.quickNotes)?.quickNotes || "";
+      return [client.notes, obligationNote].filter(Boolean).join(" / ");
+    }
+
+    function matrixStatusSummary(client) {
+      const statuses = Object.values(client.obligations).map((item) => item.status);
+      if (statuses.includes("revision")) return "Revision cluster";
+      if (statuses.includes("temporary")) return "Temporary open";
+      if (statuses.includes("awaiting")) return "Awaiting data";
+      if (statuses.includes("missing")) return "Missing info";
+      return "Controlled";
+    }
+
+    function supervisorStats(list) {
+      const allObligations = list.flatMap((client) => OBLIGATIONS.map((key) => client.obligations[key]));
+      return {
+        awaiting: allObligations.filter((item) => item.status === "awaiting").length,
+        revisions: allObligations.filter((item) => item.status === "revision").length,
+        temporary: allObligations.filter((item) => item.status === "temporary").length,
+        followUpRisk: list.filter((client) => client.followUpCount > 3).length,
+        billingGaps: list.filter((client) => !client.billingUploaded).length
+      };
+    }
+
+    function mostProblematicClients(list) {
+      return list
+        .slice()
+        .sort((a, b) => clientNeedsAttention(b).length - clientNeedsAttention(a).length || b.followUpCount - a.followUpCount)
+        .slice(0, 6);
+    }
+
+    function billingReadyClients(list) {
+      return list
+        .filter((client) => ["Billing Ready", "Claim Generated", "Sent to Client", "Payment Received"].includes(client.claimStatus))
+        .slice(0, 6);
+    }
+
+    function renderDashboard() {
+      const list = visibleClients();
+      const stats = supervisorStats(list);
+      const attention = mostProblematicClients(list);
+      const billingQueue = billingReadyClients(list);
+      const activeCount = clients.length;
+      const proposalCount = proposals.filter((item) => !["Won", "Lost"].includes(item.status)).length;
+      const completedCount = allVisibleClientsIncludingCompleted().filter((client) => isClientCompleted(client)).length;
+      const completedHistory = filteredCompletedHistory().slice(0, 6);
+      const root = document.getElementById("dashboard-view");
+
+      root.innerHTML = `
+        <section class="panel">
+          <div class="section-title">
+            <div>
+              <h3>Management</h3>
+              <p>Supervisor oversight across recurring operations, cases, client master data, and claim/payment bottlenecks.</p>
+            </div>
+            <div class="chips">
+              <span class="badge accent">Operations visibility</span>
+              <span class="badge warning">Case workload</span>
+              <span class="badge danger">Completed rows hidden from active queue</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Attendance Utility</h3>
+                <p>Lightweight helper that uses normal browser automation against the existing attendance site, not a replacement HR system.</p>
+              </div>
+            </div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>Status</strong><div class="subline">${state.attendance.status}</div></div>
+              <div class="detail-card"><strong>Last attendance time</strong><div class="subline">${state.attendance.lastTime}</div></div>
+              <div class="detail-card"><strong>Credential storage</strong><div class="subline">${state.attendance.credentialsSaved ? "Encrypted and saved" : "Not saved yet"}</div></div>
+              <div class="detail-card"><strong>Message</strong><div class="subline">${state.attendance.message}</div></div>
+              <div class="inline-controls">
+                <button class="tiny-btn" data-save-attendance-creds="yes">Save Attendance Password</button>
+                <button class="solid-btn" data-attend="yes">Attend</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Attendance Architecture</h3>
+                <p>Future-ready utility layer kept separate from tax operations logic.</p>
+              </div>
+            </div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>Existing site</strong><div class="subline">Uses https://host-mylmats.com/login through normal browser automation.</div></div>
+              <div class="detail-card"><strong>Playwright flow</strong><div class="subline">Layer 1 login, then layer 2 attendance password submission, then success verification.</div></div>
+              <div class="detail-card"><strong>Security</strong><div class="subline">Credentials stored encrypted, never in plaintext.</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="metric-grid">
+          <div class="metric">
+            <div class="eyebrow">Awaiting Client Data</div>
+            <strong>${stats.awaiting}</strong>
+            <div class="sub">Obligation cells still blocked by client data.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">Pending Revision</div>
+            <strong>${stats.revisions}</strong>
+            <div class="sub">Revisions still visible instead of disappearing after temporary filing.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">Temporary Open</div>
+            <strong>${stats.temporary}</strong>
+            <div class="sub">Temporary submissions still needing closure.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">High Follow-Up Clients</div>
+            <strong>${stats.followUpRisk}</strong>
+            <div class="sub">Clients already above three follow-ups.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">Active Clients</div>
+            <strong>${activeCount}</strong>
+            <div class="sub">Master client records currently driving live operations.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">Open Proposals</div>
+            <strong>${proposalCount}</strong>
+            <div class="sub">Prospects kept separate until they convert into active clients.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">Billing Gaps</div>
+            <strong>${stats.billingGaps}</strong>
+            <div class="sub">Clients still lacking billing upload for claim workflow.</div>
+          </div>
+          <div class="metric">
+            <div class="eyebrow">Completed Hidden</div>
+            <strong>${completedCount}</strong>
+            <div class="sub">Rows auto-hidden from the active operations surface.</div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Needs Attention Today</h3>
+                <p>Client-centric list of the riskiest rows to act on now.</p>
+              </div>
+              <button class="solid-btn" data-switch-view="matrix-view">Open Compliance Matrix</button>
+            </div>
+            <div class="attention-list">
+              ${attention.map((client) => `
+                <div class="attention-item">
+                  <div>
+                    <strong>${client.name}</strong>
+                    <div class="meta">Tax PIC ${client.taxPic} / Accounting PIC ${client.accountingPic}</div>
+                    <div class="meta">${clientNeedsAttention(client).join(" / ")}</div>
+                  </div>
+                  <button class="tiny-btn" data-open-client="${client.id}">Open</button>
+                </div>
+              `).join("") || `<div class="empty-state">No urgent attention items in the current scope.</div>`}
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Tax Claim & Payment Watchlist</h3>
+                <p>Who is ready for claim, stuck on billing, or waiting for payment.</p>
+              </div>
+              <button class="tiny-btn" data-open-client="${billingQueue[0]?.id || ""}">Open Client Claim Context</button>
+            </div>
+            <div class="list-grid">
+              ${billingQueue.map((client) => `
+                <div class="list-item">
+                  <div>
+                    <strong>${client.name}</strong>
+                    <div class="meta">${client.claimStatus} / ${client.paymentStatus}</div>
+                  </div>
+                  <span class="pill ${client.billingUploaded ? "accent" : "warning"}">${client.billingUploaded ? "Billing in Drive" : "No Billing"}</span>
+                </div>
+              `).join("") || `<div class="empty-state">No clients currently in claim-ready flow.</div>`}
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid-3">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Compliance Matrix Preview</h3>
+                <p>One row per client, grouped obligations.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>PIC</th>
+                    <th>PPh 21</th>
+                    <th>Unifikasi</th>
+                    <th>PPh 25 / PP55</th>
+                    <th>PHR / PB1</th>
+                    <th>PPN</th>
+                    <th>Attention</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.slice(0, 6).map((client) => `
+                    <tr>
+                      <td><button class="client-link" data-open-client="${client.id}">${client.name}</button></td>
+                      <td>${client.taxPic}</td>
+                      ${OBLIGATIONS.map((key) => `<td><span class="matrix-cell ${client.obligations[key].status}">${STATUS_ICON[client.obligations[key].status]}</span></td>`).join("")}
+                      <td class="attention-flag">${clientNeedsAttention(client)[0] || "Clear"}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Bottleneck Visibility</h3>
+                <p>Clients with the most follow-up burden.</p>
+              </div>
+            </div>
+            <div class="list-grid">
+              ${list.slice().sort((a, b) => b.followUpCount - a.followUpCount).slice(0, 6).map((client) => `
+                <div class="list-item">
+                  <div>
+                    <strong>${client.name}</strong>
+                    <div class="meta">Tax ${client.taxPic} / Acc ${client.accountingPic} / ${client.claimStatus}</div>
+                  </div>
+                  <span class="pill warning">${client.followUpCount} FU</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Drive Routing</h3>
+                <p>Auto-folder path for generated tax documents.</p>
+              </div>
+            </div>
+            <div class="detail-list">
+              <div class="detail-card">
+                <strong>Clients/[Client Name]/[Year]/[Month]/Billing</strong>
+                <div class="subline">Uploaded billing PDF from DJP</div>
+              </div>
+              <div class="detail-card">
+                <strong>.../Claim Pajak</strong>
+                <div class="subline">Generated claim letter</div>
+              </div>
+              <div class="detail-card">
+                <strong>.../Bukti Bayar and .../SPT</strong>
+                <div class="subline">Payment proof and reporting archive</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top:12px;">
+          <div class="section-title">
+            <div>
+              <h3>Completed History</h3>
+              <p>Completed recurring rows stay searchable by client, month, and year, but remain hidden from the active operations terminal by default.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <input id="history-query" class="filter-input" type="text" placeholder="Filter completed history by client or PIC" value="${state.historyFilters.query}" />
+              <select id="history-month" class="filter-select">
+                <option value="all">All months</option>
+                ${["January", "May"].map((month) => `<option value="${month}" ${state.historyFilters.month === month ? "selected" : ""}>${month}</option>`).join("")}
+              </select>
+              <select id="history-year" class="filter-select">
+                <option value="all">All years</option>
+                ${["2025", "2026"].map((year) => `<option value="${year}" ${state.historyFilters.year === year ? "selected" : ""}>${year}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+          <div class="list-grid">
+            ${completedHistory.map((client) => `
+              <div class="list-item">
+                <div>
+                  <strong>${client.name}</strong>
+                  <div class="meta">${client.month} ${client.year} / Tax ${client.taxPic} / Acc ${client.accountingPic}</div>
+                </div>
+                <span class="pill accent">Completed</span>
+              </div>
+            `).join("") || `<div class="empty-state">No completed rows available in the current scope.</div>`}
+          </div>
+        </section>
+      `;
+    }
+
+    function selectedClient() {
+      return clients.find((client) => client.id === state.selectedClientId) || visibleClients()[0] || clients[0];
+    }
+
+    function renderClientManagement() {
+      const root = document.getElementById("client-management-view");
+      const activeSample = clients[0];
+      const monthlyFees = feeModel(activeSample.serviceFee, true, true);
+      const annualFees = feeModel(12000000, true, false);
+
+      root.innerHTML = `
+        <section class="panel">
+          <div class="section-title">
+            <div>
+              <h3>Client Management</h3>
+              <p>Master data center for obligations, commercial terms, proposal conversion, and downstream workflow generation.</p>
+            </div>
+            <div class="chips">
+              <span class="badge accent">Client master drives matrix</span>
+              <span class="badge warning">Proposal clients stay separate</span>
+              <span class="badge danger">Fees feed claim workflow</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
+              <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation Clients</button>
+            </div>
+            <div class="toolbar-right">
+              <button class="ghost-btn" data-switch-view="matrix-view">See Compliance Output</button>
+              <button class="ghost-btn" data-switch-view="dashboard-view">See Management Output</button>
+            </div>
+          </div>
+        </section>
+
+        ${state.clientManagementTab === "active" ? `
+          <section class="dashboard-grid">
+            <div class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>Active Clients</h3>
+                  <p>Compact master records for operationally relevant client setup only.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client Name</th>
+                      <th>NPWP</th>
+                      <th>PIC</th>
+                      <th>Division</th>
+                      <th>Obligations</th>
+                      <th>Status</th>
+                      <th>Monthly Fee</th>
+                      <th>Downstream Use</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${clients.map((client) => `
+                      <tr>
+                        <td><button class="client-link" data-open-client="${client.id}">${client.name}</button></td>
+                        <td>${client.npwp || "-"}</td>
+                        <td>${client.taxPic} / ${client.accountingPic}</td>
+                        <td>Tax Team / Accounting Team</td>
+                        <td>${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").map((key) => OBLIGATION_LABELS[key]).join(", ")}</td>
+                        <td>Active</td>
+                        <td>${currency(client.serviceFee)}</td>
+                        <td>Matrix / Claim / Dashboard</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>Compact Active Client Form</h3>
+                  <p>Fast setup for obligations, PIC, and commercial terms.</p>
+                </div>
+              </div>
+              <div class="detail-list">
+                <input class="field" value="${activeSample.name}" />
+                <input class="field" value="${activeSample.npwp || ""}" />
+                <input class="field" value="${activeSample.address || ""}" />
+                <div class="detail-grid-2">
+                  <select class="field"><option>${activeSample.taxPic}</option><option>Raka</option><option>Mira</option></select>
+                  <select class="field"><option>Tax Team</option><option>Accounting Team</option></select>
+                </div>
+                <div class="detail-grid-2">
+                  <select class="field"><option>${activeSample.accountingPic}</option><option>Raka</option><option>Mira</option><option>Nadia</option></select>
+                  <input class="field" value="2025-01-01" />
+                </div>
+                <div class="detail-card">
+                  <strong>Tax obligation checklist</strong>
+                  <div class="chips" style="margin-top:8px;">
+                    ${OBLIGATIONS.map((key) => `<span class="pill ${activeSample.obligations[key].status !== "na" ? "accent" : "neutral"}">${OBLIGATION_LABELS[key]}</span>`).join("")}
+                  </div>
+                </div>
+                <div class="detail-card">
+                  <strong>Monthly fee calculation</strong>
+                  <div class="subline" style="margin-top:8px;">
+                    DPP: ${currency(monthlyFees.dpp)}<br>
+                    VAT 11%: ${currency(monthlyFees.vat)}<br>
+                    PPh23 2%: ${currency(monthlyFees.pph23)}<br>
+                    Invoice value: ${currency(monthlyFees.invoiceValue)}<br>
+                    Estimated net received: ${currency(monthlyFees.estimatedNetReceived)}
+                  </div>
+                </div>
+                <div class="detail-card">
+                  <strong>Annual fee calculation</strong>
+                  <div class="subline" style="margin-top:8px;">
+                    DPP: ${currency(annualFees.dpp)}<br>
+                    VAT 11%: ${currency(annualFees.vat)}<br>
+                    PPh23 2%: ${currency(annualFees.pph23)}<br>
+                    Invoice value: ${currency(annualFees.invoiceValue)}<br>
+                    Estimated net received: ${currency(annualFees.estimatedNetReceived)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ` : `
+          <section class="dashboard-grid">
+            <div class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>Proposal / Quotation Clients</h3>
+                  <p>Operational proposal tracking only. No CRM complexity and no mixing with active clients.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Status</th>
+                      <th>Proposed PIC</th>
+                      <th>Proposed Obligations</th>
+                      <th>Monthly Fee</th>
+                      <th>Annual Fee</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${proposals.map((proposal) => `
+                      <tr>
+                        <td>${proposal.name}<div class="subline">${proposal.address}</div></td>
+                        <td>
+                          <select class="inline-select" data-proposal-status="${proposal.id}">
+                            ${PROPOSAL_STATUSES.map((status) => `<option value="${status}" ${proposal.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                          </select>
+                        </td>
+                        <td>${proposal.proposedPic}</td>
+                        <td>${obligationLabelsFromKeys(proposal.obligations)}</td>
+                        <td>${currency(proposal.monthlyFee)}</td>
+                        <td>${currency(proposal.annualFee)}</td>
+                        <td><button class="tiny-btn" data-convert-proposal="${proposal.id}">Convert to Active</button></td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>Proposal Setup</h3>
+                  <p>Compact proposal form for fee standardization and obligation scoping.</p>
+                </div>
+              </div>
+              <div class="detail-list">
+                <input class="field" value="${proposals[0].name}" />
+                <input class="field" value="${proposals[0].npwp}" />
+                <div class="detail-grid-2">
+                  <input class="field" value="${currency(proposals[0].monthlyFee)}" />
+                  <input class="field" value="${currency(proposals[0].annualFee)}" />
+                </div>
+                <div class="detail-card">
+                  <strong>Proposed obligations</strong>
+                  <div class="chips" style="margin-top:8px;">
+                    ${proposals[0].obligations.map((key) => `<span class="pill accent">${OBLIGATION_LABELS[key]}</span>`).join("")}
+                  </div>
+                </div>
+                <div class="detail-card">
+                  <strong>Proposal notes</strong>
+                  <div class="subline" style="margin-top:8px;">${proposals[0].notes}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        `}
+
+        <section class="dashboard-grid-3" style="margin-top:12px;">
+          <div class="panel">
+            <div class="section-title"><div><h3>Master Data Integration</h3><p>Client setup should drive every operational module.</p></div></div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>Obligation checklist</strong><div class="subline">Creates grouped compliance matrix outputs.</div></div>
+              <div class="detail-card"><strong>PIC assignment</strong><div class="subline">Controls staff visibility and ownership.</div></div>
+              <div class="detail-card"><strong>Commercial terms</strong><div class="subline">Feeds claim generation and payment expectations.</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="section-title"><div><h3>Fee Standardization</h3><p>Consistent tax fee logic without fragmented spreadsheets.</p></div></div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>DPP</strong><div class="subline">Standard base fee for monthly and annual work.</div></div>
+              <div class="detail-card"><strong>VAT 11%</strong><div class="subline">Toggled inside client commercial setup.</div></div>
+              <div class="detail-card"><strong>PPh23 2%</strong><div class="subline">Automatically estimates net received.</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="section-title"><div><h3>Proposal Conversion</h3><p>Won proposals become active operational master data.</p></div></div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>New Lead to Won</strong><div class="subline">Simple statuses only.</div></div>
+              <div class="detail-card"><strong>Won = active client</strong><div class="subline">PIC, obligations, and fees move into production setup.</div></div>
+              <div class="detail-card"><strong>No heavy CRM</strong><div class="subline">Only operationally relevant proposal control.</div></div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderMatrix() {
+      const list = visibleClients();
+      const client = selectedClient();
+      const obligation = client.obligations[state.selectedObligationKey];
+      const root = document.getElementById("matrix-view");
+      const completedHiddenCount = allVisibleClientsIncludingCompleted().filter((item) => isClientCompleted(item)).length;
+      const promptedClient = state.completionPromptClientId
+        ? clients.find((item) => item.id === state.completionPromptClientId)
+        : null;
+
+      root.innerHTML = `
+        <div class="matrix-layout">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Operations</h3>
+                <p>Recurring compliance matrix for repetitive monthly work only. Uniform rows, compact cells, no project-style clutter.</p>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="toolbar-left">
+                <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, claim status" value="${state.filters.query}" />
+                <label class="subline">
+                  <input id="attention-toggle" type="checkbox" ${state.filters.needsAttentionOnly ? "checked" : ""} />
+                  Needs attention only
+                </label>
+                <label class="subline">
+                  <input id="autohide-toggle" type="checkbox" ${state.autoHideCompleted ? "checked" : ""} />
+                  Enable auto-hide completed rows
+                </label>
+                <label class="subline">
+                  <input id="show-completed-toggle" type="checkbox" ${state.showCompletedRows ? "checked" : ""} />
+                  Show completed rows
+                </label>
+              </div>
+              <div class="toolbar-right">
+                <span class="pill neutral">${list.length} clients visible</span>
+                <span class="pill ${completedHiddenCount ? "warning" : "accent"}">${completedHiddenCount} completed hidden</span>
+                <button class="ghost-btn" data-switch-view="dashboard-view">Management View</button>
+              </div>
+            </div>
+
+            ${promptedClient ? `
+              <div class="detail-card" style="margin-bottom:10px;">
+                <strong>${promptedClient.name} completed.</strong>
+                <div class="subline" style="margin-top:6px;">Move from active queue?</div>
+                <div class="inline-controls" style="margin-top:8px;">
+                  <label class="subline">
+                    <input id="autohide-prompt-toggle" type="checkbox" ${state.autoHideCompleted ? "checked" : ""} />
+                    Enable auto-hide completed rows
+                  </label>
+                  <button class="tiny-btn" data-completion-action="keep-visible">Keep visible</button>
+                  <button class="solid-btn" data-completion-action="move-completed">Move to completed history</button>
+                </div>
+              </div>
+            ` : ``}
+
+            ${state.autoHideCompleted ? `
+              <div class="detail-card" style="margin-bottom:10px;">
+                <strong>Auto-hide completed rows</strong>
+                <div class="subline" style="margin-top:6px;">Rows disappear from active operations when compliance, claim, payment, and reporting are complete. Use "Show completed rows" to bring them back temporarily.</div>
+              </div>
+            ` : ``}
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client Name</th>
+                    <th>Tax PIC</th>
+                    <th>Accounting PIC</th>
+                    <th>PPh 21</th>
+                    <th>Unifikasi</th>
+                    <th>PPh 25 / PP55</th>
+                    <th>PHR / PB1</th>
+                    <th>PPN</th>
+                    <th>Follow-Up Count</th>
+                    <th>Notes</th>
+                    <th>Last Updated</th>
+                    <th>Needs Attention</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.map((row) => `
+                    <tr>
+                      <td>
+                        <button class="client-link" data-open-client="${row.id}">${row.name}</button>
+                        <div class="subline">${row.month} ${row.year} / ${row.claimStatus}</div>
+                      </td>
+                      <td>${row.taxPic}</td>
+                      <td>${row.accountingPic}</td>
+                      ${OBLIGATIONS.map((key) => `
+                        <td>
+                          <button
+                            class="matrix-cell ${row.obligations[key].status}"
+                            data-open-obligation="${row.id}|${key}"
+                            title="${OBLIGATION_LABELS[key]} - ${STATUS_LABEL[row.obligations[key].status]}"
+                          >${STATUS_ICON[row.obligations[key].status]}</button>
+                        </td>
+                      `).join("")}
+                      <td>${row.followUpCount}</td>
+                      <td><button class="tiny-btn" data-open-notes="${row.id}" title="${clientNotesPreview(row) || "No notes"}">NOTE ${clientNotesCount(row)}</button></td>
+                      <td>${row.lastUpdated}</td>
+                      <td class="attention-flag">${clientNeedsAttention(row).slice(0, 2).join(" / ") || "Clear"}</td>
+                    </tr>
+                  `).join("") || `<tr><td colspan="11"><div class="empty-state">No clients match the current scope.</div></td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Inline Obligation Detail</h3>
+                <p>Lightweight side detail for the selected client and tax obligation.</p>
+              </div>
+            </div>
+
+            <div class="detail-card">
+              <div class="eyebrow">Selected Client</div>
+              <h4 style="margin-top:6px;font-size:18px;">${client.name}</h4>
+              <div class="subline">Tax PIC ${client.taxPic} / Accounting PIC ${client.accountingPic} / ${OBLIGATION_LABELS[state.selectedObligationKey]}</div>
+            </div>
+
+            <div class="detail-grid-2" style="margin-top:8px;">
+              <div class="detail-stat">
+                <div class="eyebrow">Status</div>
+                <strong>${STATUS_ICON[obligation.status]} ${STATUS_LABEL[obligation.status]}</strong>
+              </div>
+              <div class="detail-stat">
+                <div class="eyebrow">Payable Amount</div>
+                <strong>${currency(obligation.payableAmount)}</strong>
+              </div>
+            </div>
+
+            <div class="detail-card" style="margin-top:8px;">
+              <div class="section-title">
+                <div>
+                  <h3 style="font-size:15px;">Quick Update</h3>
+                  <p>Update directly without leaving the matrix.</p>
+                </div>
+              </div>
+              <div class="detail-list">
+                <select id="detail-status" class="inline-select">
+                  ${Object.keys(STATUS_LABEL).map((key) => `<option value="${key}" ${obligation.status === key ? "selected" : ""}>${STATUS_LABEL[key]}</option>`).join("")}
+                </select>
+                <input id="detail-receipt" class="inline-input" type="text" value="${obligation.receiptNumber}" placeholder="Receipt number" />
+                <input id="detail-payable" class="inline-input" type="number" value="${obligation.payableAmount}" placeholder="Payable amount" />
+                <textarea id="detail-notes" class="inline-textarea" placeholder="Quick notes">${obligation.quickNotes}</textarea>
+                <div class="inline-controls">
+                  <button class="tiny-btn" data-followup-change="down">- Follow Up</button>
+                  <span class="pill neutral">${client.followUpCount} follow-ups</span>
+                  <button class="tiny-btn" data-followup-change="up">+ Follow Up</button>
+                  <button class="solid-btn" data-save-detail="yes">Save Detail</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-card" style="margin-top:8px;">
+              <div class="section-title">
+                <div>
+                  <h3 style="font-size:15px;">Billing and Claim Link</h3>
+                  <p>Same surface for payable, billing, and claim coordination.</p>
+                </div>
+              </div>
+              <div class="detail-list">
+                <div class="subline">Billing code: ${obligation.billingCode || "-"}</div>
+                <div class="subline">KAP/KJS: ${obligation.kapkjs || "-"}</div>
+                <div class="subline">Expiration: ${obligation.expirationDate || "-"}</div>
+                <div class="subline">Claim status: ${client.claimStatus}</div>
+                <div class="footer-links">
+                  <button class="tiny-btn" data-simulate-billing="yes">Simulate Billing PDF Import</button>
+                  <button class="tiny-btn" data-generate-claim="yes">Generate Claim Pajak</button>
+                  <button class="tiny-btn" data-switch-view="dashboard-view">Open Management Claim Watch</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-card" style="margin-top:8px;">
+              <div class="section-title">
+                <div>
+                  <h3 style="font-size:15px;">Notes Drawer Preview</h3>
+                  <p>Notes stay out of the row to preserve uniform scanning height.</p>
+                </div>
+              </div>
+              <div class="subline">${client.notes || "No client-level notes."}</div>
+              <div class="subline" style="margin-top:8px;">${obligation.quickNotes || "No obligation notes for the selected cell."}</div>
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderCases() {
+      const scopedCases = state.role === "supervisor"
+        ? taxCases
+        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
+      const stages = ["Waiting Client Docs", "Document Review", "Submission Prep", "Ongoing Review"];
+      const root = document.getElementById("cases-view");
+
+      root.innerHTML = `
+        <section class="panel">
+          <div class="section-title">
+            <div>
+              <h3>Cases</h3>
+              <p>Non-recurring tax cases and projects. This is where Kanban belongs for milestone and stage tracking.</p>
+            </div>
+            <div class="chips">
+              <span class="badge accent">Project-style stages</span>
+              <span class="badge warning">Dual PIC tracking</span>
+              <span class="badge danger">Separate from recurring compliance matrix</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Case Queue</h3>
+                <p>Work queue for SP2DK, pemeriksaan, registrations, restitusi, and consultation projects.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Case Type</th>
+                    <th>Tax PIC</th>
+                    <th>Accounting PIC</th>
+                    <th>Stage</th>
+                    <th>Priority</th>
+                    <th>Due Date</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${scopedCases.map((item) => `
+                    <tr>
+                      <td>${item.clientName}</td>
+                      <td>${item.caseType}</td>
+                      <td>${item.taxPic}</td>
+                      <td>${item.accountingPic}</td>
+                      <td>${item.stage}</td>
+                      <td>${item.priority}</td>
+                      <td>${item.dueDate}</td>
+                      <td><span class="pill neutral" title="${item.notes}">NOTE 1</span></td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Cases Kanban</h3>
+                <p>Kanban is restricted to cases because milestone tracking fits project work better than recurring compliance.</p>
+              </div>
+            </div>
+            <div class="kanban-board">
+              ${stages.map((stage) => `
+                <div class="kanban-column">
+                  <div class="section-title" style="margin-bottom:4px;">
+                    <div>
+                      <h3 style="font-size:13px;">${stage}</h3>
+                      <p>${scopedCases.filter((item) => item.stage === stage).length} cases</p>
+                    </div>
+                  </div>
+                  ${scopedCases.filter((item) => item.stage === stage).map((item) => `
+                    <div class="kanban-card">
+                      <h4>${item.clientName}</h4>
+                      <div class="meta">${item.caseType} / Tax ${item.taxPic} / Acc ${item.accountingPic}</div>
+                      <div class="meta">${item.priority} priority / Due ${item.dueDate}</div>
+                    </div>
+                  `).join("") || `<div class="empty-state">No cases in this stage.</div>`}
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderClientView() {
+      const client = selectedClient();
+      const root = document.getElementById("client-view");
+      const totalPayable = OBLIGATIONS.reduce((sum, key) => sum + (client.obligations[key].payableAmount || 0), 0);
+
+      root.innerHTML = `
+        <section class="panel">
+          <div class="section-title">
+            <div>
+              <div class="eyebrow">Client Operational Overview</div>
+              <h3 style="margin-top:6px;">${client.name}</h3>
+              <p>${client.notes}</p>
+            </div>
+            <div class="chips">
+              <span class="badge accent">Tax ${client.taxPic}</span>
+              <span class="badge neutral">Acc ${client.accountingPic}</span>
+              <span class="badge warning">${client.followUpCount} follow-ups</span>
+              <span class="badge danger">${client.claimStatus}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Current Operations Row</h3>
+                <p>Full grouped obligation view for the selected client.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Obligation</th>
+                    <th>Status</th>
+                    <th>Receipt</th>
+                    <th>Payable</th>
+                    <th>Revision</th>
+                    <th>Billing Code</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${OBLIGATIONS.map((key) => {
+                    const item = client.obligations[key];
+                    return `
+                      <tr>
+                        <td>${OBLIGATION_LABELS[key]}</td>
+                        <td>${STATUS_ICON[item.status]} ${STATUS_LABEL[item.status]}</td>
+                        <td>${item.receiptNumber || "-"}</td>
+                        <td>${currency(item.payableAmount)}</td>
+                        <td>${item.revisionRequired ? "Required" : "No"}</td>
+                        <td>${item.billingCode || "-"}</td>
+                        <td>${item.quickNotes || "-"}</td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Claim and Payment Summary</h3>
+                <p>Parallel workflow summary for this client.</p>
+              </div>
+            </div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>Total payable</strong><div class="subline">${currency(totalPayable)}</div></div>
+              <div class="detail-card"><strong>Claim status</strong><div class="subline">${client.claimStatus}</div></div>
+              <div class="detail-card"><strong>Payment coordination</strong><div class="subline">${client.paymentStatus}</div></div>
+              <div class="detail-card"><strong>Tax PIC</strong><div class="subline">${client.taxPic}</div></div>
+              <div class="detail-card"><strong>Accounting PIC</strong><div class="subline">${client.accountingPic}</div></div>
+              <div class="detail-card"><strong>Drive folder</strong><div class="subline">${client.drivePath}</div></div>
+              <div class="detail-card"><strong>NPWP</strong><div class="subline">${client.npwp || "-"}</div></div>
+              <div class="detail-card"><strong>Alamat</strong><div class="subline">${client.address || "-"}</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid-3">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Recurring Obligations</h3>
+                <p>Monthly grouped obligations for scanning and supervision.</p>
+              </div>
+            </div>
+            <div class="detail-list">
+              ${OBLIGATIONS.map((key) => `<div class="detail-card"><strong>${OBLIGATION_LABELS[key]}</strong></div>`).join("")}
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Timeline</h3>
+                <p>Compact operational history instead of fragmented Excel files.</p>
+              </div>
+            </div>
+            <div class="timeline-list">
+              <div class="timeline-item"><div class="date-line">${client.lastUpdated}</div><strong>Last row update</strong><div class="meta">${client.notes}</div></div>
+              <div class="timeline-item"><div class="date-line">${client.month} ${client.year}</div><strong>Claim status: ${client.claimStatus}</strong><div class="meta">${client.paymentStatus}</div></div>
+              <div class="timeline-item"><div class="date-line">Billing extraction</div><strong>${client.billingUploaded ? "Billing PDF uploaded" : "Billing PDF not uploaded"}</strong><div class="meta">${client.npwp || "-"} / ${client.drivePath}Billing</div></div>
+              <div class="timeline-item"><div class="date-line">Google Drive</div><strong>Folder created</strong><div class="meta">${client.drivePath}</div></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <h3>Operational Benefits</h3>
+                <p>Why the model is client-centric.</p>
+              </div>
+            </div>
+            <div class="detail-list">
+              <div class="detail-card"><strong>No fragmented monthly files</strong></div>
+              <div class="detail-card"><strong>Supervisor can scan all clients in one place</strong></div>
+              <div class="detail-card"><strong>Claim and compliance stay connected but separate</strong></div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function switchView(viewId) {
+      state.currentView = viewId;
+      document.querySelectorAll(".nav-btn").forEach((button) => {
+        button.classList.toggle("active", button.getAttribute("data-view") === viewId);
+      });
+      document.querySelectorAll(".view").forEach((view) => {
+        view.classList.toggle("hidden", view.id !== viewId);
+      });
+    }
+
+    function simulateBillingImport(client) {
+      const obligation = client.obligations[state.selectedObligationKey] || client.obligations.pph21;
+      obligation.billingCode = obligation.billingCode || "AUTO-" + Math.floor(Math.random() * 900000 + 100000);
+      obligation.kapkjs = obligation.kapkjs || "411211 / 100";
+      obligation.expirationDate = obligation.expirationDate || "2026-05-28";
+      client.billingUploaded = true;
+      client.claimStatus = client.claimStatus === "Draft" ? "Billing Ready" : client.claimStatus;
+      client.lastUpdated = "2026-05-20 12:05";
+    }
+
+    function generateClaim(client) {
+      client.claimStatus = "Claim Generated";
+      client.paymentStatus = "Claim Ready to Send";
+      client.lastUpdated = "2026-05-20 12:10";
+    }
+
+    function rerender() {
+      document.getElementById("role-description").textContent =
+        state.role === "supervisor"
+          ? "Supervisor sees all clients, all PICs, and bottleneck visibility."
+          : "Staff only sees assigned clients and their own operational surfaces.";
+
+      renderDashboard();
+      renderClientManagement();
+      renderMatrix();
+      renderCases();
+      renderClientView();
+      switchView(state.currentView);
+    }
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+
+      if (target.matches(".nav-btn")) {
+        switchView(target.getAttribute("data-view"));
+      }
+
+      if (target.matches("[data-switch-view]")) {
+        switchView(target.getAttribute("data-switch-view"));
+      }
+
+      if (target.matches("[data-open-client]")) {
+        state.selectedClientId = target.getAttribute("data-open-client");
+        switchView("client-view");
+        rerender();
+      }
+
+      if (target.matches("[data-open-notes]")) {
+        state.selectedClientId = target.getAttribute("data-open-notes");
+        rerender();
+      }
+
+      if (target.matches("[data-client-tab]")) {
+        state.clientManagementTab = target.getAttribute("data-client-tab");
+        rerender();
+      }
+
+      if (target.matches("[data-open-obligation]")) {
+        const [clientId, obligationKey] = target.getAttribute("data-open-obligation").split("|");
+        state.selectedClientId = clientId;
+        state.selectedObligationKey = obligationKey;
+        rerender();
+      }
+
+      if (target.matches("[data-followup-change]")) {
+        const client = selectedClient();
+        const direction = target.getAttribute("data-followup-change");
+        client.followUpCount = direction === "up" ? client.followUpCount + 1 : Math.max(0, client.followUpCount - 1);
+        client.lastUpdated = "2026-05-20 12:15";
+        rerender();
+      }
+
+      if (target.matches("[data-save-detail]")) {
+        const client = selectedClient();
+        const obligation = client.obligations[state.selectedObligationKey];
+        obligation.status = document.getElementById("detail-status").value;
+        obligation.receiptNumber = document.getElementById("detail-receipt").value.trim();
+        obligation.payableAmount = Number(document.getElementById("detail-payable").value || 0);
+        obligation.quickNotes = document.getElementById("detail-notes").value.trim();
+        obligation.revisionRequired = obligation.status === "revision" || obligation.status === "temporary";
+        client.lastUpdated = "2026-05-20 12:20";
+        rerender();
+      }
+
+      if (target.matches("[data-simulate-billing]")) {
+        const client = selectedClient();
+        simulateBillingImport(client);
+        rerender();
+      }
+
+      if (target.matches("[data-generate-claim]")) {
+        const client = selectedClient();
+        generateClaim(client);
+        rerender();
+      }
+
+      if (target.matches("[data-save-attendance-creds]")) {
+        state.attendance.credentialsSaved = true;
+        state.attendance.message = "Attendance password saved in encrypted storage.";
+        rerender();
+      }
+
+      if (target.matches("[data-attend]")) {
+        state.attendance.status = "Attendance submitted";
+        state.attendance.lastTime = "2026-05-20 08:03";
+        state.attendance.message = "Attendance posted successfully through browser automation.";
+        rerender();
+      }
+
+      if (target.matches("[data-completion-action]")) {
+        const action = target.getAttribute("data-completion-action");
+        if (action === "keep-visible") {
+          state.showCompletedRows = true;
+        }
+        if (action === "move-completed") {
+          state.showCompletedRows = false;
+        }
+        state.completionPromptClientId = "";
+        rerender();
+      }
+
+      if (target.matches("[data-convert-proposal]")) {
+        const proposal = proposals.find((item) => item.id === target.getAttribute("data-convert-proposal"));
+        if (!proposal) return;
+        proposal.status = "Won";
+        const newClientId = `client-${String(clients.length + 1).padStart(3, "0")}`;
+        clients.push({
+          id: newClientId,
+          name: proposal.name,
+          pic: proposal.proposedPic,
+          taxPic: proposal.proposedPic,
+          accountingPic: proposal.proposedPic,
+          followUpCount: 0,
+          notes: proposal.notes,
+          lastUpdated: "2026-05-20 12:35",
+          year: 2026,
+          month: "May",
+          npwp: proposal.npwp,
+          address: proposal.address,
+          serviceFee: proposal.monthlyFee,
+          claimStatus: "Draft",
+          paymentStatus: "No Billing Yet",
+          billingUploaded: false,
+          drivePath: `Clients/${proposal.name}/2026/May/`,
+          obligations: {
+            pph21: { status: proposal.obligations.includes("pph21") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+            unifikasi: { status: proposal.obligations.includes("unifikasi") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+            pph25: { status: proposal.obligations.includes("pph25") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+            phrpb1: { status: proposal.obligations.includes("phrpb1") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
+            ppn: { status: proposal.obligations.includes("ppn") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" }
+          }
+        });
+        state.selectedClientId = newClientId;
+        state.clientManagementTab = "active";
+        switchView("client-management-view");
+        rerender();
+      }
+    });
+
+    document.addEventListener("change", (event) => {
+      const target = event.target;
+
+      if (target.id === "role-select") {
+        state.role = target.value;
+        rerender();
+      }
+
+      if (target.id === "pic-select") {
+        state.selectedPic = target.value;
+        rerender();
+      }
+
+      if (target.id === "query-input") {
+        state.filters.query = target.value;
+        rerender();
+      }
+
+      if (target.id === "attention-toggle") {
+        state.filters.needsAttentionOnly = target.checked;
+        rerender();
+      }
+
+      if (target.id === "autohide-toggle") {
+        state.autoHideCompleted = target.checked;
+        rerender();
+      }
+
+      if (target.id === "show-completed-toggle") {
+        state.showCompletedRows = target.checked;
+        rerender();
+      }
+
+      if (target.id === "autohide-prompt-toggle") {
+        state.autoHideCompleted = target.checked;
+        rerender();
+      }
+
+      if (target.id === "history-query") {
+        state.historyFilters.query = target.value;
+        rerender();
+      }
+
+      if (target.id === "history-month") {
+        state.historyFilters.month = target.value;
+        rerender();
+      }
+
+      if (target.id === "history-year") {
+        state.historyFilters.year = target.value;
+        rerender();
+      }
+
+      if (target.matches("[data-claim-status]")) {
+        const client = clients.find((item) => item.id === target.getAttribute("data-claim-status"));
+        if (!client) return;
+        client.claimStatus = target.value;
+        client.lastUpdated = "2026-05-20 12:25";
+        rerender();
+      }
+
+      if (target.matches("[data-proposal-status]")) {
+        const proposal = proposals.find((item) => item.id === target.getAttribute("data-proposal-status"));
+        if (!proposal) return;
+        proposal.status = target.value;
+        rerender();
+      }
+    });
+
+    rerender();
+  </script>
+</body>
+</html>
