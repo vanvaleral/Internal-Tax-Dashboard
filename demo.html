@@ -1179,6 +1179,8 @@
     </main>
   </div>
 
+  <input id="client-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
+
   <script>
     const OBLIGATIONS = ["pph21", "unifikasi", "pph25", "phrpb1", "ppn"];
 
@@ -1553,6 +1555,7 @@
       role: "staff",
       selectedPic: "Nadia",
       selectedClientId: "client-001",
+      activeClientFormId: "client-001",
       selectedObligationKey: "pph21",
       expandedClientId: "",
       operationsTab: "active",
@@ -1654,6 +1657,107 @@
 
     function obligationLabelsFromKeys(keys) {
       return keys.map((key) => OBLIGATION_LABELS[key]).join(", ");
+    }
+
+    function clientFormTarget() {
+      return clients.find((client) => client.id === state.activeClientFormId) || clients[0];
+    }
+
+    function parseBooleanCell(value) {
+      return ["1", "true", "yes", "y"].includes(String(value || "").trim().toLowerCase());
+    }
+
+    function obligationPayload(enabled) {
+      return {
+        status: enabled ? "awaiting" : "na",
+        receiptNumber: "",
+        revisionRequired: false,
+        quickNotes: "",
+        payableAmount: 0,
+        taxBreakdown: "",
+        billingCode: "",
+        kapkjs: "",
+        expirationDate: ""
+      };
+    }
+
+    function createClientFromRow(row) {
+      const id = `client-${String(clients.length + 1).padStart(3, "0")}`;
+      const monthlyFee = Number(row.monthlyFee || 0);
+      return {
+        id,
+        name: row.name || "New Client",
+        pic: row.taxPic || "Nadia",
+        taxPic: row.taxPic || "Nadia",
+        accountingPic: row.accountingPic || row.taxPic || "Nadia",
+        followUpCount: Number(row.followUpCount || 0),
+        notes: row.notes || "",
+        lastUpdated: "2026-05-20 16:00",
+        year: Number(row.year || 2026),
+        month: row.month || "May",
+        npwp: row.npwp || "",
+        address: row.address || "",
+        serviceFee: monthlyFee,
+        claimStatus: row.claimStatus || "Draft",
+        paymentStatus: row.paymentStatus || "No Billing Yet",
+        billingUploaded: parseBooleanCell(row.billingUploaded),
+        drivePath: row.drivePath || `Clients/${row.name || "New Client"}/2026/May/`,
+        obligations: {
+          pph21: obligationPayload(parseBooleanCell(row.pph21)),
+          unifikasi: obligationPayload(parseBooleanCell(row.unifikasi)),
+          pph25: obligationPayload(parseBooleanCell(row.pph25)),
+          phrpb1: obligationPayload(parseBooleanCell(row.phrpb1)),
+          ppn: obligationPayload(parseBooleanCell(row.ppn))
+        }
+      };
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let current = "";
+      let row = [];
+      let inQuotes = false;
+      const pushCell = () => {
+        row.push(current);
+        current = "";
+      };
+      const pushRow = () => {
+        if (row.length || current) {
+          pushCell();
+          rows.push(row);
+          row = [];
+        }
+      };
+
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (char === "\"") {
+          if (inQuotes && next === "\"") {
+            current += "\"";
+            i += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === "," && !inQuotes) {
+          pushCell();
+        } else if ((char === "\n" || char === "\r") && !inQuotes) {
+          if (char === "\r" && next === "\n") i += 1;
+          pushRow();
+        } else {
+          current += char;
+        }
+      }
+      pushRow();
+
+      const [headerRow, ...dataRows] = rows.filter((item) => item.some((cell) => String(cell).trim() !== ""));
+      if (!headerRow) return [];
+      const headers = headerRow.map((cell) => String(cell).trim());
+      return dataRows.map((cells) => headers.reduce((acc, header, index) => {
+        acc[header] = (cells[index] || "").trim();
+        return acc;
+      }, {}));
     }
 
     function obligationStripMarkup(client) {
@@ -1955,7 +2059,7 @@
 
     function renderClientManagement() {
       const root = document.getElementById("client-management-view");
-      const activeSample = clients[0];
+      const activeSample = clientFormTarget();
       const monthlyFees = feeModel(activeSample.serviceFee, true, true);
       const annualFees = feeModel(12000000, true, false);
 
@@ -1970,6 +2074,9 @@
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
               </div>
               <div class="toolbar-right">
+                <button class="ghost-btn" data-new-client="yes">Add Client</button>
+                <button class="ghost-btn" data-import-clients="yes">Import CSV</button>
+                <a class="ghost-btn" href="./client-import-template.csv" download>CSV Template</a>
                 <button class="ghost-btn" data-switch-view="matrix-view">Open Operations</button>
                 <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
               </div>
@@ -2002,7 +2109,10 @@
                   <tbody>
                     ${clients.map((client) => `
                       <tr>
-                        <td><button class="client-link" data-open-client="${client.id}">${client.name}</button></td>
+                        <td>
+                          <button class="client-link" data-open-client="${client.id}">${client.name}</button>
+                          <div class="subline"><button class="tiny-btn" data-edit-client="${client.id}">Edit in form</button></div>
+                        </td>
                         <td>${client.npwp || "-"}</td>
                         <td>${client.taxPic} / ${client.accountingPic}</td>
                         <td>Tax Team / Accounting Team</td>
@@ -2032,9 +2142,10 @@
                         <div class="mobile-meta-box"><div class="eyebrow">Monthly Fee</div><strong>${currency(client.serviceFee)}</strong></div>
                         <div class="mobile-meta-box"><div class="eyebrow">Obligations</div><strong>${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").length}</strong></div>
                       </div>
-                      ${obligationStripMarkup(client)}
-                    </div>
-                  `).join("")}
+                  ${obligationStripMarkup(client)}
+                  <button class="tiny-btn" data-edit-client="${client.id}">Edit in form</button>
+                </div>
+              `).join("")}
                 </div>
               </div>
             </div>
@@ -2043,27 +2154,38 @@
               <div class="section-title">
                 <div>
                   <h3>Compact Active Client Form</h3>
-                  <p>Fast setup for obligations, PIC, and commercial terms.</p>
+                  <p>Fast add/edit for obligations, PIC, and commercial terms.</p>
                 </div>
               </div>
               <div class="detail-list">
-                <input class="field" value="${activeSample.name}" />
-                <input class="field" value="${activeSample.npwp || ""}" />
-                <input class="field" value="${activeSample.address || ""}" />
+                <div class="inline-controls">
+                  <span class="pill neutral">Editing: ${activeSample.name}</span>
+                  <button class="tiny-btn" data-new-client="yes">New Blank</button>
+                </div>
+                <input id="client-form-name" class="field" value="${activeSample.name}" placeholder="Client name" />
+                <input id="client-form-npwp" class="field" value="${activeSample.npwp || ""}" placeholder="NPWP" />
+                <input id="client-form-address" class="field" value="${activeSample.address || ""}" placeholder="Address" />
                 <div class="detail-grid-2">
-                  <select class="field"><option>${activeSample.taxPic}</option><option>Raka</option><option>Mira</option></select>
-                  <select class="field"><option>Tax Team</option><option>Accounting Team</option></select>
+                  <select id="client-form-tax-pic" class="field"><option ${activeSample.taxPic === "Nadia" ? "selected" : ""}>Nadia</option><option ${activeSample.taxPic === "Raka" ? "selected" : ""}>Raka</option><option ${activeSample.taxPic === "Mira" ? "selected" : ""}>Mira</option></select>
+                  <select id="client-form-division" class="field"><option>Tax Team</option><option>Accounting Team</option></select>
                 </div>
                 <div class="detail-grid-2">
-                  <select class="field"><option>${activeSample.accountingPic}</option><option>Raka</option><option>Mira</option><option>Nadia</option></select>
-                  <input class="field" value="2025-01-01" />
+                  <select id="client-form-accounting-pic" class="field"><option ${activeSample.accountingPic === "Nadia" ? "selected" : ""}>Nadia</option><option ${activeSample.accountingPic === "Raka" ? "selected" : ""}>Raka</option><option ${activeSample.accountingPic === "Mira" ? "selected" : ""}>Mira</option></select>
+                  <input id="client-form-start-date" class="field" value="2025-01-01" />
                 </div>
                 <div class="detail-card">
                   <strong>Tax obligation checklist</strong>
                   <div class="chips" style="margin-top:8px;">
-                    ${OBLIGATIONS.map((key) => `<span class="pill ${activeSample.obligations[key].status !== "na" ? "accent" : "neutral"}">${OBLIGATION_LABELS[key]}</span>`).join("")}
+                    ${OBLIGATIONS.map((key) => `
+                      <label class="pill ${activeSample.obligations[key].status !== "na" ? "accent" : "neutral"}">
+                        <input id="client-ob-${key}" type="checkbox" ${activeSample.obligations[key].status !== "na" ? "checked" : ""} />
+                        ${OBLIGATION_LABELS[key]}
+                      </label>
+                    `).join("")}
                   </div>
                 </div>
+                <input id="client-form-monthly-fee" class="field" value="${activeSample.serviceFee}" type="number" placeholder="Monthly fee" />
+                <textarea id="client-form-notes" class="inline-textarea" placeholder="Client notes">${activeSample.notes || ""}</textarea>
                 <div class="detail-card">
                   <strong>Monthly fee calculation</strong>
                   <div class="subline" style="margin-top:8px;">
@@ -2084,14 +2206,16 @@
                     Estimated net received: ${currency(annualFees.estimatedNetReceived)}
                   </div>
                 </div>
+                <div class="inline-controls">
+                  <button class="solid-btn" data-save-client="yes">Save Client</button>
+                </div>
               </div>
             </div>
-            </section>
+          </section>
           ` : ``}
 
           ${state.clientManagementTab === "proposal" ? `
-            <section class="dashboard-grid">
-            <div class="panel">
+            <section class="panel">
               <div class="section-title">
                 <div>
                   <h3>Proposal / Quotation Clients</h3>
@@ -2154,34 +2278,49 @@
                   `).join("")}
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div class="panel">
-              <div class="section-title">
-                <div>
-                  <h3>Proposal Setup</h3>
-                  <p>Compact proposal form for fee standardization and obligation scoping.</p>
-                </div>
-              </div>
-              <div class="detail-list">
-                <input class="field" value="${proposals[0].name}" />
-                <input class="field" value="${proposals[0].npwp}" />
-                <div class="detail-grid-2">
-                  <input class="field" value="${currency(proposals[0].monthlyFee)}" />
-                  <input class="field" value="${currency(proposals[0].annualFee)}" />
-                </div>
-                <div class="detail-card">
-                  <strong>Proposed obligations</strong>
-                  <div class="chips" style="margin-top:8px;">
-                    ${proposals[0].obligations.map((key) => `<span class="pill accent">${OBLIGATION_LABELS[key]}</span>`).join("")}
+            <section class="dashboard-grid">
+              <div class="panel">
+                <div class="section-title">
+                  <div>
+                    <h3>Proposal Setup</h3>
+                    <p>Compact proposal form for fee standardization and obligation scoping.</p>
                   </div>
                 </div>
-                <div class="detail-card">
-                  <strong>Proposal notes</strong>
-                  <div class="subline" style="margin-top:8px;">${proposals[0].notes}</div>
+                <div class="detail-list">
+                  <input class="field" value="${proposals[0].name}" />
+                  <input class="field" value="${proposals[0].npwp}" />
+                  <div class="detail-grid-2">
+                    <input class="field" value="${currency(proposals[0].monthlyFee)}" />
+                    <input class="field" value="${currency(proposals[0].annualFee)}" />
+                  </div>
+                  <div class="detail-card">
+                    <strong>Proposed obligations</strong>
+                    <div class="chips" style="margin-top:8px;">
+                      ${proposals[0].obligations.map((key) => `<span class="pill accent">${OBLIGATION_LABELS[key]}</span>`).join("")}
+                    </div>
+                  </div>
+                  <div class="detail-card">
+                    <strong>Proposal notes</strong>
+                    <div class="subline" style="margin-top:8px;">${proposals[0].notes}</div>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              <div class="panel">
+                <div class="section-title">
+                  <div>
+                    <h3>Proposal Conversion Rules</h3>
+                    <p>Keep quotation handling lightweight and operational.</p>
+                  </div>
+                </div>
+                <div class="detail-list">
+                  <div class="detail-card"><strong>Won becomes active client</strong><div class="subline">Tax PIC, accounting PIC, fees, and obligations move into production setup.</div></div>
+                  <div class="detail-card"><strong>No CRM overload</strong><div class="subline">Only statuses, fee structure, obligations, and notes stay visible here.</div></div>
+                  <div class="detail-card"><strong>Proposal to operations</strong><div class="subline">Once converted, the client becomes available for compliance matrix generation.</div></div>
+                </div>
+              </div>
             </section>
           ` : ``}
 
@@ -2366,7 +2505,7 @@
                 </div>
               ` : ``}
 
-              <div class="table-wrap">
+              <div class="table-wrap desktop-only">
                 <table>
                   <thead>
                     <tr>
@@ -2741,20 +2880,15 @@
             <div class="mobile-only">
               <div class="list-grid">
                 ${caseList.map((item) => `
-                  <div class="mobile-card">
-                    <div class="mobile-card-header">
+                  <div class="mobile-compact-item">
+                    <div class="mobile-compact-header">
                       <div>
-                        <div class="mobile-card-title">${item.clientName}</div>
-                        <div class="subline">${item.caseType}</div>
+                        <strong>${item.clientName}</strong>
+                        <div class="subline">${item.caseType} / ${item.stage}</div>
                       </div>
-                      <span class="pill ${item.priority === "High" ? "danger" : "warning"}">${item.priority}</span>
+                      <span class="pill ${item.priority === "High" ? "danger" : "warning"}">${item.priority === "High" ? "!" : "•"}</span>
                     </div>
-                    <div class="mobile-meta-grid">
-                      <div class="mobile-meta-box"><div class="eyebrow">Tax PIC</div><strong>${item.taxPic}</strong></div>
-                      <div class="mobile-meta-box"><div class="eyebrow">Accounting PIC</div><strong>${item.accountingPic}</strong></div>
-                      <div class="mobile-meta-box"><div class="eyebrow">Stage</div><strong>${item.stage}</strong></div>
-                      <div class="mobile-meta-box"><div class="eyebrow">Due</div><strong>${item.dueDate}</strong></div>
-                    </div>
+                    <div class="subline">${item.taxPic} / ${item.accountingPic} / Due ${item.dueDate}</div>
                     <div class="subline">${item.notes}</div>
                   </div>
                 `).join("") || `<div class="empty-state">No cases in this lane.</div>`}
@@ -2762,7 +2896,7 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel desktop-only">
             <div class="section-title">
               <div>
                 <h3>Cases Kanban</h3>
@@ -2786,6 +2920,26 @@
                       <div class="meta">${item.priority} priority / Due ${item.dueDate}</div>
                     </div>
                   `).join("") || `<div class="empty-state">No cases in this stage.</div>`}
+                </div>
+              `).join("")}
+            </div>
+          </section>
+
+          <section class="panel mobile-only">
+            <div class="section-title">
+              <div>
+                <h3>Stage Snapshot</h3>
+                <p>Compact case-stage summary for phone view.</p>
+              </div>
+            </div>
+            <div class="list-grid">
+              ${stages.map((stage) => `
+                <div class="list-item">
+                  <div>
+                    <strong>${stage}</strong>
+                    <div class="meta">${caseList.filter((item) => item.stage === stage).length} cases</div>
+                  </div>
+                  <span class="pill neutral">${caseList.filter((item) => item.stage === stage).length}</span>
                 </div>
               `).join("")}
             </div>
@@ -2987,6 +3141,7 @@
         role: state.role,
         selectedPic: state.selectedPic,
         selectedClientId: state.selectedClientId,
+        activeClientFormId: state.activeClientFormId,
         selectedObligationKey: state.selectedObligationKey,
         expandedClientId: state.expandedClientId,
         operationsTab: state.operationsTab,
@@ -3007,6 +3162,7 @@
       state.role = snapshot.role || state.role;
       state.selectedPic = snapshot.selectedPic || state.selectedPic;
       state.selectedClientId = snapshot.selectedClientId || state.selectedClientId;
+      state.activeClientFormId = snapshot.activeClientFormId || state.activeClientFormId;
       state.selectedObligationKey = snapshot.selectedObligationKey || state.selectedObligationKey;
       state.expandedClientId = snapshot.expandedClientId || "";
       state.operationsTab = snapshot.operationsTab || state.operationsTab;
@@ -3105,6 +3261,34 @@
         return;
       }
 
+      if (target.matches("[data-new-client]")) {
+        const newClient = createClientFromRow({
+          name: `New Client ${clients.length + 1}`,
+          taxPic: state.selectedPic,
+          accountingPic: state.selectedPic,
+          monthlyFee: 0,
+          month: "May",
+          year: "2026",
+          notes: ""
+        });
+        clients.unshift(newClient);
+        state.activeClientFormId = newClient.id;
+        state.selectedClientId = newClient.id;
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-edit-client]")) {
+        state.activeClientFormId = target.getAttribute("data-edit-client");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-import-clients]")) {
+        document.getElementById("client-csv-input").click();
+        return;
+      }
+
       if (target.matches("[data-open-client]")) {
         state.selectedClientId = target.getAttribute("data-open-client");
         switchView("client-view");
@@ -3177,6 +3361,29 @@
         if (isClientCompleted(client)) {
           state.completionPromptClientId = client.id;
         }
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-save-client]")) {
+        const client = clientFormTarget();
+        client.name = document.getElementById("client-form-name").value.trim() || client.name;
+        client.npwp = document.getElementById("client-form-npwp").value.trim();
+        client.address = document.getElementById("client-form-address").value.trim();
+        client.taxPic = document.getElementById("client-form-tax-pic").value;
+        client.accountingPic = document.getElementById("client-form-accounting-pic").value;
+        client.serviceFee = Number(document.getElementById("client-form-monthly-fee").value || 0);
+        client.notes = document.getElementById("client-form-notes").value.trim();
+        OBLIGATIONS.forEach((key) => {
+          client.obligations[key].status = document.getElementById(`client-ob-${key}`).checked ? (client.obligations[key].status === "na" ? "awaiting" : client.obligations[key].status) : "na";
+          if (!document.getElementById(`client-ob-${key}`).checked) {
+            client.obligations[key].receiptNumber = "";
+            client.obligations[key].payableAmount = 0;
+            client.obligations[key].quickNotes = "";
+          }
+        });
+        client.lastUpdated = "2026-05-20 16:10";
+        state.selectedClientId = client.id;
         commitUi("push");
         return;
       }
@@ -3293,6 +3500,7 @@
           }
         });
         state.selectedClientId = newClientId;
+        state.activeClientFormId = newClientId;
         state.clientManagementTab = "active";
         switchView("client-management-view");
         commitUi("push");
@@ -3369,6 +3577,33 @@
         proposal.status = target.value;
         commitUi("push");
         return;
+      }
+    });
+
+    document.getElementById("client-csv-input").addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const rows = parseCsv(text);
+        const imported = rows
+          .filter((row) => (row.name || "").trim())
+          .map((row) => createClientFromRow(row));
+
+        if (!imported.length) {
+          state.attendance.message = "No valid client rows found in CSV.";
+          commitUi("replace");
+          return;
+        }
+
+        imported.reverse().forEach((client) => clients.unshift(client));
+        state.activeClientFormId = imported[0].id;
+        state.selectedClientId = imported[0].id;
+        state.clientManagementTab = "active";
+        commitUi("push");
+      } finally {
+        event.target.value = "";
       }
     });
 

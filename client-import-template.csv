@@ -1,0 +1,3 @@
+name,npwp,address,taxPic,accountingPic,monthlyFee,followUpCount,month,year,claimStatus,paymentStatus,billingUploaded,drivePath,notes,pph21,unifikasi,pph25,phrpb1,ppn
+PT Example Baru,019283746500000,"Jl. Contoh No. 10, Denpasar",Nadia,Mira,2500000,0,May,2026,Draft,No Billing Yet,false,Clients/PT Example Baru/2026/May/,"New monthly compliance client",true,true,false,false,true
+CV Sample Jasa,087654321000000,"Jl. Industri No. 3, Badung",Raka,Nadia,1800000,1,May,2026,Billing Ready,Waiting Client Payment,true,Clients/CV Sample Jasa/2026/May/,"Client imported from CSV template",false,true,true,false,true
