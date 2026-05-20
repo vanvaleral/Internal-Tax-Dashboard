@@ -113,22 +113,28 @@ It should not be mixed into the recurring compliance matrix.
 ## Attendance setup
 
 1. Add the environment variables from [`.env.example`](./.env.example), especially:
-   - `ATTENDANCE_SECRET_KEY`
+   - `ATTENDANCE_PORT`
    - `ATTENDANCE_LOGIN_URL`
    - Playwright selector variables for the two-step attendance flow
-2. Install dependencies so `playwright` is available.
-3. Store the encrypted credential payload returned by `POST /api/attendance` in the authenticated user profile record.
-4. Call `POST /api/attendance` with `action: "attend"` to launch the hidden browser flow.
+2. Install dependencies so `express` and `playwright` are available.
+3. Start the attendance microservice with `npm run server`.
+4. Call `POST /api/attendance/checkin` with:
+   - `username`
+   - `password`
+   - `attendancePassword`
+5. For this demo, attendance credentials are kept in memory only during the request.
+6. For production, store user attendance secrets encrypted at rest and never in plaintext.
 
 ## Suggested next implementation steps
 
 1. Wire `staff_profiles.auth_user_id` to real authenticated users.
 2. Add row-level security policies after deciding whether all staff should see all clients or only their assignments.
-3. Add a small scheduled job or Supabase cron to run `select generate_monthly_compliance_tasks(current_date);` every month.
+3. Add a small scheduled job or Supabase cron to generate the next month of client-period operations rows from active client obligations every month.
 4. Add filtered operations presets by PIC, month, attention-needed state, and completed-history toggles.
 5. Formalize client-management tables for active clients, proposal clients, client obligations, commercial terms, and dual PIC ownership.
 6. Add dedicated case tables and workflows separate from recurring compliance rows.
 7. Persist encrypted attendance credentials per user and connect the attendance widget to authenticated profiles.
+8. Replace the placeholder Playwright selectors with the real DOM selectors from `https://host-mylmats.com/login`.
 
 ## Notes
 
@@ -136,3 +142,4 @@ It should not be mixed into the recurring compliance matrix.
 - Accounting Team support is intentionally minimal in this MVP and can later reuse the same client/staff foundation with a lighter case workflow.
 - The standalone demo now reflects the intended production direction: four primary modules with operations matrix first, cases Kanban separate, client master data central, and management oversight distinct.
 - Attendance automation is intentionally implemented as a utility layer and should remain isolated from the core tax workflow model.
+- The current attendance backend is a lightweight Node/Express microservice in [`server/`](./server) so the HTML demo can call a real backend instead of attempting cross-site browser automation from frontend JavaScript.

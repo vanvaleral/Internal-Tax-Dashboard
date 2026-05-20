@@ -1,0 +1,24 @@
+Double-click:
+
+1. git-pull.bat
+   Use this before starting work on a computer.
+
+2. git-push.bat
+   Use this after making changes.
+   It will:
+   - show git status
+   - ask for a commit message
+   - add all files
+   - commit
+   - push to GitHub
+
+Recommended habit:
+
+- Start work: git-pull.bat
+- Finish work: git-push.bat
+
+Important:
+
+- Make sure Git is installed first.
+- If git-push.bat says there is nothing to commit, that usually means no files changed.
+- If you use two computers, always pull first before editing.

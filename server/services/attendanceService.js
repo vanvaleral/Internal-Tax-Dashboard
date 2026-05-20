@@ -1,25 +1,20 @@
-import { decryptSecret } from "@/lib/attendance/crypto";
-import type { AttendanceRunResult, StoredAttendanceCredentials } from "@/lib/attendance/types";
+const { chromium } = require("playwright");
 
-function requiredEnv(name: string) {
+function requiredEnv(name) {
   const value = process.env[name];
 
   if (!value) {
-    throw new Error(`${name} is not configured.`);
+    throw new Error(`${name} is not configured`);
   }
 
   return value;
 }
 
-export async function submitAttendance(credentials: StoredAttendanceCredentials): Promise<AttendanceRunResult> {
-  const { chromium } = await import("playwright");
+async function runAttendanceCheckin({ username, password, attendancePassword }) {
   const browser = await chromium.launch({ headless: true });
 
   try {
     const page = await browser.newPage();
-    const username = credentials.username;
-    const password = decryptSecret(credentials.passwordEncrypted);
-    const attendancePassword = decryptSecret(credentials.attendancePasswordEncrypted);
 
     await page.goto(process.env.ATTENDANCE_LOGIN_URL || "https://host-mylmats.com/login", {
       waitUntil: "domcontentloaded"
@@ -38,16 +33,20 @@ export async function submitAttendance(credentials: StoredAttendanceCredentials)
     });
 
     return {
-      ok: true,
-      message: "Attendance submitted successfully.",
-      attendedAt: new Date().toISOString()
+      success: true,
+      message: "Attendance submitted successfully",
+      timestamp: new Date().toISOString()
     };
   } catch (error) {
     return {
-      ok: false,
-      message: error instanceof Error ? error.message : "Attendance automation failed."
+      success: false,
+      message: error instanceof Error ? error.message : "Attendance automation failed"
     };
   } finally {
     await browser.close();
   }
 }
+
+module.exports = {
+  runAttendanceCheckin
+};

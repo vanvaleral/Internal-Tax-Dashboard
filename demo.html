@@ -20,6 +20,7 @@
       --danger-soft: #ffe1ea;
       --neutral-soft: #edf1f5;
       --shadow: 0 10px 24px rgba(24, 38, 48, 0.08);
+      --workspace-width: 1320px;
     }
 
     * {
@@ -54,7 +55,7 @@
     }
 
     .shell {
-      max-width: 1680px;
+      max-width: 1780px;
       margin: 0 auto;
       padding: 14px;
       display: grid;
@@ -143,6 +144,14 @@
     .main {
       display: grid;
       gap: 12px;
+      align-content: start;
+      justify-items: center;
+    }
+
+    .main > .panel,
+    .main > .view {
+      width: 100%;
+      max-width: var(--workspace-width);
     }
 
     .panel {
@@ -222,6 +231,10 @@
       display: none;
     }
 
+    .hidden {
+      display: none !important;
+    }
+
     .section-title {
       justify-content: space-between;
       margin-bottom: 10px;
@@ -235,6 +248,138 @@
     .section-title p {
       color: var(--muted);
       font-size: 12px;
+    }
+
+    .global-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .breadcrumb {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .workspace-label {
+      margin-top: 4px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .workspace-note {
+      margin-top: 6px;
+      max-width: 760px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .workspace-frame {
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+      max-width: var(--workspace-width);
+    }
+
+    .workspace-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .sidebar-stack {
+      display: grid;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .profile-card,
+    .attendance-widget {
+      padding: 12px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+    }
+
+    .mobile-utility-bar {
+      margin-top: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mobile-utility-card {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+    }
+
+    .mobile-utility-card strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 15px;
+    }
+
+    .mobile-summary-row {
+      display: none;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+    }
+
+    .mobile-summary-main {
+      min-width: 0;
+    }
+
+    .mobile-summary-title {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .mobile-summary-subtitle {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mobile-summary-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .mobile-scope-panel {
+      display: none;
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+    }
+
+    .profile-name {
+      margin-top: 4px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .attendance-widget .inline-controls {
+      margin-top: 8px;
     }
 
     .metric-grid {
@@ -276,6 +421,12 @@
       gap: 12px;
     }
 
+    .compact-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
     .attention-list,
     .list-grid,
     .detail-list,
@@ -303,6 +454,103 @@
       margin-top: 4px;
       font-size: 12px;
       color: var(--muted);
+    }
+
+    .desktop-only {
+      display: block;
+    }
+
+    .mobile-only {
+      display: none;
+    }
+
+    .mobile-card {
+      border-radius: 18px;
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      background: rgba(255, 255, 255, 0.92);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mobile-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .mobile-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .mobile-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .mobile-meta-box {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--neutral-soft);
+    }
+
+    .mobile-meta-box strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 12px;
+    }
+
+    .obligation-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .obligation-mini {
+      border-radius: 12px;
+      background: var(--neutral-soft);
+      padding: 8px 4px;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .mobile-compact-item {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 16px;
+      background: var(--neutral-soft);
+    }
+
+    .mobile-compact-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .mobile-compact-header strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+
+    .mobile-compact-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .obligation-mini .icon {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 16px;
     }
 
     .timeline-item {
@@ -390,8 +638,12 @@
 
     table {
       width: 100%;
-      min-width: 1400px;
+      min-width: 860px;
       border-collapse: collapse;
+    }
+
+    .operations-table {
+      min-width: 1320px;
     }
 
     th {
@@ -452,12 +704,6 @@
       font-size: 11px;
       line-height: 1.45;
       color: var(--ink);
-    }
-
-    .matrix-layout {
-      display: grid;
-      grid-template-columns: 1.65fr 420px;
-      gap: 12px;
     }
 
     .detail-card {
@@ -533,9 +779,13 @@
       .metric-grid,
       .dashboard-grid,
       .dashboard-grid-3,
-      .matrix-layout,
+      .compact-grid-4,
       .detail-grid-2 {
         grid-template-columns: 1fr;
+      }
+
+      .global-topbar {
+        flex-direction: column;
       }
     }
 
@@ -547,6 +797,289 @@
       .sidebar {
         position: static;
         height: auto;
+      }
+
+      .main > .panel,
+      .main > .view,
+      .workspace-frame {
+        max-width: 100%;
+      }
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding-bottom: 88px;
+      }
+
+      .shell {
+        padding: 8px;
+        gap: 8px;
+      }
+
+      .sidebar {
+        position: fixed;
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        top: auto;
+        height: auto;
+        z-index: 20;
+        padding: 8px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 16px 36px rgba(24, 38, 48, 0.16);
+        backdrop-filter: blur(14px);
+      }
+
+      .sidebar > div:first-child,
+      .sidebar-stack {
+        display: none;
+      }
+
+      .nav {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        overflow: visible;
+        padding: 0;
+      }
+
+      .nav-btn {
+        min-width: 0;
+        padding: 10px 6px;
+        border-radius: 14px;
+        font-size: 11px;
+        line-height: 1.2;
+        flex-direction: column;
+        gap: 3px;
+        justify-content: center;
+      }
+
+      .nav-btn span {
+        font-size: 9px;
+        font-weight: 600;
+        opacity: 0.75;
+      }
+
+      .main {
+        gap: 8px;
+      }
+
+      .main > .panel,
+      .main > .view,
+      .workspace-frame {
+        max-width: 100%;
+      }
+
+      .panel {
+        padding: 10px;
+        border-radius: 18px;
+      }
+
+      .global-topbar {
+        position: sticky;
+        top: 8px;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(12px);
+      }
+
+      .global-topbar > div:first-child {
+        width: 100%;
+      }
+
+      .global-topbar .eyebrow,
+      .global-topbar .breadcrumb,
+      .global-topbar .workspace-label {
+        display: none;
+      }
+
+      .workspace-note {
+        display: none;
+      }
+
+      .mobile-summary-row {
+        display: flex;
+      }
+
+      .role-bar {
+        display: none;
+      }
+
+      .toolbar,
+      .toolbar-left,
+      .toolbar-right,
+      .role-bar,
+      .workspace-tabs,
+      .inline-controls {
+        align-items: stretch;
+      }
+
+      .toolbar-right {
+        width: 100%;
+      }
+
+      .workspace-tabs {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        overflow: visible;
+        padding-bottom: 0;
+      }
+
+      .workspace-tabs .solid-btn,
+      .workspace-tabs .ghost-btn,
+      .workspace-tabs .tiny-btn {
+        white-space: normal;
+        width: 100%;
+      }
+
+      .filter-input,
+      .filter-select,
+      .inline-input,
+      .inline-select,
+      .inline-textarea {
+        width: 100%;
+      }
+
+      .toolbar-right .solid-btn,
+      .toolbar-right .ghost-btn,
+      .toolbar-right .tiny-btn {
+        width: 100%;
+      }
+
+      .compact-grid-4,
+      .dashboard-grid,
+      .dashboard-grid-3,
+      .detail-grid-2,
+      .mobile-meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title {
+        gap: 6px;
+      }
+
+      .desktop-only {
+        display: none;
+      }
+
+      .mobile-only {
+        display: block;
+      }
+
+      table {
+        min-width: 680px;
+      }
+
+      .operations-table {
+        min-width: 980px;
+      }
+
+      td,
+      th {
+        padding: 7px 6px;
+      }
+
+      .matrix-cell {
+        width: 32px;
+        height: 28px;
+        font-size: 16px;
+      }
+
+      .mobile-card {
+        padding: 12px;
+        gap: 12px;
+      }
+
+      .obligation-strip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .obligation-mini {
+        min-width: 58px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding-bottom: 94px;
+      }
+
+      .shell {
+        padding: 6px;
+      }
+
+      .sidebar {
+        left: 6px;
+        right: 6px;
+        bottom: 6px;
+      }
+
+      .nav-btn {
+        padding: 9px 4px;
+        font-size: 10px;
+      }
+
+      .nav-btn span {
+        font-size: 8px;
+      }
+
+      .panel {
+        padding: 9px;
+      }
+
+      .breadcrumb,
+      .subline,
+      .workspace-note,
+      .section-title p {
+        font-size: 11px;
+      }
+
+      .mobile-card-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .mobile-card .inline-controls {
+        grid-template-columns: 1fr 1fr;
+        display: grid;
+      }
+
+      .mobile-card .inline-controls .solid-btn {
+        grid-column: 1 / -1;
+      }
+
+      .mobile-utility-card .inline-controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .mobile-utility-card .inline-controls .solid-btn,
+      .mobile-utility-card .inline-controls .tiny-btn {
+        width: 100%;
+      }
+
+      .mobile-summary-row {
+        padding: 9px 10px;
+      }
+
+      .mobile-summary-title {
+        font-size: 13px;
+      }
+
+      .mobile-summary-subtitle {
+        font-size: 10px;
+      }
+
+      .obligation-strip {
+        gap: 5px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .obligation-mini {
+        min-width: 54px;
+        font-size: 9px;
       }
     }
   </style>
@@ -567,47 +1100,81 @@
         <button class="nav-btn" data-view="dashboard-view">Management <span>Oversight</span></button>
       </div>
 
-      <div class="sidebar-note">
-        Core rule: one client per row. Obligation cells stay compact. Daily work happens in the matrix, not in cards.
+      <div class="sidebar-stack">
+        <div class="profile-card">
+          <div class="eyebrow">User Profile</div>
+          <div class="profile-name" id="sidebar-user-name">Nadia</div>
+          <div class="subline" id="sidebar-user-role">Normal Staff / Tax PIC</div>
+        </div>
+
+        <div class="attendance-widget">
+          <div class="eyebrow">Attendance</div>
+          <div class="profile-name" id="sidebar-attendance-status">Not attended yet</div>
+          <div class="subline" id="sidebar-attendance-time">No record today</div>
+          <div class="inline-controls">
+            <button class="tiny-btn" data-save-attendance-creds="yes">Save</button>
+            <button class="solid-btn" data-attend="yes">Attend</button>
+          </div>
+        </div>
+
+        <div class="sidebar-note">
+          Workspace rule: use focused pages, not one giant dashboard. Operations stays dense. Cases use Kanban. Attendance remains a tiny utility only.
+        </div>
       </div>
     </aside>
 
     <main class="main">
-      <section class="panel hero">
+      <section class="panel global-topbar">
         <div>
-          <div class="eyebrow">Tax Operations & Claim Control Center</div>
-          <h2>Centralized like Excel, faster than Excel</h2>
-          <p>
-            The app is now structured around client rows, grouped monthly obligations, payable visibility, billing extraction,
-            claim generation, and payment tracking. It keeps the dense scanning behavior staff already rely on while giving supervisors one centralized view.
-          </p>
+          <div class="eyebrow">Tax Firm Operating System</div>
+          <div class="breadcrumb" id="workspace-breadcrumb">Operations / Active Queue</div>
+          <div class="workspace-label" id="workspace-label">Operations Workspace</div>
+          <div class="workspace-note" id="workspace-note">Focused recurring compliance workspace with dense scanning, inline row expansion, and minimal eye travel.</div>
+          <div class="mobile-only mobile-summary-row">
+            <div class="mobile-summary-main">
+              <div class="mobile-summary-title" id="mobile-workspace-title">Operations Workspace</div>
+              <div class="mobile-summary-subtitle"><span id="mobile-user-name">Nadia</span> / <span id="mobile-user-role">Normal Staff</span></div>
+            </div>
+            <div class="mobile-summary-actions">
+              <button class="tiny-btn" data-toggle-scope="yes">Scope</button>
+              <button class="solid-btn" data-attend="yes" id="mobile-attend-button">Attend</button>
+            </div>
+          </div>
+          <div class="mobile-only mobile-scope-panel hidden" id="mobile-scope-panel">
+            <div class="eyebrow">Visibility Mode</div>
+            <div class="detail-list" style="margin-top:8px;">
+              <select id="mobile-role-select" class="filter-select">
+                <option value="staff">Normal Staff</option>
+                <option value="supervisor">Supervisor</option>
+              </select>
+              <select id="mobile-pic-select" class="filter-select">
+                <option value="Nadia">Nadia</option>
+                <option value="Raka">Raka</option>
+                <option value="Mira">Mira</option>
+              </select>
+              <button class="tiny-btn" data-save-attendance-creds="yes">Save Attendance Credentials</button>
+            </div>
+          </div>
         </div>
-        <div class="chips">
-          <span class="badge accent">1 client = 1 row</span>
-          <span class="badge warning">Compact obligation cells</span>
-          <span class="badge danger">Claim + payment track separated</span>
+        <div class="role-bar">
+          <div class="eyebrow">Visibility Mode</div>
+          <select id="role-select" class="filter-select">
+            <option value="staff">Normal Staff</option>
+            <option value="supervisor">Supervisor</option>
+          </select>
+          <select id="pic-select" class="filter-select">
+            <option value="Nadia">Nadia</option>
+            <option value="Raka">Raka</option>
+            <option value="Mira">Mira</option>
+          </select>
+          <span class="pill neutral" id="role-description">Staff only sees assigned clients.</span>
         </div>
-      </section>
-
-      <section class="panel role-bar">
-        <div class="eyebrow">Visibility Mode</div>
-        <select id="role-select" class="filter-select">
-          <option value="staff">Normal Staff</option>
-          <option value="supervisor">Supervisor</option>
-        </select>
-        <select id="pic-select" class="filter-select">
-          <option value="Nadia">Nadia</option>
-          <option value="Raka">Raka</option>
-          <option value="Mira">Mira</option>
-        </select>
-        <span class="pill neutral" id="role-description">Staff only sees assigned clients.</span>
       </section>
 
       <section id="matrix-view" class="view"></section>
       <section id="cases-view" class="view hidden"></section>
       <section id="client-management-view" class="view hidden"></section>
       <section id="dashboard-view" class="view hidden"></section>
-      <section id="kanban-view" class="view hidden"></section>
       <section id="client-view" class="view hidden"></section>
     </main>
   </div>
@@ -987,7 +1554,12 @@
       selectedPic: "Nadia",
       selectedClientId: "client-001",
       selectedObligationKey: "pph21",
+      expandedClientId: "",
+      operationsTab: "active",
+      casesTab: "active",
       clientManagementTab: "active",
+      managementTab: "overview",
+      mobileScopeOpen: false,
       autoHideCompleted: true,
       showCompletedRows: false,
       completionPromptClientId: "",
@@ -997,10 +1569,13 @@
         year: "all"
       },
       attendance: {
+        apiUrl: "http://localhost:4000/api/attendance/checkin",
         status: "Not attended yet",
         lastTime: "No record today",
         message: "Attendance utility ready.",
-        credentialsSaved: true
+        credentialsSaved: false,
+        loading: false,
+        credentials: null
       },
       filters: {
         query: "",
@@ -1025,8 +1600,73 @@
       return { dpp, vat, pph23, invoiceValue, estimatedNetReceived };
     }
 
+    function currentWorkspaceMeta() {
+      const maps = {
+        operations: {
+          active: ["Operations / Active Queue", "Operations Workspace", "Focused recurring compliance workspace with dense scanning, inline row expansion, and minimal eye travel."],
+          history: ["Operations / Completed History", "Operations Workspace", "Completed recurring rows stay searchable here while remaining hidden from the active queue by default."],
+          claim: ["Operations / Claim Status", "Operations Workspace", "Claim and payment coordination stays visible without turning the recurring workspace into a giant dashboard."],
+          archive: ["Operations / Reporting Archive", "Operations Workspace", "Archive-ready reporting visibility for completed monthly work and receipt traceability."]
+        },
+        cases: {
+          active: ["Cases / Active Cases", "Cases Workspace", "Non-recurring tax work uses case queues and milestone progression, not the recurring compliance matrix."],
+          sp2dk: ["Cases / SP2DK", "Cases Workspace", "Focused case lane for SP2DK handling and follow-through."],
+          pemeriksaan: ["Cases / Pemeriksaan", "Cases Workspace", "Inspection-oriented view with clearer ownership and stage visibility."],
+          restitusi: ["Cases / Restitusi", "Cases Workspace", "Restitusi work stays separate from routine monthly obligations."],
+          closed: ["Cases / Closed Cases", "Cases Workspace", "Closed case history for reference without cluttering active case flow."]
+        },
+        clients: {
+          active: ["Clients / Active Clients", "Clients Workspace", "Client master data remains the source of truth for obligations, fees, dual PIC ownership, and downstream operations."],
+          proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
+          analytics: ["Clients / Fee Analytics", "Clients Workspace", "Future-ready view for fee and client growth without overbuilding a finance dashboard."],
+          contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
+        },
+        management: {
+          overview: ["Management / KPI Overview", "Management Workspace", "Decision workspace for exceptions, bottlenecks, and quick access only."],
+          trends: ["Management / Client Growth", "Management Workspace", "Trend view for fee growth, proposal conversion, and client portfolio movement."],
+          workload: ["Management / Workload", "Management Workspace", "PIC workload and open case pressure, without exposing operational edit forms."],
+          access: ["Management / Quick Access", "Management Workspace", "Launch directly into clients, cases, and operations that need attention."]
+        },
+        client: ["Clients / Client Detail", "Client Detail Workspace", "Compact client timeline and grouped obligation history for drill-down without leaving the workspace model."]
+      };
+
+      if (state.currentView === "matrix-view") {
+        const [breadcrumb, label, note] = maps.operations[state.operationsTab];
+        return { breadcrumb, label, note };
+      }
+      if (state.currentView === "cases-view") {
+        const [breadcrumb, label, note] = maps.cases[state.casesTab];
+        return { breadcrumb, label, note };
+      }
+      if (state.currentView === "client-management-view") {
+        const [breadcrumb, label, note] = maps.clients[state.clientManagementTab];
+        return { breadcrumb, label, note };
+      }
+      if (state.currentView === "dashboard-view") {
+        const [breadcrumb, label, note] = maps.management[state.managementTab];
+        return { breadcrumb, label, note };
+      }
+      const activeClient = selectedClient();
+      const [_, label, note] = maps.client;
+      const breadcrumb = `Clients / ${activeClient.name}`;
+      return { breadcrumb, label, note };
+    }
+
     function obligationLabelsFromKeys(keys) {
       return keys.map((key) => OBLIGATION_LABELS[key]).join(", ");
+    }
+
+    function obligationStripMarkup(client) {
+      return `
+        <div class="obligation-strip">
+          ${OBLIGATIONS.map((key) => `
+            <button class="obligation-mini" data-open-obligation="${client.id}|${key}">
+              <span class="icon">${STATUS_ICON[client.obligations[key].status]}</span>
+              ${OBLIGATION_LABELS[key]}
+            </button>
+          `).join("")}
+        </div>
+      `;
     }
 
     function visibleClients() {
@@ -1152,259 +1792,160 @@
       const activeCount = clients.length;
       const proposalCount = proposals.filter((item) => !["Won", "Lost"].includes(item.status)).length;
       const completedCount = allVisibleClientsIncludingCompleted().filter((client) => isClientCompleted(client)).length;
-      const completedHistory = filteredCompletedHistory().slice(0, 6);
+      const workloadByPic = ["Nadia", "Raka", "Mira"].map((pic) => ({
+        pic,
+        activeRows: clients.filter((client) => client.taxPic === pic || client.accountingPic === pic).length,
+        openCases: taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic).length
+      }));
       const root = document.getElementById("dashboard-view");
 
       root.innerHTML = `
-        <section class="panel">
-          <div class="section-title">
-            <div>
-              <h3>Management</h3>
-              <p>Supervisor oversight across recurring operations, cases, client master data, and claim/payment bottlenecks.</p>
-            </div>
-            <div class="chips">
-              <span class="badge accent">Operations visibility</span>
-              <span class="badge warning">Case workload</span>
-              <span class="badge danger">Completed rows hidden from active queue</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="dashboard-grid">
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Attendance Utility</h3>
-                <p>Lightweight helper that uses normal browser automation against the existing attendance site, not a replacement HR system.</p>
+        <div class="workspace-frame workspace-management">
+          <section class="panel">
+            <div class="toolbar">
+              <div class="workspace-tabs">
+                <button class="${state.managementTab === "overview" ? "solid-btn" : "ghost-btn"}" data-management-tab="overview">KPI Overview</button>
+                <button class="${state.managementTab === "trends" ? "solid-btn" : "ghost-btn"}" data-management-tab="trends">Client Growth</button>
+                <button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">Workload</button>
+                <button class="${state.managementTab === "access" ? "solid-btn" : "ghost-btn"}" data-management-tab="access">Quick Access</button>
               </div>
             </div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>Status</strong><div class="subline">${state.attendance.status}</div></div>
-              <div class="detail-card"><strong>Last attendance time</strong><div class="subline">${state.attendance.lastTime}</div></div>
-              <div class="detail-card"><strong>Credential storage</strong><div class="subline">${state.attendance.credentialsSaved ? "Encrypted and saved" : "Not saved yet"}</div></div>
-              <div class="detail-card"><strong>Message</strong><div class="subline">${state.attendance.message}</div></div>
-              <div class="inline-controls">
-                <button class="tiny-btn" data-save-attendance-creds="yes">Save Attendance Password</button>
-                <button class="solid-btn" data-attend="yes">Attend</button>
-              </div>
-            </div>
-          </div>
+          </section>
 
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Attendance Architecture</h3>
-                <p>Future-ready utility layer kept separate from tax operations logic.</p>
-              </div>
-            </div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>Existing site</strong><div class="subline">Uses https://host-mylmats.com/login through normal browser automation.</div></div>
-              <div class="detail-card"><strong>Playwright flow</strong><div class="subline">Layer 1 login, then layer 2 attendance password submission, then success verification.</div></div>
-              <div class="detail-card"><strong>Security</strong><div class="subline">Credentials stored encrypted, never in plaintext.</div></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="metric-grid">
-          <div class="metric">
-            <div class="eyebrow">Awaiting Client Data</div>
-            <strong>${stats.awaiting}</strong>
-            <div class="sub">Obligation cells still blocked by client data.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">Pending Revision</div>
-            <strong>${stats.revisions}</strong>
-            <div class="sub">Revisions still visible instead of disappearing after temporary filing.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">Temporary Open</div>
-            <strong>${stats.temporary}</strong>
-            <div class="sub">Temporary submissions still needing closure.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">High Follow-Up Clients</div>
-            <strong>${stats.followUpRisk}</strong>
-            <div class="sub">Clients already above three follow-ups.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">Active Clients</div>
-            <strong>${activeCount}</strong>
-            <div class="sub">Master client records currently driving live operations.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">Open Proposals</div>
-            <strong>${proposalCount}</strong>
-            <div class="sub">Prospects kept separate until they convert into active clients.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">Billing Gaps</div>
-            <strong>${stats.billingGaps}</strong>
-            <div class="sub">Clients still lacking billing upload for claim workflow.</div>
-          </div>
-          <div class="metric">
-            <div class="eyebrow">Completed Hidden</div>
-            <strong>${completedCount}</strong>
-            <div class="sub">Rows auto-hidden from the active operations surface.</div>
-          </div>
-        </section>
-
-        <section class="dashboard-grid">
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Needs Attention Today</h3>
-                <p>Client-centric list of the riskiest rows to act on now.</p>
-              </div>
-              <button class="solid-btn" data-switch-view="matrix-view">Open Compliance Matrix</button>
-            </div>
-            <div class="attention-list">
-              ${attention.map((client) => `
-                <div class="attention-item">
+          ${state.managementTab === "overview" ? `
+            <section class="compact-grid-4">
+              <div class="metric"><div class="eyebrow">Revisions</div><strong>${stats.revisions}</strong><div class="sub">Open revision exceptions.</div></div>
+              <div class="metric"><div class="eyebrow">Missing Obligations</div><strong>${stats.awaiting + stats.temporary}</strong><div class="sub">Awaiting data or temporary still unresolved.</div></div>
+              <div class="metric"><div class="eyebrow">High Follow-Up</div><strong>${stats.followUpRisk}</strong><div class="sub">Clients above three follow-ups.</div></div>
+              <div class="metric"><div class="eyebrow">Open Cases</div><strong>${taxCases.length}</strong><div class="sub">Non-recurring tax work still active.</div></div>
+            </section>
+            <section class="dashboard-grid">
+              <div class="panel">
+                <div class="section-title">
                   <div>
-                    <strong>${client.name}</strong>
-                    <div class="meta">Tax PIC ${client.taxPic} / Accounting PIC ${client.accountingPic}</div>
-                    <div class="meta">${clientNeedsAttention(client).join(" / ")}</div>
+                    <h3>Exceptions</h3>
+                    <p>Only the items that require management attention now.</p>
                   </div>
-                  <button class="tiny-btn" data-open-client="${client.id}">Open</button>
                 </div>
-              `).join("") || `<div class="empty-state">No urgent attention items in the current scope.</div>`}
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Tax Claim & Payment Watchlist</h3>
-                <p>Who is ready for claim, stuck on billing, or waiting for payment.</p>
+                <div class="attention-list">
+                  ${attention.map((client) => `
+                    <div class="attention-item">
+                      <div>
+                        <strong>${client.name}</strong>
+                        <div class="meta">Tax ${client.taxPic} / Acc ${client.accountingPic}</div>
+                        <div class="meta">${clientNeedsAttention(client).slice(0, 2).join(" / ")}</div>
+                      </div>
+                      <button class="tiny-btn" data-open-client="${client.id}">Open</button>
+                    </div>
+                  `).join("") || `<div class="empty-state">No management exceptions in the current scope.</div>`}
+                </div>
               </div>
-              <button class="tiny-btn" data-open-client="${billingQueue[0]?.id || ""}">Open Client Claim Context</button>
-            </div>
-            <div class="list-grid">
-              ${billingQueue.map((client) => `
-                <div class="list-item">
+              <div class="panel">
+                <div class="section-title">
                   <div>
-                    <strong>${client.name}</strong>
-                    <div class="meta">${client.claimStatus} / ${client.paymentStatus}</div>
+                    <h3>Bottlenecks</h3>
+                    <p>Follow-up burden and stalled claim flow.</p>
                   </div>
-                  <span class="pill ${client.billingUploaded ? "accent" : "warning"}">${client.billingUploaded ? "Billing in Drive" : "No Billing"}</span>
                 </div>
-              `).join("") || `<div class="empty-state">No clients currently in claim-ready flow.</div>`}
-            </div>
-          </div>
-        </section>
-
-        <section class="dashboard-grid-3">
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Compliance Matrix Preview</h3>
-                <p>One row per client, grouped obligations.</p>
+                <div class="list-grid">
+                  ${billingQueue.map((client) => `
+                    <div class="list-item">
+                      <div>
+                        <strong>${client.name}</strong>
+                        <div class="meta">${client.claimStatus} / ${client.paymentStatus}</div>
+                      </div>
+                      <span class="pill ${client.billingUploaded ? "accent" : "warning"}">${client.followUpCount} FU</span>
+                    </div>
+                  `).join("") || `<div class="empty-state">No visible bottlenecks in the current scope.</div>`}
+                </div>
               </div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Client</th>
-                    <th>PIC</th>
-                    <th>PPh 21</th>
-                    <th>Unifikasi</th>
-                    <th>PPh 25 / PP55</th>
-                    <th>PHR / PB1</th>
-                    <th>PPN</th>
-                    <th>Attention</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${list.slice(0, 6).map((client) => `
+            </section>
+          ` : ``}
+
+          ${state.managementTab === "trends" ? `
+            <section class="compact-grid-4">
+              <div class="metric"><div class="eyebrow">Active Clients</div><strong>${activeCount}</strong><div class="sub">Current portfolio size.</div></div>
+              <div class="metric"><div class="eyebrow">Open Proposals</div><strong>${proposalCount}</strong><div class="sub">Still in non-active pipeline.</div></div>
+              <div class="metric"><div class="eyebrow">Won Proposals</div><strong>${proposals.filter((item) => item.status === "Won").length}</strong><div class="sub">Converted into active clients.</div></div>
+              <div class="metric"><div class="eyebrow">Completed Rows</div><strong>${completedCount}</strong><div class="sub">Recurring work already moved out of the live queue.</div></div>
+            </section>
+            <section class="dashboard-grid">
+              <div class="panel">
+                <div class="section-title"><div><h3>Fee Growth Foundation</h3><p>Keep this light until actual trend data is stored historically.</p></div></div>
+                <div class="detail-list">
+                  <div class="detail-card"><strong>Monthly fee portfolio</strong><div class="subline">${currency(clients.reduce((sum, client) => sum + client.serviceFee, 0))}</div></div>
+                  <div class="detail-card"><strong>Proposal monthly total</strong><div class="subline">${currency(proposals.reduce((sum, item) => sum + item.monthlyFee, 0))}</div></div>
+                  <div class="detail-card"><strong>Conversion signal</strong><div class="subline">${proposals.filter((item) => item.status === "Won").length} won / ${proposals.length} total proposals</div></div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="section-title"><div><h3>Portfolio Notes</h3><p>Management trend space should stay summary-only.</p></div></div>
+                <div class="detail-list">
+                  <div class="detail-card"><strong>Client growth</strong><div class="subline">Future yearly chart area.</div></div>
+                  <div class="detail-card"><strong>Fee growth</strong><div class="subline">Future recurring and annual fee trend line.</div></div>
+                  <div class="detail-card"><strong>Proposal conversion</strong><div class="subline">Future funnel from lead to active client.</div></div>
+                </div>
+              </div>
+            </section>
+          ` : ``}
+
+          ${state.managementTab === "workload" ? `
+            <section class="panel">
+              <div class="section-title"><div><h3>PIC Workload</h3><p>Cross-workspace workload summary only, without exposing operational edit forms.</p></div></div>
+              <div class="table-wrap desktop-only">
+                <table>
+                  <thead>
                     <tr>
-                      <td><button class="client-link" data-open-client="${client.id}">${client.name}</button></td>
-                      <td>${client.taxPic}</td>
-                      ${OBLIGATIONS.map((key) => `<td><span class="matrix-cell ${client.obligations[key].status}">${STATUS_ICON[client.obligations[key].status]}</span></td>`).join("")}
-                      <td class="attention-flag">${clientNeedsAttention(client)[0] || "Clear"}</td>
+                      <th>PIC</th>
+                      <th>Active Client Rows</th>
+                      <th>Open Cases</th>
+                      <th>High Follow-Up Clients</th>
                     </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Bottleneck Visibility</h3>
-                <p>Clients with the most follow-up burden.</p>
+                  </thead>
+                  <tbody>
+                    ${workloadByPic.map((row) => `
+                      <tr>
+                        <td>${row.pic}</td>
+                        <td>${row.activeRows}</td>
+                        <td>${row.openCases}</td>
+                        <td>${clients.filter((client) => (client.taxPic === row.pic || client.accountingPic === row.pic) && client.followUpCount > 3).length}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <div class="list-grid">
-              ${list.slice().sort((a, b) => b.followUpCount - a.followUpCount).slice(0, 6).map((client) => `
-                <div class="list-item">
-                  <div>
-                    <strong>${client.name}</strong>
-                    <div class="meta">Tax ${client.taxPic} / Acc ${client.accountingPic} / ${client.claimStatus}</div>
-                  </div>
-                  <span class="pill warning">${client.followUpCount} FU</span>
+            </section>
+          ` : ``}
+
+          ${state.managementTab === "access" ? `
+            <section class="dashboard-grid">
+              <div class="panel">
+                <div class="section-title"><div><h3>Open Operations</h3><p>Jump directly into live recurring work.</p></div></div>
+                <div class="detail-list">
+                  <button class="ghost-btn" data-switch-view="matrix-view">Operations / Active Queue</button>
+                  <button class="ghost-btn" data-operations-tab-shortcut="history">Operations / Completed History</button>
+                  <button class="ghost-btn" data-operations-tab-shortcut="claim">Operations / Claim Status</button>
                 </div>
-              `).join("")}
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Drive Routing</h3>
-                <p>Auto-folder path for generated tax documents.</p>
               </div>
-            </div>
-            <div class="detail-list">
-              <div class="detail-card">
-                <strong>Clients/[Client Name]/[Year]/[Month]/Billing</strong>
-                <div class="subline">Uploaded billing PDF from DJP</div>
-              </div>
-              <div class="detail-card">
-                <strong>.../Claim Pajak</strong>
-                <div class="subline">Generated claim letter</div>
-              </div>
-              <div class="detail-card">
-                <strong>.../Bukti Bayar and .../SPT</strong>
-                <div class="subline">Payment proof and reporting archive</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel" style="margin-top:12px;">
-          <div class="section-title">
-            <div>
-              <h3>Completed History</h3>
-              <p>Completed recurring rows stay searchable by client, month, and year, but remain hidden from the active operations terminal by default.</p>
-            </div>
-          </div>
-          <div class="toolbar">
-            <div class="toolbar-left">
-              <input id="history-query" class="filter-input" type="text" placeholder="Filter completed history by client or PIC" value="${state.historyFilters.query}" />
-              <select id="history-month" class="filter-select">
-                <option value="all">All months</option>
-                ${["January", "May"].map((month) => `<option value="${month}" ${state.historyFilters.month === month ? "selected" : ""}>${month}</option>`).join("")}
-              </select>
-              <select id="history-year" class="filter-select">
-                <option value="all">All years</option>
-                ${["2025", "2026"].map((year) => `<option value="${year}" ${state.historyFilters.year === year ? "selected" : ""}>${year}</option>`).join("")}
-              </select>
-            </div>
-          </div>
-          <div class="list-grid">
-            ${completedHistory.map((client) => `
-              <div class="list-item">
-                <div>
-                  <strong>${client.name}</strong>
-                  <div class="meta">${client.month} ${client.year} / Tax ${client.taxPic} / Acc ${client.accountingPic}</div>
+              <div class="panel">
+                <div class="section-title"><div><h3>Open Cases</h3><p>Jump into the relevant case workspace lane.</p></div></div>
+                <div class="detail-list">
+                  <button class="ghost-btn" data-cases-tab-shortcut="active">Cases / Active Cases</button>
+                  <button class="ghost-btn" data-cases-tab-shortcut="sp2dk">Cases / SP2DK</button>
+                  <button class="ghost-btn" data-cases-tab-shortcut="pemeriksaan">Cases / Pemeriksaan</button>
                 </div>
-                <span class="pill accent">Completed</span>
               </div>
-            `).join("") || `<div class="empty-state">No completed rows available in the current scope.</div>`}
-          </div>
-        </section>
+              <div class="panel">
+                <div class="section-title"><div><h3>Open Clients</h3><p>Jump into master data and proposals without mixing them into management.</p></div></div>
+                <div class="detail-list">
+                  <button class="ghost-btn" data-client-tab-shortcut="active">Clients / Active Clients</button>
+                  <button class="ghost-btn" data-client-tab-shortcut="proposal">Clients / Proposal / Quotation</button>
+                  <button class="ghost-btn" data-client-tab-shortcut="contracts">Clients / Contract Monitoring</button>
+                </div>
+              </div>
+            </section>
+          ` : ``}
+        </div>
       `;
     }
 
@@ -1419,35 +1960,24 @@
       const annualFees = feeModel(12000000, true, false);
 
       root.innerHTML = `
-        <section class="panel">
-          <div class="section-title">
-            <div>
-              <h3>Client Management</h3>
-              <p>Master data center for obligations, commercial terms, proposal conversion, and downstream workflow generation.</p>
+        <div class="workspace-frame workspace-clients">
+          <section class="panel">
+            <div class="toolbar">
+              <div class="workspace-tabs">
+                <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
+                <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
+                <button class="${state.clientManagementTab === "analytics" ? "solid-btn" : "ghost-btn"}" data-client-tab="analytics">Fee Analytics</button>
+                <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
+              </div>
+              <div class="toolbar-right">
+                <button class="ghost-btn" data-switch-view="matrix-view">Open Operations</button>
+                <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
+              </div>
             </div>
-            <div class="chips">
-              <span class="badge accent">Client master drives matrix</span>
-              <span class="badge warning">Proposal clients stay separate</span>
-              <span class="badge danger">Fees feed claim workflow</span>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="panel">
-          <div class="toolbar">
-            <div class="toolbar-left">
-              <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
-              <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation Clients</button>
-            </div>
-            <div class="toolbar-right">
-              <button class="ghost-btn" data-switch-view="matrix-view">See Compliance Output</button>
-              <button class="ghost-btn" data-switch-view="dashboard-view">See Management Output</button>
-            </div>
-          </div>
-        </section>
-
-        ${state.clientManagementTab === "active" ? `
-          <section class="dashboard-grid">
+          ${state.clientManagementTab === "active" ? `
+            <section class="dashboard-grid">
             <div class="panel">
               <div class="section-title">
                 <div>
@@ -1455,7 +1985,7 @@
                   <p>Compact master records for operationally relevant client setup only.</p>
                 </div>
               </div>
-              <div class="table-wrap">
+              <div class="table-wrap desktop-only">
                 <table>
                   <thead>
                     <tr>
@@ -1484,6 +2014,28 @@
                     `).join("")}
                   </tbody>
                 </table>
+              </div>
+              <div class="mobile-only">
+                <div class="list-grid">
+                  ${clients.map((client) => `
+                    <div class="mobile-card">
+                      <div class="mobile-card-header">
+                        <div>
+                          <button class="client-link" data-open-client="${client.id}">${client.name}</button>
+                          <div class="subline">${client.npwp || "-"}</div>
+                        </div>
+                        <span class="pill accent">Active</span>
+                      </div>
+                      <div class="mobile-meta-grid">
+                        <div class="mobile-meta-box"><div class="eyebrow">Tax PIC</div><strong>${client.taxPic}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">Accounting PIC</div><strong>${client.accountingPic}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">Monthly Fee</div><strong>${currency(client.serviceFee)}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">Obligations</div><strong>${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").length}</strong></div>
+                      </div>
+                      ${obligationStripMarkup(client)}
+                    </div>
+                  `).join("")}
+                </div>
               </div>
             </div>
 
@@ -1534,9 +2086,11 @@
                 </div>
               </div>
             </div>
-          </section>
-        ` : `
-          <section class="dashboard-grid">
+            </section>
+          ` : ``}
+
+          ${state.clientManagementTab === "proposal" ? `
+            <section class="dashboard-grid">
             <div class="panel">
               <div class="section-title">
                 <div>
@@ -1544,8 +2098,8 @@
                   <p>Operational proposal tracking only. No CRM complexity and no mixing with active clients.</p>
                 </div>
               </div>
-              <div class="table-wrap">
-                <table>
+              <div class="table-wrap desktop-only">
+                <table class="operations-table">
                   <thead>
                     <tr>
                       <th>Client</th>
@@ -1576,6 +2130,30 @@
                   </tbody>
                 </table>
               </div>
+              <div class="mobile-only">
+                <div class="list-grid">
+                  ${proposals.map((proposal) => `
+                    <div class="mobile-card">
+                      <div class="mobile-card-header">
+                        <div>
+                          <div class="mobile-card-title">${proposal.name}</div>
+                          <div class="subline">${proposal.address}</div>
+                        </div>
+                        <span class="pill warning">${proposal.status}</span>
+                      </div>
+                      <div class="mobile-meta-grid">
+                        <div class="mobile-meta-box"><div class="eyebrow">Proposed PIC</div><strong>${proposal.proposedPic}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">Monthly Fee</div><strong>${currency(proposal.monthlyFee)}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">Annual Fee</div><strong>${currency(proposal.annualFee)}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">Obligations</div><strong>${proposal.obligations.length}</strong></div>
+                      </div>
+                      <div class="inline-controls">
+                        <button class="tiny-btn" data-convert-proposal="${proposal.id}">Convert to Active</button>
+                      </div>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
             </div>
 
             <div class="panel">
@@ -1604,229 +2182,489 @@
                 </div>
               </div>
             </div>
-          </section>
-        `}
+            </section>
+          ` : ``}
 
-        <section class="dashboard-grid-3" style="margin-top:12px;">
-          <div class="panel">
-            <div class="section-title"><div><h3>Master Data Integration</h3><p>Client setup should drive every operational module.</p></div></div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>Obligation checklist</strong><div class="subline">Creates grouped compliance matrix outputs.</div></div>
-              <div class="detail-card"><strong>PIC assignment</strong><div class="subline">Controls staff visibility and ownership.</div></div>
-              <div class="detail-card"><strong>Commercial terms</strong><div class="subline">Feeds claim generation and payment expectations.</div></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="section-title"><div><h3>Fee Standardization</h3><p>Consistent tax fee logic without fragmented spreadsheets.</p></div></div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>DPP</strong><div class="subline">Standard base fee for monthly and annual work.</div></div>
-              <div class="detail-card"><strong>VAT 11%</strong><div class="subline">Toggled inside client commercial setup.</div></div>
-              <div class="detail-card"><strong>PPh23 2%</strong><div class="subline">Automatically estimates net received.</div></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="section-title"><div><h3>Proposal Conversion</h3><p>Won proposals become active operational master data.</p></div></div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>New Lead to Won</strong><div class="subline">Simple statuses only.</div></div>
-              <div class="detail-card"><strong>Won = active client</strong><div class="subline">PIC, obligations, and fees move into production setup.</div></div>
-              <div class="detail-card"><strong>No heavy CRM</strong><div class="subline">Only operationally relevant proposal control.</div></div>
-            </div>
-          </div>
-        </section>
+          ${state.clientManagementTab === "analytics" ? `
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>Fee Analytics</h3>
+                  <p>Future-ready area for client growth, fee movement, and revenue trend without overbuilding a finance dashboard.</p>
+                </div>
+              </div>
+              <div class="compact-grid-4">
+                <div class="metric"><div class="eyebrow">Active Clients</div><strong>${clients.length}</strong><div class="sub">Current master records in production scope.</div></div>
+                <div class="metric"><div class="eyebrow">Monthly Fee Base</div><strong>${currency(clients.reduce((sum, client) => sum + client.serviceFee, 0))}</strong><div class="sub">Simple portfolio-level recurring fee snapshot.</div></div>
+                <div class="metric"><div class="eyebrow">Open Proposals</div><strong>${proposals.filter((item) => !["Won", "Lost"].includes(item.status)).length}</strong><div class="sub">Pipeline still outside active operations.</div></div>
+                <div class="metric"><div class="eyebrow">Won Proposals</div><strong>${proposals.filter((item) => item.status === "Won").length}</strong><div class="sub">Conversion base for future growth metrics.</div></div>
+              </div>
+              <div class="detail-card" style="margin-top:12px;">
+                <strong>Future-ready note</strong>
+                <div class="subline" style="margin-top:8px;">Keep this workspace lightweight for now: yearly client growth, fee growth, revenue trend, and acquisition tracking can layer on top of the existing client master without changing daily operations flow.</div>
+              </div>
+            </section>
+          ` : ``}
+
+          ${state.clientManagementTab === "contracts" ? `
+            <section class="dashboard-grid">
+              <div class="panel">
+                <div class="section-title">
+                  <div>
+                    <h3>Contract Monitoring</h3>
+                    <p>Compact contract and fee-term control instead of scattered notes across monthly files.</p>
+                  </div>
+                </div>
+                <div class="table-wrap desktop-only">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Client</th>
+                        <th>Start Contract</th>
+                        <th>Tax PIC</th>
+                        <th>Accounting PIC</th>
+                        <th>Monthly Fee</th>
+                        <th>Annual Fee</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${clients.map((client) => `
+                        <tr>
+                          <td>${client.name}</td>
+                          <td>2025-01-01</td>
+                          <td>${client.taxPic}</td>
+                          <td>${client.accountingPic}</td>
+                          <td>${currency(client.serviceFee)}</td>
+                          <td>${currency(12000000)}</td>
+                          <td>Active</td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="mobile-only">
+                  <div class="list-grid">
+                    ${clients.map((client) => `
+                      <div class="mobile-card">
+                        <div class="mobile-card-header">
+                          <div>
+                            <div class="mobile-card-title">${client.name}</div>
+                            <div class="subline">Start: 2025-01-01</div>
+                          </div>
+                          <span class="pill accent">Active</span>
+                        </div>
+                        <div class="mobile-meta-grid">
+                          <div class="mobile-meta-box"><div class="eyebrow">Tax PIC</div><strong>${client.taxPic}</strong></div>
+                          <div class="mobile-meta-box"><div class="eyebrow">Acc PIC</div><strong>${client.accountingPic}</strong></div>
+                          <div class="mobile-meta-box"><div class="eyebrow">Monthly Fee</div><strong>${currency(client.serviceFee)}</strong></div>
+                          <div class="mobile-meta-box"><div class="eyebrow">Annual Fee</div><strong>${currency(12000000)}</strong></div>
+                        </div>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="section-title">
+                  <div>
+                    <h3>Commercial Logic</h3>
+                    <p>Fee standardization stays tied to the client master rather than separate Excel sheets.</p>
+                  </div>
+                </div>
+                <div class="detail-list">
+                  <div class="detail-card"><strong>DPP</strong><div class="subline">${currency(monthlyFees.dpp)}</div></div>
+                  <div class="detail-card"><strong>VAT 11%</strong><div class="subline">${currency(monthlyFees.vat)}</div></div>
+                  <div class="detail-card"><strong>PPh23 2%</strong><div class="subline">${currency(monthlyFees.pph23)}</div></div>
+                  <div class="detail-card"><strong>Estimated net</strong><div class="subline">${currency(monthlyFees.estimatedNetReceived)}</div></div>
+                </div>
+              </div>
+            </section>
+          ` : ``}
+        </div>
       `;
     }
 
     function renderMatrix() {
       const list = visibleClients();
-      const client = selectedClient();
-      const obligation = client.obligations[state.selectedObligationKey];
       const root = document.getElementById("matrix-view");
       const completedHiddenCount = allVisibleClientsIncludingCompleted().filter((item) => isClientCompleted(item)).length;
       const promptedClient = state.completionPromptClientId
         ? clients.find((item) => item.id === state.completionPromptClientId)
         : null;
+      const expandedClient = state.expandedClientId
+        ? clients.find((item) => item.id === state.expandedClientId)
+        : null;
+      const expandedObligationKey = expandedClient && expandedClient.obligations[state.selectedObligationKey]
+        ? state.selectedObligationKey
+        : OBLIGATIONS.find((key) => expandedClient?.obligations[key].status !== "na") || "pph21";
+      const expandedObligation = expandedClient ? expandedClient.obligations[expandedObligationKey] : null;
+      const claimRows = allVisibleClientsIncludingCompleted();
+      const archiveRows = allVisibleClientsIncludingCompleted().filter((client) =>
+        ["Reported", "Tax Paid"].includes(client.claimStatus) || isClientCompleted(client)
+      );
 
       root.innerHTML = `
-        <div class="matrix-layout">
+        <div class="workspace-frame workspace-operations">
           <section class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Operations</h3>
-                <p>Recurring compliance matrix for repetitive monthly work only. Uniform rows, compact cells, no project-style clutter.</p>
-              </div>
-            </div>
-
             <div class="toolbar">
-              <div class="toolbar-left">
-                <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, claim status" value="${state.filters.query}" />
-                <label class="subline">
-                  <input id="attention-toggle" type="checkbox" ${state.filters.needsAttentionOnly ? "checked" : ""} />
-                  Needs attention only
-                </label>
-                <label class="subline">
-                  <input id="autohide-toggle" type="checkbox" ${state.autoHideCompleted ? "checked" : ""} />
-                  Enable auto-hide completed rows
-                </label>
-                <label class="subline">
-                  <input id="show-completed-toggle" type="checkbox" ${state.showCompletedRows ? "checked" : ""} />
-                  Show completed rows
-                </label>
+              <div class="workspace-tabs">
+                <button class="${state.operationsTab === "active" ? "solid-btn" : "ghost-btn"}" data-operations-tab="active">Active Queue</button>
+                <button class="${state.operationsTab === "history" ? "solid-btn" : "ghost-btn"}" data-operations-tab="history">Completed History</button>
+                <button class="${state.operationsTab === "claim" ? "solid-btn" : "ghost-btn"}" data-operations-tab="claim">Claim Status</button>
+                <button class="${state.operationsTab === "archive" ? "solid-btn" : "ghost-btn"}" data-operations-tab="archive">Reporting Archive</button>
               </div>
               <div class="toolbar-right">
-                <span class="pill neutral">${list.length} clients visible</span>
+                <span class="pill neutral">${list.length} active rows</span>
                 <span class="pill ${completedHiddenCount ? "warning" : "accent"}">${completedHiddenCount} completed hidden</span>
-                <button class="ghost-btn" data-switch-view="dashboard-view">Management View</button>
               </div>
             </div>
+          </section>
 
-            ${promptedClient ? `
-              <div class="detail-card" style="margin-bottom:10px;">
-                <strong>${promptedClient.name} completed.</strong>
-                <div class="subline" style="margin-top:6px;">Move from active queue?</div>
-                <div class="inline-controls" style="margin-top:8px;">
+          ${state.operationsTab === "active" ? `
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>Active Queue</h3>
+                  <p>Recurring compliance matrix for repetitive monthly work only. Main rows stay dense and inline expansion handles updates below the row.</p>
+                </div>
+              </div>
+
+              <div class="toolbar">
+                <div class="toolbar-left">
+                  <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, claim status" value="${state.filters.query}" />
                   <label class="subline">
-                    <input id="autohide-prompt-toggle" type="checkbox" ${state.autoHideCompleted ? "checked" : ""} />
+                    <input id="attention-toggle" type="checkbox" ${state.filters.needsAttentionOnly ? "checked" : ""} />
+                    Needs attention only
+                  </label>
+                  <label class="subline">
+                    <input id="autohide-toggle" type="checkbox" ${state.autoHideCompleted ? "checked" : ""} />
                     Enable auto-hide completed rows
                   </label>
-                  <button class="tiny-btn" data-completion-action="keep-visible">Keep visible</button>
-                  <button class="solid-btn" data-completion-action="move-completed">Move to completed history</button>
+                  <label class="subline">
+                    <input id="show-completed-toggle" type="checkbox" ${state.showCompletedRows ? "checked" : ""} />
+                    Show completed rows
+                  </label>
+                </div>
+                <div class="toolbar-right">
+                  <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
                 </div>
               </div>
-            ` : ``}
 
-            ${state.autoHideCompleted ? `
-              <div class="detail-card" style="margin-bottom:10px;">
-                <strong>Auto-hide completed rows</strong>
-                <div class="subline" style="margin-top:6px;">Rows disappear from active operations when compliance, claim, payment, and reporting are complete. Use "Show completed rows" to bring them back temporarily.</div>
-              </div>
-            ` : ``}
+              ${promptedClient ? `
+                <div class="detail-card" style="margin-bottom:10px;">
+                  <strong>${promptedClient.name} completed.</strong>
+                  <div class="subline" style="margin-top:6px;">Move from active queue?</div>
+                  <div class="inline-controls" style="margin-top:8px;">
+                    <label class="subline">
+                      <input id="autohide-prompt-toggle" type="checkbox" ${state.autoHideCompleted ? "checked" : ""} />
+                      Enable auto-hide completed rows
+                    </label>
+                    <button class="tiny-btn" data-completion-action="keep-visible">Keep visible</button>
+                    <button class="solid-btn" data-completion-action="move-completed">Move to completed history</button>
+                  </div>
+                </div>
+              ` : ``}
 
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Client Name</th>
-                    <th>Tax PIC</th>
-                    <th>Accounting PIC</th>
-                    <th>PPh 21</th>
-                    <th>Unifikasi</th>
-                    <th>PPh 25 / PP55</th>
-                    <th>PHR / PB1</th>
-                    <th>PPN</th>
-                    <th>Follow-Up Count</th>
-                    <th>Notes</th>
-                    <th>Last Updated</th>
-                    <th>Needs Attention</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${list.map((row) => `
+              <div class="table-wrap">
+                <table>
+                  <thead>
                     <tr>
-                      <td>
-                        <button class="client-link" data-open-client="${row.id}">${row.name}</button>
-                        <div class="subline">${row.month} ${row.year} / ${row.claimStatus}</div>
-                      </td>
-                      <td>${row.taxPic}</td>
-                      <td>${row.accountingPic}</td>
-                      ${OBLIGATIONS.map((key) => `
-                        <td>
-                          <button
-                            class="matrix-cell ${row.obligations[key].status}"
-                            data-open-obligation="${row.id}|${key}"
-                            title="${OBLIGATION_LABELS[key]} - ${STATUS_LABEL[row.obligations[key].status]}"
-                          >${STATUS_ICON[row.obligations[key].status]}</button>
-                        </td>
-                      `).join("")}
-                      <td>${row.followUpCount}</td>
-                      <td><button class="tiny-btn" data-open-notes="${row.id}" title="${clientNotesPreview(row) || "No notes"}">NOTE ${clientNotesCount(row)}</button></td>
-                      <td>${row.lastUpdated}</td>
-                      <td class="attention-flag">${clientNeedsAttention(row).slice(0, 2).join(" / ") || "Clear"}</td>
+                      <th>Client Name</th>
+                      <th>Tax PIC</th>
+                      <th>Accounting PIC</th>
+                      <th>PPh 21</th>
+                      <th>Unifikasi</th>
+                      <th>PPh 25 / PP55</th>
+                      <th>PHR / PB1</th>
+                      <th>PPN</th>
+                      <th>Follow-Up Count</th>
+                      <th>Notes</th>
+                      <th>Last Updated</th>
+                      <th>Needs Attention</th>
                     </tr>
-                  `).join("") || `<tr><td colspan="11"><div class="empty-state">No clients match the current scope.</div></td></tr>`}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                  </thead>
+                  <tbody>
+                    ${list.map((row) => {
+                      const rowExpanded = state.expandedClientId === row.id;
+                      const rowObligationKey = rowExpanded ? expandedObligationKey : OBLIGATIONS.find((key) => row.obligations[key].status !== "na") || "pph21";
+                      const rowObligation = row.obligations[rowObligationKey];
+                      const rowTotalPayable = OBLIGATIONS.reduce((sum, key) => sum + (row.obligations[key].payableAmount || 0), 0);
 
-          <section class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Inline Obligation Detail</h3>
-                <p>Lightweight side detail for the selected client and tax obligation.</p>
+                      return `
+                        <tr class="main-row" data-row-toggle="${row.id}">
+                          <td>
+                            <button class="client-link" data-open-client="${row.id}">${row.name}</button>
+                            <div class="subline">${row.month} ${row.year} / ${row.claimStatus}</div>
+                          </td>
+                          <td>${row.taxPic}</td>
+                          <td>${row.accountingPic}</td>
+                          ${OBLIGATIONS.map((key) => `
+                            <td>
+                              <button class="matrix-cell ${row.obligations[key].status}" data-open-obligation="${row.id}|${key}" title="${OBLIGATION_LABELS[key]} - ${STATUS_LABEL[row.obligations[key].status]}">${STATUS_ICON[row.obligations[key].status]}</button>
+                            </td>
+                          `).join("")}
+                          <td>${row.followUpCount}</td>
+                          <td><button class="tiny-btn" data-open-notes="${row.id}" title="${clientNotesPreview(row) || "No notes"}">NOTE ${clientNotesCount(row)}</button></td>
+                          <td>${row.lastUpdated}</td>
+                          <td class="attention-flag">${clientNeedsAttention(row).slice(0, 2).join(" / ") || "Clear"}</td>
+                        </tr>
+                        ${rowExpanded ? `
+                          <tr class="expanded-row">
+                            <td colspan="12">
+                              <div class="detail-card">
+                                <div class="section-title">
+                                  <div>
+                                    <h3 style="font-size:15px;">${row.name} / ${OBLIGATION_LABELS[rowObligationKey]}</h3>
+                                    <p>Scan queue, expand inline, update quickly, collapse, continue.</p>
+                                  </div>
+                                  <button class="ghost-btn" data-row-toggle="${row.id}">Collapse</button>
+                                </div>
+                                <div class="detail-grid-2">
+                                  <div class="detail-stat">
+                                    <div class="eyebrow">Focused obligation status</div>
+                                    <strong>${STATUS_ICON[rowObligation.status]} ${STATUS_LABEL[rowObligation.status]}</strong>
+                                  </div>
+                                  <div class="detail-stat">
+                                    <div class="eyebrow">Client total payable</div>
+                                    <strong>${currency(rowTotalPayable)}</strong>
+                                  </div>
+                                </div>
+                                <div class="detail-grid-2" style="margin-top:8px;">
+                                  <div class="detail-card">
+                                    <strong>Quick update</strong>
+                                    <div class="detail-list" style="margin-top:8px;">
+                                      <select id="detail-status" class="inline-select">
+                                        ${Object.keys(STATUS_LABEL).map((key) => `<option value="${key}" ${rowObligation.status === key ? "selected" : ""}>${STATUS_LABEL[key]}</option>`).join("")}
+                                      </select>
+                                      <input id="detail-receipt" class="inline-input" type="text" value="${rowObligation.receiptNumber}" placeholder="Receipt number" />
+                                      <input id="detail-payable" class="inline-input" type="number" value="${rowObligation.payableAmount}" placeholder="Payable amount" />
+                                      <textarea id="detail-notes" class="inline-textarea" placeholder="Quick notes">${rowObligation.quickNotes}</textarea>
+                                      <div class="inline-controls">
+                                        <button class="tiny-btn" data-followup-change="down">- Follow Up</button>
+                                        <span class="pill neutral">${row.followUpCount} follow-ups</span>
+                                        <button class="tiny-btn" data-followup-change="up">+ Follow Up</button>
+                                        <button class="solid-btn" data-save-detail="yes">Save Detail</button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div class="detail-card">
+                                    <strong>Claim and payment context</strong>
+                                    <div class="subline" style="margin-top:8px;">Claim status: ${row.claimStatus}</div>
+                                    <div class="subline">Payment status: ${row.paymentStatus}</div>
+                                    <div class="subline">Receipt number: ${rowObligation.receiptNumber || "-"}</div>
+                                    <div class="subline">Billing code: ${rowObligation.billingCode || "-"}</div>
+                                    <div class="subline">KAP/KJS: ${rowObligation.kapkjs || "-"}</div>
+                                    <div class="subline">Expiration: ${rowObligation.expirationDate || "-"}</div>
+                                    <div class="inline-controls" style="margin-top:8px;">
+                                      <button class="tiny-btn" data-simulate-billing="yes">Import Billing</button>
+                                      <button class="tiny-btn" data-generate-claim="yes">Generate Claim</button>
+                                      <button class="tiny-btn" data-open-client="${row.id}">Open Client View</button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="detail-card" style="margin-top:8px;">
+                                  <strong>Notes drawer preview</strong>
+                                  <div class="subline" style="margin-top:8px;">Client notes: ${row.notes || "No client-level notes."}</div>
+                                  <div class="subline">Obligation notes: ${rowObligation.quickNotes || "No obligation notes for the selected cell."}</div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ` : ``}
+                      `;
+                    }).join("") || `<tr><td colspan="12"><div class="empty-state">No clients match the current scope.</div></td></tr>`}
+                  </tbody>
+                </table>
               </div>
-            </div>
 
-            <div class="detail-card">
-              <div class="eyebrow">Selected Client</div>
-              <h4 style="margin-top:6px;font-size:18px;">${client.name}</h4>
-              <div class="subline">Tax PIC ${client.taxPic} / Accounting PIC ${client.accountingPic} / ${OBLIGATION_LABELS[state.selectedObligationKey]}</div>
-            </div>
-
-            <div class="detail-grid-2" style="margin-top:8px;">
-              <div class="detail-stat">
-                <div class="eyebrow">Status</div>
-                <strong>${STATUS_ICON[obligation.status]} ${STATUS_LABEL[obligation.status]}</strong>
+              <div class="mobile-only">
+                <div class="list-grid">
+                  ${list.map((row) => {
+                    const rowExpanded = state.expandedClientId === row.id;
+                    const rowObligationKey = rowExpanded ? expandedObligationKey : OBLIGATIONS.find((key) => row.obligations[key].status !== "na") || "pph21";
+                    const rowObligation = row.obligations[rowObligationKey];
+                    const rowTotalPayable = OBLIGATIONS.reduce((sum, key) => sum + (row.obligations[key].payableAmount || 0), 0);
+                    return `
+                      <div class="mobile-compact-item">
+                        <div class="mobile-compact-header">
+                          <div>
+                            <strong>${row.name}</strong>
+                            <div class="subline">${row.month} ${row.year} / ${row.taxPic} / ${row.claimStatus}</div>
+                          </div>
+                          <button class="tiny-btn" data-row-toggle="${row.id}">${rowExpanded ? "Hide" : "Open"}</button>
+                        </div>
+                        ${obligationStripMarkup(row)}
+                        <div class="subline">${clientNeedsAttention(row)[0] || "Clear"} / ${row.followUpCount} follow-ups / ${row.lastUpdated}</div>
+                        ${rowExpanded ? `
+                          <div class="detail-card">
+                            <strong>${OBLIGATION_LABELS[rowObligationKey]}</strong>
+                            <div class="detail-list" style="margin-top:8px;">
+                              <select id="detail-status" class="inline-select">
+                                ${Object.keys(STATUS_LABEL).map((key) => `<option value="${key}" ${rowObligation.status === key ? "selected" : ""}>${STATUS_LABEL[key]}</option>`).join("")}
+                              </select>
+                              <input id="detail-receipt" class="inline-input" type="text" value="${rowObligation.receiptNumber}" placeholder="Receipt number" />
+                              <input id="detail-payable" class="inline-input" type="number" value="${rowObligation.payableAmount}" placeholder="Payable amount" />
+                              <textarea id="detail-notes" class="inline-textarea" placeholder="Quick notes">${rowObligation.quickNotes}</textarea>
+                              <div class="subline">Payment: ${row.paymentStatus} / Total payable: ${currency(rowTotalPayable)}</div>
+                              <div class="mobile-compact-actions">
+                                <button class="tiny-btn" data-followup-change="down">- Follow Up</button>
+                                <button class="tiny-btn" data-followup-change="up">+ Follow Up</button>
+                                <button class="tiny-btn" data-simulate-billing="yes">Import Billing</button>
+                                <button class="tiny-btn" data-generate-claim="yes">Generate Claim</button>
+                                <button class="solid-btn" data-save-detail="yes">Save Detail</button>
+                              </div>
+                            </div>
+                          </div>
+                        ` : ``}
+                      </div>
+                    `;
+                  }).join("") || `<div class="empty-state">No clients match the current scope.</div>`}
+                </div>
               </div>
-              <div class="detail-stat">
-                <div class="eyebrow">Payable Amount</div>
-                <strong>${currency(obligation.payableAmount)}</strong>
-              </div>
-            </div>
+            </section>
+          ` : ``}
 
-            <div class="detail-card" style="margin-top:8px;">
+          ${state.operationsTab === "history" ? `
+            <section class="panel">
               <div class="section-title">
                 <div>
-                  <h3 style="font-size:15px;">Quick Update</h3>
-                  <p>Update directly without leaving the matrix.</p>
+                  <h3>Completed History</h3>
+                  <p>Completed compliance disappears from the active queue but stays searchable here by client, month, and year.</p>
                 </div>
               </div>
-              <div class="detail-list">
-                <select id="detail-status" class="inline-select">
-                  ${Object.keys(STATUS_LABEL).map((key) => `<option value="${key}" ${obligation.status === key ? "selected" : ""}>${STATUS_LABEL[key]}</option>`).join("")}
-                </select>
-                <input id="detail-receipt" class="inline-input" type="text" value="${obligation.receiptNumber}" placeholder="Receipt number" />
-                <input id="detail-payable" class="inline-input" type="number" value="${obligation.payableAmount}" placeholder="Payable amount" />
-                <textarea id="detail-notes" class="inline-textarea" placeholder="Quick notes">${obligation.quickNotes}</textarea>
-                <div class="inline-controls">
-                  <button class="tiny-btn" data-followup-change="down">- Follow Up</button>
-                  <span class="pill neutral">${client.followUpCount} follow-ups</span>
-                  <button class="tiny-btn" data-followup-change="up">+ Follow Up</button>
-                  <button class="solid-btn" data-save-detail="yes">Save Detail</button>
+              <div class="toolbar">
+                <div class="toolbar-left">
+                  <input id="history-query" class="filter-input" type="text" placeholder="Filter completed history by client or PIC" value="${state.historyFilters.query}" />
+                  <select id="history-month" class="filter-select">
+                    <option value="all">All months</option>
+                    ${["January", "May"].map((month) => `<option value="${month}" ${state.historyFilters.month === month ? "selected" : ""}>${month}</option>`).join("")}
+                  </select>
+                  <select id="history-year" class="filter-select">
+                    <option value="all">All years</option>
+                    ${["2025", "2026"].map((year) => `<option value="${year}" ${state.historyFilters.year === year ? "selected" : ""}>${year}</option>`).join("")}
+                  </select>
                 </div>
               </div>
-            </div>
+              <div class="list-grid">
+                ${filteredCompletedHistory().map((client) => `
+                  <div class="list-item">
+                    <div>
+                      <strong>${client.name}</strong>
+                      <div class="meta">${client.month} ${client.year} / Tax ${client.taxPic} / Acc ${client.accountingPic}</div>
+                    </div>
+                    <span class="pill accent">Completed</span>
+                  </div>
+                `).join("") || `<div class="empty-state">No completed rows available in the current scope.</div>`}
+              </div>
+            </section>
+          ` : ``}
 
-            <div class="detail-card" style="margin-top:8px;">
+          ${state.operationsTab === "claim" ? `
+            <section class="panel">
               <div class="section-title">
                 <div>
-                  <h3 style="font-size:15px;">Billing and Claim Link</h3>
-                  <p>Same surface for payable, billing, and claim coordination.</p>
+                  <h3>Claim Status</h3>
+                  <p>Separate claim/payment visibility without mixing it into the main recurring edit surface.</p>
                 </div>
               </div>
-              <div class="detail-list">
-                <div class="subline">Billing code: ${obligation.billingCode || "-"}</div>
-                <div class="subline">KAP/KJS: ${obligation.kapkjs || "-"}</div>
-                <div class="subline">Expiration: ${obligation.expirationDate || "-"}</div>
-                <div class="subline">Claim status: ${client.claimStatus}</div>
-                <div class="footer-links">
-                  <button class="tiny-btn" data-simulate-billing="yes">Simulate Billing PDF Import</button>
-                  <button class="tiny-btn" data-generate-claim="yes">Generate Claim Pajak</button>
-                  <button class="tiny-btn" data-switch-view="dashboard-view">Open Management Claim Watch</button>
+              <div class="table-wrap desktop-only">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Period</th>
+                      <th>Tax PIC</th>
+                      <th>Claim Status</th>
+                      <th>Payment Status</th>
+                      <th>Billing</th>
+                      <th>Total Payable</th>
+                      <th>Quick Access</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${claimRows.map((client) => `
+                      <tr>
+                        <td>${client.name}</td>
+                        <td>${client.month} ${client.year}</td>
+                        <td>${client.taxPic}</td>
+                        <td>${client.claimStatus}</td>
+                        <td>${client.paymentStatus}</td>
+                        <td>${client.billingUploaded ? "Uploaded" : "Pending"}</td>
+                        <td>${currency(OBLIGATIONS.reduce((sum, key) => sum + (client.obligations[key].payableAmount || 0), 0))}</td>
+                        <td><button class="tiny-btn" data-open-client="${client.id}">Open Client</button></td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+              <div class="mobile-only">
+                <div class="list-grid">
+                  ${claimRows.map((client) => `
+                    <div class="list-item">
+                      <div>
+                        <strong>${client.name}</strong>
+                        <div class="meta">${client.month} ${client.year} / ${client.taxPic}</div>
+                        <div class="meta">${client.claimStatus} / ${client.paymentStatus} / ${client.billingUploaded ? "Billing uploaded" : "Billing pending"}</div>
+                      </div>
+                      <button class="tiny-btn" data-open-client="${client.id}">Open</button>
+                    </div>
+                  `).join("") || `<div class="empty-state">No claim rows available in the current scope.</div>`}
                 </div>
               </div>
-            </div>
+            </section>
+          ` : ``}
 
-            <div class="detail-card" style="margin-top:8px;">
+          ${state.operationsTab === "archive" ? `
+            <section class="panel">
               <div class="section-title">
                 <div>
-                  <h3 style="font-size:15px;">Notes Drawer Preview</h3>
-                  <p>Notes stay out of the row to preserve uniform scanning height.</p>
+                  <h3>Reporting Archive</h3>
+                  <p>Archive-oriented visibility for submitted work, receipt traceability, and Drive routing.</p>
                 </div>
               </div>
-              <div class="subline">${client.notes || "No client-level notes."}</div>
-              <div class="subline" style="margin-top:8px;">${obligation.quickNotes || "No obligation notes for the selected cell."}</div>
-            </div>
-          </section>
+              <div class="table-wrap desktop-only">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Period</th>
+                      <th>Claim Status</th>
+                      <th>Drive Path</th>
+                      <th>Receipt Snapshot</th>
+                      <th>Follow-Ups</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${archiveRows.map((client) => `
+                      <tr>
+                        <td>${client.name}</td>
+                        <td>${client.month} ${client.year}</td>
+                        <td>${client.claimStatus}</td>
+                        <td>${client.drivePath}</td>
+                        <td>${OBLIGATIONS.map((key) => client.obligations[key].receiptNumber).filter(Boolean).slice(0, 2).join(" / ") || "-"}</td>
+                        <td>${client.followUpCount}</td>
+                      </tr>
+                    `).join("") || `<tr><td colspan="6"><div class="empty-state">No archive-ready rows in the current scope.</div></td></tr>`}
+                  </tbody>
+                </table>
+              </div>
+              <div class="mobile-only">
+                <div class="list-grid">
+                  ${archiveRows.map((client) => `
+                    <div class="list-item">
+                      <div>
+                        <strong>${client.name}</strong>
+                        <div class="meta">${client.month} ${client.year} / ${client.claimStatus}</div>
+                        <div class="meta">${OBLIGATIONS.map((key) => client.obligations[key].receiptNumber).filter(Boolean).slice(0, 2).join(" / ") || "No receipt yet"}</div>
+                      </div>
+                      <span class="pill neutral">Archive</span>
+                    </div>
+                  `).join("") || `<div class="empty-state">No archive-ready rows in the current scope.</div>`}
+                </div>
+              </div>
+            </section>
+          ` : ``}
         </div>
       `;
     }
@@ -1836,32 +2674,41 @@
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
       const stages = ["Waiting Client Docs", "Document Review", "Submission Prep", "Ongoing Review"];
+      const caseTabMap = {
+        active: scopedCases.filter((item) => item.stage !== "Closed"),
+        sp2dk: scopedCases.filter((item) => item.caseType.includes("SP2DK")),
+        pemeriksaan: scopedCases.filter((item) => item.caseType.includes("Pemeriksaan")),
+        restitusi: scopedCases.filter((item) => item.caseType.includes("Restitusi")),
+        closed: scopedCases.filter((item) => item.stage === "Closed")
+      };
+      const caseList = caseTabMap[state.casesTab] || scopedCases;
       const root = document.getElementById("cases-view");
 
       root.innerHTML = `
-        <section class="panel">
-          <div class="section-title">
-            <div>
-              <h3>Cases</h3>
-              <p>Non-recurring tax cases and projects. This is where Kanban belongs for milestone and stage tracking.</p>
+        <div class="workspace-frame workspace-cases">
+          <section class="panel">
+            <div class="toolbar">
+              <div class="workspace-tabs">
+                <button class="${state.casesTab === "active" ? "solid-btn" : "ghost-btn"}" data-cases-tab="active">Active Cases</button>
+                <button class="${state.casesTab === "sp2dk" ? "solid-btn" : "ghost-btn"}" data-cases-tab="sp2dk">SP2DK</button>
+                <button class="${state.casesTab === "pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan">Pemeriksaan</button>
+                <button class="${state.casesTab === "restitusi" ? "solid-btn" : "ghost-btn"}" data-cases-tab="restitusi">Restitusi</button>
+                <button class="${state.casesTab === "closed" ? "solid-btn" : "ghost-btn"}" data-cases-tab="closed">Closed Cases</button>
+              </div>
+              <div class="toolbar-right">
+                <span class="pill neutral">${caseList.length} cases</span>
+              </div>
             </div>
-            <div class="chips">
-              <span class="badge accent">Project-style stages</span>
-              <span class="badge warning">Dual PIC tracking</span>
-              <span class="badge danger">Separate from recurring compliance matrix</span>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="dashboard-grid">
-          <div class="panel">
+          <section class="panel">
             <div class="section-title">
               <div>
                 <h3>Case Queue</h3>
-                <p>Work queue for SP2DK, pemeriksaan, registrations, restitusi, and consultation projects.</p>
+                <p>Project-style queue for SP2DK, pemeriksaan, restitusi, registrations, and consultation work.</p>
               </div>
             </div>
-            <div class="table-wrap">
+            <div class="table-wrap desktop-only">
               <table>
                 <thead>
                   <tr>
@@ -1876,7 +2723,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${scopedCases.map((item) => `
+                  ${caseList.map((item) => `
                     <tr>
                       <td>${item.clientName}</td>
                       <td>${item.caseType}</td>
@@ -1887,17 +2734,39 @@
                       <td>${item.dueDate}</td>
                       <td><span class="pill neutral" title="${item.notes}">NOTE 1</span></td>
                     </tr>
-                  `).join("")}
+                  `).join("") || `<tr><td colspan="8"><div class="empty-state">No cases in this lane.</div></td></tr>`}
                 </tbody>
               </table>
             </div>
-          </div>
+            <div class="mobile-only">
+              <div class="list-grid">
+                ${caseList.map((item) => `
+                  <div class="mobile-card">
+                    <div class="mobile-card-header">
+                      <div>
+                        <div class="mobile-card-title">${item.clientName}</div>
+                        <div class="subline">${item.caseType}</div>
+                      </div>
+                      <span class="pill ${item.priority === "High" ? "danger" : "warning"}">${item.priority}</span>
+                    </div>
+                    <div class="mobile-meta-grid">
+                      <div class="mobile-meta-box"><div class="eyebrow">Tax PIC</div><strong>${item.taxPic}</strong></div>
+                      <div class="mobile-meta-box"><div class="eyebrow">Accounting PIC</div><strong>${item.accountingPic}</strong></div>
+                      <div class="mobile-meta-box"><div class="eyebrow">Stage</div><strong>${item.stage}</strong></div>
+                      <div class="mobile-meta-box"><div class="eyebrow">Due</div><strong>${item.dueDate}</strong></div>
+                    </div>
+                    <div class="subline">${item.notes}</div>
+                  </div>
+                `).join("") || `<div class="empty-state">No cases in this lane.</div>`}
+              </div>
+            </div>
+          </section>
 
-          <div class="panel">
+          <section class="panel">
             <div class="section-title">
               <div>
                 <h3>Cases Kanban</h3>
-                <p>Kanban is restricted to cases because milestone tracking fits project work better than recurring compliance.</p>
+                <p>Kanban is reserved for non-recurring work where stage progression matters more than dense matrix scanning.</p>
               </div>
             </div>
             <div class="kanban-board">
@@ -1906,21 +2775,22 @@
                   <div class="section-title" style="margin-bottom:4px;">
                     <div>
                       <h3 style="font-size:13px;">${stage}</h3>
-                      <p>${scopedCases.filter((item) => item.stage === stage).length} cases</p>
+                      <p>${caseList.filter((item) => item.stage === stage).length} cases</p>
                     </div>
                   </div>
-                  ${scopedCases.filter((item) => item.stage === stage).map((item) => `
+                  ${caseList.filter((item) => item.stage === stage).map((item) => `
                     <div class="kanban-card">
                       <h4>${item.clientName}</h4>
-                      <div class="meta">${item.caseType} / Tax ${item.taxPic} / Acc ${item.accountingPic}</div>
+                      <div class="meta">${item.caseType}</div>
+                      <div class="meta">Tax ${item.taxPic} / Acc ${item.accountingPic}</div>
                       <div class="meta">${item.priority} priority / Due ${item.dueDate}</div>
                     </div>
                   `).join("") || `<div class="empty-state">No cases in this stage.</div>`}
                 </div>
               `).join("")}
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       `;
     }
 
@@ -1930,23 +2800,24 @@
       const totalPayable = OBLIGATIONS.reduce((sum, key) => sum + (client.obligations[key].payableAmount || 0), 0);
 
       root.innerHTML = `
-        <section class="panel">
-          <div class="section-title">
-            <div>
-              <div class="eyebrow">Client Operational Overview</div>
-              <h3 style="margin-top:6px;">${client.name}</h3>
-              <p>${client.notes}</p>
+        <div class="workspace-frame workspace-client">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">Client Operational Overview</div>
+                <h3 style="margin-top:6px;">${client.name}</h3>
+                <p>${client.notes}</p>
+              </div>
+              <div class="chips">
+                <span class="badge accent">Tax ${client.taxPic}</span>
+                <span class="badge neutral">Acc ${client.accountingPic}</span>
+                <span class="badge warning">${client.followUpCount} follow-ups</span>
+                <span class="badge danger">${client.claimStatus}</span>
+              </div>
             </div>
-            <div class="chips">
-              <span class="badge accent">Tax ${client.taxPic}</span>
-              <span class="badge neutral">Acc ${client.accountingPic}</span>
-              <span class="badge warning">${client.followUpCount} follow-ups</span>
-              <span class="badge danger">${client.claimStatus}</span>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="dashboard-grid">
+          <section class="dashboard-grid">
           <div class="panel">
             <div class="section-title">
               <div>
@@ -2049,7 +2920,38 @@
             </div>
           </div>
         </section>
+        </div>
       `;
+    }
+
+    function renderShellChrome() {
+      const meta = currentWorkspaceMeta();
+      document.getElementById("workspace-breadcrumb").textContent = meta.breadcrumb;
+      document.getElementById("workspace-label").textContent = meta.label;
+      document.getElementById("workspace-note").textContent = meta.note;
+      document.getElementById("mobile-workspace-title").textContent = meta.label;
+      document.getElementById("sidebar-user-name").textContent = state.selectedPic;
+      document.getElementById("sidebar-user-role").textContent =
+        state.role === "supervisor" ? "Supervisor / All PIC Visibility" : "Normal Staff / Assigned Scope";
+      document.getElementById("mobile-user-name").textContent = state.selectedPic;
+      document.getElementById("mobile-user-role").textContent =
+        state.role === "supervisor" ? "Supervisor" : "Normal Staff";
+      document.getElementById("sidebar-attendance-status").textContent = state.attendance.loading
+        ? "Submitting..."
+        : state.attendance.status;
+      document.getElementById("sidebar-attendance-time").textContent = state.attendance.lastTime;
+      document.getElementById("mobile-attendance-status").textContent = state.attendance.loading
+        ? "Submitting..."
+        : state.attendance.status;
+      document.getElementById("mobile-attendance-time").textContent = state.attendance.lastTime;
+      document.getElementById("mobile-role-select").value = state.role;
+      document.getElementById("mobile-pic-select").value = state.selectedPic;
+      document.getElementById("mobile-scope-panel").classList.toggle("hidden", !state.mobileScopeOpen);
+      const sidebarAttendButton = document.querySelector(".attendance-widget [data-attend]");
+      if (sidebarAttendButton) {
+        sidebarAttendButton.textContent = state.attendance.loading ? "Attending..." : "Attend";
+      }
+      document.getElementById("mobile-attend-button").textContent = state.attendance.loading ? "Attending..." : "Attend";
     }
 
     function switchView(viewId) {
@@ -2060,6 +2962,7 @@
       document.querySelectorAll(".view").forEach((view) => {
         view.classList.toggle("hidden", view.id !== viewId);
       });
+      renderShellChrome();
     }
 
     function simulateBillingImport(client) {
@@ -2078,6 +2981,55 @@
       client.lastUpdated = "2026-05-20 12:10";
     }
 
+    function historySnapshot() {
+      return {
+        currentView: state.currentView,
+        role: state.role,
+        selectedPic: state.selectedPic,
+        selectedClientId: state.selectedClientId,
+        selectedObligationKey: state.selectedObligationKey,
+        expandedClientId: state.expandedClientId,
+        operationsTab: state.operationsTab,
+        casesTab: state.casesTab,
+        clientManagementTab: state.clientManagementTab,
+        managementTab: state.managementTab,
+        mobileScopeOpen: state.mobileScopeOpen,
+        autoHideCompleted: state.autoHideCompleted,
+        showCompletedRows: state.showCompletedRows,
+        filters: { ...state.filters },
+        historyFilters: { ...state.historyFilters }
+      };
+    }
+
+    function applyHistorySnapshot(snapshot) {
+      if (!snapshot) return;
+      state.currentView = snapshot.currentView || state.currentView;
+      state.role = snapshot.role || state.role;
+      state.selectedPic = snapshot.selectedPic || state.selectedPic;
+      state.selectedClientId = snapshot.selectedClientId || state.selectedClientId;
+      state.selectedObligationKey = snapshot.selectedObligationKey || state.selectedObligationKey;
+      state.expandedClientId = snapshot.expandedClientId || "";
+      state.operationsTab = snapshot.operationsTab || state.operationsTab;
+      state.casesTab = snapshot.casesTab || state.casesTab;
+      state.clientManagementTab = snapshot.clientManagementTab || state.clientManagementTab;
+      state.managementTab = snapshot.managementTab || state.managementTab;
+      state.mobileScopeOpen = typeof snapshot.mobileScopeOpen === "boolean" ? snapshot.mobileScopeOpen : state.mobileScopeOpen;
+      state.autoHideCompleted = typeof snapshot.autoHideCompleted === "boolean" ? snapshot.autoHideCompleted : state.autoHideCompleted;
+      state.showCompletedRows = typeof snapshot.showCompletedRows === "boolean" ? snapshot.showCompletedRows : state.showCompletedRows;
+      state.filters = { ...state.filters, ...(snapshot.filters || {}) };
+      state.historyFilters = { ...state.historyFilters, ...(snapshot.historyFilters || {}) };
+    }
+
+    function syncBrowserHistory(mode = "replace") {
+      const method = mode === "push" ? "pushState" : "replaceState";
+      window.history[method](historySnapshot(), "", window.location.pathname);
+    }
+
+    function commitUi(mode = "push") {
+      rerender();
+      syncBrowserHistory(mode);
+    }
+
     function rerender() {
       document.getElementById("role-description").textContent =
         state.role === "supervisor"
@@ -2089,41 +3041,119 @@
       renderMatrix();
       renderCases();
       renderClientView();
+      renderShellChrome();
       switchView(state.currentView);
     }
 
-    document.addEventListener("click", (event) => {
+    document.addEventListener("click", async (event) => {
       const target = event.target;
+      const navButton = target.closest ? target.closest(".nav-btn") : null;
 
-      if (target.matches(".nav-btn")) {
-        switchView(target.getAttribute("data-view"));
+      if (navButton) {
+        switchView(navButton.getAttribute("data-view"));
+        syncBrowserHistory("push");
+        return;
       }
 
       if (target.matches("[data-switch-view]")) {
         switchView(target.getAttribute("data-switch-view"));
+        syncBrowserHistory("push");
+      }
+
+      if (target.matches("[data-toggle-scope]")) {
+        state.mobileScopeOpen = !state.mobileScopeOpen;
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-operations-tab]")) {
+        state.operationsTab = target.getAttribute("data-operations-tab");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-cases-tab]")) {
+        state.casesTab = target.getAttribute("data-cases-tab");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-management-tab]")) {
+        state.managementTab = target.getAttribute("data-management-tab");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-operations-tab-shortcut]")) {
+        state.operationsTab = target.getAttribute("data-operations-tab-shortcut");
+        switchView("matrix-view");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-cases-tab-shortcut]")) {
+        state.casesTab = target.getAttribute("data-cases-tab-shortcut");
+        switchView("cases-view");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-client-tab-shortcut]")) {
+        state.clientManagementTab = target.getAttribute("data-client-tab-shortcut");
+        switchView("client-management-view");
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-open-client]")) {
         state.selectedClientId = target.getAttribute("data-open-client");
         switchView("client-view");
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-open-notes]")) {
         state.selectedClientId = target.getAttribute("data-open-notes");
-        rerender();
+        state.expandedClientId = target.getAttribute("data-open-notes");
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-row-toggle]")) {
+        const clientId = target.getAttribute("data-row-toggle");
+        state.expandedClientId = state.expandedClientId === clientId ? "" : clientId;
+        state.selectedClientId = clientId;
+        commitUi("push");
+        return;
+      }
+
+      const rowToggleElement = target.closest ? target.closest("[data-row-toggle]") : null;
+      if (
+        rowToggleElement &&
+        !target.closest("[data-open-obligation]") &&
+        !target.closest("[data-open-client]") &&
+        !target.closest("[data-open-notes]")
+      ) {
+        const clientId = rowToggleElement.getAttribute("data-row-toggle");
+        state.expandedClientId = state.expandedClientId === clientId ? "" : clientId;
+        state.selectedClientId = clientId;
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-client-tab]")) {
         state.clientManagementTab = target.getAttribute("data-client-tab");
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-open-obligation]")) {
         const [clientId, obligationKey] = target.getAttribute("data-open-obligation").split("|");
         state.selectedClientId = clientId;
         state.selectedObligationKey = obligationKey;
-        rerender();
+        state.expandedClientId = clientId;
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-followup-change]")) {
@@ -2131,7 +3161,8 @@
         const direction = target.getAttribute("data-followup-change");
         client.followUpCount = direction === "up" ? client.followUpCount + 1 : Math.max(0, client.followUpCount - 1);
         client.lastUpdated = "2026-05-20 12:15";
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-save-detail]")) {
@@ -2143,32 +3174,77 @@
         obligation.quickNotes = document.getElementById("detail-notes").value.trim();
         obligation.revisionRequired = obligation.status === "revision" || obligation.status === "temporary";
         client.lastUpdated = "2026-05-20 12:20";
-        rerender();
+        if (isClientCompleted(client)) {
+          state.completionPromptClientId = client.id;
+        }
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-simulate-billing]")) {
         const client = selectedClient();
         simulateBillingImport(client);
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-generate-claim]")) {
         const client = selectedClient();
         generateClaim(client);
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-save-attendance-creds]")) {
+        const username = window.prompt("Attendance website username:", "");
+        if (username === null) return;
+        const password = window.prompt("Attendance website password:", "");
+        if (password === null) return;
+        const attendancePassword = window.prompt("Attendance second-layer password:", "");
+        if (attendancePassword === null) return;
         state.attendance.credentialsSaved = true;
-        state.attendance.message = "Attendance password saved in encrypted storage.";
-        rerender();
+        state.attendance.credentials = {
+          username,
+          password,
+          attendancePassword
+        };
+        state.attendance.message = "Attendance credentials saved in memory for this session only.";
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-attend]")) {
-        state.attendance.status = "Attendance submitted";
-        state.attendance.lastTime = "2026-05-20 08:03";
-        state.attendance.message = "Attendance posted successfully through browser automation.";
-        rerender();
+        if (!state.attendance.credentials) {
+          state.attendance.message = "Save attendance credentials first.";
+          commitUi("replace");
+          return;
+        }
+
+        state.attendance.loading = true;
+        state.attendance.message = "Submitting attendance...";
+        commitUi("replace");
+
+        try {
+          const response = await fetch(state.attendance.apiUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(state.attendance.credentials)
+          });
+          const result = await response.json();
+
+          state.attendance.status = result.success ? "Attendance submitted" : "Attendance failed";
+          state.attendance.lastTime = result.timestamp || state.attendance.lastTime;
+          state.attendance.message = result.message || "Attendance request completed.";
+        } catch (error) {
+          state.attendance.status = "Attendance failed";
+          state.attendance.message = error instanceof Error ? error.message : "Could not reach attendance service.";
+        } finally {
+          state.attendance.loading = false;
+          commitUi("replace");
+        }
+        return;
       }
 
       if (target.matches("[data-completion-action]")) {
@@ -2178,9 +3254,11 @@
         }
         if (action === "move-completed") {
           state.showCompletedRows = false;
+          state.expandedClientId = "";
         }
         state.completionPromptClientId = "";
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-convert-proposal]")) {
@@ -2217,80 +3295,90 @@
         state.selectedClientId = newClientId;
         state.clientManagementTab = "active";
         switchView("client-management-view");
-        rerender();
+        commitUi("push");
+        return;
       }
     });
 
     document.addEventListener("change", (event) => {
       const target = event.target;
 
-      if (target.id === "role-select") {
+      if (target.id === "role-select" || target.id === "mobile-role-select") {
         state.role = target.value;
-        rerender();
+        commitUi("push");
+        return;
       }
 
-      if (target.id === "pic-select") {
+      if (target.id === "pic-select" || target.id === "mobile-pic-select") {
         state.selectedPic = target.value;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "query-input") {
         state.filters.query = target.value;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "attention-toggle") {
         state.filters.needsAttentionOnly = target.checked;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "autohide-toggle") {
         state.autoHideCompleted = target.checked;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "show-completed-toggle") {
         state.showCompletedRows = target.checked;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "autohide-prompt-toggle") {
         state.autoHideCompleted = target.checked;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "history-query") {
         state.historyFilters.query = target.value;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "history-month") {
         state.historyFilters.month = target.value;
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.id === "history-year") {
         state.historyFilters.year = target.value;
-        rerender();
-      }
-
-      if (target.matches("[data-claim-status]")) {
-        const client = clients.find((item) => item.id === target.getAttribute("data-claim-status"));
-        if (!client) return;
-        client.claimStatus = target.value;
-        client.lastUpdated = "2026-05-20 12:25";
-        rerender();
+        commitUi("push");
+        return;
       }
 
       if (target.matches("[data-proposal-status]")) {
         const proposal = proposals.find((item) => item.id === target.getAttribute("data-proposal-status"));
         if (!proposal) return;
         proposal.status = target.value;
-        rerender();
+        commitUi("push");
+        return;
       }
     });
 
+    window.addEventListener("popstate", (event) => {
+      applyHistorySnapshot(event.state);
+      rerender();
+    });
+
     rerender();
+    syncBrowserHistory("replace");
   </script>
 </body>
 </html>
