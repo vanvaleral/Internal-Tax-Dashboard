@@ -547,10 +547,166 @@
       gap: 6px;
     }
 
+    .followup-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .obligation-stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .obligation-form {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      display: grid;
+      gap: 10px;
+    }
+
+    .obligation-form-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .status-compact {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .status-mini {
+      min-width: 34px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: #eef2f6;
+      color: #42515e;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .status-mini.active {
+      background: var(--ink);
+      color: white;
+    }
+
+    .obligation-fields {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 1.4fr auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .ledger-sheet {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(216, 212, 202, 0.95);
+      padding-left: 12px;
+      background: rgba(248, 249, 245, 0.7);
+      border-radius: 16px;
+    }
+
+    .ledger-table {
+      width: 100%;
+      min-width: 0;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .ledger-table th,
+    .ledger-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid rgba(216, 212, 202, 0.72);
+      vertical-align: middle;
+      font-size: 12px;
+      background: transparent;
+      position: static;
+    }
+
+    .ledger-table thead th {
+      background: transparent;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 12px;
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .ledger-name-col {
+      width: 130px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      border-right: 1px solid rgba(216, 212, 202, 0.72);
+    }
+
+    .ledger-tax-head {
+      min-width: 150px;
+    }
+
+    .ledger-tax-title {
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .ledger-tax-meta {
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .ledger-mini-btn {
+      padding: 4px 7px;
+      border-radius: 8px;
+      background: #eef2f6;
+      color: #42515e;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .ledger-cell-input {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 7px;
+      min-height: 28px;
+      font-size: 12px;
+      background: white;
+    }
+
+    .ledger-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
     .obligation-mini .icon {
       display: block;
       margin-bottom: 4px;
       font-size: 16px;
+    }
+
+    .obligation-mini.na {
+      color: #94a3af;
+      background: #edf1f5;
+    }
+
+    .obligation-mini.na .icon {
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      margin-bottom: 5px;
     }
 
     .timeline-item {
@@ -698,12 +854,117 @@
     .matrix-cell.temporary { background: #fff4e5; }
     .matrix-cell.revision { background: var(--danger-soft); }
     .matrix-cell.missing { background: #f3d9df; }
-    .matrix-cell.na { background: #edf1f5; color: #94a3af; }
+    .matrix-cell.na {
+      background: #edf1f5;
+      color: #94a3af;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    .matrix-cell.idle { background: #edf1f5; color: #7a8793; }
+    .matrix-cell.requested { background: var(--warning-soft); color: #8c5a09; }
+    .matrix-cell.calculated { background: #e9f3ff; color: #24568c; }
+    .matrix-cell.paid { background: #eef7ea; color: #2f6b3e; }
+    .matrix-cell.validated { background: #e7f6ee; color: #195c41; }
+    .matrix-cell.completed { background: #d9f1ed; color: #0f766e; }
+
+    .matrix-cell.data-missing {
+      background: #f9e3e6;
+      color: #b42332;
+      font-size: 16px;
+    }
+
+    .matrix-cell.data-requesting {
+      background: #fff1db;
+      color: #9a6700;
+      font-size: 15px;
+    }
+
+    .matrix-cell.data-received {
+      background: #e7f6ee;
+      color: #1f7a4d;
+      font-size: 15px;
+    }
 
     .attention-flag {
       font-size: 11px;
       line-height: 1.45;
       color: var(--ink);
+    }
+
+    .notes-popover {
+      position: fixed;
+      width: min(280px, calc(100vw - 24px));
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.98);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      z-index: 95;
+    }
+
+    .notes-popover.closing {
+      animation: noteCurlOut 0.42s ease forwards;
+      transform-origin: bottom left;
+      pointer-events: none;
+    }
+
+    .notes-popup-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .notes-mini-card {
+      padding: 10px;
+      border-radius: 14px;
+      background: var(--neutral-soft);
+      display: grid;
+      gap: 6px;
+    }
+
+    .notes-save-btn.saving {
+      animation: saveExpand 0.42s ease forwards;
+    }
+
+    .note-trigger {
+      transition: background 0.16s ease, color 0.16s ease;
+    }
+
+    .note-trigger:hover {
+      background: #eef4fb;
+      color: #22394a;
+    }
+
+    .note-hover-preview {
+      position: fixed;
+      width: 240px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.98);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--ink);
+      white-space: normal;
+      text-align: left;
+      z-index: 96;
+      pointer-events: none;
+    }
+
+    @keyframes saveExpand {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(34, 57, 74, 0.14); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34, 57, 74, 0); }
+    }
+
+    @keyframes noteCurlOut {
+      0% { opacity: 1; transform: rotate(0deg) scale(1); filter: blur(0); }
+      55% { opacity: 0.92; transform: rotate(-3deg) translateY(-4px) scale(1.01); }
+      100% { opacity: 0; transform: rotate(-11deg) translateY(-18px) scale(0.9); filter: blur(1px); }
     }
 
     .detail-card {
@@ -780,7 +1041,8 @@
       .dashboard-grid,
       .dashboard-grid-3,
       .compact-grid-4,
-      .detail-grid-2 {
+      .detail-grid-2,
+      .obligation-fields {
         grid-template-columns: 1fr;
       }
 
@@ -1180,6 +1442,8 @@
   </div>
 
   <input id="client-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
+  <div id="notes-popup-root"></div>
+  <div id="notes-hover-root"></div>
 
   <script>
     const OBLIGATIONS = ["pph21", "unifikasi", "pph25", "phrpb1", "ppn"];
@@ -1190,6 +1454,22 @@
       pph25: "PPh 25 / PP55",
       phrpb1: "PHR / PB1",
       ppn: "PPN"
+    };
+
+    const OBLIGATION_SHORT_LABELS = {
+      pph21: "PPh 21",
+      unifikasi: "PPh Uni",
+      pph25: "PPh 25",
+      phrpb1: "PB1",
+      ppn: "PPN"
+    };
+
+    const OBLIGATION_GROUP_HINTS = {
+      pph21: "Employee withholding",
+      unifikasi: "Covers 22 / 23 / 4(2)",
+      pph25: "PPh 25 or PP 55",
+      phrpb1: "Regional tax bucket",
+      ppn: "VAT reporting"
     };
 
     const STATUS_ICON = {
@@ -1208,6 +1488,32 @@
       revision: "Revision Pending",
       missing: "Missing",
       na: "Not Applicable"
+    };
+
+    const LEDGER_STATE_LABELS = {
+      idle: "Not handled",
+      requested: "Data requested",
+      calculated: "Calculated",
+      paid: "Paid",
+      validated: "Validated",
+      completed: "Completed",
+      na: "No obligation"
+    };
+
+    const LEDGER_STATE_ICONS = {
+      idle: "-",
+      requested: "R",
+      calculated: "Rp",
+      paid: "Dt",
+      validated: "ID",
+      completed: "OK",
+      na: "N/A"
+    };
+
+    const DATA_STATE_META = {
+      missing: { icon: "!", label: "Data missing", className: "data-missing" },
+      requesting: { icon: "↗", label: "Data requested", className: "data-requesting" },
+      received: { icon: "✓", label: "Data received", className: "data-received" }
     };
 
     const CLAIM_STATUSES = [
@@ -1566,6 +1872,12 @@
       autoHideCompleted: true,
       showCompletedRows: false,
       completionPromptClientId: "",
+      notesPopupClientId: "",
+      notesAnchor: null,
+      dateDragValue: "",
+      dateDragSourceId: "",
+      dateDragArmed: false,
+      dateDragActive: false,
       historyFilters: {
         query: "",
         month: "all",
@@ -1659,6 +1971,25 @@
       return keys.map((key) => OBLIGATION_LABELS[key]).join(", ");
     }
 
+    function activeObligationKeys(client) {
+      return OBLIGATIONS.filter((key) => client.obligations[key].status !== "na");
+    }
+
+    function obligationLedgerState(item) {
+      if (!item || item.status === "na") return "na";
+      if (item.reported) return "completed";
+      if (item.receiptNumber) return "validated";
+      if (item.paidDate) return "paid";
+      if (Number(item.payableAmount || 0) > 0) return "calculated";
+      if (item.requestedAt) return "requested";
+      return "idle";
+    }
+
+    function clientDataState(client) {
+      if (client.dataState && DATA_STATE_META[client.dataState]) return client.dataState;
+      return "missing";
+    }
+
     function clientFormTarget() {
       return clients.find((client) => client.id === state.activeClientFormId) || clients[0];
     }
@@ -1690,6 +2021,7 @@
         pic: row.taxPic || "Nadia",
         taxPic: row.taxPic || "Nadia",
         accountingPic: row.accountingPic || row.taxPic || "Nadia",
+        dataState: row.dataState || "missing",
         followUpCount: Number(row.followUpCount || 0),
         notes: row.notes || "",
         lastUpdated: "2026-05-20 16:00",
@@ -1763,12 +2095,15 @@
     function obligationStripMarkup(client) {
       return `
         <div class="obligation-strip">
-          ${OBLIGATIONS.map((key) => `
-            <button class="obligation-mini" data-open-obligation="${client.id}|${key}">
-              <span class="icon">${STATUS_ICON[client.obligations[key].status]}</span>
-              ${OBLIGATION_LABELS[key]}
+          ${OBLIGATIONS.map((key) => {
+            const derivedState = obligationLedgerState(client.obligations[key]);
+            return `
+            <button class="obligation-mini ${derivedState}" data-open-obligation="${client.id}|${key}" title="${OBLIGATION_SHORT_LABELS[key]} - ${LEDGER_STATE_LABELS[derivedState]}">
+              <span class="icon">${LEDGER_STATE_ICONS[derivedState]}</span>
+              ${OBLIGATION_SHORT_LABELS[key]}
             </button>
-          `).join("")}
+          `;
+          }).join("")}
         </div>
       `;
     }
@@ -1827,11 +2162,15 @@
 
     function clientNeedsAttention(client) {
       const reasons = [];
-      const values = Object.values(client.obligations);
-      if (values.some((item) => item.status === "awaiting")) reasons.push("Awaiting client data");
-      if (values.some((item) => item.status === "temporary")) reasons.push("Temporary submission pending");
-      if (values.some((item) => item.status === "revision")) reasons.push("Revision pending");
-      if (values.some((item) => item.status === "missing")) reasons.push("Missing obligation info");
+      const dataState = clientDataState(client);
+      const values = Object.values(client.obligations).map((item) => obligationLedgerState(item));
+      if (dataState === "missing") reasons.push("Data missing");
+      if (dataState === "requesting") reasons.push("Data requested");
+      if (values.some((item) => item === "requested")) reasons.push("Data requested");
+      if (values.some((item) => item === "idle")) reasons.push("Not handled");
+      if (values.some((item) => item === "calculated")) reasons.push("Awaiting payment");
+      if (values.some((item) => item === "paid")) reasons.push("Awaiting NTPN");
+      if (values.some((item) => item === "validated")) reasons.push("Awaiting report");
       if (client.followUpCount > 3) reasons.push("High follow-up burden");
       if (client.claimStatus === "Draft" || client.claimStatus === "Billing Ready") reasons.push("Claim workflow not advanced");
       if (!client.billingUploaded) reasons.push("Billing PDF not uploaded");
@@ -1839,20 +2178,117 @@
     }
 
     function isClientCompleted(client) {
-      const obligationsDone = Object.values(client.obligations).every((item) => ["done", "na"].includes(item.status));
+      const obligationsDone = Object.values(client.obligations).every((item) => ["completed", "na"].includes(obligationLedgerState(item)));
       const claimDone = ["Tax Paid", "Reported"].includes(client.claimStatus);
       const paymentDone = ["Waiting Reporting Finalization", "Reported"].includes(client.paymentStatus);
       return obligationsDone && claimDone && paymentDone;
     }
 
     function clientNotesCount(client) {
-      const obligationNotes = Object.values(client.obligations).filter((item) => item.quickNotes).length;
-      return (client.notes ? 1 : 0) + obligationNotes;
+      return client.notes ? 1 : 0;
     }
 
     function clientNotesPreview(client) {
-      const obligationNote = Object.values(client.obligations).find((item) => item.quickNotes)?.quickNotes || "";
-      return [client.notes, obligationNote].filter(Boolean).join(" / ");
+      return client.notes || "";
+    }
+
+    function escapeAttr(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function formatRupiahInput(value) {
+      const digits = String(value || "").replace(/\D/g, "");
+      if (!digits) return "";
+      const number = Number(digits);
+      return new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(number);
+    }
+
+    function extractRupiahNumber(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return 0;
+      const normalized = raw.replace(/\s/g, "");
+      if (normalized.includes(",")) {
+        const [wholePart] = normalized.split(",");
+        const wholeDigits = wholePart.replace(/\D/g, "");
+        return wholeDigits ? Number(wholeDigits) : 0;
+      }
+      const digits = normalized.replace(/\D/g, "");
+      return digits ? Number(digits) : 0;
+    }
+
+    function formatDateDraft(value) {
+      const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+      const day = digits.slice(0, 2);
+      const month = digits.slice(2, 4);
+      const year = digits.slice(4, 8);
+      return [day, month, year].filter(Boolean).join("/");
+    }
+
+    function formatIsoToDisplayDate(value) {
+      if (!value) return "";
+      const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return value;
+      const [, year, month, day] = match;
+      return `${day}/${month}/${year}`;
+    }
+
+    function parseDisplayDateToIso(value) {
+      const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!match) return "";
+      const [, day, month, year] = match;
+      const dayNum = Number(day);
+      const monthNum = Number(month);
+      const yearNum = Number(year);
+      if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 2000) return "";
+      return `${year}-${month}-${day}`;
+    }
+
+    function ledgerDateDisplayValue(item) {
+      return item.paidDateDraft || formatIsoToDisplayDate(item.paidDate) || "";
+    }
+
+    function updateLedgerField(clientId, obligationKey, fieldKey, rawValue, shouldCommit = false) {
+      const client = clients.find((item) => item.id === clientId);
+      if (!client) return;
+      const obligation = client.obligations[obligationKey];
+      if (fieldKey === "payable") {
+        obligation.payableAmount = extractRupiahNumber(rawValue);
+      }
+      if (fieldKey === "date") {
+        obligation.paidDateDraft = rawValue;
+        const iso = parseDisplayDateToIso(rawValue);
+        obligation.paidDate = iso;
+        if (!rawValue) obligation.paidDate = "";
+      }
+      if (fieldKey === "ntpn") {
+        obligation.receiptNumber = String(rawValue || "").trim();
+      }
+      if (fieldKey === "detail") {
+        obligation.taxBreakdown = String(rawValue || "").trim();
+      }
+      client.lastUpdated = "2026-05-21 11:05";
+      if (isClientCompleted(client)) {
+        state.completionPromptClientId = client.id;
+      }
+      if (shouldCommit) {
+        commitUi("replace");
+      }
+    }
+
+    function resetDateDragState(clearValue = false) {
+      state.dateDragActive = false;
+      state.dateDragArmed = false;
+      state.dateDragSourceId = "";
+      if (clearValue) {
+        state.dateDragValue = "";
+      }
     }
 
     function matrixStatusSummary(client) {
@@ -2431,13 +2867,6 @@
       const promptedClient = state.completionPromptClientId
         ? clients.find((item) => item.id === state.completionPromptClientId)
         : null;
-      const expandedClient = state.expandedClientId
-        ? clients.find((item) => item.id === state.expandedClientId)
-        : null;
-      const expandedObligationKey = expandedClient && expandedClient.obligations[state.selectedObligationKey]
-        ? state.selectedObligationKey
-        : OBLIGATIONS.find((key) => expandedClient?.obligations[key].status !== "na") || "pph21";
-      const expandedObligation = expandedClient ? expandedClient.obligations[expandedObligationKey] : null;
       const claimRows = allVisibleClientsIncludingCompleted();
       const archiveRows = allVisibleClientsIncludingCompleted().filter((client) =>
         ["Reported", "Tax Paid"].includes(client.claimStatus) || isClientCompleted(client)
@@ -2511,13 +2940,13 @@
                     <tr>
                       <th>Client Name</th>
                       <th>Tax PIC</th>
-                      <th>Accounting PIC</th>
+                      <th>ACC PIC</th>
+                      <th>DATA</th>
                       <th>PPh 21</th>
-                      <th>Unifikasi</th>
-                      <th>PPh 25 / PP55</th>
-                      <th>PHR / PB1</th>
+                      <th>PPh Uni</th>
+                      <th>PPh 25</th>
+                      <th>PB1</th>
                       <th>PPN</th>
-                      <th>Follow-Up Count</th>
                       <th>Notes</th>
                       <th>Last Updated</th>
                       <th>Needs Attention</th>
@@ -2526,8 +2955,7 @@
                   <tbody>
                     ${list.map((row) => {
                       const rowExpanded = state.expandedClientId === row.id;
-                      const rowObligationKey = rowExpanded ? expandedObligationKey : OBLIGATIONS.find((key) => row.obligations[key].status !== "na") || "pph21";
-                      const rowObligation = row.obligations[rowObligationKey];
+                      const activeKeys = activeObligationKeys(row);
                       const rowTotalPayable = OBLIGATIONS.reduce((sum, key) => sum + (row.obligations[key].payableAmount || 0), 0);
 
                       return `
@@ -2538,13 +2966,15 @@
                           </td>
                           <td>${row.taxPic}</td>
                           <td>${row.accountingPic}</td>
+                          <td>
+                            <button class="matrix-cell ${DATA_STATE_META[clientDataState(row)].className}" data-cycle-data="${row.id}" title="${DATA_STATE_META[clientDataState(row)].label}">${DATA_STATE_META[clientDataState(row)].icon}</button>
+                          </td>
                           ${OBLIGATIONS.map((key) => `
                             <td>
-                              <button class="matrix-cell ${row.obligations[key].status}" data-open-obligation="${row.id}|${key}" title="${OBLIGATION_LABELS[key]} - ${STATUS_LABEL[row.obligations[key].status]}">${STATUS_ICON[row.obligations[key].status]}</button>
+                              <span class="matrix-cell ${obligationLedgerState(row.obligations[key])}" title="${OBLIGATION_SHORT_LABELS[key]} - ${LEDGER_STATE_LABELS[obligationLedgerState(row.obligations[key])]}">${LEDGER_STATE_ICONS[obligationLedgerState(row.obligations[key])]}</span>
                             </td>
                           `).join("")}
-                          <td>${row.followUpCount}</td>
-                          <td><button class="tiny-btn" data-open-notes="${row.id}" title="${clientNotesPreview(row) || "No notes"}">NOTE ${clientNotesCount(row)}</button></td>
+                          <td><button class="tiny-btn note-trigger" data-open-notes="${row.id}" data-note-preview="${escapeAttr(clientNotesPreview(row) || "No general note yet")}">NOTE</button></td>
                           <td>${row.lastUpdated}</td>
                           <td class="attention-flag">${clientNeedsAttention(row).slice(0, 2).join(" / ") || "Clear"}</td>
                         </tr>
@@ -2554,58 +2984,57 @@
                               <div class="detail-card">
                                 <div class="section-title">
                                   <div>
-                                    <h3 style="font-size:15px;">${row.name} / ${OBLIGATION_LABELS[rowObligationKey]}</h3>
-                                    <p>Scan queue, expand inline, update quickly, collapse, continue.</p>
+                                    <h3 style="font-size:15px;">${row.name}</h3>
                                   </div>
                                   <button class="ghost-btn" data-row-toggle="${row.id}">Collapse</button>
                                 </div>
-                                <div class="detail-grid-2">
-                                  <div class="detail-stat">
-                                    <div class="eyebrow">Focused obligation status</div>
-                                    <strong>${STATUS_ICON[rowObligation.status]} ${STATUS_LABEL[rowObligation.status]}</strong>
-                                  </div>
-                                  <div class="detail-stat">
-                                    <div class="eyebrow">Client total payable</div>
-                                    <strong>${currency(rowTotalPayable)}</strong>
-                                  </div>
-                                </div>
-                                <div class="detail-grid-2" style="margin-top:8px;">
-                                  <div class="detail-card">
-                                    <strong>Quick update</strong>
-                                    <div class="detail-list" style="margin-top:8px;">
-                                      <select id="detail-status" class="inline-select">
-                                        ${Object.keys(STATUS_LABEL).map((key) => `<option value="${key}" ${rowObligation.status === key ? "selected" : ""}>${STATUS_LABEL[key]}</option>`).join("")}
-                                      </select>
-                                      <input id="detail-receipt" class="inline-input" type="text" value="${rowObligation.receiptNumber}" placeholder="Receipt number" />
-                                      <input id="detail-payable" class="inline-input" type="number" value="${rowObligation.payableAmount}" placeholder="Payable amount" />
-                                      <textarea id="detail-notes" class="inline-textarea" placeholder="Quick notes">${rowObligation.quickNotes}</textarea>
-                                      <div class="inline-controls">
-                                        <button class="tiny-btn" data-followup-change="down">- Follow Up</button>
-                                        <span class="pill neutral">${row.followUpCount} follow-ups</span>
-                                        <button class="tiny-btn" data-followup-change="up">+ Follow Up</button>
-                                        <button class="solid-btn" data-save-detail="yes">Save Detail</button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div class="detail-card">
-                                    <strong>Claim and payment context</strong>
-                                    <div class="subline" style="margin-top:8px;">Claim status: ${row.claimStatus}</div>
-                                    <div class="subline">Payment status: ${row.paymentStatus}</div>
-                                    <div class="subline">Receipt number: ${rowObligation.receiptNumber || "-"}</div>
-                                    <div class="subline">Billing code: ${rowObligation.billingCode || "-"}</div>
-                                    <div class="subline">KAP/KJS: ${rowObligation.kapkjs || "-"}</div>
-                                    <div class="subline">Expiration: ${rowObligation.expirationDate || "-"}</div>
-                                    <div class="inline-controls" style="margin-top:8px;">
-                                      <button class="tiny-btn" data-simulate-billing="yes">Import Billing</button>
-                                      <button class="tiny-btn" data-generate-claim="yes">Generate Claim</button>
-                                      <button class="tiny-btn" data-open-client="${row.id}">Open Client View</button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div class="detail-card" style="margin-top:8px;">
-                                  <strong>Notes drawer preview</strong>
-                                  <div class="subline" style="margin-top:8px;">Client notes: ${row.notes || "No client-level notes."}</div>
-                                  <div class="subline">Obligation notes: ${rowObligation.quickNotes || "No obligation notes for the selected cell."}</div>
+                                <div class="ledger-sheet">
+                                  ${activeKeys.length ? `
+                                    <table class="ledger-table">
+                                      <thead>
+                                        <tr>
+                                          <th class="ledger-name-col"></th>
+                                          ${activeKeys.map((key) => {
+                                            const item = row.obligations[key];
+                                            const derivedState = obligationLedgerState(item);
+                                            return `
+                                              <th class="ledger-tax-head">
+                                                <div class="ledger-tax-title">${OBLIGATION_SHORT_LABELS[key]}</div>
+                                                <div class="ledger-tax-meta">
+                                                  <span class="ledger-state">${LEDGER_STATE_ICONS[derivedState]} ${LEDGER_STATE_LABELS[derivedState]}</span>
+                                                  <button class="ledger-mini-btn" data-request-data="${row.id}|${key}">Req</button>
+                                                  <label class="subline"><input type="checkbox" data-toggle-reported="${row.id}|${key}" ${item.reported ? "checked" : ""} /> Rep</label>
+                                                </div>
+                                                ${key === "unifikasi" ? `<div class="subline">22 / 23 / 4(2)</div>` : ``}
+                                              </th>
+                                            `;
+                                          }).join("")}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        <tr>
+                                          <td class="ledger-name-col">Tax Payable</td>
+                                          ${activeKeys.map((key) => `
+                                            <td><input id="ob-${row.id}-${key}-payable" class="ledger-cell-input" type="text" inputmode="numeric" value="${formatRupiahInput(row.obligations[key].payableAmount)}" placeholder="0,00" /></td>
+                                          `).join("")}
+                                        </tr>
+                                        <tr>
+                                          <td class="ledger-name-col">Date Paid</td>
+                                          ${activeKeys.map((key) => `
+                                            <td><input id="ob-${row.id}-${key}-date" class="ledger-cell-input" data-ledger-date="${row.id}|${key}" type="text" inputmode="numeric" value="${ledgerDateDisplayValue(row.obligations[key])}" placeholder="dd/mm/yyyy" /></td>
+                                          `).join("")}
+                                        </tr>
+                                        <tr>
+                                          <td class="ledger-name-col">NTPN</td>
+                                          ${activeKeys.map((key) => `
+                                            <td><input id="ob-${row.id}-${key}-ntpn" class="ledger-cell-input" type="text" value="${row.obligations[key].receiptNumber || ""}" placeholder="NTPN" /></td>
+                                          `).join("")}
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  ` : `
+                                    <div class="empty-state">No tax obligations are enabled for this client in Client List.</div>
+                                  `}
                                 </div>
                               </div>
                             </td>
@@ -2621,37 +3050,39 @@
                 <div class="list-grid">
                   ${list.map((row) => {
                     const rowExpanded = state.expandedClientId === row.id;
-                    const rowObligationKey = rowExpanded ? expandedObligationKey : OBLIGATIONS.find((key) => row.obligations[key].status !== "na") || "pph21";
-                    const rowObligation = row.obligations[rowObligationKey];
+                    const activeKeys = activeObligationKeys(row);
                     const rowTotalPayable = OBLIGATIONS.reduce((sum, key) => sum + (row.obligations[key].payableAmount || 0), 0);
                     return `
                       <div class="mobile-compact-item">
                         <div class="mobile-compact-header">
                           <div>
                             <strong>${row.name}</strong>
-                            <div class="subline">${row.month} ${row.year} / ${row.taxPic} / ${row.claimStatus}</div>
+                            <div class="subline">${row.month} ${row.year} / ${row.taxPic} / ${row.accountingPic}</div>
                           </div>
-                          <button class="tiny-btn" data-row-toggle="${row.id}">${rowExpanded ? "Hide" : "Open"}</button>
+                          <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="matrix-cell ${DATA_STATE_META[clientDataState(row)].className}" data-cycle-data="${row.id}" title="${DATA_STATE_META[clientDataState(row)].label}">${DATA_STATE_META[clientDataState(row)].icon}</button>
+                            <button class="tiny-btn" data-row-toggle="${row.id}">${rowExpanded ? "Hide" : "Open"}</button>
+                          </div>
                         </div>
                         ${obligationStripMarkup(row)}
-                        <div class="subline">${clientNeedsAttention(row)[0] || "Clear"} / ${row.followUpCount} follow-ups / ${row.lastUpdated}</div>
+                        <div class="subline">${clientNeedsAttention(row)[0] || "Clear"} / ${DATA_STATE_META[clientDataState(row)].label} / ${row.lastUpdated}</div>
                         ${rowExpanded ? `
                           <div class="detail-card">
-                            <strong>${OBLIGATION_LABELS[rowObligationKey]}</strong>
+                            <strong>${currency(rowTotalPayable)} / ${row.paymentStatus}</strong>
                             <div class="detail-list" style="margin-top:8px;">
-                              <select id="detail-status" class="inline-select">
-                                ${Object.keys(STATUS_LABEL).map((key) => `<option value="${key}" ${rowObligation.status === key ? "selected" : ""}>${STATUS_LABEL[key]}</option>`).join("")}
-                              </select>
-                              <input id="detail-receipt" class="inline-input" type="text" value="${rowObligation.receiptNumber}" placeholder="Receipt number" />
-                              <input id="detail-payable" class="inline-input" type="number" value="${rowObligation.payableAmount}" placeholder="Payable amount" />
-                              <textarea id="detail-notes" class="inline-textarea" placeholder="Quick notes">${rowObligation.quickNotes}</textarea>
-                              <div class="subline">Payment: ${row.paymentStatus} / Total payable: ${currency(rowTotalPayable)}</div>
+                              ${activeKeys.length ? activeKeys.map((key) => `
+                                <div class="mobile-meta-box">
+                                  <div class="eyebrow">${OBLIGATION_SHORT_LABELS[key]}</div>
+                                  <strong>${LEDGER_STATE_LABELS[obligationLedgerState(row.obligations[key])]}</strong>
+                                  <div class="subline">${OBLIGATION_GROUP_HINTS[key]}</div>
+                                </div>
+                              `).join("") : `<div class="empty-state">No tax obligations are enabled for this client.</div>`}
                               <div class="mobile-compact-actions">
-                                <button class="tiny-btn" data-followup-change="down">- Follow Up</button>
-                                <button class="tiny-btn" data-followup-change="up">+ Follow Up</button>
-                                <button class="tiny-btn" data-simulate-billing="yes">Import Billing</button>
-                                <button class="tiny-btn" data-generate-claim="yes">Generate Claim</button>
-                                <button class="solid-btn" data-save-detail="yes">Save Detail</button>
+                                <button class="tiny-btn" data-followup-change="down" data-client-id="${row.id}">- FU</button>
+                                <button class="tiny-btn" data-followup-change="up" data-client-id="${row.id}">+ FU</button>
+                                <button class="tiny-btn" data-simulate-billing="yes" data-client-id="${row.id}">Billing</button>
+                                <button class="tiny-btn" data-generate-claim="yes" data-client-id="${row.id}">Claim</button>
+                                <button class="solid-btn" data-open-client="${row.id}">Full View</button>
                               </div>
                             </div>
                           </div>
@@ -3108,6 +3539,95 @@
       document.getElementById("mobile-attend-button").textContent = state.attendance.loading ? "Attending..." : "Attend";
     }
 
+    function renderNotesPopup() {
+      const root = document.getElementById("notes-popup-root");
+      if (!root) return;
+      const client = state.notesPopupClientId
+        ? clients.find((item) => item.id === state.notesPopupClientId)
+        : null;
+      if (!client) {
+        root.innerHTML = "";
+        return;
+      }
+      const anchor = state.notesAnchor || { left: 16, top: 16 };
+      root.innerHTML = `
+        <div class="notes-popover" role="dialog" aria-label="General note popover" style="left:${anchor.left}px; top:${anchor.top}px;">
+          <div class="notes-popup-head">
+            <div>
+              <div class="eyebrow">General Note</div>
+              <strong>${client.name}</strong>
+            </div>
+            <button class="ghost-btn" data-close-notes="yes">Close</button>
+          </div>
+          <div class="notes-mini-card">
+            <textarea id="popup-client-notes" class="inline-textarea" placeholder="Type general note here">${client.notes || ""}</textarea>
+          </div>
+          <div class="inline-controls">
+            <button class="ghost-btn" data-close-notes="yes">Cancel</button>
+            <button class="solid-btn notes-save-btn" data-save-notes="${client.id}">Save</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function showNoteHoverPreview(triggerElement, text) {
+      const root = document.getElementById("notes-hover-root");
+      if (!root || !text) {
+        hideNoteHoverPreview();
+        return;
+      }
+      const rect = triggerElement.getBoundingClientRect();
+      const width = 240;
+      const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right + 10));
+      const top = Math.max(12, Math.min(window.innerHeight - 120, rect.top - 6));
+      root.innerHTML = `<div class="note-hover-preview" style="left:${left}px; top:${top}px;">${escapeAttr(text)}</div>`;
+    }
+
+    function hideNoteHoverPreview() {
+      const root = document.getElementById("notes-hover-root");
+      if (root) root.innerHTML = "";
+    }
+
+    function openNotesPopover(clientId, triggerElement) {
+      hideNoteHoverPreview();
+      const rect = triggerElement.getBoundingClientRect();
+      const width = Math.min(280, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width));
+      const top = Math.max(12, Math.min(window.innerHeight - 210, rect.bottom + 8));
+      state.selectedClientId = clientId;
+      state.notesPopupClientId = clientId;
+      state.notesAnchor = { left, top };
+      renderNotesPopup();
+    }
+
+    function bindDirectRowActions() {
+      document.querySelectorAll("[data-open-notes]").forEach((button) => {
+        button.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const clientId = button.getAttribute("data-open-notes");
+          openNotesPopover(clientId, button);
+        };
+      });
+
+      document.querySelectorAll("[data-cycle-data]").forEach((button) => {
+        button.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const client = clients.find((item) => item.id === button.getAttribute("data-cycle-data"));
+          if (!client) return;
+          const current = clientDataState(client);
+          const next = current === "missing" ? "requesting" : current === "requesting" ? "received" : "missing";
+          client.dataState = next;
+          if (next === "requesting") {
+            client.followUpCount += 1;
+          }
+          client.lastUpdated = "2026-05-21 10:05";
+          commitUi("push");
+        };
+      });
+    }
+
     function switchView(viewId) {
       state.currentView = viewId;
       document.querySelectorAll(".nav-btn").forEach((button) => {
@@ -3144,6 +3664,8 @@
         activeClientFormId: state.activeClientFormId,
         selectedObligationKey: state.selectedObligationKey,
         expandedClientId: state.expandedClientId,
+        notesPopupClientId: state.notesPopupClientId,
+        notesAnchor: state.notesAnchor,
         operationsTab: state.operationsTab,
         casesTab: state.casesTab,
         clientManagementTab: state.clientManagementTab,
@@ -3165,6 +3687,8 @@
       state.activeClientFormId = snapshot.activeClientFormId || state.activeClientFormId;
       state.selectedObligationKey = snapshot.selectedObligationKey || state.selectedObligationKey;
       state.expandedClientId = snapshot.expandedClientId || "";
+      state.notesPopupClientId = snapshot.notesPopupClientId || "";
+      state.notesAnchor = snapshot.notesAnchor || null;
       state.operationsTab = snapshot.operationsTab || state.operationsTab;
       state.casesTab = snapshot.casesTab || state.casesTab;
       state.clientManagementTab = snapshot.clientManagementTab || state.clientManagementTab;
@@ -3199,11 +3723,38 @@
       renderClientView();
       renderShellChrome();
       switchView(state.currentView);
+      renderNotesPopup();
+      bindDirectRowActions();
     }
 
     document.addEventListener("click", async (event) => {
-      const target = event.target;
-      const navButton = target.closest ? target.closest(".nav-btn") : null;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const navButton = target.closest(".nav-btn");
+      const switchViewTrigger = target.closest("[data-switch-view]");
+      const toggleScopeTrigger = target.closest("[data-toggle-scope]");
+      const operationsTabTrigger = target.closest("[data-operations-tab]");
+      const casesTabTrigger = target.closest("[data-cases-tab]");
+      const managementTabTrigger = target.closest("[data-management-tab]");
+      const operationsShortcutTrigger = target.closest("[data-operations-tab-shortcut]");
+      const casesShortcutTrigger = target.closest("[data-cases-tab-shortcut]");
+      const clientShortcutTrigger = target.closest("[data-client-tab-shortcut]");
+      const newClientTrigger = target.closest("[data-new-client]");
+      const editClientTrigger = target.closest("[data-edit-client]");
+      const importClientsTrigger = target.closest("[data-import-clients]");
+      const openClientTrigger = target.closest("[data-open-client]");
+      const openNotesTrigger = target.closest("[data-open-notes]");
+      const closeNotesTrigger = target.closest("[data-close-notes]");
+      const cycleDataTrigger = target.closest("[data-cycle-data]");
+      const saveNotesTrigger = target.closest("[data-save-notes]");
+      const openObligationTrigger = target.closest("[data-open-obligation]");
+      const notesPopoverTrigger = target.closest(".notes-popover");
+
+      if (state.notesPopupClientId && !openNotesTrigger && !saveNotesTrigger && !closeNotesTrigger && !notesPopoverTrigger) {
+        state.notesPopupClientId = "";
+        state.notesAnchor = null;
+        renderNotesPopup();
+      }
 
       if (navButton) {
         switchView(navButton.getAttribute("data-view"));
@@ -3211,57 +3762,57 @@
         return;
       }
 
-      if (target.matches("[data-switch-view]")) {
-        switchView(target.getAttribute("data-switch-view"));
+      if (switchViewTrigger) {
+        switchView(switchViewTrigger.getAttribute("data-switch-view"));
         syncBrowserHistory("push");
       }
 
-      if (target.matches("[data-toggle-scope]")) {
+      if (toggleScopeTrigger) {
         state.mobileScopeOpen = !state.mobileScopeOpen;
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-operations-tab]")) {
-        state.operationsTab = target.getAttribute("data-operations-tab");
+      if (operationsTabTrigger) {
+        state.operationsTab = operationsTabTrigger.getAttribute("data-operations-tab");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-cases-tab]")) {
-        state.casesTab = target.getAttribute("data-cases-tab");
+      if (casesTabTrigger) {
+        state.casesTab = casesTabTrigger.getAttribute("data-cases-tab");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-management-tab]")) {
-        state.managementTab = target.getAttribute("data-management-tab");
+      if (managementTabTrigger) {
+        state.managementTab = managementTabTrigger.getAttribute("data-management-tab");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-operations-tab-shortcut]")) {
-        state.operationsTab = target.getAttribute("data-operations-tab-shortcut");
+      if (operationsShortcutTrigger) {
+        state.operationsTab = operationsShortcutTrigger.getAttribute("data-operations-tab-shortcut");
         switchView("matrix-view");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-cases-tab-shortcut]")) {
-        state.casesTab = target.getAttribute("data-cases-tab-shortcut");
+      if (casesShortcutTrigger) {
+        state.casesTab = casesShortcutTrigger.getAttribute("data-cases-tab-shortcut");
         switchView("cases-view");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-client-tab-shortcut]")) {
-        state.clientManagementTab = target.getAttribute("data-client-tab-shortcut");
+      if (clientShortcutTrigger) {
+        state.clientManagementTab = clientShortcutTrigger.getAttribute("data-client-tab-shortcut");
         switchView("client-management-view");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-new-client]")) {
+      if (newClientTrigger) {
         const newClient = createClientFromRow({
           name: `New Client ${clients.length + 1}`,
           taxPic: state.selectedPic,
@@ -3278,45 +3829,44 @@
         return;
       }
 
-      if (target.matches("[data-edit-client]")) {
-        state.activeClientFormId = target.getAttribute("data-edit-client");
+      if (editClientTrigger) {
+        state.activeClientFormId = editClientTrigger.getAttribute("data-edit-client");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-import-clients]")) {
+      if (importClientsTrigger) {
         document.getElementById("client-csv-input").click();
         return;
       }
 
-      if (target.matches("[data-open-client]")) {
-        state.selectedClientId = target.getAttribute("data-open-client");
+      if (openClientTrigger) {
+        state.selectedClientId = openClientTrigger.getAttribute("data-open-client");
         switchView("client-view");
         commitUi("push");
         return;
       }
 
-      if (target.matches("[data-open-notes]")) {
-        state.selectedClientId = target.getAttribute("data-open-notes");
-        state.expandedClientId = target.getAttribute("data-open-notes");
-        commitUi("push");
+      if (openNotesTrigger) {
+        openNotesPopover(openNotesTrigger.getAttribute("data-open-notes"), openNotesTrigger);
         return;
       }
 
-      if (target.matches("[data-row-toggle]")) {
-        const clientId = target.getAttribute("data-row-toggle");
-        state.expandedClientId = state.expandedClientId === clientId ? "" : clientId;
-        state.selectedClientId = clientId;
-        commitUi("push");
+      if (closeNotesTrigger) {
+        state.notesPopupClientId = "";
+        state.notesAnchor = null;
+        hideNoteHoverPreview();
+        renderNotesPopup();
         return;
       }
 
-      const rowToggleElement = target.closest ? target.closest("[data-row-toggle]") : null;
+      const rowToggleElement = target.closest("[data-row-toggle]");
       if (
         rowToggleElement &&
-        !target.closest("[data-open-obligation]") &&
-        !target.closest("[data-open-client]") &&
-        !target.closest("[data-open-notes]")
+        !openObligationTrigger &&
+        !cycleDataTrigger &&
+        !openClientTrigger &&
+        !openNotesTrigger
       ) {
         const clientId = rowToggleElement.getAttribute("data-row-toggle");
         state.expandedClientId = state.expandedClientId === clientId ? "" : clientId;
@@ -3331,8 +3881,8 @@
         return;
       }
 
-      if (target.matches("[data-open-obligation]")) {
-        const [clientId, obligationKey] = target.getAttribute("data-open-obligation").split("|");
+      if (openObligationTrigger) {
+        const [clientId, obligationKey] = openObligationTrigger.getAttribute("data-open-obligation").split("|");
         state.selectedClientId = clientId;
         state.selectedObligationKey = obligationKey;
         state.expandedClientId = clientId;
@@ -3340,11 +3890,60 @@
         return;
       }
 
+      if (cycleDataTrigger) {
+        const client = clients.find((item) => item.id === cycleDataTrigger.getAttribute("data-cycle-data"));
+        if (!client) return;
+        const current = clientDataState(client);
+        const next = current === "missing" ? "requesting" : current === "requesting" ? "received" : "missing";
+        client.dataState = next;
+        if (next === "requesting") {
+          client.followUpCount += 1;
+        }
+        client.lastUpdated = "2026-05-21 10:05";
+        commitUi("push");
+        return;
+      }
+
+      if (saveNotesTrigger) {
+        const client = clients.find((item) => item.id === saveNotesTrigger.getAttribute("data-save-notes"));
+        if (!client) return;
+        const clientNotesInput = document.getElementById("popup-client-notes");
+        client.notes = clientNotesInput ? clientNotesInput.value.trim() : client.notes;
+        client.lastUpdated = "2026-05-21 10:25";
+        const popover = document.querySelector(".notes-popover");
+        const saveButton = saveNotesTrigger;
+        if (saveButton) {
+          saveButton.classList.add("saving");
+          saveButton.textContent = "Saved";
+        }
+        if (popover) {
+          popover.classList.add("closing");
+          await new Promise((resolve) => setTimeout(resolve, 420));
+        }
+        state.notesPopupClientId = "";
+        state.notesAnchor = null;
+        commitUi("push");
+        return;
+      }
+
       if (target.matches("[data-followup-change]")) {
-        const client = selectedClient();
+        const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
         const direction = target.getAttribute("data-followup-change");
         client.followUpCount = direction === "up" ? client.followUpCount + 1 : Math.max(0, client.followUpCount - 1);
         client.lastUpdated = "2026-05-20 12:15";
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-request-data]")) {
+        const [clientId, obligationKey] = target.getAttribute("data-request-data").split("|");
+        const client = clients.find((item) => item.id === clientId);
+        if (!client) return;
+        client.obligations[obligationKey].requestedAt = "2026-05-21";
+        client.followUpCount += 1;
+        state.selectedClientId = clientId;
+        state.selectedObligationKey = obligationKey;
+        client.lastUpdated = "2026-05-21 09:10";
         commitUi("push");
         return;
       }
@@ -3389,14 +3988,14 @@
       }
 
       if (target.matches("[data-simulate-billing]")) {
-        const client = selectedClient();
+        const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
         simulateBillingImport(client);
         commitUi("push");
         return;
       }
 
       if (target.matches("[data-generate-claim]")) {
-        const client = selectedClient();
+        const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
         generateClaim(client);
         commitUi("push");
         return;
@@ -3479,6 +4078,7 @@
           pic: proposal.proposedPic,
           taxPic: proposal.proposedPic,
           accountingPic: proposal.proposedPic,
+          dataState: "missing",
           followUpCount: 0,
           notes: proposal.notes,
           lastUpdated: "2026-05-20 12:35",
@@ -3571,12 +4171,61 @@
         return;
       }
 
+      if (target.matches("[data-toggle-reported]")) {
+        const [clientId, obligationKey] = target.getAttribute("data-toggle-reported").split("|");
+        const client = clients.find((item) => item.id === clientId);
+        if (!client) return;
+        client.obligations[obligationKey].reported = target.checked;
+        client.lastUpdated = "2026-05-21 09:20";
+        if (isClientCompleted(client)) {
+          state.completionPromptClientId = client.id;
+        }
+        commitUi("push");
+        return;
+      }
+
       if (target.matches("[data-proposal-status]")) {
         const proposal = proposals.find((item) => item.id === target.getAttribute("data-proposal-status"));
         if (!proposal) return;
         proposal.status = target.value;
         commitUi("push");
         return;
+      }
+
+      if (target.id.startsWith("ob-")) {
+        const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
+        if (!match) return;
+        const [, clientId, obligationKey, fieldKey] = match;
+        if (fieldKey === "payable") {
+          target.value = formatRupiahInput(target.value);
+        }
+        if (fieldKey === "date") {
+          target.value = formatDateDraft(target.value);
+        }
+        updateLedgerField(clientId, obligationKey, fieldKey, target.value, true);
+        return;
+      }
+    });
+
+    document.addEventListener("input", (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!target || !target.id.startsWith("ob-")) return;
+      const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
+      if (!match) return;
+      const [, clientId, obligationKey, fieldKey] = match;
+      if (fieldKey === "payable") {
+        target.value = formatRupiahInput(target.value);
+        target.setSelectionRange(target.value.length, target.value.length);
+        updateLedgerField(clientId, obligationKey, fieldKey, target.value, false);
+      }
+      if (fieldKey === "date") {
+        resetDateDragState();
+        target.value = formatDateDraft(target.value);
+        target.setSelectionRange(target.value.length, target.value.length);
+        updateLedgerField(clientId, obligationKey, fieldKey, target.value, false);
+      }
+      if (fieldKey === "ntpn") {
+        updateLedgerField(clientId, obligationKey, fieldKey, target.value, false);
       }
     });
 
@@ -3610,6 +4259,78 @@
     window.addEventListener("popstate", (event) => {
       applyHistorySnapshot(event.state);
       rerender();
+    });
+
+    document.addEventListener("mouseover", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const noteTrigger = target.closest("[data-open-notes]");
+      if (!noteTrigger || state.notesPopupClientId) return;
+      showNoteHoverPreview(noteTrigger, noteTrigger.getAttribute("data-note-preview"));
+    });
+
+    document.addEventListener("dblclick", async (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!target) return;
+      const dateTarget = target.closest("[data-ledger-date]");
+      if (!dateTarget) return;
+      const value = target.value.trim();
+      if (!value) return;
+      state.dateDragValue = value;
+      state.dateDragSourceId = target.id;
+      state.dateDragArmed = true;
+      state.dateDragActive = false;
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch {}
+      target.select();
+    });
+
+    document.addEventListener("mousedown", (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!target) return;
+      const dateTarget = target.closest("[data-ledger-date]");
+      if (!dateTarget || !state.dateDragArmed || !state.dateDragValue) return;
+      if (target.id === state.dateDragSourceId) return;
+      state.dateDragActive = true;
+      const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
+      if (!match) return;
+      const [, clientId, obligationKey] = match;
+      target.value = state.dateDragValue;
+      updateLedgerField(clientId, obligationKey, "date", target.value, false);
+    });
+
+    document.addEventListener("mouseover", (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (!target || !state.dateDragValue || !state.dateDragActive) return;
+      const dateTarget = target.closest("[data-ledger-date]");
+      if (!dateTarget || target.id === state.dateDragSourceId) return;
+      const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
+      if (!match) return;
+      const [, clientId, obligationKey] = match;
+      target.value = state.dateDragValue;
+      updateLedgerField(clientId, obligationKey, "date", target.value, false);
+    });
+
+    document.addEventListener("mouseout", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const noteTrigger = target.closest("[data-open-notes]");
+      if (!noteTrigger) return;
+      const related = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+      if (related && related.closest("[data-open-notes]") === noteTrigger) return;
+      hideNoteHoverPreview();
+    });
+
+    document.addEventListener("mouseup", () => {
+      resetDateDragState(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.notesPopupClientId) {
+        state.notesPopupClientId = "";
+        commitUi("replace");
+      }
     });
 
     rerender();
