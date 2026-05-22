@@ -7,10 +7,10 @@ const router = express.Router();
 router.post("/checkin", async (request, response) => {
   const { username, password, attendancePassword } = request.body || {};
 
-  if (!username || !password || !attendancePassword) {
+  if (!username || !password) {
     return response.status(400).json({
       success: false,
-      message: "username, password, and attendancePassword are required"
+      message: "username and password are required"
     });
   }
 
@@ -21,7 +21,7 @@ router.post("/checkin", async (request, response) => {
     const result = await runAttendanceCheckin({
       username,
       password,
-      attendancePassword
+      attendancePassword: attendancePassword || password
     });
 
     return response.status(result.success ? 200 : 500).json(result);

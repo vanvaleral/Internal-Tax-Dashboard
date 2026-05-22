@@ -8,6 +8,10 @@ const port = Number(process.env.ATTENDANCE_PORT || 4000);
 
 app.use(cors());
 app.use(express.json());
+app.use((request, _response, next) => {
+  console.log(`[attendance] ${request.method} ${request.originalUrl}`);
+  next();
+});
 
 app.get("/health", (_request, response) => {
   response.json({ ok: true, service: "attendance-microservice" });

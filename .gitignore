@@ -2,4 +2,6 @@
 .next/
 node_modules/
 dev-server.log
+dev-server-error.log
+.npm-cache/
 tsconfig.tsbuildinfo

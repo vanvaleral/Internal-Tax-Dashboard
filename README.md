@@ -136,6 +136,25 @@ It should not be mixed into the recurring compliance matrix.
 7. Persist encrypted attendance credentials per user and connect the attendance widget to authenticated profiles.
 8. Replace the placeholder Playwright selectors with the real DOM selectors from `https://host-mylmats.com/login`.
 
+## Attendance local run
+
+To use the attendance utility locally, run both services:
+
+1. App UI:
+   - `run-dev.bat`
+2. Attendance microservice:
+   - `run-attendance.bat`
+
+Then set the attendance selectors in `.env.local`.
+
+Selector env vars support fallback values separated by `||`, for example:
+
+```env
+ATTENDANCE_USERNAME_SELECTOR=input[type="email"] || input[name="email"]
+ATTENDANCE_PASSWORD_SELECTOR=input[type="password"] || input[name="password"]
+ATTENDANCE_SUBMIT_SELECTOR=button[type="submit"] || button:has-text("Log In")
+```
+
 ## Notes
 
 - The app includes demo fallback data if Supabase env vars are missing, so the interface is still reviewable before database setup.

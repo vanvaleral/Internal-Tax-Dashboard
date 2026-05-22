@@ -382,6 +382,27 @@
       margin-top: 8px;
     }
 
+    .attendance-log {
+      margin-top: 8px;
+      padding: 8px 9px;
+      border-radius: 12px;
+      background: #f5f7fa;
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      font-size: 10px;
+      line-height: 1.45;
+      color: #556470;
+      max-height: 120px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    .attendance-message {
+      margin-top: 8px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -886,23 +907,23 @@
       text-align: center;
     }
 
-    .operations-matrix th:nth-child(1),
-    .operations-matrix td:nth-child(1),
-    .operations-matrix th:nth-child(2),
-    .operations-matrix td:nth-child(2),
-    .operations-matrix th:nth-child(3),
-    .operations-matrix td:nth-child(3) {
+    .operations-matrix thead th:nth-child(1),
+    .operations-matrix tbody > tr.main-row > td:nth-child(1),
+    .operations-matrix thead th:nth-child(2),
+    .operations-matrix tbody > tr.main-row > td:nth-child(2),
+    .operations-matrix thead th:nth-child(3),
+    .operations-matrix tbody > tr.main-row > td:nth-child(3) {
       position: sticky;
       z-index: 2;
       background: rgba(255, 255, 255, 0.985);
     }
 
-    .operations-matrix th:nth-child(1),
-    .operations-matrix td:nth-child(1) { left: 0; }
-    .operations-matrix th:nth-child(2),
-    .operations-matrix td:nth-child(2) { left: 232px; }
-    .operations-matrix th:nth-child(3),
-    .operations-matrix td:nth-child(3) { left: 324px; }
+    .operations-matrix thead th:nth-child(1),
+    .operations-matrix tbody > tr.main-row > td:nth-child(1) { left: 0; }
+    .operations-matrix thead th:nth-child(2),
+    .operations-matrix tbody > tr.main-row > td:nth-child(2) { left: 232px; }
+    .operations-matrix thead th:nth-child(3),
+    .operations-matrix tbody > tr.main-row > td:nth-child(3) { left: 324px; }
 
     .operations-matrix thead th:nth-child(1),
     .operations-matrix thead th:nth-child(2),
@@ -925,6 +946,13 @@
     .expanded-row td,
     .ledger-table tbody tr:hover,
     .ledger-table tbody tr:hover td {
+      background: transparent;
+    }
+
+    .operations-matrix tbody > tr.expanded-row > td {
+      position: static !important;
+      left: auto !important;
+      z-index: auto !important;
       background: transparent;
     }
 
@@ -1091,6 +1119,257 @@
       font-weight: 700;
     }
 
+    .ops-mode-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .annual-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .annual-kpi {
+      padding: 11px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(216, 212, 202, 0.95);
+    }
+
+    .annual-kpi strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    .annual-sheet {
+      min-width: 1320px;
+    }
+
+    .annual-sheet th,
+    .annual-sheet td {
+      font-size: 10px;
+      padding: 6px 7px;
+      white-space: nowrap;
+    }
+
+    .annual-sheet .client-name-cell {
+      min-width: 180px;
+      white-space: normal;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    .annual-sheet .client-group-cell,
+    .annual-sheet .annual-notes-cell {
+      white-space: normal;
+      line-height: 1.3;
+    }
+
+    .annual-check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: #eef2f6;
+      color: #7b8794;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .annual-check.done {
+      background: #e7f6ee;
+      color: #1f7a4d;
+    }
+
+    .annual-check.pending {
+      background: #fff1db;
+      color: #9a6700;
+    }
+
+    .annual-check.alert {
+      background: #f9e3e6;
+      color: #b42332;
+    }
+
+    .annual-status-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .annual-status-chip.done {
+      background: #e7f6ee;
+      color: #1f7a4d;
+    }
+
+    .annual-status-chip.progress {
+      background: #e9f3ff;
+      color: #24568c;
+    }
+
+    .annual-status-chip.wait {
+      background: #fff1db;
+      color: #9a6700;
+    }
+
+    .annual-status-chip.alert {
+      background: #f9e3e6;
+      color: #b42332;
+    }
+
+    .annual-sheet .deadline-cutoff {
+      color: #b42332;
+      font-weight: 700;
+    }
+
+    .annual-progress-select {
+      min-width: 118px;
+      max-width: 118px;
+      padding: 6px 8px;
+      font-size: 10px;
+    }
+
+    .annual-date-input {
+      width: 92px;
+      min-width: 92px;
+      padding: 6px 8px;
+      font-size: 10px;
+    }
+
+    .date-input-wrap {
+      position: relative;
+      display: block;
+      width: 100%;
+    }
+
+    .native-date-proxy {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      border: 0;
+    }
+
+    .notes-log-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .notes-log-item {
+      padding: 7px 8px;
+      border-radius: 10px;
+      background: #f5f7fa;
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      font-size: 10px;
+      line-height: 1.45;
+      color: #556470;
+    }
+
+    .pic-progress-table-wrap {
+      margin-bottom: 10px;
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .pic-progress-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 11px;
+    }
+
+    .pic-progress-table th,
+    .pic-progress-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(216, 212, 202, 0.8);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .pic-progress-table th {
+      position: static;
+      background: rgba(245, 247, 250, 0.95);
+      color: #51606d;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .pic-progress-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .pic-progress-table .num {
+      width: 64px;
+      text-align: center;
+      font-weight: 700;
+      color: #23313d;
+    }
+
+    .pic-progress-table .pic-name {
+      font-weight: 700;
+      color: #15232d;
+    }
+
+    .mini-progress-track {
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e8edf2;
+    }
+
+    .mini-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #0f766e, #22c55e);
+    }
+
+    .cutoff-badge {
+      display: inline-flex;
+      justify-content: center;
+      min-width: 28px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #fff4db;
+      color: #9a5a07;
+      font-weight: 700;
+    }
+
+    .sort-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-weight: inherit;
+    }
+
+    .sort-arrow {
+      font-size: 10px;
+      color: #8a97a3;
+      letter-spacing: 0;
+    }
+
     .compact-toolbar {
       gap: 10px;
     }
@@ -1152,12 +1431,26 @@
     .compact-detail-card .ledger-sheet {
       margin-top: 6px;
       padding-top: 8px;
-      padding-left: 10px;
+      padding-left: 0;
+      overflow-x: auto;
+    }
+
+    .compact-detail-card .ledger-table {
+      table-layout: fixed;
+      min-width: 0;
+    }
+
+    .compact-detail-card .ledger-table thead th,
+    .compact-detail-card .ledger-table tbody td,
+    .compact-detail-card .ledger-table tbody th {
+      position: static;
+      top: auto;
+      z-index: auto;
     }
 
     .compact-detail-card .ledger-table th,
     .compact-detail-card .ledger-table td {
-      padding: 8px 8px;
+      padding: 8px 7px;
       font-size: 11px;
     }
 
@@ -1174,8 +1467,27 @@
     }
 
     .compact-detail-card .ledger-name-col {
-      width: 132px;
+      width: 118px;
+      min-width: 118px;
       font-size: 10px;
+      background: rgba(245, 244, 240, 0.72);
+    }
+
+    .compact-detail-card .ledger-tax-head {
+      min-width: 0;
+      vertical-align: top;
+    }
+
+    .compact-detail-card .ledger-tax-title {
+      margin-bottom: 4px;
+    }
+
+    .compact-detail-card .ledger-tax-meta {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 5px 7px;
+      align-items: center;
+      justify-items: start;
     }
 
     .ledger-tax-meta .subline {
@@ -1184,6 +1496,13 @@
       gap: 6px;
       margin-top: 0;
       white-space: nowrap;
+    }
+
+    .compact-detail-card .ledger-state {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .ledger-tax-meta input[type="checkbox"] {
@@ -1585,7 +1904,7 @@
       <div class="sidebar-stack">
         <div class="profile-card">
           <div class="eyebrow">User Profile</div>
-          <div class="profile-name" id="sidebar-user-name">Nadia</div>
+          <div class="profile-name" id="sidebar-user-name">Bagus</div>
           <div class="subline" id="sidebar-user-role">Normal Staff / Tax PIC</div>
         </div>
 
@@ -1597,6 +1916,8 @@
             <button class="tiny-btn" data-save-attendance-creds="yes">Save</button>
             <button class="solid-btn" data-attend="yes">Attend</button>
           </div>
+          <div class="attendance-message" id="sidebar-attendance-message">Attendance utility ready.</div>
+          <div class="attendance-log" id="sidebar-attendance-log">No attendance log yet.</div>
         </div>
 
         <div class="sidebar-note">
@@ -1615,41 +1936,15 @@
           <div class="mobile-only mobile-summary-row">
             <div class="mobile-summary-main">
               <div class="mobile-summary-title" id="mobile-workspace-title">Operations Workspace</div>
-              <div class="mobile-summary-subtitle"><span id="mobile-user-name">Nadia</span> / <span id="mobile-user-role">Normal Staff</span></div>
+              <div class="mobile-summary-subtitle"><span id="mobile-user-name">Bagus</span> / <span id="mobile-user-role">Normal Staff</span></div>
             </div>
             <div class="mobile-summary-actions">
-              <button class="tiny-btn" data-toggle-scope="yes">Scope</button>
               <button class="solid-btn" data-attend="yes" id="mobile-attend-button">Attend</button>
-            </div>
-          </div>
-          <div class="mobile-only mobile-scope-panel hidden" id="mobile-scope-panel">
-            <div class="eyebrow">Visibility Mode</div>
-            <div class="detail-list" style="margin-top:8px;">
-              <select id="mobile-role-select" class="filter-select">
-                <option value="staff">Normal Staff</option>
-                <option value="supervisor">Supervisor</option>
-              </select>
-              <select id="mobile-pic-select" class="filter-select">
-                <option value="Nadia">Nadia</option>
-                <option value="Raka">Raka</option>
-                <option value="Mira">Mira</option>
-              </select>
-              <button class="tiny-btn" data-save-attendance-creds="yes">Save Attendance Credentials</button>
             </div>
           </div>
         </div>
         <div class="role-bar">
-          <div class="eyebrow">Visibility Mode</div>
-          <select id="role-select" class="filter-select">
-            <option value="staff">Normal Staff</option>
-            <option value="supervisor">Supervisor</option>
-          </select>
-          <select id="pic-select" class="filter-select">
-            <option value="Nadia">Nadia</option>
-            <option value="Raka">Raka</option>
-            <option value="Mira">Mira</option>
-          </select>
-          <span class="pill neutral" id="role-description">Staff only sees assigned clients.</span>
+          <span class="pill neutral" id="role-description">You only see your own scope and teammate progress relevant to your assignment.</span>
         </div>
       </section>
 
@@ -1747,12 +2042,15 @@
     ];
 
     const PROPOSAL_STATUSES = ["New Lead", "Proposal Sent", "Negotiation", "Won", "Lost"];
+    const ACC_PICS = ["Ivan", "Cemari", "Dewayu", "Tantri", "Dina", "Dimas"];
+    const TAX_PICS = ["Ita", "Okta", "Harry", "Denny", "Bagus", "Dinar"];
+    const ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
 
     const clients = [
       {
         id: "client-001",
         name: "PT Qalm Retreat",
-        pic: "Nadia",
+        pic: "Bagus",
         followUpCount: 4,
         notes: "Reference client using the real billing and claim document format.",
         lastUpdated: "2026-05-20 10:25",
@@ -1816,7 +2114,7 @@
       {
         id: "client-002",
         name: "CV Bumi Niaga",
-        pic: "Raka",
+        pic: "Denny",
         followUpCount: 6,
         notes: "High rework. Sales recap often incomplete.",
         lastUpdated: "2026-05-20 11:18",
@@ -1860,7 +2158,7 @@
       {
         id: "client-003",
         name: "PT Nusa Prima Karya",
-        pic: "Nadia",
+        pic: "Bagus",
         followUpCount: 2,
         notes: "Generally manageable. One open VAT concern.",
         lastUpdated: "2026-05-20 09:42",
@@ -1894,7 +2192,7 @@
       {
         id: "client-004",
         name: "PT Samudra Retail",
-        pic: "Mira",
+        pic: "Okta",
         followUpCount: 3,
         notes: "Temporary filings common on VAT cycle.",
         lastUpdated: "2026-05-20 11:03",
@@ -1928,7 +2226,7 @@
       {
         id: "client-005",
         name: "PT Delta Boga",
-        pic: "Raka",
+        pic: "Harry",
         followUpCount: 1,
         notes: "Payment usually smooth once claim is sent.",
         lastUpdated: "2026-05-20 08:55",
@@ -1952,7 +2250,7 @@
       {
         id: "client-006",
         name: "CV Merah Putih Logistik",
-        pic: "Mira",
+        pic: "Dinar",
         followUpCount: 5,
         notes: "Supervisor should watch. Claim often delayed by billing upload.",
         lastUpdated: "2026-05-19 17:40",
@@ -1991,7 +2289,7 @@
         name: "PT Langit Wellness",
         npwp: "031234567890000",
         address: "Badung, Bali",
-        proposedPic: "Nadia",
+        proposedPic: "Bagus",
         team: "Tax Team",
         obligations: ["pph21", "ppn"],
         monthlyFee: 3500000,
@@ -2006,7 +2304,7 @@
         name: "CV Taman Pesisir",
         npwp: "041234567890000",
         address: "Singaraja, Bali",
-        proposedPic: "Mira",
+        proposedPic: "Okta",
         team: "Tax Team",
         obligations: ["unifikasi", "phrpb1"],
         monthlyFee: 2400000,
@@ -2021,7 +2319,7 @@
     clients.forEach((client, index) => {
       if (!client.taxPic) client.taxPic = client.pic;
       if (!client.accountingPic) {
-        client.accountingPic = ["Mira", "Raka", "Nadia"][index % 3];
+        client.accountingPic = ACC_PICS[index % ACC_PICS.length];
       }
     });
 
@@ -2031,8 +2329,8 @@
         clientId: "client-001",
         clientName: "PT Qalm Retreat",
         caseType: "SP2DK",
-        taxPic: "Nadia",
-        accountingPic: "Mira",
+        taxPic: "Bagus",
+        accountingPic: "Ivan",
         stage: "Document Review",
         priority: "High",
         dueDate: "2026-05-27",
@@ -2043,8 +2341,8 @@
         clientId: "client-003",
         clientName: "PT Nusa Prima Karya",
         caseType: "Restitusi",
-        taxPic: "Nadia",
-        accountingPic: "Raka",
+        taxPic: "Harry",
+        accountingPic: "Cemari",
         stage: "Submission Prep",
         priority: "Medium",
         dueDate: "2026-06-05",
@@ -2055,8 +2353,8 @@
         clientId: "client-004",
         clientName: "PT Samudra Retail",
         caseType: "PKP Registration",
-        taxPic: "Mira",
-        accountingPic: "Raka",
+        taxPic: "Okta",
+        accountingPic: "Dewayu",
         stage: "Waiting Client Docs",
         priority: "Medium",
         dueDate: "2026-05-30",
@@ -2067,8 +2365,8 @@
         clientId: "client-006",
         clientName: "CV Merah Putih Logistik",
         caseType: "Pemeriksaan",
-        taxPic: "Mira",
-        accountingPic: "Nadia",
+        taxPic: "Dinar",
+        accountingPic: "Tantri",
         stage: "Ongoing Review",
         priority: "High",
         dueDate: "2026-05-25",
@@ -2076,15 +2374,217 @@
       }
     ];
 
+    const annualAccountingRows = [
+      {
+        id: "annual-acc-001",
+        clientName: "CV Belajar Terus Menerus",
+        contractType: "Kontrak",
+        priority: 1,
+        accountingStatus: "NIHIL",
+        progress: "Reported",
+        result: "NIHIL",
+        risk: "Clear",
+        businessType: "Badan",
+        assist: "-",
+        accountingPic: "Tantri",
+        taxPic: "Okta",
+        notes: "Draft SPT still waiting final supporting schedule.",
+        deadline: "21/04/2026",
+        lapor: "21/04/2026",
+        ntpe: "BPE-43488/CT/KPP.1703/2026",
+        changeLog: []
+      },
+      {
+        id: "annual-acc-002",
+        clientName: "PT Bali Premium Mountain Coffee",
+        contractType: "Kontrak",
+        priority: 1,
+        accountingStatus: "PPH 25",
+        progress: "Payment",
+        result: "Bayar",
+        risk: "Clear",
+        businessType: "Badan",
+        assist: "-",
+        accountingPic: "Cemari",
+        taxPic: "Harry",
+        notes: "Waiting account confirmation from client director.",
+        deadline: "08/04/2026",
+        lapor: "08/04/2026",
+        ntpe: "BPE-159478/CT/KPP.0809/2026",
+        changeLog: []
+      },
+      {
+        id: "annual-acc-003",
+        clientName: "PT VICTORY Inspirasi Persada",
+        contractType: "Kontrak",
+        priority: 2,
+        accountingStatus: "NIHIL",
+        progress: "Review",
+        result: "NIHIL",
+        risk: "Watch",
+        businessType: "Badan",
+        assist: "Dina",
+        accountingPic: "Cemari",
+        taxPic: "Denny",
+        notes: "Meeting required before buku besar finalization.",
+        deadline: "10/04/2026",
+        lapor: "10/04/2026",
+        ntpe: "BPE-86879/CT/KPP.1701/2026",
+        changeLog: []
+      },
+      {
+        id: "annual-acc-004",
+        clientName: "PT Tri Rumah Cantik",
+        contractType: "Kontrak",
+        priority: 2,
+        accountingStatus: "PPH FINAL",
+        progress: "Data Request",
+        result: "Pending",
+        risk: "Cutoff",
+        businessType: "Badan",
+        assist: "-",
+        accountingPic: "Ivan",
+        taxPic: "Bagus",
+        notes: "CUT OFF because client still missing reconciliation support.",
+        deadline: "CUT OFF",
+        lapor: "-",
+        ntpe: "-",
+        changeLog: []
+      },
+      {
+        id: "annual-acc-005",
+        clientName: "PT Qalm Retreat",
+        contractType: "Kontrak",
+        priority: 1,
+        accountingStatus: "NIHIL",
+        progress: "In Process",
+        result: "NIHIL",
+        risk: "Watch",
+        businessType: "Badan",
+        assist: "Dina",
+        accountingPic: "Dina",
+        taxPic: "Bagus",
+        notes: "Annual statement pack already requested, waiting equalization support.",
+        deadline: "25/03/2026",
+        lapor: "-",
+        ntpe: "-",
+        changeLog: []
+      },
+      {
+        id: "annual-acc-006",
+        clientName: "PT Nusa Prima Karya",
+        contractType: "Kontrak",
+        priority: 2,
+        accountingStatus: "PPH 25",
+        progress: "Financials Done",
+        result: "Bayar",
+        risk: "Clear",
+        businessType: "Badan",
+        assist: "-",
+        accountingPic: "Dimas",
+        taxPic: "Harry",
+        notes: "Financial statement draft finished, moving into equalization stage.",
+        deadline: "30/03/2026",
+        lapor: "-",
+        ntpe: "-",
+        changeLog: []
+      }
+    ];
+
+    const annualTaxRows = [
+      {
+        id: "annual-tax-001",
+        clientName: "Rin Sagisaka",
+        groupName: "Rin Beauty Studio",
+        reportPic: "Ivan",
+        taxPic: "Bagus",
+        status: "Pencatatan",
+        previousSpt: true,
+        lifestyleAnalysis: true,
+        assetReview: true,
+        clientMeeting: true,
+        finish: true,
+        meeting: true,
+        spt: true,
+        bayar: true,
+        laporCount: "1",
+        kurangBayar: "Nihil",
+        ntpe: "BPE-50665/CT/KPP.1705/2026",
+        notes: "Done"
+      },
+      {
+        id: "annual-tax-002",
+        clientName: "Taiyo Shoji",
+        groupName: "Nishiki Estate",
+        reportPic: "Ivan",
+        taxPic: "Bagus",
+        status: "Pencatatan",
+        previousSpt: true,
+        lifestyleAnalysis: true,
+        assetReview: true,
+        clientMeeting: true,
+        finish: true,
+        meeting: true,
+        spt: true,
+        bayar: true,
+        laporCount: "1",
+        kurangBayar: "1.906.990",
+        ntpe: "BPE-61664/CT/KPP.1706/2026",
+        notes: "Done"
+      },
+      {
+        id: "annual-tax-003",
+        clientName: "Andrew White",
+        groupName: "Sajanna Property",
+        reportPic: "-",
+        taxPic: "Bagus",
+        status: "Pencatatan",
+        previousSpt: true,
+        lifestyleAnalysis: true,
+        assetReview: true,
+        clientMeeting: false,
+        finish: true,
+        meeting: false,
+        spt: true,
+        bayar: false,
+        laporCount: "0",
+        kurangBayar: "99.900",
+        ntpe: "BPE-114226/CT/KPP.0810/2026",
+        notes: "Waiting client confirmation"
+      },
+      {
+        id: "annual-tax-004",
+        clientName: "Kadek Wisu Wardana",
+        groupName: "Prabha Rupa Ishana",
+        reportPic: "Dewayu",
+        taxPic: "Bagus",
+        status: "Pembukuan",
+        previousSpt: true,
+        lifestyleAnalysis: false,
+        assetReview: false,
+        clientMeeting: false,
+        finish: false,
+        meeting: false,
+        spt: false,
+        bayar: false,
+        laporCount: "0",
+        kurangBayar: "99.036",
+        ntpe: "-",
+        notes: "Analysis pending"
+      }
+    ];
+
     const state = {
       currentView: "matrix-view",
       role: "staff",
-      selectedPic: "Nadia",
+      selectedPic: "Bagus",
       selectedClientId: "client-001",
       activeClientFormId: "client-001",
       selectedObligationKey: "pph21",
       expandedClientId: "",
+      operationsMode: "monthly",
       operationsTab: "active",
+      annualTeam: "accounting",
       casesTab: "active",
       clientManagementTab: "active",
       managementTab: "overview",
@@ -2092,7 +2592,7 @@
       autoHideCompleted: true,
       showCompletedRows: false,
       completionPromptClientId: "",
-      notesPopupClientId: "",
+      notesPopupTarget: "",
       notesAnchor: null,
       dateDragValue: "",
       dateDragSourceId: "",
@@ -2104,17 +2604,26 @@
         year: "all"
       },
       attendance: {
-        apiUrl: "http://localhost:4000/api/attendance/checkin",
+        apiUrl: "/api/attendance/checkin",
+        healthUrl: "/api/attendance/health",
+        warmed: false,
         status: "Not attended yet",
         lastTime: "No record today",
         message: "Attendance utility ready.",
+        logs: ["No attendance log yet."],
         credentialsSaved: false,
         loading: false,
         credentials: null
       },
       filters: {
         query: "",
-        needsAttentionOnly: false
+        needsAttentionOnly: false,
+        period: "all"
+      },
+      sorts: {
+        monthly: { key: "name", dir: "asc" },
+        annualAccounting: { key: "name", dir: "asc" },
+        annualTax: { key: "name", dir: "asc" }
       }
     };
 
@@ -2124,6 +2633,17 @@
         currency: "IDR",
         maximumFractionDigits: 0
       }).format(amount || 0);
+    }
+
+    async function warmAttendanceRoutes() {
+      if (state.attendance.warmed) return;
+      state.attendance.warmed = true;
+      try {
+        await fetch(state.attendance.healthUrl, { method: "GET", cache: "no-store" });
+      } catch {}
+      try {
+        await fetch(state.attendance.apiUrl, { method: "GET", cache: "no-store" });
+      } catch {}
     }
 
     function feeModel(baseFee, includeVat, includePph23) {
@@ -2138,10 +2658,16 @@
     function currentWorkspaceMeta() {
       const maps = {
         operations: {
-          active: ["Operations / Active Queue", "Operations Workspace", "Focused recurring compliance workspace with dense scanning, inline row expansion, and minimal eye travel."],
-          history: ["Operations / Completed History", "Operations Workspace", "Completed recurring rows stay searchable here while remaining hidden from the active queue by default."],
-          claim: ["Operations / Claim Status", "Operations Workspace", "Claim and payment coordination stays visible without turning the recurring workspace into a giant dashboard."],
-          archive: ["Operations / Reporting Archive", "Operations Workspace", "Archive-ready reporting visibility for completed monthly work and receipt traceability."]
+          monthly: {
+            active: ["Operations / Monthly Compliance / Active Queue", "Operations Workspace", "Focused recurring monthly compliance workspace with dense scanning, inline row expansion, and minimal eye travel."],
+            history: ["Operations / Monthly Compliance / Completed History", "Operations Workspace", "Completed recurring rows stay searchable here while remaining hidden from the active queue by default."],
+            claim: ["Operations / Monthly Compliance / Claim Status", "Operations Workspace", "Claim and payment coordination stays visible without turning the recurring workspace into a giant dashboard."],
+            archive: ["Operations / Monthly Compliance / Reporting Archive", "Operations Workspace", "Archive-ready reporting visibility for completed monthly work and receipt traceability."]
+          },
+          annual: {
+            accounting: ["Operations / Annual Compliance / Accounting Team", "Operations Workspace", "Annual financial statement control sheet for the accounting team, kept separate from monthly tax compliance."],
+            tax: ["Operations / Annual Compliance / Tax Team", "Operations Workspace", "Annual tax return control sheet for the tax team, optimized for milestone scanning and reporting completion."]
+          }
         },
         cases: {
           active: ["Cases / Active Cases", "Cases Workspace", "Non-recurring tax work uses case queues and milestone progression, not the recurring compliance matrix."],
@@ -2166,7 +2692,9 @@
       };
 
       if (state.currentView === "matrix-view") {
-        const [breadcrumb, label, note] = maps.operations[state.operationsTab];
+        const [breadcrumb, label, note] = state.operationsMode === "monthly"
+          ? maps.operations.monthly[state.operationsTab]
+          : maps.operations.annual[state.annualTeam];
         return { breadcrumb, label, note };
       }
       if (state.currentView === "cases-view") {
@@ -2238,9 +2766,9 @@
       return {
         id,
         name: row.name || "New Client",
-        pic: row.taxPic || "Nadia",
-        taxPic: row.taxPic || "Nadia",
-        accountingPic: row.accountingPic || row.taxPic || "Nadia",
+        pic: row.taxPic || TAX_PICS[0],
+        taxPic: row.taxPic || TAX_PICS[0],
+        accountingPic: row.accountingPic || row.taxPic || ACC_PICS[0],
         dataState: row.dataState || "missing",
         followUpCount: Number(row.followUpCount || 0),
         notes: row.notes || "",
@@ -2262,6 +2790,139 @@
           ppn: obligationPayload(parseBooleanCell(row.ppn))
         }
       };
+    }
+
+    function periodKey(month, year) {
+      return `${month} ${year}`;
+    }
+
+    function monthlyPeriodOptions() {
+      return [...new Set(clients.map((client) => periodKey(client.month, client.year)))];
+    }
+
+    function normalizedEntityName(name) {
+      return String(name || "")
+        .trim()
+        .replace(/^(PT|CV|FA|UD|FIRMA)\s+/i, "")
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+    }
+
+    function compareText(a, b) {
+      return String(a || "").localeCompare(String(b || ""), "id", { sensitivity: "base" });
+    }
+
+    const OBLIGATION_SORT_RANK = {
+      completed: 1,
+      validated: 2,
+      paid: 3,
+      calculated: 4,
+      requested: 5,
+      idle: 6,
+      na: 7
+    };
+
+    const DATA_SORT_RANK = {
+      received: 1,
+      requesting: 2,
+      missing: 3
+    };
+
+    const ANNUAL_PROGRESS_SORT_RANK = {
+      "Data Request": 1,
+      "In Process": 2,
+      "Financials Done": 3,
+      Equalization: 4,
+      Review: 5,
+      Meeting: 6,
+      "SPT Ready": 7,
+      Payment: 8,
+      Reported: 9,
+      Done: 10
+    };
+
+    function sortArrow(scope, key) {
+      const sort = state.sorts[scope];
+      if (!sort || sort.key !== key) return "↕";
+      return sort.dir === "asc" ? "↑" : "↓";
+    }
+
+    function sortHeader(scope, key, label) {
+      return `<button class="sort-btn" data-sort-scope="${scope}" data-sort-key="${key}">${label}<span class="sort-arrow">${sortArrow(scope, key)}</span></button>`;
+    }
+
+    function compareDatesDisplay(a, b) {
+      const aIso = parseDisplayDateToIso(a);
+      const bIso = parseDisplayDateToIso(b);
+      if (aIso && bIso) return aIso.localeCompare(bIso);
+      if (aIso) return -1;
+      if (bIso) return 1;
+      return compareText(a, b);
+    }
+
+    function sortMonthlyClients(list) {
+      const { key, dir } = state.sorts.monthly;
+      const factor = dir === "asc" ? 1 : -1;
+      return [...list].sort((left, right) => {
+        let result = 0;
+        if (key === "name") result = compareText(normalizedEntityName(left.name), normalizedEntityName(right.name));
+        if (key === "taxPic") result = compareText(left.taxPic, right.taxPic);
+        if (key === "accPic") result = compareText(left.accountingPic, right.accountingPic);
+        if (key === "data") result = (DATA_SORT_RANK[clientDataState(left)] - DATA_SORT_RANK[clientDataState(right)]);
+        if (OBLIGATIONS.includes(key)) result = (OBLIGATION_SORT_RANK[obligationLedgerState(left.obligations[key])] - OBLIGATION_SORT_RANK[obligationLedgerState(right.obligations[key])]);
+        if (key === "updated") result = compareText(left.lastUpdated, right.lastUpdated);
+        if (key === "attention") result = compareText((clientNeedsAttention(left)[0] || ""), (clientNeedsAttention(right)[0] || ""));
+        if (result === 0) result = compareText(normalizedEntityName(left.name), normalizedEntityName(right.name));
+        return result * factor;
+      });
+    }
+
+    function sortAnnualAccountingRows(list) {
+      const { key, dir } = state.sorts.annualAccounting;
+      const factor = dir === "asc" ? 1 : -1;
+      return [...list].sort((left, right) => {
+        let result = 0;
+        if (key === "name") result = compareText(normalizedEntityName(left.clientName), normalizedEntityName(right.clientName));
+        if (key === "contract") result = compareText(left.contractType, right.contractType);
+        if (key === "priority") result = Number(left.priority || 0) - Number(right.priority || 0);
+        if (key === "status") result = compareText(left.accountingStatus, right.accountingStatus);
+        if (key === "form") result = compareText(left.businessType, right.businessType);
+        if (key === "assist") result = compareText(left.assist, right.assist);
+        if (key === "picAcc") result = compareText(left.accountingPic, right.accountingPic);
+        if (key === "picTax") result = compareText(left.taxPic, right.taxPic);
+        if (key === "progress") result = (ANNUAL_PROGRESS_SORT_RANK[left.progress] || 999) - (ANNUAL_PROGRESS_SORT_RANK[right.progress] || 999);
+        if (key === "deadline") result = compareDatesDisplay(left.deadline === "CUT OFF" ? "99/99/9999" : left.deadline, right.deadline === "CUT OFF" ? "99/99/9999" : right.deadline);
+        if (key === "lapor") result = compareDatesDisplay(left.lapor, right.lapor);
+        if (key === "ntpe") result = compareText(left.ntpe, right.ntpe);
+        if (result === 0) result = compareText(normalizedEntityName(left.clientName), normalizedEntityName(right.clientName));
+        return result * factor;
+      });
+    }
+
+    function sortAnnualTaxRows(list) {
+      const { key, dir } = state.sorts.annualTax;
+      const factor = dir === "asc" ? 1 : -1;
+      return [...list].sort((left, right) => {
+        let result = 0;
+        if (key === "name") result = compareText(normalizedEntityName(left.clientName), normalizedEntityName(right.clientName));
+        if (key === "status") result = compareText(left.status, right.status);
+        if (key === "group") result = compareText(left.groupName, right.groupName);
+        if (key === "reportPic") result = compareText(left.reportPic, right.reportPic);
+        if (key === "taxPic") result = compareText(left.taxPic, right.taxPic);
+        if (key === "previousSpt") result = Number(Boolean(left.previousSpt)) - Number(Boolean(right.previousSpt));
+        if (key === "lifestyle") result = Number(Boolean(left.lifestyleAnalysis)) - Number(Boolean(right.lifestyleAnalysis));
+        if (key === "asset") result = Number(Boolean(left.assetReview)) - Number(Boolean(right.assetReview));
+        if (key === "clientMeeting") result = Number(Boolean(left.clientMeeting)) - Number(Boolean(right.clientMeeting));
+        if (key === "finish") result = Number(Boolean(left.finish)) - Number(Boolean(right.finish));
+        if (key === "meeting") result = Number(Boolean(left.meeting)) - Number(Boolean(right.meeting));
+        if (key === "spt") result = Number(Boolean(left.spt)) - Number(Boolean(right.spt));
+        if (key === "bayar") result = Number(Boolean(left.bayar)) - Number(Boolean(right.bayar));
+        if (key === "lapor") result = Number(left.laporCount || 0) - Number(right.laporCount || 0);
+        if (key === "kurangBayar") result = parseRupiahToNumber(left.kurangBayar) - parseRupiahToNumber(right.kurangBayar);
+        if (key === "ntpe") result = compareText(left.ntpe, right.ntpe);
+        if (result === 0) result = compareText(normalizedEntityName(left.clientName), normalizedEntityName(right.clientName));
+        return result * factor;
+      });
     }
 
     function parseCsv(text) {
@@ -2333,10 +2994,11 @@
         ? clients
         : clients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
 
-      return scoped.filter((client) => {
+      return sortMonthlyClients(scoped.filter((client) => {
         const query = state.filters.query.trim().toLowerCase();
         const attention = clientNeedsAttention(client).length > 0;
         const completed = isClientCompleted(client);
+        const matchesPeriod = state.filters.period === "all" || periodKey(client.month, client.year) === state.filters.period;
         const matchesQuery = !query || [
           client.name,
           client.taxPic,
@@ -2347,8 +3009,109 @@
         ].join(" ").toLowerCase().includes(query);
         const matchesAttention = !state.filters.needsAttentionOnly || attention;
         const matchesCompleted = state.showCompletedRows || !state.autoHideCompleted || !completed;
-        return matchesQuery && matchesAttention && matchesCompleted;
+        return matchesQuery && matchesAttention && matchesCompleted && matchesPeriod;
+      }));
+    }
+
+    function visibleAnnualAccountingRows() {
+      const scoped = state.role === "supervisor"
+        ? annualAccountingRows
+        : annualAccountingRows.filter((row) =>
+            [row.accountingPic, row.taxPic, row.assist].includes(state.selectedPic)
+          );
+      const query = state.filters.query.trim().toLowerCase();
+      return sortAnnualAccountingRows(scoped.filter((row) => {
+        const matchesQuery = !query || [
+          row.clientName,
+          row.accountingPic,
+          row.taxPic,
+          row.assist,
+          row.notes,
+          row.accountingStatus
+        ].join(" ").toLowerCase().includes(query);
+        return matchesQuery;
+      }));
+    }
+
+    function visibleAnnualTaxRows() {
+      const scoped = state.role === "supervisor"
+        ? annualTaxRows
+        : annualTaxRows.filter((row) =>
+            [row.reportPic, row.taxPic].includes(state.selectedPic)
+          );
+      const query = state.filters.query.trim().toLowerCase();
+      return sortAnnualTaxRows(scoped.filter((row) => {
+        const matchesQuery = !query || [
+          row.clientName,
+          row.groupName,
+          row.reportPic,
+          row.taxPic,
+          row.notes,
+          row.kurangBayar
+        ].join(" ").toLowerCase().includes(query);
+        return matchesQuery;
+      }));
+    }
+
+    function annualBoolCell(value) {
+      return `<span class="annual-check ${value ? "done" : "pending"}">${value ? "✓" : "·"}</span>`;
+    }
+
+    function annualStateChip(value) {
+      const map = {
+        Done: "done",
+        NIHIL: "done",
+        Final: "done",
+        Pending: "wait",
+        "-": "wait",
+        Alert: "alert",
+        "CUT OFF": "alert"
+      };
+      const klass = map[value] || "progress";
+      return `<span class="annual-status-chip ${klass}">${value}</span>`;
+    }
+
+    function annualProgressChip(value) {
+      const map = {
+        "Data Request": "wait",
+        "In Process": "progress",
+        "Financials Done": "done",
+        Equalization: "progress",
+        Review: "progress",
+        Meeting: "wait",
+        "SPT Ready": "done",
+        Payment: "progress",
+        Reported: "done",
+        Done: "done"
+      };
+      return `<span class="annual-status-chip ${map[value] || "progress"}">${value}</span>`;
+    }
+
+    function appendAnnualAccountingLog(row, field, fromValue, toValue) {
+      if (String(fromValue || "") === String(toValue || "")) return;
+      row.changeLog = row.changeLog || [];
+      row.changeLog.unshift({
+        field,
+        from: fromValue || "-",
+        to: toValue || "-",
+        by: state.selectedPic,
+        at: new Date().toLocaleString("id-ID")
       });
+      row.changeLog = row.changeLog.slice(0, 8);
+    }
+
+    function openNativeDatePicker(targetId) {
+      const picker = document.getElementById(`native-date-${targetId}`);
+      if (!picker) return;
+      const textInput = document.getElementById(targetId);
+      if (textInput) {
+        picker.value = parseDisplayDateToIso(textInput.value.trim()) || "";
+      }
+      if (typeof picker.showPicker === "function") {
+        picker.showPicker();
+      } else {
+        picker.click();
+      }
     }
 
     function allVisibleClientsIncludingCompleted() {
@@ -2404,12 +3167,62 @@
       return obligationsDone && claimDone && paymentDone;
     }
 
-    function clientNotesCount(client) {
-      return client.notes ? 1 : 0;
+    function noteTargetRecord(targetId) {
+      if (!targetId) return null;
+      if (targetId.startsWith("client:")) {
+        const id = targetId.slice("client:".length);
+        const client = clients.find((item) => item.id === id);
+        return client ? {
+          kind: "client",
+          id,
+          title: client.name,
+          get notes() { return client.notes || ""; },
+          set notes(value) { client.notes = value; },
+          get changeLog() { return []; }
+        } : null;
+      }
+      if (targetId.startsWith("annualAccounting:")) {
+        const id = targetId.slice("annualAccounting:".length);
+        const row = annualAccountingRows.find((item) => item.id === id);
+        return row ? {
+          kind: "annualAccounting",
+          id,
+          title: row.clientName,
+          get notes() { return row.notes || ""; },
+          set notes(value) { row.notes = value; },
+          get changeLog() { return row.changeLog || []; }
+        } : null;
+      }
+      if (targetId.startsWith("annualTax:")) {
+        const id = targetId.slice("annualTax:".length);
+        const row = annualTaxRows.find((item) => item.id === id);
+        return row ? {
+          kind: "annualTax",
+          id,
+          title: row.clientName,
+          get notes() { return row.notes || ""; },
+          set notes(value) { row.notes = value; },
+          get changeLog() { return []; }
+        } : null;
+      }
+      if (targetId.startsWith("case:")) {
+        const id = targetId.slice("case:".length);
+        const row = taxCases.find((item) => item.id === id);
+        return row ? {
+          kind: "case",
+          id,
+          title: row.clientName,
+          get notes() { return row.notes || ""; },
+          set notes(value) { row.notes = value; },
+          get changeLog() { return []; }
+        } : null;
+      }
+      return null;
     }
 
-    function clientNotesPreview(client) {
-      return client.notes || "";
+    function notesPreviewByTarget(targetId) {
+      const record = noteTargetRecord(targetId);
+      return record ? record.notes : "";
     }
 
     function escapeAttr(value) {
@@ -2552,7 +3365,7 @@
       const activeCount = clients.length;
       const proposalCount = proposals.filter((item) => !["Won", "Lost"].includes(item.status)).length;
       const completedCount = allVisibleClientsIncludingCompleted().filter((client) => isClientCompleted(client)).length;
-      const workloadByPic = ["Nadia", "Raka", "Mira"].map((pic) => ({
+      const workloadByPic = ALL_PICS.map((pic) => ({
         pic,
         activeRows: clients.filter((client) => client.taxPic === pic || client.accountingPic === pic).length,
         openCases: taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic).length
@@ -2822,12 +3635,12 @@
                 <input id="client-form-npwp" class="field" value="${activeSample.npwp || ""}" placeholder="NPWP" />
                 <input id="client-form-address" class="field" value="${activeSample.address || ""}" placeholder="Address" />
                 <div class="detail-grid-2">
-                  <select id="client-form-tax-pic" class="field"><option ${activeSample.taxPic === "Nadia" ? "selected" : ""}>Nadia</option><option ${activeSample.taxPic === "Raka" ? "selected" : ""}>Raka</option><option ${activeSample.taxPic === "Mira" ? "selected" : ""}>Mira</option></select>
+                  <select id="client-form-tax-pic" class="field">${TAX_PICS.map((pic) => `<option ${activeSample.taxPic === pic ? "selected" : ""}>${pic}</option>`).join("")}</select>
                   <select id="client-form-division" class="field"><option>Tax Team</option><option>Accounting Team</option></select>
                 </div>
                 <div class="detail-grid-2">
-                  <select id="client-form-accounting-pic" class="field"><option ${activeSample.accountingPic === "Nadia" ? "selected" : ""}>Nadia</option><option ${activeSample.accountingPic === "Raka" ? "selected" : ""}>Raka</option><option ${activeSample.accountingPic === "Mira" ? "selected" : ""}>Mira</option></select>
-                  <input id="client-form-start-date" class="field" value="2025-01-01" />
+                  <select id="client-form-accounting-pic" class="field">${ACC_PICS.map((pic) => `<option ${activeSample.accountingPic === pic ? "selected" : ""}>${pic}</option>`).join("")}</select>
+                  <input id="client-form-start-date" class="field" type="date" value="2025-01-01" />
                 </div>
                 <div class="detail-card">
                   <strong>Tax obligation checklist</strong>
@@ -3082,6 +3895,8 @@
 
     function renderMatrix() {
       const list = visibleClients();
+      const annualAccountingList = visibleAnnualAccountingRows();
+      const annualTaxList = visibleAnnualTaxRows();
       const root = document.getElementById("matrix-view");
       const completedHiddenCount = allVisibleClientsIncludingCompleted().filter((item) => isClientCompleted(item)).length;
       const promptedClient = state.completionPromptClientId
@@ -3091,25 +3906,59 @@
       const archiveRows = allVisibleClientsIncludingCompleted().filter((client) =>
         ["Reported", "Tax Paid"].includes(client.claimStatus) || isClientCompleted(client)
       );
+      const annualSource = state.annualTeam === "accounting" ? annualAccountingList : annualTaxList;
+      const annualDoneCount = state.annualTeam === "accounting"
+        ? annualAccountingList.filter((row) => ["Reported", "Done"].includes(row.progress)).length
+        : annualTaxList.filter((row) => row.notes === "Done").length;
+      const annualPendingCount = Math.max(0, annualSource.length - annualDoneCount);
+      const annualCutoffCount = state.annualTeam === "accounting"
+        ? annualAccountingList.filter((row) => row.deadline === "CUT OFF").length
+        : annualTaxList.filter((row) => !row.clientMeeting || !row.spt).length;
+      const annualPercent = annualSource.length
+        ? `${((annualDoneCount / annualSource.length) * 100).toFixed(1)}%`
+        : "0%";
+      const annualAccountingProgressByPic = ACC_PICS.map((pic) => {
+        const rows = annualAccountingRows.filter((row) => row.accountingPic === pic);
+        const done = rows.filter((row) => ["Reported", "Done"].includes(row.progress)).length;
+        return {
+          pic,
+          total: rows.length,
+          done,
+          active: rows.filter((row) => !["Reported", "Done"].includes(row.progress)).length,
+          cutoff: rows.filter((row) => row.deadline === "CUT OFF").length,
+          percent: rows.length ? `${Math.round((done / rows.length) * 100)}%` : "0%"
+        };
+      }).filter((row) => row.total > 0);
 
       root.innerHTML = `
         <div class="workspace-frame workspace-operations">
           <section class="panel">
             <div class="toolbar">
-              <div class="workspace-tabs">
-                <button class="${state.operationsTab === "active" ? "solid-btn" : "ghost-btn"}" data-operations-tab="active">Active Queue</button>
-                <button class="${state.operationsTab === "history" ? "solid-btn" : "ghost-btn"}" data-operations-tab="history">Completed History</button>
-                <button class="${state.operationsTab === "claim" ? "solid-btn" : "ghost-btn"}" data-operations-tab="claim">Claim Status</button>
-                <button class="${state.operationsTab === "archive" ? "solid-btn" : "ghost-btn"}" data-operations-tab="archive">Reporting Archive</button>
+              <div class="ops-mode-tabs">
+                <button class="${state.operationsMode === "monthly" ? "solid-btn" : "ghost-btn"}" data-operations-mode="monthly">Monthly Compliance</button>
+                <button class="${state.operationsMode === "annual" ? "solid-btn" : "ghost-btn"}" data-operations-mode="annual">Annual Compliance</button>
               </div>
               <div class="toolbar-right">
-                <span class="pill neutral">${list.length} active rows</span>
-                <span class="pill ${completedHiddenCount ? "warning" : "accent"}">${completedHiddenCount} completed hidden</span>
+                <span class="pill neutral">${state.operationsMode === "monthly" ? `${list.length} active rows` : `${annualSource.length} annual rows`}</span>
+                <span class="pill ${state.operationsMode === "monthly" ? (completedHiddenCount ? "warning" : "accent") : (annualPendingCount ? "warning" : "accent")}">${state.operationsMode === "monthly" ? `${completedHiddenCount} completed hidden` : `${annualPendingCount} still open`}</span>
+              </div>
+            </div>
+            <div class="toolbar" style="margin-top:10px;">
+              <div class="workspace-tabs">
+                ${state.operationsMode === "monthly" ? `
+                  <button class="${state.operationsTab === "active" ? "solid-btn" : "ghost-btn"}" data-operations-tab="active">Active Queue</button>
+                  <button class="${state.operationsTab === "history" ? "solid-btn" : "ghost-btn"}" data-operations-tab="history">Completed History</button>
+                  <button class="${state.operationsTab === "claim" ? "solid-btn" : "ghost-btn"}" data-operations-tab="claim">Claim Status</button>
+                  <button class="${state.operationsTab === "archive" ? "solid-btn" : "ghost-btn"}" data-operations-tab="archive">Reporting Archive</button>
+                ` : `
+                  <button class="${state.annualTeam === "accounting" ? "solid-btn" : "ghost-btn"}" data-annual-team="accounting">Accounting Team</button>
+                  <button class="${state.annualTeam === "tax" ? "solid-btn" : "ghost-btn"}" data-annual-team="tax">Tax Team</button>
+                `}
               </div>
             </div>
           </section>
 
-          ${state.operationsTab === "active" ? `
+          ${state.operationsMode === "monthly" && state.operationsTab === "active" ? `
             <section class="panel">
               <div class="section-title">
                 <div>
@@ -3121,6 +3970,10 @@
               <div class="toolbar compact-toolbar">
                 <div class="toolbar-left">
                   <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, claim status" value="${state.filters.query}" />
+                  <select id="monthly-period-filter" class="filter-select">
+                    <option value="all">All periods</option>
+                    ${monthlyPeriodOptions().map((period) => `<option value="${period}" ${state.filters.period === period ? "selected" : ""}>${period}</option>`).join("")}
+                  </select>
                   <label class="subline">
                     <input id="attention-toggle" type="checkbox" ${state.filters.needsAttentionOnly ? "checked" : ""} />
                     Needs attention only
@@ -3179,18 +4032,18 @@
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>Client Name</th>
-                      <th>Tax PIC</th>
-                      <th>ACC PIC</th>
-                      <th>DATA</th>
-                      <th>PPh 21</th>
-                      <th>PPh Uni</th>
-                      <th>PPh 25</th>
-                      <th>PB1</th>
-                      <th>PPN</th>
+                      <th>${sortHeader("monthly", "name", "Client Name")}</th>
+                      <th>${sortHeader("monthly", "taxPic", "Tax PIC")}</th>
+                      <th>${sortHeader("monthly", "accPic", "ACC PIC")}</th>
+                      <th>${sortHeader("monthly", "data", "DATA")}</th>
+                      <th>${sortHeader("monthly", "pph21", "PPh 21")}</th>
+                      <th>${sortHeader("monthly", "unifikasi", "PPh Uni")}</th>
+                      <th>${sortHeader("monthly", "pph25", "PPh 25")}</th>
+                      <th>${sortHeader("monthly", "phrpb1", "PB1")}</th>
+                      <th>${sortHeader("monthly", "ppn", "PPN")}</th>
                       <th>Notes</th>
-                      <th>Last Updated</th>
-                      <th>Needs Attention</th>
+                      <th>${sortHeader("monthly", "updated", "Last Updated")}</th>
+                      <th>${sortHeader("monthly", "attention", "Needs Attention")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3215,7 +4068,7 @@
                               <span class="matrix-cell ${obligationLedgerState(row.obligations[key])}" title="${OBLIGATION_SHORT_LABELS[key]} - ${LEDGER_STATE_LABELS[obligationLedgerState(row.obligations[key])]}">${LEDGER_STATE_ICONS[obligationLedgerState(row.obligations[key])]}</span>
                             </td>
                           `).join("")}
-                          <td class="center-cell"><button class="tiny-btn note-trigger" data-open-notes="${row.id}" data-note-preview="${escapeAttr(clientNotesPreview(row) || "No general note yet")}">NOTE</button></td>
+                          <td class="center-cell"><button class="tiny-btn note-trigger" data-open-notes="client:${row.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`client:${row.id}`) || "No general note yet")}">NOTE</button></td>
                           <td class="updated-cell">${row.lastUpdated}</td>
                           <td class="attention-flag">${clientNeedsAttention(row).slice(0, 2).join(" / ") || "Clear"}</td>
                         </tr>
@@ -3262,7 +4115,12 @@
                                         <tr>
                                           <td class="ledger-name-col">Date Paid</td>
                                           ${activeKeys.map((key) => `
-                                            <td><input id="ob-${row.id}-${key}-date" class="ledger-cell-input" data-ledger-date="${row.id}|${key}" type="text" inputmode="numeric" value="${ledgerDateDisplayValue(row.obligations[key])}" placeholder="dd/mm/yyyy" /></td>
+                                            <td>
+                                              <div class="date-input-wrap">
+                                                <input id="ob-${row.id}-${key}-date" class="ledger-cell-input" data-ledger-date="${row.id}|${key}" data-date-text="ob-${row.id}-${key}-date" type="text" inputmode="numeric" value="${ledgerDateDisplayValue(row.obligations[key])}" placeholder="dd/mm/yyyy" />
+                                                <input id="native-date-ob-${row.id}-${key}-date" data-date-target="ob-${row.id}-${key}-date" type="date" class="native-date-proxy" />
+                                              </div>
+                                            </td>
                                           `).join("")}
                                         </tr>
                                         <tr>
@@ -3336,7 +4194,201 @@
             </section>
           ` : ``}
 
-          ${state.operationsTab === "history" ? `
+          ${state.operationsMode === "annual" ? `
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <h3>${state.annualTeam === "accounting" ? "Annual Accounting Control" : "Annual Tax Return Control"}</h3>
+                  <p>${state.annualTeam === "accounting"
+                    ? "Separate annual compliance sheet for accounting-team closing, review, filing, and NTPE visibility."
+                    : "Separate annual compliance sheet for tax-team confirmation, SPT, payment, reporting, and NTPE visibility."}</p>
+                </div>
+              </div>
+
+              <div class="annual-summary-grid">
+                <div class="annual-kpi"><div class="eyebrow">Total Clients</div><strong>${annualSource.length}</strong><div class="subline">Visible in current PIC scope.</div></div>
+                <div class="annual-kpi"><div class="eyebrow">Completed</div><strong>${annualDoneCount}</strong><div class="subline">Rows already filed / finished.</div></div>
+                <div class="annual-kpi"><div class="eyebrow">Completion</div><strong>${annualPercent}</strong><div class="subline">Operational finish ratio.</div></div>
+                <div class="annual-kpi"><div class="eyebrow">${state.annualTeam === "accounting" ? "Cutoff" : "Pending Follow-Up"}</div><strong>${annualCutoffCount}</strong><div class="subline">${state.annualTeam === "accounting" ? "Rows marked CUT OFF in deadline." : "Rows still missing core tax milestones."}</div></div>
+              </div>
+
+              ${state.annualTeam === "accounting" ? `
+                <div class="pic-progress-table-wrap">
+                  <table class="pic-progress-table">
+                    <thead>
+                      <tr>
+                        <th style="width:140px;">PIC ACC</th>
+                        <th class="num">Total</th>
+                        <th class="num">Done</th>
+                        <th class="num">Active</th>
+                        <th class="num">Cutoff</th>
+                        <th>Progress</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${annualAccountingProgressByPic.map((row) => `
+                        <tr>
+                          <td class="pic-name">${row.pic}</td>
+                          <td class="num">${row.total}</td>
+                          <td class="num">${row.done}</td>
+                          <td class="num">${row.active}</td>
+                          <td class="num"><span class="cutoff-badge">${row.cutoff}</span></td>
+                          <td>
+                            <div class="mini-progress-track"><div class="mini-progress-fill" style="width:${row.percent};"></div></div>
+                            <div class="subline" style="margin-top:4px;">${row.percent} complete</div>
+                          </td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              ` : ``}
+
+              <div class="toolbar compact-toolbar">
+                <div class="toolbar-left">
+                  <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, status" value="${state.filters.query}" />
+                </div>
+                <div class="toolbar-right">
+                  <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
+                </div>
+              </div>
+
+              <div class="matrix-ops-guide">
+                <span><strong>Annual mode</strong> = separate control sheet from monthly compliance</span>
+                <span><strong>1 client</strong> = 1 row</span>
+                <span><strong>Goal</strong> = preserve old Excel scanning speed without mixing accounting and tax annual workflows</span>
+              </div>
+
+              <div class="table-wrap desktop-only">
+                ${state.annualTeam === "accounting" ? `
+                  <table class="annual-sheet">
+                    <thead>
+                      <tr>
+                        <th>No.</th>
+                        <th>${sortHeader("annualAccounting", "contract", "Contract")}</th>
+                        <th>${sortHeader("annualAccounting", "priority", "Priority")}</th>
+                        <th>${sortHeader("annualAccounting", "status", "Status")}</th>
+                        <th>${sortHeader("annualAccounting", "name", "Name")}</th>
+                        <th>${sortHeader("annualAccounting", "form", "Form")}</th>
+                        <th>Assist</th>
+                        <th>${sortHeader("annualAccounting", "picAcc", "PIC ACC")}</th>
+                        <th>${sortHeader("annualAccounting", "picTax", "PIC TAX")}</th>
+                        <th>${sortHeader("annualAccounting", "progress", "Progress")}</th>
+                        <th>${sortHeader("annualAccounting", "deadline", "Deadline")}</th>
+                        <th>${sortHeader("annualAccounting", "lapor", "Lapor")}</th>
+                        <th>${sortHeader("annualAccounting", "ntpe", "NTPE")}</th>
+                        <th>NOTE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${annualAccountingList.map((row, index) => `
+                        <tr>
+                          <td>${index + 1}</td>
+                          <td>${row.contractType}</td>
+                          <td>${row.priority}</td>
+                          <td>${annualStateChip(row.accountingStatus)}</td>
+                          <td class="client-name-cell">${row.clientName}</td>
+                          <td>${row.businessType}</td>
+                          <td>${row.assist}</td>
+                          <td>${row.accountingPic}</td>
+                          <td>${row.taxPic}</td>
+                          <td>
+                            <select class="inline-select annual-progress-select" data-annual-accounting-progress="${row.id}">
+                              ${["Data Request", "In Process", "Financials Done", "Equalization", "Review", "Meeting", "SPT Ready", "Payment", "Reported", "Done"].map((status) => `<option value="${status}" ${row.progress === status ? "selected" : ""}>${status}</option>`).join("")}
+                            </select>
+                          </td>
+                          <td class="${row.deadline === "CUT OFF" ? "deadline-cutoff" : ""}">
+                            <div class="date-input-wrap">
+                              <input id="annual-deadline-${row.id}" class="field annual-date-input" data-date-text="annual-deadline-${row.id}" data-annual-accounting-deadline="${row.id}" type="text" inputmode="numeric" value="${row.deadline === "CUT OFF" ? row.deadline : row.deadline}" placeholder="dd/mm/yyyy or CUT OFF" />
+                              <input id="native-date-annual-deadline-${row.id}" data-date-target="annual-deadline-${row.id}" type="date" class="native-date-proxy" />
+                            </div>
+                          </td>
+                          <td>
+                            <div class="date-input-wrap">
+                              <input id="annual-lapor-${row.id}" class="field annual-date-input" data-date-text="annual-lapor-${row.id}" data-annual-accounting-lapor="${row.id}" type="text" inputmode="numeric" value="${row.lapor === "-" ? "" : row.lapor}" placeholder="dd/mm/yyyy" />
+                              <input id="native-date-annual-lapor-${row.id}" data-date-target="annual-lapor-${row.id}" type="date" class="native-date-proxy" />
+                            </div>
+                          </td>
+                          <td>${row.ntpe}</td>
+                          <td class="center-cell"><button class="tiny-btn note-trigger" data-open-notes="annualAccounting:${row.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`annualAccounting:${row.id}`) || "No general note yet")}">NOTE</button></td>
+                        </tr>
+                      `).join("") || `<tr><td colspan="14"><div class="empty-state">No annual accounting rows match the current scope.</div></td></tr>`}
+                    </tbody>
+                  </table>
+                ` : `
+                  <table class="annual-sheet">
+                    <thead>
+                      <tr>
+                        <th>No.</th>
+                        <th>${sortHeader("annualTax", "status", "Status")}</th>
+                        <th>${sortHeader("annualTax", "name", "Nama Perusahaan")}</th>
+                        <th>${sortHeader("annualTax", "group", "Group")}</th>
+                        <th>${sortHeader("annualTax", "reportPic", "PIC Laporan")}</th>
+                        <th>${sortHeader("annualTax", "taxPic", "PIC Pajak")}</th>
+                        <th>${sortHeader("annualTax", "previousSpt", "SPT Tahun Sebelumnya")}</th>
+                        <th>${sortHeader("annualTax", "lifestyle", "Analisis Biaya Hidup")}</th>
+                        <th>${sortHeader("annualTax", "asset", "Aset / Hutang / Penghasilan")}</th>
+                        <th>${sortHeader("annualTax", "clientMeeting", "Meeting / Konfirmasi")}</th>
+                        <th>${sortHeader("annualTax", "finish", "Finish")}</th>
+                        <th>${sortHeader("annualTax", "meeting", "Meeting")}</th>
+                        <th>${sortHeader("annualTax", "spt", "SPT")}</th>
+                        <th>${sortHeader("annualTax", "bayar", "Bayar")}</th>
+                        <th>${sortHeader("annualTax", "lapor", "Lapor")}</th>
+                        <th>${sortHeader("annualTax", "kurangBayar", "Kurang Bayar")}</th>
+                        <th>${sortHeader("annualTax", "ntpe", "NTPE")}</th>
+                        <th>NOTE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${annualTaxList.map((row, index) => `
+                        <tr>
+                          <td>${index + 1}</td>
+                          <td>${row.status}</td>
+                          <td class="client-name-cell">${row.clientName}</td>
+                          <td class="client-group-cell">${row.groupName}</td>
+                          <td>${row.reportPic}</td>
+                          <td>${row.taxPic}</td>
+                          <td>${annualBoolCell(row.previousSpt)}</td>
+                          <td>${annualBoolCell(row.lifestyleAnalysis)}</td>
+                          <td>${annualBoolCell(row.assetReview)}</td>
+                          <td>${annualBoolCell(row.clientMeeting)}</td>
+                          <td>${annualBoolCell(row.finish)}</td>
+                          <td>${annualBoolCell(row.meeting)}</td>
+                          <td>${annualBoolCell(row.spt)}</td>
+                          <td>${annualBoolCell(row.bayar)}</td>
+                          <td>${row.laporCount}</td>
+                          <td>${row.kurangBayar}</td>
+                          <td>${row.ntpe}</td>
+                          <td class="center-cell"><button class="tiny-btn note-trigger" data-open-notes="annualTax:${row.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`annualTax:${row.id}`) || "No general note yet")}">NOTE</button></td>
+                        </tr>
+                      `).join("") || `<tr><td colspan="18"><div class="empty-state">No annual tax rows match the current scope.</div></td></tr>`}
+                    </tbody>
+                  </table>
+                `}
+              </div>
+
+              <div class="mobile-only">
+                <div class="list-grid">
+                  ${(state.annualTeam === "accounting" ? annualAccountingList : annualTaxList).map((row, index) => `
+                    <div class="mobile-compact-item">
+                      <div class="mobile-compact-header">
+                        <div>
+                          <strong>${row.clientName}</strong>
+                          <div class="subline">${state.annualTeam === "accounting" ? `${row.accountingPic} / ${row.taxPic}` : `${row.reportPic} / ${row.taxPic}`}</div>
+                        </div>
+                        <span class="pill ${index < annualDoneCount ? "accent" : "warning"}">${state.annualTeam === "accounting" ? (row.lapor || "-") : row.laporCount}</span>
+                      </div>
+                      <div class="subline">${state.annualTeam === "accounting" ? row.progress : row.groupName}</div>
+                      <div class="subline">${state.annualTeam === "accounting" ? `Deadline ${row.deadline} / NTPE ${row.ntpe}` : `Kurang bayar ${row.kurangBayar} / NTPE ${row.ntpe}`}</div>
+                      <div><button class="tiny-btn note-trigger" data-open-notes="${state.annualTeam === "accounting" ? `annualAccounting:${row.id}` : `annualTax:${row.id}`}" data-note-preview="${escapeAttr(notesPreviewByTarget(state.annualTeam === "accounting" ? `annualAccounting:${row.id}` : `annualTax:${row.id}`) || "No general note yet")}">NOTE</button></div>
+                    </div>
+                  `).join("") || `<div class="empty-state">No annual rows match the current scope.</div>`}
+                </div>
+              </div>
+            </section>
+          ` : ``}
+
+          ${state.operationsMode === "monthly" && state.operationsTab === "history" ? `
             <section class="panel">
               <div class="section-title">
                 <div>
@@ -3371,7 +4423,7 @@
             </section>
           ` : ``}
 
-          ${state.operationsTab === "claim" ? `
+          ${state.operationsMode === "monthly" && state.operationsTab === "claim" ? `
             <section class="panel">
               <div class="section-title">
                 <div>
@@ -3426,7 +4478,7 @@
             </section>
           ` : ``}
 
-          ${state.operationsTab === "archive" ? `
+          ${state.operationsMode === "monthly" && state.operationsTab === "archive" ? `
             <section class="panel">
               <div class="section-title">
                 <div>
@@ -3543,7 +4595,7 @@
                       <td>${item.stage}</td>
                       <td>${item.priority}</td>
                       <td>${item.dueDate}</td>
-                      <td><span class="pill neutral" title="${item.notes}">NOTE 1</span></td>
+                      <td><button class="tiny-btn note-trigger" data-open-notes="case:${item.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`case:${item.id}`) || "No general note yet")}">NOTE</button></td>
                     </tr>
                   `).join("") || `<tr><td colspan="8"><div class="empty-state">No cases in this lane.</div></td></tr>`}
                 </tbody>
@@ -3561,7 +4613,7 @@
                       <span class="pill ${item.priority === "High" ? "danger" : "warning"}">${item.priority === "High" ? "!" : "•"}</span>
                     </div>
                     <div class="subline">${item.taxPic} / ${item.accountingPic} / Due ${item.dueDate}</div>
-                    <div class="subline">${item.notes}</div>
+                    <div><button class="tiny-btn note-trigger" data-open-notes="case:${item.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`case:${item.id}`) || "No general note yet")}">NOTE</button></div>
                   </div>
                 `).join("") || `<div class="empty-state">No cases in this lane.</div>`}
               </div>
@@ -3766,13 +4818,12 @@
         ? "Submitting..."
         : state.attendance.status;
       document.getElementById("sidebar-attendance-time").textContent = state.attendance.lastTime;
+      document.getElementById("sidebar-attendance-message").textContent = state.attendance.message;
+      document.getElementById("sidebar-attendance-log").textContent = (state.attendance.logs || []).join("\n");
       document.getElementById("mobile-attendance-status").textContent = state.attendance.loading
         ? "Submitting..."
         : state.attendance.status;
       document.getElementById("mobile-attendance-time").textContent = state.attendance.lastTime;
-      document.getElementById("mobile-role-select").value = state.role;
-      document.getElementById("mobile-pic-select").value = state.selectedPic;
-      document.getElementById("mobile-scope-panel").classList.toggle("hidden", !state.mobileScopeOpen);
       const sidebarAttendButton = document.querySelector(".attendance-widget [data-attend]");
       if (sidebarAttendButton) {
         sidebarAttendButton.textContent = state.attendance.loading ? "Attending..." : "Attend";
@@ -3783,10 +4834,8 @@
     function renderNotesPopup() {
       const root = document.getElementById("notes-popup-root");
       if (!root) return;
-      const client = state.notesPopupClientId
-        ? clients.find((item) => item.id === state.notesPopupClientId)
-        : null;
-      if (!client) {
+      const record = noteTargetRecord(state.notesPopupTarget);
+      if (!record) {
         root.innerHTML = "";
         return;
       }
@@ -3796,16 +4845,26 @@
           <div class="notes-popup-head">
             <div>
               <div class="eyebrow">General Note</div>
-              <strong>${client.name}</strong>
+              <strong>${record.title}</strong>
             </div>
             <button class="ghost-btn" data-close-notes="yes">Close</button>
           </div>
           <div class="notes-mini-card">
-            <textarea id="popup-client-notes" class="inline-textarea" placeholder="Type general note here">${client.notes || ""}</textarea>
+            <textarea id="popup-client-notes" class="inline-textarea" placeholder="Type general note here">${record.notes || ""}</textarea>
           </div>
+          ${record.kind === "annualAccounting" ? `
+            <div class="notes-log-list">
+              ${(record.changeLog || []).length ? record.changeLog.map((item) => `
+                <div class="notes-log-item">
+                  <strong>${item.field}</strong>: ${item.from} -> ${item.to}<br>
+                  ${item.by} / ${item.at}
+                </div>
+              `).join("") : `<div class="notes-log-item">No deadline / lapor changes logged yet.</div>`}
+            </div>
+          ` : ``}
           <div class="inline-controls">
             <button class="ghost-btn" data-close-notes="yes">Cancel</button>
-            <button class="solid-btn notes-save-btn" data-save-notes="${client.id}">Save</button>
+            <button class="solid-btn notes-save-btn" data-save-notes="${state.notesPopupTarget}">Save</button>
           </div>
         </div>
       `;
@@ -3829,16 +4888,28 @@
       if (root) root.innerHTML = "";
     }
 
-    function openNotesPopover(clientId, triggerElement) {
+    function openNotesPopover(targetId, triggerElement) {
       hideNoteHoverPreview();
       const rect = triggerElement.getBoundingClientRect();
       const width = Math.min(280, window.innerWidth - 24);
       const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width));
       const top = Math.max(12, Math.min(window.innerHeight - 210, rect.bottom + 8));
-      state.selectedClientId = clientId;
-      state.notesPopupClientId = clientId;
+      const record = noteTargetRecord(targetId);
+      if (record?.kind === "client") {
+        state.selectedClientId = record.id;
+      }
+      state.notesPopupTarget = targetId;
       state.notesAnchor = { left, top };
       renderNotesPopup();
+    }
+
+    function toggleSort(scope, key) {
+      const current = state.sorts[scope];
+      if (current.key === key) {
+        state.sorts[scope].dir = current.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.sorts[scope] = { key, dir: "asc" };
+      }
     }
 
     function bindDirectRowActions() {
@@ -3905,9 +4976,11 @@
         activeClientFormId: state.activeClientFormId,
         selectedObligationKey: state.selectedObligationKey,
         expandedClientId: state.expandedClientId,
-        notesPopupClientId: state.notesPopupClientId,
+        notesPopupTarget: state.notesPopupTarget,
         notesAnchor: state.notesAnchor,
+        operationsMode: state.operationsMode,
         operationsTab: state.operationsTab,
+        annualTeam: state.annualTeam,
         casesTab: state.casesTab,
         clientManagementTab: state.clientManagementTab,
         managementTab: state.managementTab,
@@ -3915,7 +4988,8 @@
         autoHideCompleted: state.autoHideCompleted,
         showCompletedRows: state.showCompletedRows,
         filters: { ...state.filters },
-        historyFilters: { ...state.historyFilters }
+        historyFilters: { ...state.historyFilters },
+        sorts: JSON.parse(JSON.stringify(state.sorts))
       };
     }
 
@@ -3928,9 +5002,11 @@
       state.activeClientFormId = snapshot.activeClientFormId || state.activeClientFormId;
       state.selectedObligationKey = snapshot.selectedObligationKey || state.selectedObligationKey;
       state.expandedClientId = snapshot.expandedClientId || "";
-      state.notesPopupClientId = snapshot.notesPopupClientId || "";
+      state.notesPopupTarget = snapshot.notesPopupTarget || "";
       state.notesAnchor = snapshot.notesAnchor || null;
+      state.operationsMode = snapshot.operationsMode || state.operationsMode;
       state.operationsTab = snapshot.operationsTab || state.operationsTab;
+      state.annualTeam = snapshot.annualTeam || state.annualTeam;
       state.casesTab = snapshot.casesTab || state.casesTab;
       state.clientManagementTab = snapshot.clientManagementTab || state.clientManagementTab;
       state.managementTab = snapshot.managementTab || state.managementTab;
@@ -3939,6 +5015,10 @@
       state.showCompletedRows = typeof snapshot.showCompletedRows === "boolean" ? snapshot.showCompletedRows : state.showCompletedRows;
       state.filters = { ...state.filters, ...(snapshot.filters || {}) };
       state.historyFilters = { ...state.historyFilters, ...(snapshot.historyFilters || {}) };
+      state.sorts = {
+        ...state.sorts,
+        ...(snapshot.sorts || {})
+      };
     }
 
     function syncBrowserHistory(mode = "replace") {
@@ -3974,7 +5054,9 @@
       const navButton = target.closest(".nav-btn");
       const switchViewTrigger = target.closest("[data-switch-view]");
       const toggleScopeTrigger = target.closest("[data-toggle-scope]");
+      const operationsModeTrigger = target.closest("[data-operations-mode]");
       const operationsTabTrigger = target.closest("[data-operations-tab]");
+      const annualTeamTrigger = target.closest("[data-annual-team]");
       const casesTabTrigger = target.closest("[data-cases-tab]");
       const managementTabTrigger = target.closest("[data-management-tab]");
       const operationsShortcutTrigger = target.closest("[data-operations-tab-shortcut]");
@@ -3984,6 +5066,7 @@
       const editClientTrigger = target.closest("[data-edit-client]");
       const importClientsTrigger = target.closest("[data-import-clients]");
       const openClientTrigger = target.closest("[data-open-client]");
+      const sortTrigger = target.closest("[data-sort-scope]");
       const openNotesTrigger = target.closest("[data-open-notes]");
       const closeNotesTrigger = target.closest("[data-close-notes]");
       const cycleDataTrigger = target.closest("[data-cycle-data]");
@@ -3991,8 +5074,8 @@
       const openObligationTrigger = target.closest("[data-open-obligation]");
       const notesPopoverTrigger = target.closest(".notes-popover");
 
-      if (state.notesPopupClientId && !openNotesTrigger && !saveNotesTrigger && !closeNotesTrigger && !notesPopoverTrigger) {
-        state.notesPopupClientId = "";
+      if (state.notesPopupTarget && !openNotesTrigger && !saveNotesTrigger && !closeNotesTrigger && !notesPopoverTrigger) {
+        state.notesPopupTarget = "";
         state.notesAnchor = null;
         renderNotesPopup();
       }
@@ -4008,14 +5091,33 @@
         syncBrowserHistory("push");
       }
 
+      if (sortTrigger) {
+        toggleSort(sortTrigger.getAttribute("data-sort-scope"), sortTrigger.getAttribute("data-sort-key"));
+        commitUi("push");
+        return;
+      }
+
       if (toggleScopeTrigger) {
         state.mobileScopeOpen = !state.mobileScopeOpen;
         commitUi("push");
         return;
       }
 
+      if (operationsModeTrigger) {
+        state.operationsMode = operationsModeTrigger.getAttribute("data-operations-mode");
+        state.expandedClientId = "";
+        commitUi("push");
+        return;
+      }
+
       if (operationsTabTrigger) {
         state.operationsTab = operationsTabTrigger.getAttribute("data-operations-tab");
+        commitUi("push");
+        return;
+      }
+
+      if (annualTeamTrigger) {
+        state.annualTeam = annualTeamTrigger.getAttribute("data-annual-team");
         commitUi("push");
         return;
       }
@@ -4056,8 +5158,8 @@
       if (newClientTrigger) {
         const newClient = createClientFromRow({
           name: `New Client ${clients.length + 1}`,
-          taxPic: state.selectedPic,
-          accountingPic: state.selectedPic,
+          taxPic: TAX_PICS.includes(state.selectedPic) ? state.selectedPic : TAX_PICS[0],
+          accountingPic: ACC_PICS[0],
           monthlyFee: 0,
           month: "May",
           year: "2026",
@@ -4093,8 +5195,13 @@
         return;
       }
 
+      if (target.matches("[data-date-text]")) {
+        openNativeDatePicker(target.getAttribute("data-date-text"));
+        return;
+      }
+
       if (closeNotesTrigger) {
-        state.notesPopupClientId = "";
+        state.notesPopupTarget = "";
         state.notesAnchor = null;
         hideNoteHoverPreview();
         renderNotesPopup();
@@ -4146,11 +5253,16 @@
       }
 
       if (saveNotesTrigger) {
-        const client = clients.find((item) => item.id === saveNotesTrigger.getAttribute("data-save-notes"));
-        if (!client) return;
+        const record = noteTargetRecord(saveNotesTrigger.getAttribute("data-save-notes"));
+        if (!record) return;
         const clientNotesInput = document.getElementById("popup-client-notes");
-        client.notes = clientNotesInput ? clientNotesInput.value.trim() : client.notes;
-        client.lastUpdated = "2026-05-21 10:25";
+        record.notes = clientNotesInput ? clientNotesInput.value.trim() : record.notes;
+        if (record.kind === "client") {
+          const client = clients.find((item) => item.id === record.id);
+          if (client) {
+            client.lastUpdated = "2026-05-21 10:25";
+          }
+        }
         const popover = document.querySelector(".notes-popover");
         const saveButton = saveNotesTrigger;
         if (saveButton) {
@@ -4161,7 +5273,7 @@
           popover.classList.add("closing");
           await new Promise((resolve) => setTimeout(resolve, 420));
         }
-        state.notesPopupClientId = "";
+        state.notesPopupTarget = "";
         state.notesAnchor = null;
         commitUi("push");
         return;
@@ -4247,15 +5359,13 @@
         if (username === null) return;
         const password = window.prompt("Attendance website password:", "");
         if (password === null) return;
-        const attendancePassword = window.prompt("Attendance second-layer password:", "");
-        if (attendancePassword === null) return;
         state.attendance.credentialsSaved = true;
         state.attendance.credentials = {
           username,
-          password,
-          attendancePassword
+          password
         };
-        state.attendance.message = "Attendance credentials saved in memory for this session only.";
+        state.attendance.message = "Attendance credentials saved. Second layer will reuse the same password.";
+        state.attendance.logs = ["Credentials saved for this session."];
         commitUi("push");
         return;
       }
@@ -4269,24 +5379,37 @@
 
         state.attendance.loading = true;
         state.attendance.message = "Submitting attendance...";
+        state.attendance.logs = ["Preparing attendance request..."];
         commitUi("replace");
 
         try {
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 45000);
+          state.attendance.logs.push(`POST ${state.attendance.apiUrl}`);
           const response = await fetch(state.attendance.apiUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
-            body: JSON.stringify(state.attendance.credentials)
+            body: JSON.stringify(state.attendance.credentials),
+            signal: controller.signal
           });
+          window.clearTimeout(timeout);
           const result = await response.json();
 
           state.attendance.status = result.success ? "Attendance submitted" : "Attendance failed";
           state.attendance.lastTime = result.timestamp || state.attendance.lastTime;
           state.attendance.message = result.message || "Attendance request completed.";
+          state.attendance.logs = result.logs && result.logs.length
+            ? result.logs
+            : [`HTTP ${response.status}`, result.message || "Attendance request completed."];
         } catch (error) {
           state.attendance.status = "Attendance failed";
           state.attendance.message = error instanceof Error ? error.message : "Could not reach attendance service.";
+          state.attendance.logs = [
+            ...state.attendance.logs,
+            error instanceof Error ? `Request failed: ${error.message}` : "Request failed."
+          ];
         } finally {
           state.attendance.loading = false;
           commitUi("replace");
@@ -4318,7 +5441,7 @@
           name: proposal.name,
           pic: proposal.proposedPic,
           taxPic: proposal.proposedPic,
-          accountingPic: proposal.proposedPic,
+          accountingPic: ACC_PICS[0],
           dataState: "missing",
           followUpCount: 0,
           notes: proposal.notes,
@@ -4352,16 +5475,40 @@
     document.addEventListener("change", (event) => {
       const target = event.target;
 
-      if (target.id === "role-select" || target.id === "mobile-role-select") {
-        state.role = target.value;
-        commitUi("push");
-        return;
-      }
+      if (target.matches("[data-date-target]")) {
+        const dateTarget = target.getAttribute("data-date-target");
+        const textInput = document.getElementById(dateTarget);
+        if (!textInput) return;
+        const display = formatIsoToDisplayDate(target.value);
+        textInput.value = display;
 
-      if (target.id === "pic-select" || target.id === "mobile-pic-select") {
-        state.selectedPic = target.value;
-        commitUi("push");
-        return;
+        if (textInput.matches("[data-annual-accounting-deadline]")) {
+          const row = annualAccountingRows.find((item) => item.id === textInput.getAttribute("data-annual-accounting-deadline"));
+          if (!row) return;
+          const previous = row.deadline || "";
+          row.deadline = display || "-";
+          appendAnnualAccountingLog(row, "Deadline", previous, row.deadline);
+          commitUi("push");
+          return;
+        }
+
+        if (textInput.matches("[data-annual-accounting-lapor]")) {
+          const row = annualAccountingRows.find((item) => item.id === textInput.getAttribute("data-annual-accounting-lapor"));
+          if (!row) return;
+          const previous = row.lapor || "";
+          row.lapor = display || "-";
+          appendAnnualAccountingLog(row, "Lapor", previous, row.lapor);
+          commitUi("push");
+          return;
+        }
+
+        if (dateTarget.startsWith("ob-")) {
+          const match = dateTarget.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
+          if (!match) return;
+          const [, clientId, obligationKey] = match;
+          updateLedgerField(clientId, obligationKey, "date", display, true);
+          return;
+        }
       }
 
       if (target.id === "query-input") {
@@ -4372,6 +5519,12 @@
 
       if (target.id === "attention-toggle") {
         state.filters.needsAttentionOnly = target.checked;
+        commitUi("push");
+        return;
+      }
+
+      if (target.id === "monthly-period-filter") {
+        state.filters.period = target.value;
         commitUi("push");
         return;
       }
@@ -4433,6 +5586,45 @@
         return;
       }
 
+      if (target.matches("[data-annual-accounting-progress]")) {
+        const row = annualAccountingRows.find((item) => item.id === target.getAttribute("data-annual-accounting-progress"));
+        if (!row) return;
+        row.progress = target.value;
+
+        if (["Reported", "Done"].includes(row.progress) && (!row.lapor || row.lapor === "-")) {
+          row.lapor = "30/04/2026";
+        }
+
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-annual-accounting-deadline]")) {
+        const row = annualAccountingRows.find((item) => item.id === target.getAttribute("data-annual-accounting-deadline"));
+        if (!row) return;
+        const previous = row.deadline || "";
+        const next = target.value.trim().toUpperCase() === "CUT OFF"
+          ? "CUT OFF"
+          : formatDateDraft(target.value.trim());
+        row.deadline = next || "-";
+        target.value = row.deadline === "-" ? "" : row.deadline;
+        appendAnnualAccountingLog(row, "Deadline", previous, row.deadline);
+        commitUi("push");
+        return;
+      }
+
+      if (target.matches("[data-annual-accounting-lapor]")) {
+        const row = annualAccountingRows.find((item) => item.id === target.getAttribute("data-annual-accounting-lapor"));
+        if (!row) return;
+        const previous = row.lapor || "";
+        const next = formatDateDraft(target.value.trim());
+        row.lapor = next || "-";
+        target.value = row.lapor === "-" ? "" : row.lapor;
+        appendAnnualAccountingLog(row, "Lapor", previous, row.lapor);
+        commitUi("push");
+        return;
+      }
+
       if (target.id.startsWith("ob-")) {
         const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
         if (!match) return;
@@ -4450,7 +5642,24 @@
 
     document.addEventListener("input", (event) => {
       const target = event.target instanceof HTMLInputElement ? event.target : null;
-      if (!target || !target.id.startsWith("ob-")) return;
+      if (!target) return;
+
+      if (target.matches("[data-annual-accounting-deadline]")) {
+        const raw = target.value.trim();
+        if (raw.toUpperCase().startsWith("CUT")) {
+          target.value = raw.toUpperCase();
+        } else {
+          target.value = formatDateDraft(raw);
+        }
+        return;
+      }
+
+      if (target.matches("[data-annual-accounting-lapor]")) {
+        target.value = formatDateDraft(target.value);
+        return;
+      }
+
+      if (!target.id.startsWith("ob-")) return;
       const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
       if (!match) return;
       const [, clientId, obligationKey, fieldKey] = match;
@@ -4506,7 +5715,7 @@
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
       const noteTrigger = target.closest("[data-open-notes]");
-      if (!noteTrigger || state.notesPopupClientId) return;
+      if (!noteTrigger || state.notesPopupTarget) return;
       showNoteHoverPreview(noteTrigger, noteTrigger.getAttribute("data-note-preview"));
     });
 
@@ -4568,13 +5777,16 @@
     });
 
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && state.notesPopupClientId) {
-        state.notesPopupClientId = "";
+      if (event.key === "Escape" && state.notesPopupTarget) {
+        state.notesPopupTarget = "";
         commitUi("replace");
       }
     });
 
     rerender();
+    window.setTimeout(() => {
+      warmAttendanceRoutes();
+    }, 600);
     syncBrowserHistory("replace");
   </script>
 </body>
