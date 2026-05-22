@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+type CookieMutation = {
+  name: string;
+  value: string;
+  options?: Record<string, unknown>;
+};
+
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,7 +21,7 @@ export async function middleware(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookieValues) {
+      setAll(cookieValues: CookieMutation[]) {
         cookieValues.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
       }
     }
