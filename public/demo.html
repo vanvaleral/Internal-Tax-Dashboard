@@ -7512,6 +7512,7 @@
     }
 
     const inlineCaseSaveQueues = new WeakMap();
+    const inlineCaseSaveTimers = new WeakMap();
 
     function refreshInlineHimbauanRow(record) {
       document.querySelectorAll("[data-case-inline]").forEach((input) => {
@@ -7553,27 +7554,33 @@
         }
       }
       refreshInlineHimbauanRow(record);
+      persistDemoState();
 
-      // Keep rapid edits in order. Inline fields must not repaint the table or
-      // show the full-screen loader, otherwise date entry loses its focus.
-      const previousSave = inlineCaseSaveQueues.get(record) || Promise.resolve();
-      const nextSave = previousSave.catch(() => {}).then(async () => {
-        // A new row is retained locally until Wajib Pajak is supplied, because
-        // the database requires a client name for every case record.
-        if (record.id.startsWith("case-") && !record.clientName.trim()) {
+      // Batch nearby edits and serialize each case's requests. Inline fields
+      // never repaint the table or use the full-screen loader while saving.
+      window.clearTimeout(inlineCaseSaveTimers.get(record));
+      const timer = window.setTimeout(() => {
+        const previousSave = inlineCaseSaveQueues.get(record) || Promise.resolve();
+        const nextSave = previousSave.catch(() => {}).then(async () => {
+          // A new row is retained locally until Wajib Pajak is supplied, because
+          // the database requires a client name for every case record.
+          if (record.id.startsWith("case-") && !record.clientName.trim()) return;
+          const previousId = record.id;
+          await saveCaseToDatabase(record, { showLoading: false });
+          replaceInlineCaseId(previousId, record);
+          delete record.pendingSync;
+          refreshInlineHimbauanRow(record);
           persistDemoState();
-          return;
-        }
-        const previousId = record.id;
-        await saveCaseToDatabase(record, { showLoading: false });
-        replaceInlineCaseId(previousId, record);
-        refreshInlineHimbauanRow(record);
-        persistDemoState();
-      }).catch((error) => {
-        window.alert(error instanceof Error ? error.message : "Case could not be saved.");
-      });
-      inlineCaseSaveQueues.set(record, nextSave);
-      return nextSave;
+        }).catch((error) => {
+          // Preserve the edit locally. The next inline change retries it without
+          // interrupting the user's data entry with a blocking browser alert.
+          record.pendingSync = true;
+          persistDemoState();
+          console.warn("[cases] inline save failed", error);
+        });
+        inlineCaseSaveQueues.set(record, nextSave);
+      }, 750);
+      inlineCaseSaveTimers.set(record, timer);
     }
 
     function myWorkPayload(task, extra = {}) {

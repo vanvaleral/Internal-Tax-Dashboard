@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createOperationalAnnouncement } from "@/lib/notifications";
 
@@ -55,8 +55,16 @@ export async function POST(request: Request) {
   if (!payload.client_name) return NextResponse.json({ error: "Client name is required." }, { status: 400 });
   const { data, error } = await supabase.from("tax_cases").insert(payload).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const { data: creator } = await supabase.from("staff_profiles").select("id, display_name, full_name").eq("auth_user_id", user.id).maybeSingle();
-  if (creator) await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${creator.display_name || creator.full_name} created a new ${payload.case_category} case.`, senderProfileId: creator.id, recipientNames: [payload.tax_pic_name || "", payload.accounting_pic_name || ""] });
+  // Notification creation performs several extra queries. It must not delay a
+  // successful case save until the Vercel request reaches its timeout limit.
+  after(async () => {
+    try {
+      const { data: creator } = await supabase.from("staff_profiles").select("id, display_name, full_name").eq("auth_user_id", user.id).maybeSingle();
+      if (creator) await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${creator.display_name || creator.full_name} created a new ${payload.case_category} case.`, senderProfileId: creator.id, recipientNames: [payload.tax_pic_name || "", payload.accounting_pic_name || ""] });
+    } catch (notificationError) {
+      console.error("[cases] notification could not be created", notificationError);
+    }
+  });
   return NextResponse.json({ data }, { status: 201 });
 }
 
