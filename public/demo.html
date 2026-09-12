@@ -20,6 +20,8 @@
       --points-start: #172554;
       --points-end: #2563eb;
       --my-work-image: none;
+      --my-work-overlay-start: rgba(31, 55, 145, .58);
+      --my-work-overlay-end: rgba(95, 120, 220, .34);
       --warning: #b76a0a;
       --warning-soft: #fdf1da;
       --danger: #be123c;
@@ -221,7 +223,7 @@
 
     .my-work-shell { max-width: none; padding: 0; }
     .my-work-panel { min-height: calc(100vh - 100px); display:grid; grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); overflow:hidden; border-radius:20px; }
-    .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, color-mix(in srgb, var(--my-work-start) 76%, transparent), color-mix(in srgb, var(--my-work-end) 72%, transparent)), var(--my-work-image); background-position:center; background-size:cover; }
+    .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, var(--my-work-overlay-start), var(--my-work-overlay-end)), var(--my-work-image); background-position:center; background-size:cover; }
     .my-work-list h2 { font-size:28px; color:#fff; }
     .my-work-row { width:100%; display:grid; grid-template-columns:24px 1fr 24px; gap:12px; align-items:start; margin:3px 0; padding:12px; text-align:left; border-radius:4px; background:rgba(255,255,255,.84); color:#1f2732; backdrop-filter:blur(8px); }
     .my-work-row.is-new { animation:taskEnter 230ms ease both; }
@@ -1521,6 +1523,13 @@
       width: 130px;
     }
 
+    .case-inline-field { width:100%; min-width:86px; height:26px; padding:3px 5px; border:1px solid transparent; border-radius:5px; color:var(--ink); background:transparent; font-size:12px; }
+    .case-inline-field:focus { border-color:var(--accent); background:var(--panel-solid); outline:0; }
+    .case-inline-field.case-client-field { min-width:170px; font-weight:700; }
+    .case-inline-field.case-note-field { min-width:130px; }
+    .case-inline-date { min-width:118px; }
+    .case-inline-readonly { padding:3px 5px; color:var(--muted); font-size:12px; white-space:nowrap; }
+
     .inline-textarea {
       width: 100%;
       min-height: 72px;
@@ -1561,8 +1570,7 @@
     .appearance-custom { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
     .appearance-custom input { width:42px; height:30px; padding:2px; border:1px solid var(--line); border-radius:7px; background:transparent; }
     .appearance-background { display:grid; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
-    .appearance-upload { display:flex; align-items:center; justify-content:center; min-height:36px; padding:8px 10px; border:1px dashed var(--accent); border-radius:9px; color:var(--accent-strong); background:var(--accent-soft); font-size:12px; font-weight:700; cursor:pointer; }
-    .appearance-upload input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+    .appearance-upload { display:flex; align-items:center; justify-content:center; width:100%; min-height:36px; padding:8px 10px; border:1px dashed var(--accent); border-radius:9px; color:var(--accent-strong); background:var(--accent-soft); font-size:12px; font-weight:700; cursor:pointer; }
 
     body.theme-dark .sidebar,
     body.theme-dark .panel,
@@ -3071,6 +3079,7 @@
   </div>
 
   <input id="client-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
+  <input id="appearance-my-work-background" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
   <div id="notes-popup-root"></div>
   <div id="notes-hover-root"></div>
   <div id="annual-action-popup-root"></div>
@@ -5015,6 +5024,12 @@
       return `#${blended.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
     }
 
+    function hexToRgba(hex, alpha) {
+      const source = String(hex || "#2563eb").replace("#", "");
+      const channels = [0, 2, 4].map((index) => parseInt(source.slice(index, index + 2), 16));
+      return `rgba(${channels.join(", ")}, ${alpha})`;
+    }
+
     function applyAppearance() {
       const accent = state.appearance.accent;
       const root = document.documentElement;
@@ -5024,6 +5039,8 @@
       root.style.setProperty("--accent-strong", blendHex(accent, [0, 0, 0], state.appearance.theme === "dark" ? 0.18 : 0.36));
       root.style.setProperty("--my-work-start", blendHex(accent, [0, 0, 0], state.appearance.theme === "dark" ? 0.3 : 0.18));
       root.style.setProperty("--my-work-end", blendHex(accent, [255, 255, 255], state.appearance.theme === "dark" ? 0.08 : 0.32));
+      root.style.setProperty("--my-work-overlay-start", hexToRgba(blendHex(accent, [0, 0, 0], state.appearance.theme === "dark" ? 0.42 : 0.2), .64));
+      root.style.setProperty("--my-work-overlay-end", hexToRgba(blendHex(accent, [255, 255, 255], state.appearance.theme === "dark" ? 0.06 : 0.26), .32));
       root.style.setProperty("--points-start", blendHex(accent, [0, 0, 0], 0.66));
       root.style.setProperty("--points-end", accent);
       root.style.setProperty("--my-work-image", state.appearance.myWorkBackground ? `url("${state.appearance.myWorkBackground.replace(/"/g, "")}")` : "none");
@@ -5046,7 +5063,7 @@
           <div class="eyebrow" style="margin:16px 0 8px;">Accent color</div>
           <div class="appearance-swatches">${presets.map((color) => `<button class="appearance-swatch ${state.appearance.accent.toLowerCase() === color ? "active" : ""}" style="--swatch:${color}" data-set-accent="${color}" aria-label="Use ${color} accent"></button>`).join("")}</div>
           <label class="appearance-custom"><span>Custom color</span><input id="appearance-custom-color" type="color" value="${escapeAttr(state.appearance.accent)}" /></label>
-          <div class="appearance-background"><div class="eyebrow">My Work background</div><label class="appearance-upload">Upload image<input id="appearance-my-work-background" type="file" accept="image/png,image/jpeg,image/webp" /></label>${state.appearance.myWorkBackground ? `<button class="ghost-btn" data-clear-my-work-background="yes">Remove background image</button>` : ""}</div>
+          <div class="appearance-background"><div class="eyebrow">My Work background</div><button class="appearance-upload" data-select-my-work-background="yes">Upload image</button><div class="subline">${state.appearance.myWorkBackground ? "Image applied" : "PNG, JPG, or WebP up to 1.5 MB"}</div>${state.appearance.myWorkBackground ? `<button class="ghost-btn" data-clear-my-work-background="yes">Remove background image</button>` : ""}</div>
         </section>`;
     }
 
@@ -6885,12 +6902,17 @@
     function renderCases() {
       const scopedCases = hasLeadershipAccess()
         ? taxCases
-        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
+        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic || item.id === state.selectedCaseId);
       const caseQuery = state.caseSearch.trim().toLowerCase();
       const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
       const caseList = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes].join(" ").toLowerCase().includes(caseQuery)));
       const activeCase = selectedCase();
       const root = document.getElementById("cases-view");
+      const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
+      const himbauanRows = caseList.map((item, index) => {
+        const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
+        return `<tr><td>${index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
+      }).join("") || `<tr><td colspan="12"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
 
       root.innerHTML = `
         <div class="workspace-frame workspace-cases">
@@ -6910,10 +6932,10 @@
           <section class="panel">
             <div class="toolbar compact-toolbar"><input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Search wajib pajak, surat, PIC..." /></div>
             <div class="table-wrap"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th>`}</tr></thead><tbody>
-              ${caseList.map((item, index) => { const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null; return `<tr data-select-case="${item.id}"><td>${index + 1}</td><td><button class="client-link" data-select-case="${item.id}">${displayClientName(item.clientName)}</button></td><td>${item.letterNumber || "-"}</td><td>${item.letterDate || "-"}</td><td>${item.receivedDate || "-"}</td><td>${item.subject || "-"}</td>${category === "Himbauan" ? `<td>${item.dueDate || "-"}</td><td>${days === null ? "-" : `${days} days`}</td><td>${item.completionDate || "-"}</td>` : `<td>${item.taxYear || "-"}</td>`}<td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td>${category === "Pemeriksaan" ? `<td>${item.inspectorPic || "-"}</td><td>${item.sphpDate || "-"}</td><td>${item.completionNotes || "-"}</td>` : `<td>${item.notes || "-"}</td>`}</tr>`; }).join("") || `<tr><td colspan="12"><div class="empty-state">No ${category} records in your PIC scope.</div></td></tr>`}
+              ${category === "Himbauan" ? himbauanRows : caseList.map((item, index) => `<tr data-select-case="${item.id}"><td>${index + 1}</td><td><button class="client-link" data-select-case="${item.id}">${displayClientName(item.clientName)}</button></td><td>${item.letterNumber || "-"}</td><td>${item.letterDate || "-"}</td><td>${item.receivedDate || "-"}</td><td>${item.subject || "-"}</td><td>${item.taxYear || "-"}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${item.inspectorPic || "-"}</td><td>${item.sphpDate || "-"}</td><td>${item.completionNotes || "-"}</td></tr>`).join("") || `<tr><td colspan="12"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`}
             </tbody></table></div>
           </section>
-          <section class="panel case-detail-panel">
+          ${category === "Pemeriksaan" ? `<section class="panel case-detail-panel">
               ${activeCase ? `
                 <div class="section-title">
                   <div><h3>${activeCase.clientName}</h3><p>${activeCase.caseType} case workspace.</p></div>
@@ -6942,7 +6964,7 @@
               ` : `<div class="empty-state">Select a case or add a new case to begin.</div>`}
             </section>
             <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
-          </section>
+          </section>` : `<datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>`}
         </div>
       `;
     }
@@ -7300,6 +7322,11 @@
         setAppLoading(true, message);
       }
       try {
+        // Opening public/demo.html directly uses file://, where relative API
+        // requests are unavailable. Keep that path usable as an offline demo.
+        if (window.location.protocol === "file:") {
+          return new Response(JSON.stringify({ error: "Offline demo mode" }), { status: 503, headers: { "Content-Type": "application/json" } });
+        }
         return await fetch(url, options);
       } finally {
         if (showLoading) {
@@ -7482,6 +7509,41 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Case could not be saved.");
       Object.assign(record, databaseCaseToDemo(result.data));
+    }
+
+    async function saveInlineHimbauanCase(record, field, value) {
+      record[field] = value;
+      if (field === "clientName") {
+        const linkedClient = clients.find((client) => normalizedEntityName(client.name) === normalizedEntityName(record.clientName));
+        record.clientId = linkedClient?.id || "";
+        record.databaseClientId = linkedClient?.databaseId || record.databaseClientId || "";
+        if (linkedClient) {
+          record.taxPic = linkedClient.taxPic;
+          record.accountingPic = linkedClient.accountingPic;
+        }
+      }
+      if (field === "receivedDate") {
+        if (record.receivedDate) {
+          const due = new Date(`${record.receivedDate}T00:00:00`);
+          due.setDate(due.getDate() + 14);
+          record.dueDate = due.toISOString().slice(0, 10);
+        } else {
+          record.dueDate = "";
+        }
+      }
+      // A new row is retained locally until Wajib Pajak is supplied, because the
+      // database requires a client name for every case record.
+      if (record.id.startsWith("case-") && !record.clientName.trim()) {
+        persistDemoState();
+        return;
+      }
+      try {
+        await saveCaseToDatabase(record);
+        state.selectedCaseId = record.id;
+        commitUi("replace");
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Case could not be saved.");
+      }
     }
 
     function myWorkPayload(task, extra = {}) {
@@ -8129,6 +8191,7 @@
       const themeTrigger = target.closest("[data-set-theme]");
       const accentTrigger = target.closest("[data-set-accent]");
       const clearMyWorkBackgroundTrigger = target.closest("[data-clear-my-work-background]");
+      const selectMyWorkBackgroundTrigger = target.closest("[data-select-my-work-background]");
       const profileTabTrigger = target.closest("[data-profile-tab]");
       const addMyWorkTrigger = target.closest("[data-add-my-work]");
       const completeMyWorkTrigger = target.closest("[data-my-work-done]");
@@ -8160,6 +8223,7 @@
       if (closeAppearanceSettingsTrigger && (target === closeAppearanceSettingsTrigger || closeAppearanceSettingsTrigger.tagName === "BUTTON")) { state.appearanceSettingsOpen = false; renderAppearanceSettings(); return; }
       if (themeTrigger) { state.appearance.theme = themeTrigger.getAttribute("data-set-theme") === "dark" ? "dark" : "light"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
       if (accentTrigger) { state.appearance.accent = accentTrigger.getAttribute("data-set-accent") || "#2563eb"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
+      if (selectMyWorkBackgroundTrigger) { document.getElementById("appearance-my-work-background")?.click(); return; }
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
 
       if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); commitUi("replace"); return; }
@@ -9111,6 +9175,7 @@
           persistDemoState();
           renderAppearanceSettings();
         };
+        reader.onerror = () => window.alert("The selected image could not be read. Please try another PNG, JPG, or WebP file.");
         reader.readAsDataURL(file);
         return;
       }
@@ -9141,6 +9206,14 @@
         if (target.id === "my-work-note") task.note = target.value;
         commitUi("replace");
         saveMyWorkTaskToDatabase(task);
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.matches("[data-case-inline]")) {
+        const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
+        const field = target.getAttribute("data-case-field");
+        if (!record || !field) return;
+        saveInlineHimbauanCase(record, field, target.value.trim());
         return;
       }
 
