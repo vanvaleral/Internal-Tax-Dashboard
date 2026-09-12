@@ -1635,6 +1635,13 @@
       background: transparent;
     }
 
+    /* Preserve the Excel-like matrix while allowing the browser to skip paint
+       work for rows outside the current viewport. */
+    .operations-matrix > tbody > tr.main-row {
+      content-visibility: auto;
+      contain-intrinsic-size: 48px;
+    }
+
     .operations-matrix tbody > tr.expanded-row > td {
       position: static !important;
       left: auto !important;
@@ -3749,6 +3756,10 @@
         period: "all",
         ...(persistedDemoState?.ui?.filters || {})
       },
+      clientSearch: persistedDemoState?.ui?.clientSearch || "",
+      profileClientSearch: persistedDemoState?.ui?.profileClientSearch || "",
+      monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
+      activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       sorts: {
         monthly: { key: "name", dir: "asc" },
         annualAccounting: { key: "name", dir: "asc" },
@@ -3759,6 +3770,9 @@
 
     if (!["active", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
+    }
+    if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) {
+      clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
     }
 
     function currency(amount) {
@@ -4134,15 +4148,66 @@
     }
 
     function monthlyPeriodOptions() {
-      return [...new Set(clients.map((client) => periodKey(client.month, client.year)))];
+      return Object.keys(state.monthlyProgress).sort((left, right) => {
+        const [leftMonth, leftYear] = left.split(" ");
+        const [rightMonth, rightYear] = right.split(" ");
+        return Number(rightYear) - Number(leftYear) || new Date(`1 ${rightMonth} 2000`).getMonth() - new Date(`1 ${leftMonth} 2000`).getMonth();
+      });
     }
 
     function normalizedEntityName(name) {
       return String(name || "")
         .trim()
-        .replace(/^(PT|CV|FA|UD|FIRMA)\s+/i, "")
+        .replace(/^(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+/i, "")
         .replace(/\s+/g, " ")
         .toLowerCase();
+    }
+
+    function displayClientName(clientOrName) {
+      const name = typeof clientOrName === "string" ? clientOrName : clientOrName?.name;
+      return String(name || "").trim().replace(/^(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+/i, "") || "-";
+    }
+
+    function activeMonthlyClients() {
+      return state.activeMonthlyPeriod ? (state.monthlyProgress[state.activeMonthlyPeriod] || []) : [];
+    }
+
+    function saveMonthlyProgress() {
+      if (!state.activeMonthlyPeriod) return;
+      state.monthlyProgress[state.activeMonthlyPeriod] = structuredClone(clients);
+    }
+
+    function openMonthlyPeriod(period) {
+      if (!period) return;
+      saveMonthlyProgress();
+      if (!state.monthlyProgress[period]) return;
+      clients = structuredClone(state.monthlyProgress[period]);
+      state.activeMonthlyPeriod = period;
+      state.filters.period = period;
+    }
+
+    function createMonthlyPeriodRows(month, year) {
+      return structuredClone(clients).map((client) => {
+        client.month = month;
+        client.year = year;
+        client.dataState = "missing";
+        client.followUpCount = 0;
+        client.claimStatus = "Draft";
+        client.paymentStatus = "Not Started";
+        client.lastUpdated = "";
+        Object.values(client.obligations).forEach((obligation) => {
+          if (obligation.status === "na") return;
+          obligation.status = "awaiting";
+          obligation.receiptNumber = "";
+          obligation.payableAmount = 0;
+          obligation.quickNotes = "";
+          obligation.paymentDate = "";
+          obligation.ntpn = "";
+          obligation.reported = false;
+          obligation.revisionRequired = false;
+        });
+        return client;
+      });
     }
 
     function compareText(a, b) {
@@ -4327,9 +4392,10 @@
     }
 
     function visibleClients() {
+      const periodClients = activeMonthlyClients();
       const scoped = hasLeadershipAccess()
-        ? clients
-        : clients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
+        ? periodClients
+        : periodClients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
 
       return sortMonthlyClients(scoped.filter((client) => {
         const query = state.filters.query.trim().toLowerCase();
@@ -4638,9 +4704,10 @@
     }
 
     function allVisibleClientsIncludingCompleted() {
+      const periodClients = activeMonthlyClients();
       const scoped = hasLeadershipAccess()
-        ? clients
-        : clients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
+        ? periodClients
+        : periodClients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
       const query = state.filters.query.trim().toLowerCase();
       return scoped.filter((client) => {
         const matchesQuery = !query || [
@@ -5466,7 +5533,8 @@
           || (state.contractFilter === "expired" && health.label === "Expired")
           || (state.contractFilter === "open" && health.label === "Open-ended");
       });
-      const activeClientRows = [...clients].sort((left, right) => {
+      const clientSearch = state.clientSearch.trim().toLowerCase();
+      const activeClientRows = [...clients].filter((client) => !clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch)).sort((left, right) => {
         const leftIdentity = splitBusinessName(left);
         const rightIdentity = splitBusinessName(right);
         return leftIdentity.form.localeCompare(rightIdentity.form) || leftIdentity.name.localeCompare(rightIdentity.name);
@@ -5496,6 +5564,7 @@
                   <h3>Active Clients</h3>
                   <p>Client master overview. Select a client to review or update its operational profile.</p>
                 </div>
+                <input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." />
               </div>
               <div class="table-wrap desktop-only">
                 <table class="client-table">
@@ -5509,6 +5578,7 @@
                     <col class="client-status-col">
                     <col class="client-fee-col">
                     <col class="client-fee-col">
+                    <col class="client-form-col">
                   </colgroup>
                   <thead>
                     <tr>
@@ -5521,6 +5591,7 @@
                       <th>Status</th>
                       <th>Monthly Fee</th>
                       <th>Annual Fee</th>
+                      <th aria-label="Edit"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5531,7 +5602,6 @@
                         <td>${identity.form || "Individual"}</td>
                         <td class="client-name-cell" title="${client.name}">
                           <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
-                          <div class="subline"><button class="tiny-btn" data-edit-client="${client.id}">Edit in form</button></div>
                         </td>
                         <td>${client.npwp || "-"}</td>
                         <td>${client.taxPic} / ${client.accountingPic}</td>
@@ -5540,6 +5610,7 @@
                         <td>${client.clientStatus}</td>
                         <td>${currency(client.serviceFee)}</td>
                         <td>${currency(client.annualFee)}</td>
+                        <td class="center-cell"><button class="tiny-btn icon-edit-btn" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
                     `;
                     }).join("")}
@@ -5969,6 +6040,7 @@
                   <button class="${state.annualTeam === "tax" ? "solid-btn" : "ghost-btn"}" data-annual-team="tax">Tax Team</button>
                 `}
               </div>
+              ${state.operationsMode === "monthly" ? `<div class="toolbar-right"><label class="subline">Period <input id="generate-monthly-period" class="field" type="month" value="${new Date().toISOString().slice(0, 7)}" /></label><button class="solid-btn" data-generate-monthly-period="yes">Generate Month</button></div>` : ``}
             </div>
           </section>
 
@@ -5985,7 +6057,7 @@
                 <div class="toolbar-left">
                   <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, claim status" value="${state.filters.query}" />
                   <select id="monthly-period-filter" class="filter-select">
-                    <option value="all">All periods</option>
+                    <option value="">Select generated month</option>
                     ${monthlyPeriodOptions().map((period) => `<option value="${period}" ${state.filters.period === period ? "selected" : ""}>${period}</option>`).join("")}
                   </select>
                   <label class="subline">
@@ -6012,6 +6084,8 @@
                 <span><strong>Expand row</strong> = payable, payment date, NTPN, reported</span>
                 <span><strong>Goal</strong> = scan across clients as fast as Excel</span>
               </div>
+
+              ${state.activeMonthlyPeriod ? `` : `<div class="empty-state">No monthly period has been generated. Choose a month above and select <strong>Generate Month</strong> when the tax team is ready to begin.</div>`}
 
               ${promptedClient ? `
                 <div class="detail-card" style="margin-bottom:10px;">
@@ -6069,7 +6143,7 @@
                       return `
                         <tr class="main-row" data-row-toggle="${row.id}">
                           <td class="client-cell">
-                            <button class="client-link" data-open-client="${row.id}">${row.name}</button>
+                            <button class="client-link" data-open-client="${row.id}">${displayClientName(row)}</button>
                             <div class="client-meta">${row.month} ${row.year} / ${row.claimStatus}</div>
                           </td>
                           <td>${row.taxPic}</td>
@@ -6092,7 +6166,7 @@
                               <div class="detail-card compact-detail-card">
                                 <div class="section-title">
                                   <div>
-                                    <h3 style="font-size:15px;">${row.name}</h3>
+                                    <h3 style="font-size:15px;">${displayClientName(row)}</h3>
                                   </div>
                                   <button class="ghost-btn" data-row-toggle="${row.id}">Collapse</button>
                                 </div>
@@ -6169,7 +6243,7 @@
                       <div class="mobile-compact-item">
                         <div class="mobile-compact-header">
                           <div>
-                            <strong>${row.name}</strong>
+                            <strong>${displayClientName(row)}</strong>
                             <div class="subline">${row.month} ${row.year} / ${row.taxPic} / ${row.accountingPic}</div>
                           </div>
                           <div style="display:flex; align-items:center; gap:8px;">
@@ -6378,7 +6452,7 @@
                               ${["Pencatatan", "Pembukuan", "Konfirmasi", "Proses", "Review", "Siap Lapor", "Done"].map((status) => `<option value="${status}" ${row.status === status ? "selected" : ""}>${status}</option>`).join("")}
                             </select>
                           </td>
-                          <td class="client-name-cell" title="${escapeAttr(row.clientName)}">${row.clientName}</td>
+                          <td class="client-name-cell" title="${escapeAttr(row.clientName)}">${displayClientName(row.clientName)}</td>
                           <td class="client-group-cell">${row.groupName}</td>
                           <td>
                             <select class="inline-select annual-pic-select" data-annual-tax-report-pic="${row.id}">
@@ -6419,7 +6493,7 @@
                     <div class="mobile-compact-item">
                       <div class="mobile-compact-header">
                         <div>
-                          <strong>${row.clientName}</strong>
+                          <strong>${displayClientName(row.clientName)}</strong>
                           <div class="subline">${state.annualTeam === "accounting" ? `${row.accountingPic} / ${row.taxPic}` : `${row.reportPic} / ${row.taxPic}`}</div>
                         </div>
                         <span class="pill ${index < annualDoneCount ? "accent" : "warning"}">${state.annualTeam === "accounting" ? (row.lapor || "-") : row.laporCount}</span>
@@ -6459,7 +6533,7 @@
                 ${filteredCompletedHistory().map((client) => `
                   <div class="list-item">
                     <div>
-                      <strong>${client.name}</strong>
+                      <strong>${displayClientName(client)}</strong>
                       <div class="meta">${client.month} ${client.year} / Tax ${client.taxPic} / Acc ${client.accountingPic}</div>
                     </div>
                     <span class="pill accent">Completed</span>
@@ -6494,7 +6568,7 @@
                   <tbody>
                     ${claimRows.map((client) => `
                       <tr>
-                        <td>${client.name}</td>
+                        <td>${displayClientName(client)}</td>
                         <td>${client.month} ${client.year}</td>
                         <td>${client.taxPic}</td>
                         <td>${client.claimStatus}</td>
@@ -6512,7 +6586,7 @@
                   ${claimRows.map((client) => `
                     <div class="list-item">
                       <div>
-                        <strong>${client.name}</strong>
+                        <strong>${displayClientName(client)}</strong>
                         <div class="meta">${client.month} ${client.year} / ${client.taxPic}</div>
                         <div class="meta">${client.claimStatus} / ${client.paymentStatus} / ${client.billingUploaded ? "Billing uploaded" : "Billing pending"}</div>
                       </div>
@@ -6547,7 +6621,7 @@
                   <tbody>
                     ${archiveRows.map((client) => `
                       <tr>
-                        <td>${client.name}</td>
+                        <td>${displayClientName(client)}</td>
                         <td>${client.month} ${client.year}</td>
                         <td>${client.claimStatus}</td>
                         <td>${client.drivePath}</td>
@@ -6563,7 +6637,7 @@
                   ${archiveRows.map((client) => `
                     <div class="list-item">
                       <div>
-                        <strong>${client.name}</strong>
+                        <strong>${displayClientName(client)}</strong>
                         <div class="meta">${client.month} ${client.year} / ${client.claimStatus}</div>
                         <div class="meta">${OBLIGATIONS.map((key) => client.obligations[key].receiptNumber).filter(Boolean).slice(0, 2).join(" / ") || "No receipt yet"}</div>
                       </div>
@@ -6817,7 +6891,8 @@
     function renderProfile() {
       const root = document.getElementById("profile-view");
       if (!root) return;
-      const assignedClients = clients.filter((client) => client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic);
+      const profileClientQuery = state.profileClientSearch.trim().toLowerCase();
+      const assignedClients = clients.filter((client) => (client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
       root.innerHTML = `
         <div class="workspace-frame">
           <section class="panel">
@@ -6835,11 +6910,16 @@
                 </select>
                 <div class="subline">Role: ${state.role}</div>
                 <div class="inline-controls" style="margin-top:14px;"><button class="solid-btn" data-save-profile="yes">Save Profile</button></div>
+                <div class="eyebrow" style="margin-top:18px;">Change Password</div>
+                <input class="field" id="profile-new-password" type="password" autocomplete="new-password" placeholder="New password (minimum 8 characters)" />
+                <input class="field" id="profile-confirm-password" type="password" autocomplete="new-password" placeholder="Confirm new password" style="margin-top:8px;" />
+                <div class="inline-controls" style="margin-top:10px;"><button class="ghost-btn" data-change-password="yes">Update Password</button></div>
               </div>
               <div class="detail-card"><div class="eyebrow">Assigned Clients</div><strong>${assignedClients.length}</strong><div class="subline">Based on PIC ACC or PIC TAX.</div></div>
             </div>
-            <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
-              ${assignedClients.map((client) => `<tr><td><strong>${client.name}</strong><div class="subline">${client.clientCode}</div></td><td>${client.taxPic === state.selectedPic ? "PIC TAX" : "PIC ACC"}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
+            <div class="toolbar compact-toolbar" style="margin-top:16px;"><input id="profile-client-search" class="filter-input" type="search" value="${escapeAttr(state.profileClientSearch)}" placeholder="Search my clients..." /></div>
+            <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
+              ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${client.taxPic === state.selectedPic ? "PIC TAX" : "PIC ACC"}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div>
           </section>
         </div>`;
@@ -6974,11 +7054,11 @@
       return client;
     }
 
-    const BUSINESS_FORMS = ["", "PT", "CV", "FA", "UD", "Firma", "Yayasan", "Koperasi", "Individual"];
+    const BUSINESS_FORMS = ["", "PT", "CV", "FA", "BUT", "UD", "Firma", "Yayasan", "Koperasi", "Individual"];
 
     function splitBusinessName(client) {
       const source = String(client.name || "").trim();
-      const match = source.match(/^(PT|CV|FA|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+(.+)$/i);
+      const match = source.match(/^(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+(.+)$/i);
       return {
         form: client.businessForm || (match ? match[1].toUpperCase() : ""),
         name: match ? match[2] : source
@@ -7027,6 +7107,9 @@
           annualFee: client.annualFee,
           status: client.proposalStatus || "New Lead"
         }));
+        if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) {
+          clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
+        }
         clientsLoadedFromDatabase = true;
         if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
         if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
@@ -7107,9 +7190,9 @@
       }
     }
 
-    async function loadCurrentProfile() {
+    async function loadCurrentProfile(background = false) {
       try {
-        const response = await appFetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading your profile...");
+        const response = await appFetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading your profile...");
         if (!response.ok) {
           console.warn("[profile] failed to load current profile", response.status);
           return;
@@ -7121,7 +7204,7 @@
         state.username = profile.username || state.username;
         state.teamDivision = profile.team_division || state.teamDivision;
         state.role = String(profile.role || "staff").toLowerCase();
-        loadStaffDirectory();
+        loadStaffDirectory(background);
         rerender();
       } catch (error) {
         console.warn("[profile] request failed", error);
@@ -7129,9 +7212,9 @@
       }
     }
 
-    async function loadStaffDirectory() {
+    async function loadStaffDirectory(background = false) {
       try {
-        const response = await appFetch("/api/staff", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading staff directory...");
+        const response = await appFetch("/api/staff", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading staff directory...");
         if (!response.ok) return;
         const result = await response.json();
         const staff = Array.isArray(result.staff) ? result.staff : [];
@@ -7406,6 +7489,10 @@
               showCompletedRows: state.showCompletedRows,
               filters: state.filters,
               historyFilters: state.historyFilters,
+              clientSearch: state.clientSearch,
+              profileClientSearch: state.profileClientSearch,
+              monthlyProgress: state.monthlyProgress,
+              activeMonthlyPeriod: state.activeMonthlyPeriod,
               sorts: state.sorts
             }
           })
@@ -7591,6 +7678,7 @@
     }
 
     function commitUi(mode = "push") {
+      if (state.operationsMode === "monthly" && state.activeMonthlyPeriod) saveMonthlyProgress();
       rerender();
       persistDemoState();
       syncBrowserHistory(mode);
@@ -7616,6 +7704,7 @@
       const toggleScopeTrigger = target.closest("[data-toggle-scope]");
       const operationsModeTrigger = target.closest("[data-operations-mode]");
       const operationsTabTrigger = target.closest("[data-operations-tab]");
+      const generateMonthlyPeriodTrigger = target.closest("[data-generate-monthly-period]");
       const annualTeamTrigger = target.closest("[data-annual-team]");
       const casesTabTrigger = target.closest("[data-cases-tab]");
       const managementTabTrigger = target.closest("[data-management-tab]");
@@ -7650,6 +7739,7 @@
       const selectCaseTrigger = target.closest("[data-select-case]");
       const saveCaseTrigger = target.closest("[data-save-case]");
       const saveProfileTrigger = target.closest("[data-save-profile]");
+      const changePasswordTrigger = target.closest("[data-change-password]");
       const addCaseStepTrigger = target.closest("[data-add-case-step]");
       const annualAccountingAddTrigger = target.closest("[data-add-annual-accounting]");
       const contractFilterTrigger = target.closest("[data-contract-filter]");
@@ -7752,6 +7842,27 @@
 
       if (operationsModeTrigger) {
         state.operationsMode = operationsModeTrigger.getAttribute("data-operations-mode");
+        state.expandedClientId = "";
+        commitUi("push");
+        return;
+      }
+
+      if (generateMonthlyPeriodTrigger) {
+        const value = document.getElementById("generate-monthly-period")?.value;
+        if (!value) {
+          window.alert("Choose the tax month first.");
+          return;
+        }
+        const [year, monthNumber] = value.split("-").map(Number);
+        const month = new Date(year, monthNumber - 1, 1).toLocaleString("en-US", { month: "long" });
+        const period = periodKey(month, year);
+        if (!state.monthlyProgress[period]) {
+          saveMonthlyProgress();
+          state.monthlyProgress[period] = createMonthlyPeriodRows(month, year);
+        }
+        openMonthlyPeriod(period);
+        state.operationsMode = "monthly";
+        state.operationsTab = "active";
         state.expandedClientId = "";
         commitUi("push");
         return;
@@ -7868,6 +7979,34 @@
           window.alert(error instanceof Error ? error.message : "Profile could not be saved. Please try again.");
         } finally {
           saveProfileTrigger.disabled = false;
+        }
+        return;
+      }
+
+      if (changePasswordTrigger) {
+        const password = document.getElementById("profile-new-password")?.value || "";
+        const confirmation = document.getElementById("profile-confirm-password")?.value || "";
+        if (password.length < 8) {
+          window.alert("Password must contain at least 8 characters.");
+          return;
+        }
+        if (password !== confirmation) {
+          window.alert("Password confirmation does not match.");
+          return;
+        }
+        try {
+          const response = await appFetch("/api/profile/password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ password })
+          }, "Updating password...");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Password update failed.");
+          window.alert("Password updated successfully.");
+          document.getElementById("profile-new-password").value = "";
+          document.getElementById("profile-confirm-password").value = "";
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Password could not be updated.");
         }
         return;
       }
@@ -8579,6 +8718,18 @@
         return;
       }
 
+      if (target.id === "active-client-search") {
+        state.clientSearch = target.value;
+        commitUi("replace");
+        return;
+      }
+
+      if (target.id === "profile-client-search") {
+        state.profileClientSearch = target.value;
+        commitUi("replace");
+        return;
+      }
+
       if (target.id === "allocation-query") {
         state.allocationQuery = target.value;
         commitUi("replace");
@@ -8598,7 +8749,7 @@
       }
 
       if (target.id === "monthly-period-filter") {
-        state.filters.period = target.value;
+        openMonthlyPeriod(target.value);
         commitUi("push");
         return;
       }
@@ -8984,13 +9135,13 @@
       }
     });
 
-    async function refreshDatabaseStatus() {
+    async function refreshDatabaseStatus(background = false) {
       const chip = document.getElementById("database-status-chip");
       if (!chip) return;
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 8000);
       try {
-        const response = await appFetch("/api/health/database", { cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } }, "Checking database connection...");
+        const response = await appFetch("/api/health/database", { cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } }, background ? "" : "Checking database connection...");
         const result = await response.json();
         if (result.connected) {
           chip.textContent = "Database: connected";
@@ -9017,11 +9168,16 @@
 
     rerender();
     persistDemoState();
-    loadCurrentProfile();
-    loadSharedClients();
-    loadSharedCases();
-    loadSharedAnnouncements();
-    refreshDatabaseStatus();
+    // Initial UI uses the local workspace immediately. Supabase refreshes
+    // silently afterwards so slow connections never block navigation.
+    loadCurrentProfile(true);
+    loadSharedClients(true);
+    const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
+    scheduleBackgroundLoad(() => {
+      loadSharedCases(true);
+      loadSharedAnnouncements(true);
+      refreshDatabaseStatus(true);
+    });
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       loadSharedAnnouncements(true);

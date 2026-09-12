@@ -8,9 +8,9 @@ alter table public.client_master add column if not exists proposal_status text;
 alter table public.client_master add column if not exists company_form text;
 
 update public.client_master
-set company_form = upper((regexp_match(legal_name, '^\s*(PT|CV|FA|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+', 'i'))[1])
+set company_form = upper((regexp_match(legal_name, '^\s*(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+', 'i'))[1])
 where (company_form is null or btrim(company_form) = '')
-  and legal_name ~* '^\s*(PT|CV|FA|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+';
+  and legal_name ~* '^\s*(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+';
 
 create sequence if not exists public.client_master_client_code_seq;
 do $$
