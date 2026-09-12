@@ -28,7 +28,7 @@ export async function middleware(request: NextRequest) {
   });
 
   const pathname = request.nextUrl.pathname;
-  const publicPath = pathname === "/login" || pathname.startsWith("/auth/") || pathname === "/onboarding";
+  const publicPath = pathname === "/login" || pathname.startsWith("/auth/") || pathname.startsWith("/api/auth/") || pathname === "/onboarding";
   let user = null;
   try {
     const result = await supabase.auth.getUser();

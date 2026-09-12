@@ -13,9 +13,10 @@ This project currently keeps the browser demo usable without a database, but the
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+INVITE_REFERRAL_CODE=your-private-registration-code
 ```
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` in browser code or commit `.env.local`.
+Never expose `SUPABASE_SERVICE_ROLE_KEY` or `INVITE_REFERRAL_CODE` in browser code or commit `.env.local`.
 
 ## 2. Run the first migration
 
@@ -27,8 +28,17 @@ Open **SQL Editor** in Supabase and run these files in order:
 4. `supabase/migrations/202609100002_staff_roles.sql` for staff roles.
 5. `supabase/migrations/202609100003_auto_create_staff_profile.sql` to link Auth users to staff profiles automatically.
 6. `supabase/migrations/202609100004_staff_profile_rls.sql` to allow a user to complete only their own profile.
+7. `supabase/migrations/202609110001_staff_usernames.sql` for username login.
+8. `supabase/migrations/202609110002_staff_display_names.sql` for operational display names.
+9. `supabase/migrations/202609110003_username_registration_support.sql` if username support was added after your first setup.
 
 The second migration does not delete or rewrite existing prototype tables.
+
+## Direct staff registration
+
+The login page can create a Staff account only when the supplied referral code matches `INVITE_REFERRAL_CODE` on the server. Set that variable in `.env.local` and in Vercel for both Preview and Production.
+
+To make this gate effective, open **Supabase Authentication > General Configuration** and turn off **Allow new users to sign up**. The application creates approved staff through the private service-role route, while direct Supabase signups would otherwise bypass the referral code.
 
 ## 3. Start the app
 
