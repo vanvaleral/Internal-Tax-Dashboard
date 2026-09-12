@@ -7477,7 +7477,7 @@
       }
     }
 
-    async function saveCaseToDatabase(record) {
+    async function saveCaseToDatabase(record, { showLoading = true } = {}) {
       const payload = {
         id: record.id.includes("case-") ? "" : record.id,
         case: {
@@ -7505,13 +7505,34 @@
         }
       };
       const method = payload.id ? "PATCH" : "POST";
-      const response = await appFetch("/api/cases", { method, headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) }, "Saving case...");
+      const response = await appFetch("/api/cases", { method, headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) }, showLoading ? "Saving case..." : "");
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Case could not be saved.");
       Object.assign(record, databaseCaseToDemo(result.data));
     }
 
-    async function saveInlineHimbauanCase(record, field, value) {
+    const inlineCaseSaveQueues = new WeakMap();
+
+    function refreshInlineHimbauanRow(record) {
+      document.querySelectorAll("[data-case-inline]").forEach((input) => {
+        if (input.getAttribute("data-case-inline") !== record.id) return;
+        const row = input.closest("tr");
+        if (!row) return;
+        const derivedFields = row.querySelectorAll(".case-inline-readonly");
+        const days = record.dueDate ? Math.ceil((new Date(`${record.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
+        if (derivedFields[0]) derivedFields[0].textContent = record.dueDate || "-";
+        if (derivedFields[1]) derivedFields[1].textContent = days === null ? "-" : `${days} days`;
+      });
+    }
+
+    function replaceInlineCaseId(previousId, record) {
+      if (previousId === record.id) return;
+      document.querySelectorAll("[data-case-inline]").forEach((input) => {
+        if (input.getAttribute("data-case-inline") === previousId) input.setAttribute("data-case-inline", record.id);
+      });
+    }
+
+    function saveInlineHimbauanCase(record, field, value) {
       record[field] = value;
       if (field === "clientName") {
         const linkedClient = clients.find((client) => normalizedEntityName(client.name) === normalizedEntityName(record.clientName));
@@ -7531,19 +7552,28 @@
           record.dueDate = "";
         }
       }
-      // A new row is retained locally until Wajib Pajak is supplied, because the
-      // database requires a client name for every case record.
-      if (record.id.startsWith("case-") && !record.clientName.trim()) {
+      refreshInlineHimbauanRow(record);
+
+      // Keep rapid edits in order. Inline fields must not repaint the table or
+      // show the full-screen loader, otherwise date entry loses its focus.
+      const previousSave = inlineCaseSaveQueues.get(record) || Promise.resolve();
+      const nextSave = previousSave.catch(() => {}).then(async () => {
+        // A new row is retained locally until Wajib Pajak is supplied, because
+        // the database requires a client name for every case record.
+        if (record.id.startsWith("case-") && !record.clientName.trim()) {
+          persistDemoState();
+          return;
+        }
+        const previousId = record.id;
+        await saveCaseToDatabase(record, { showLoading: false });
+        replaceInlineCaseId(previousId, record);
+        refreshInlineHimbauanRow(record);
         persistDemoState();
-        return;
-      }
-      try {
-        await saveCaseToDatabase(record);
-        state.selectedCaseId = record.id;
-        commitUi("replace");
-      } catch (error) {
+      }).catch((error) => {
         window.alert(error instanceof Error ? error.message : "Case could not be saved.");
-      }
+      });
+      inlineCaseSaveQueues.set(record, nextSave);
+      return nextSave;
     }
 
     function myWorkPayload(task, extra = {}) {
@@ -9157,6 +9187,15 @@
       target.style.height = `${target.scrollHeight}px`;
     });
 
+    document.addEventListener("focusout", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.matches("[data-case-inline]")) return;
+      const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
+      const field = target.getAttribute("data-case-field");
+      if (!record || !field) return;
+      saveInlineHimbauanCase(record, field, target.value.trim());
+    });
+
     document.addEventListener("change", (event) => {
       const target = event.target;
 
@@ -9206,14 +9245,6 @@
         if (target.id === "my-work-note") task.note = target.value;
         commitUi("replace");
         saveMyWorkTaskToDatabase(task);
-        return;
-      }
-
-      if (target instanceof HTMLInputElement && target.matches("[data-case-inline]")) {
-        const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
-        const field = target.getAttribute("data-case-field");
-        if (!record || !field) return;
-        saveInlineHimbauanCase(record, field, target.value.trim());
         return;
       }
 
