@@ -225,7 +225,7 @@
     .my-work-panel { min-height: calc(100vh - 100px); display:grid; grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); overflow:hidden; border-radius:20px; }
     .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, var(--my-work-overlay-start), var(--my-work-overlay-end)), var(--my-work-image); background-position:center; background-size:cover; }
     .my-work-list h2 { font-size:28px; color:#fff; }
-    .my-work-row { width:100%; display:grid; grid-template-columns:24px 1fr 24px; gap:12px; align-items:start; margin:3px 0; padding:12px; text-align:left; border-radius:4px; background:rgba(255,255,255,.84); color:#1f2732; backdrop-filter:blur(8px); }
+    .my-work-row { width:100%; display:grid; grid-template-columns:24px 1fr 24px; gap:12px; align-items:start; margin:3px 0; padding:12px; text-align:left; border-radius:4px; background:rgba(255,255,255,.70); color:#1f2732; backdrop-filter:blur(8px); }
     .my-work-row.is-new { animation:taskEnter 230ms ease both; }
     .my-work-row.is-completing { animation:taskCompleteMove 360ms ease both; }
     .my-work-row.is-restoring { animation:taskRestoreMove 360ms ease both; }
@@ -235,7 +235,7 @@
     .circle-check { appearance:none; width:19px; height:19px; margin:2px 0 0; border:2px solid #6b7280; border-radius:50%; background:#fff; }
     .circle-check:checked { border-color:var(--accent); background:radial-gradient(circle,var(--accent) 45%,#fff 48%); }
     .my-work-task-list { flex:1; min-height:0; margin-top:24px; overflow:auto; }
-    .my-work-composer { display:flex; flex:0 0 auto; gap:10px; margin-top:12px; padding:12px; background:rgba(232,237,255,.78); border-radius:5px; backdrop-filter:blur(8px); }
+    .my-work-composer { display:flex; flex:0 0 auto; gap:10px; margin-top:12px; padding:12px; background:rgba(232,237,255,.65); border-radius:5px; backdrop-filter:blur(8px); }
     .my-work-composer input { flex:1; border:0; background:transparent; outline:0; }
     .my-work-detail { display:flex; flex-direction:column; padding:28px 22px; background:#fff; }
     .my-work-detail.is-opening { animation:drawerIn 260ms ease both; }
@@ -7596,11 +7596,21 @@
         if (!response.ok) return;
         const result = await response.json();
         const tasks = Array.isArray(result.tasks) ? result.tasks : [];
-        // Do not discard pre-migration local tasks until the first shared task exists.
-        if (tasks.length || !state.myWork.length || myWorkLoadedFromDatabase) state.myWork = tasks;
+        // Keep tasks waiting for their first successful POST. A transient API
+        // failure must never make a task disappear when the shared list reloads.
+        const pendingTasks = state.myWork.filter((task) => task.pendingSync || task.id?.startsWith("task-"));
+        const sharedIds = new Set(tasks.map((task) => task.id));
+        const pendingById = new Map(pendingTasks.map((task) => [task.id, task]));
+        state.myWork = [
+          ...pendingTasks.filter((task) => !sharedIds.has(task.id)),
+          ...tasks.map((task) => pendingById.get(task.id) || task)
+        ];
         myWorkLoadedFromDatabase = true;
         if (!state.myWork.some((task) => task.id === state.selectedMyWorkId)) state.selectedMyWorkId = state.myWork[0]?.id || "";
         if (state.currentView === "my-work-view") rerender();
+        pendingTasks.forEach((task) => {
+          if (!sharedIds.has(task.id)) saveMyWorkTaskToDatabase(task);
+        });
       } catch (error) {
         console.warn("[my-work] shared load failed", error);
       }
@@ -7619,6 +7629,7 @@
         if (result.task) {
           const previousId = task.id;
           Object.assign(task, result.task);
+          delete task.pendingSync;
           if (state.selectedMyWorkId === previousId) state.selectedMyWorkId = task.id;
           if (state.newMyWorkTaskId === previousId) state.newMyWorkTaskId = task.id;
           persistDemoState();
@@ -7626,6 +7637,8 @@
         }
         if (!creating && task.done) loadSharedMyWork(true);
       } catch (error) {
+        task.pendingSync = true;
+        persistDemoState();
         console.warn("[my-work] save failed", error);
       }
     }
@@ -8257,7 +8270,7 @@
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
 
       if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); commitUi("replace"); return; }
-      if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "" }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
+      if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
       if (completeMyWorkTrigger) { const task = state.myWork.find((item) => item.id === completeMyWorkTrigger.getAttribute("data-my-work-done")); if (task) { task.done = completeMyWorkTrigger.checked; task.completedAt = task.done ? Date.now() : 0; state.movingMyWorkTaskId = task.done ? task.id : ""; state.restoringMyWorkTaskId = task.done ? "" : task.id; } commitUi("push"); if (task) saveMyWorkTaskToDatabase(task, { done: task.done }); return; }
       if (starMyWorkTrigger) { const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star")); if (task) { task.favorite = !task.favorite; task.favoritedAt = task.favorite ? Date.now() : 0; } commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite }); return; }
       if (openMyWorkMenuTrigger) { state.myWorkMenu = openMyWorkMenuTrigger.getAttribute("data-open-my-work-menu"); commitUi("replace"); return; }
@@ -9728,7 +9741,29 @@
       if (event.key === "Enter" && event.target?.id === "my-work-title") {
         event.preventDefault();
         const title = event.target.value.trim();
-        if (title) { const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), steps: [], reminder: "", assignee: "", note: "" }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); }
+        if (title) {
+          const task = {
+            id: `task-${Date.now()}`,
+            title,
+            dueDate: "",
+            done: false,
+            completedAt: 0,
+            createdAt: Date.now(),
+            createdAtText: new Date().toISOString(),
+            creatorName: state.selectedPic,
+            steps: [],
+            reminder: "",
+            assignees: [],
+            repeatRule: "none",
+            note: "",
+            pendingSync: true
+          };
+          state.myWork.unshift(task);
+          state.selectedMyWorkId = task.id;
+          state.newMyWorkTaskId = task.id;
+          commitUi("push");
+          saveMyWorkTaskToDatabase(task);
+        }
       }
       if (event.key === "Enter" && event.target?.id === "my-work-step") {
         event.preventDefault();
