@@ -492,6 +492,9 @@
 
     .workspace-clients .client-master-layout .client-setup-panel { display: none; }
 
+    .workspace-clients { max-width: none; }
+    .workspace-clients .client-master-layout { grid-template-columns: minmax(0, 1fr); }
+
     .client-fab {
       position: fixed;
       z-index: 35;
@@ -2356,6 +2359,7 @@
     }
 
     .client-table col.client-name-col { width: 190px; }
+    .client-table col.client-form-col { width: 72px; }
     .client-table col.client-code-col { width: 74px; }
     .client-table col.client-npwp-col { width: 148px; }
     .client-table col.client-pic-col { width: 116px; }
@@ -3913,6 +3917,7 @@
         id,
         clientCode: row.clientCode || `CL-${String(clients.length + 1).padStart(3, "0")}`,
         name: row.name || "New Client",
+        businessForm: row.businessForm || "",
         pic: row.taxPic || TAX_PICS[0],
         taxPic: row.taxPic || TAX_PICS[0],
         accountingPic: row.accountingPic || row.taxPic || ACC_PICS[0],
@@ -3990,6 +3995,7 @@
         id: `client-${code.slice(3)}`,
         clientCode: code,
         name: "",
+        businessForm: "",
         pic: "",
         taxPic: "",
         accountingPic: "",
@@ -5460,6 +5466,11 @@
           || (state.contractFilter === "expired" && health.label === "Expired")
           || (state.contractFilter === "open" && health.label === "Open-ended");
       });
+      const activeClientRows = [...clients].sort((left, right) => {
+        const leftIdentity = splitBusinessName(left);
+        const rightIdentity = splitBusinessName(right);
+        return leftIdentity.form.localeCompare(rightIdentity.form) || leftIdentity.name.localeCompare(rightIdentity.name);
+      });
 
       root.innerHTML = `
         <div class="workspace-frame workspace-clients">
@@ -5489,8 +5500,8 @@
               <div class="table-wrap desktop-only">
                 <table class="client-table">
                   <colgroup>
+                    <col class="client-form-col">
                     <col class="client-name-col">
-                    <col class="client-code-col">
                     <col class="client-npwp-col">
                     <col class="client-pic-col">
                     <col class="client-industry-col">
@@ -5501,8 +5512,8 @@
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>Client Name</th>
-                      <th>Code</th>
+                      <th>Form</th>
+                      <th>Name</th>
                       <th>NPWP</th>
                       <th>PIC Tax / ACC</th>
                       <th>Industry</th>
@@ -5513,13 +5524,15 @@
                     </tr>
                   </thead>
                   <tbody>
-                    ${clients.map((client) => `
+                    ${activeClientRows.map((client) => {
+                      const identity = splitBusinessName(client);
+                      return `
                       <tr>
+                        <td>${identity.form || "Individual"}</td>
                         <td class="client-name-cell" title="${client.name}">
-                          <button class="client-link" data-open-client="${client.id}">${client.name}</button>
+                          <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
                           <div class="subline"><button class="tiny-btn" data-edit-client="${client.id}">Edit in form</button></div>
                         </td>
-                        <td>${client.clientCode}</td>
                         <td>${client.npwp || "-"}</td>
                         <td>${client.taxPic} / ${client.accountingPic}</td>
                         <td class="client-industry-cell" title="${client.industry}">${client.industry}</td>
@@ -5528,18 +5541,21 @@
                         <td>${currency(client.serviceFee)}</td>
                         <td>${currency(client.annualFee)}</td>
                       </tr>
-                    `).join("")}
+                    `;
+                    }).join("")}
                   </tbody>
                 </table>
               </div>
               <div class="mobile-only">
                 <div class="list-grid">
-                  ${clients.map((client) => `
+                  ${activeClientRows.map((client) => {
+                    const identity = splitBusinessName(client);
+                    return `
                     <div class="mobile-card">
                       <div class="mobile-card-header">
                         <div>
-                          <button class="client-link" data-open-client="${client.id}">${client.name}</button>
-                          <div class="subline">${client.clientCode} • ${client.npwp || "-"}</div>
+                          <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
+                          <div class="subline">${identity.form || "Individual"} • ${client.npwp || "-"}</div>
                         </div>
                         <span class="pill accent">${client.clientStatus}</span>
                       </div>
@@ -5552,7 +5568,8 @@
                   ${obligationStripMarkup(client)}
                   <button class="tiny-btn" data-edit-client="${client.id}">Edit in form</button>
                 </div>
-              `).join("")}
+              `;
+                  }).join("")}
                 </div>
               </div>
             </div>
@@ -6908,14 +6925,19 @@
       if (overlay) overlay.classList.toggle("visible", visible);
     }
 
-    async function appFetch(url, options, message) {
-      appLoadingRequests += 1;
-      setAppLoading(true, message);
+    async function appFetch(url, options, message = "") {
+      const showLoading = Boolean(message);
+      if (showLoading) {
+        appLoadingRequests += 1;
+        setAppLoading(true, message);
+      }
       try {
         return await fetch(url, options);
       } finally {
-        appLoadingRequests = Math.max(0, appLoadingRequests - 1);
-        if (!appLoadingRequests) setAppLoading(false);
+        if (showLoading) {
+          appLoadingRequests = Math.max(0, appLoadingRequests - 1);
+          if (!appLoadingRequests) setAppLoading(false);
+        }
       }
     }
 
@@ -6924,6 +6946,7 @@
       const client = createClientFromRow({
         clientCode: code,
         name: row.legal_name,
+        businessForm: row.company_form,
         npwp: row.npwp,
         industry: row.industry,
         address: row.address,
@@ -6951,6 +6974,22 @@
       return client;
     }
 
+    const BUSINESS_FORMS = ["", "PT", "CV", "FA", "UD", "Firma", "Yayasan", "Koperasi", "Individual"];
+
+    function splitBusinessName(client) {
+      const source = String(client.name || "").trim();
+      const match = source.match(/^(PT|CV|FA|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+(.+)$/i);
+      return {
+        form: client.businessForm || (match ? match[1].toUpperCase() : ""),
+        name: match ? match[2] : source
+      };
+    }
+
+    function joinBusinessName(form, name) {
+      const cleanName = String(name || "").trim();
+      return form && form !== "Individual" ? `${form} ${cleanName}`.trim() : cleanName;
+    }
+
     function databaseCaseToDemo(row) {
       const linkedClient = clients.find((client) => client.databaseId === row.client_id);
       return {
@@ -6970,9 +7009,9 @@
       };
     }
 
-    async function loadSharedClients() {
+    async function loadSharedClients(background = false) {
       try {
-        const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading shared clients...");
+        const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared clients...");
         if (!response.ok) return;
         const result = await response.json();
         const rows = Array.isArray(result.data) ? result.data : [];
@@ -7017,9 +7056,9 @@
       return result.clientCode;
     }
 
-    async function loadSharedCases() {
+    async function loadSharedCases(background = false) {
       try {
-        const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading shared cases...");
+        const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared cases...");
         if (!response.ok) return;
         const result = await response.json();
         taxCases = (Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo);
@@ -7054,12 +7093,14 @@
       Object.assign(record, databaseCaseToDemo(result.data));
     }
 
-    async function loadSharedAnnouncements() {
+    async function loadSharedAnnouncements(background = false) {
       try {
-        const response = await appFetch("/api/announcements", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading announcements...");
+        const response = await appFetch("/api/announcements", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading announcements...");
         if (!response.ok) return;
         const result = await response.json();
-        state.announcements = Array.isArray(result.announcements) ? result.announcements : [];
+        const nextAnnouncements = Array.isArray(result.announcements) ? result.announcements : [];
+        if (JSON.stringify(state.announcements) === JSON.stringify(nextAnnouncements)) return;
+        state.announcements = nextAnnouncements;
         rerender();
       } catch (error) {
         console.warn("[announcements] shared load failed", error);
@@ -7249,6 +7290,7 @@
       }
       const taxPic = isProposal ? record.proposedPic : record.taxPic;
       const accountingPic = isProposal ? record.proposedAccPic : record.accountingPic;
+      const identity = splitBusinessName(record);
       const selectedObligations = isProposal ? record.obligations : OBLIGATIONS.filter((key) => record.obligations[key].status !== "na");
       const title = isProposal ? "Proposal / Quotation" : "Client Setup";
       const saveAttribute = isProposal ? `data-save-proposal="${record.id}"` : "data-save-client=\"yes\"";
@@ -7260,7 +7302,7 @@
               <section class="client-form-section">
                 <div class="client-form-section-title"><strong>Identity</strong><span>${isProposal ? "Proposal details" : "Master record"}</span></div>
                 ${isProposal ? "" : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-code">Client Code</label><input id="client-form-code" class="field" value="${record.clientCode || ""}" readonly /></div><div class="client-field"><label for="client-form-status">Status</label><select id="client-form-status" class="field">${optionsMarkup(CLIENT_STATUSES, record.clientStatus)}</select></div></div>`}
-                <div class="client-field"><label for="${isProposal ? "proposal-name" : "client-form-name"}">Name</label><input id="${isProposal ? "proposal-name" : "client-form-name"}" class="field" value="${record.name || ""}" placeholder="${isProposal ? "Prospective client" : "PT Example Indonesia"}" /></div>
+                <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-business-form" : "client-form-business-form"}">Form</label><select id="${isProposal ? "proposal-business-form" : "client-form-business-form"}" class="field">${optionsMarkup(BUSINESS_FORMS, identity.form)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-name" : "client-form-name"}">Name</label><input id="${isProposal ? "proposal-name" : "client-form-name"}" class="field" value="${identity.name || ""}" placeholder="${isProposal ? "Prospective client" : "Company or individual name"}" /></div></div>
                 <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-npwp" : "client-form-npwp"}">NPWP</label><input id="${isProposal ? "proposal-npwp" : "client-form-npwp"}" class="field" value="${record.npwp || ""}" /></div><div class="client-field"><label for="${isProposal ? "proposal-industry" : "client-form-industry"}">Industry</label><input id="${isProposal ? "proposal-industry" : "client-form-industry"}" class="field" value="${record.industry || ""}" /></div></div>
                 <div class="client-field"><label for="${isProposal ? "proposal-address" : "client-form-address"}">Address</label><input id="${isProposal ? "proposal-address" : "client-form-address"}" class="field" value="${record.address || ""}" /></div>
               </section>
@@ -7275,6 +7317,12 @@
             <div class="client-editor-actions"><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
           </section>
         </div>`;
+    }
+
+    // The legacy side form remains in the page for backwards-compatible UI,
+    // so scope editor reads to the open modal rather than duplicate document IDs.
+    function clientEditorField(id) {
+      return document.querySelector(`#client-editor-root [id="${id}"]`);
     }
 
     function showNoteHoverPreview(triggerElement, text) {
@@ -7973,6 +8021,7 @@
           id: `proposal-${String(number).padStart(3, "0")}`,
           clientCode: `PR-${String(number).padStart(3, "0")}`,
           name: "",
+          businessForm: "",
           npwp: "",
           address: "",
           industry: "",
@@ -8005,21 +8054,23 @@
       if (saveProposalTrigger) {
         const proposal = proposals.find((item) => item.id === saveProposalTrigger.getAttribute("data-save-proposal"));
         if (!proposal) return;
-        proposal.name = document.getElementById("proposal-name").value.trim();
-        if (!proposal.name) {
+        const proposalName = clientEditorField("proposal-name").value.trim();
+        if (!proposalName) {
           window.alert("Proposal name is required.");
           return;
         }
-        proposal.npwp = document.getElementById("proposal-npwp").value.trim();
-        proposal.industry = document.getElementById("proposal-industry").value.trim();
-        proposal.address = document.getElementById("proposal-address").value.trim();
-        proposal.proposedPic = document.getElementById("proposal-tax-pic").value;
-        proposal.proposedAccPic = document.getElementById("proposal-acc-pic").value;
-        proposal.status = document.getElementById("proposal-status").value;
-        proposal.monthlyFee = Number(document.getElementById("proposal-monthly-fee").value || 0);
-        proposal.annualFee = Number(document.getElementById("proposal-annual-fee").value || 0);
-        proposal.notes = document.getElementById("proposal-notes").value.trim();
-        proposal.obligations = OBLIGATIONS.filter((key) => document.getElementById(`proposal-ob-${key}`).checked);
+        proposal.businessForm = clientEditorField("proposal-business-form").value;
+        proposal.name = joinBusinessName(proposal.businessForm, proposalName);
+        proposal.npwp = clientEditorField("proposal-npwp").value.trim();
+        proposal.industry = clientEditorField("proposal-industry").value.trim();
+        proposal.address = clientEditorField("proposal-address").value.trim();
+        proposal.proposedPic = clientEditorField("proposal-tax-pic").value;
+        proposal.proposedAccPic = clientEditorField("proposal-acc-pic").value;
+        proposal.status = clientEditorField("proposal-status").value;
+        proposal.monthlyFee = Number(clientEditorField("proposal-monthly-fee").value || 0);
+        proposal.annualFee = Number(clientEditorField("proposal-annual-fee").value || 0);
+        proposal.notes = clientEditorField("proposal-notes").value.trim();
+        proposal.obligations = OBLIGATIONS.filter((key) => clientEditorField(`proposal-ob-${key}`).checked);
         try {
           await saveClientToDatabase({
             clientCode: proposal.clientCode || `PR-${String(proposals.indexOf(proposal) + 1).padStart(3, "0")}`,
@@ -8034,6 +8085,7 @@
             annualFee: proposal.annualFee,
             notes: proposal.notes,
             proposalStatus: proposal.status,
+            businessForm: proposal.businessForm,
             obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
           });
           state.clientEditor = null;
@@ -8181,30 +8233,32 @@
 
       if (target.matches("[data-save-client]")) {
         const client = clientFormTarget();
-        client.clientCode = document.getElementById("client-form-code").value.trim() || client.clientCode;
-        client.name = document.getElementById("client-form-name").value.trim();
-        if (!client.name) {
+        client.clientCode = clientEditorField("client-form-code").value.trim() || client.clientCode;
+        const clientName = clientEditorField("client-form-name").value.trim();
+        if (!clientName) {
           window.alert("Client name is required.");
           return;
         }
-        client.npwp = document.getElementById("client-form-npwp").value.trim();
-        client.address = document.getElementById("client-form-address").value.trim();
-        client.taxPic = document.getElementById("client-form-tax-pic").value;
+        client.businessForm = clientEditorField("client-form-business-form").value;
+        client.name = joinBusinessName(client.businessForm, clientName);
+        client.npwp = clientEditorField("client-form-npwp").value.trim();
+        client.address = clientEditorField("client-form-address").value.trim();
+        client.taxPic = clientEditorField("client-form-tax-pic").value;
         client.pic = client.taxPic;
-        client.accountingPic = document.getElementById("client-form-accounting-pic").value;
-        client.clientStatus = document.getElementById("client-form-status").value;
-        client.industry = document.getElementById("client-form-industry").value;
-        client.servicePackage = document.getElementById("client-form-package").value;
-        client.partner = document.getElementById("client-form-partner").value;
-        client.supervisor = document.getElementById("client-form-supervisor").value;
-        client.engagementStart = document.getElementById("client-form-start-date").value;
-        client.engagementEnd = document.getElementById("client-form-end-date").value;
-        client.serviceFee = Number(document.getElementById("client-form-monthly-fee").value || 0);
-        client.annualFee = Number(document.getElementById("client-form-annual-fee").value || annualFeeFromMonthly(client.serviceFee));
-        client.notes = document.getElementById("client-form-notes").value.trim();
+        client.accountingPic = clientEditorField("client-form-accounting-pic").value;
+        client.clientStatus = clientEditorField("client-form-status").value;
+        client.industry = clientEditorField("client-form-industry").value;
+        client.servicePackage = clientEditorField("client-form-package").value;
+        client.partner = clientEditorField("client-form-partner").value;
+        client.supervisor = clientEditorField("client-form-supervisor").value;
+        client.engagementStart = clientEditorField("client-form-start-date").value;
+        client.engagementEnd = clientEditorField("client-form-end-date").value;
+        client.serviceFee = Number(clientEditorField("client-form-monthly-fee").value || 0);
+        client.annualFee = Number(clientEditorField("client-form-annual-fee").value || annualFeeFromMonthly(client.serviceFee));
+        client.notes = clientEditorField("client-form-notes").value.trim();
         OBLIGATIONS.forEach((key) => {
-          client.obligations[key].status = document.getElementById(`client-ob-${key}`).checked ? (client.obligations[key].status === "na" ? "awaiting" : client.obligations[key].status) : "na";
-          if (!document.getElementById(`client-ob-${key}`).checked) {
+          client.obligations[key].status = clientEditorField(`client-ob-${key}`).checked ? (client.obligations[key].status === "na" ? "awaiting" : client.obligations[key].status) : "na";
+          if (!clientEditorField(`client-ob-${key}`).checked) {
             client.obligations[key].receiptNumber = "";
             client.obligations[key].payableAmount = 0;
             client.obligations[key].quickNotes = "";
@@ -8386,6 +8440,7 @@
           id: `client-${convertedClientCode.slice(3)}`,
           clientCode: convertedClientCode,
           name: proposal.name,
+          businessForm: proposal.businessForm || splitBusinessName(proposal).form,
           pic: proposal.proposedPic,
           taxPic: proposal.proposedPic,
           accountingPic: proposal.proposedAccPic || ACC_PICS[0],
@@ -8433,6 +8488,7 @@
             annualFee: proposal.annualFee,
             notes: proposal.notes,
             proposalStatus: "Won",
+            businessForm: proposal.businessForm || splitBusinessName(proposal).form,
             obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
           });
           await saveClientToDatabase(newClient);
@@ -8613,6 +8669,7 @@
           annualFee: proposal.annualFee,
           notes: proposal.notes,
           proposalStatus: proposal.status,
+          businessForm: proposal.businessForm || splitBusinessName(proposal).form,
           obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
         }).catch((error) => console.warn("[proposal] status save failed", error));
         commitUi("push");
@@ -8966,10 +9023,15 @@
     loadSharedAnnouncements();
     refreshDatabaseStatus();
     window.setInterval(() => {
-      loadSharedClients();
-      loadSharedCases();
-      loadSharedAnnouncements();
-    }, 30000);
+      if (document.visibilityState !== "visible") return;
+      loadSharedAnnouncements(true);
+    }, 120000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      loadSharedClients(true);
+      loadSharedCases(true);
+      loadSharedAnnouncements(true);
+    });
     window.setTimeout(() => {
       queueLatestFameAnnouncement();
     }, 280);

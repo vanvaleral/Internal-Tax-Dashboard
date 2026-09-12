@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     supervisor_name: client.supervisor || null,
     service_package: client.servicePackage || null,
     proposal_status: client.proposalStatus || null,
+    company_form: client.businessForm || null,
     has_pph21: Boolean(client.obligations?.pph21?.status !== "na"),
     has_unifikasi: Boolean(client.obligations?.unifikasi?.status !== "na"),
     has_pph25_pp55: Boolean(client.obligations?.pph25?.status !== "na"),
