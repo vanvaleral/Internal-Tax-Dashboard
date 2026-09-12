@@ -1,0 +1,96 @@
+-- Shared operational records. This migration is additive and keeps existing client data intact.
+
+alter table public.client_master add column if not exists notes text;
+alter table public.client_master add column if not exists partner_name text;
+alter table public.client_master add column if not exists supervisor_name text;
+alter table public.client_master add column if not exists service_package text;
+alter table public.client_master add column if not exists proposal_status text;
+
+create table if not exists public.tax_cases (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid references public.client_master(id) on delete set null,
+  client_name text not null,
+  case_type text not null default 'Tax Consultation',
+  stage text not null default 'Waiting Client Docs',
+  priority text not null default 'Medium' check (priority in ('Low', 'Medium', 'High')),
+  tax_pic_name text,
+  accounting_pic_name text,
+  due_date date,
+  notes text,
+  next_steps jsonb not null default '[]'::jsonb,
+  closed_at date,
+  created_by uuid not null references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_tax_cases_tax_pic on public.tax_cases(tax_pic_name);
+create index if not exists idx_tax_cases_accounting_pic on public.tax_cases(accounting_pic_name);
+create index if not exists idx_tax_cases_stage on public.tax_cases(stage);
+
+create or replace function public.current_staff_display_name()
+returns text
+language sql
+stable
+security definer set search_path = public
+as $$
+  select coalesce(nullif(btrim(display_name), ''), full_name)
+  from public.staff_profiles
+  where auth_user_id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.current_user_is_leadership()
+returns boolean
+language sql
+stable
+security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.staff_profiles
+    where auth_user_id = auth.uid()
+      and role in ('supervisor', 'partner', 'admin')
+  );
+$$;
+
+alter table public.tax_cases enable row level security;
+drop policy if exists tax_cases_read_scope on public.tax_cases;
+create policy tax_cases_read_scope on public.tax_cases for select to authenticated
+  using (public.current_user_is_leadership() or tax_pic_name = public.current_staff_display_name() or accounting_pic_name = public.current_staff_display_name());
+drop policy if exists tax_cases_insert_scope on public.tax_cases;
+create policy tax_cases_insert_scope on public.tax_cases for insert to authenticated
+  with check (created_by = auth.uid() and (public.current_user_is_leadership() or tax_pic_name = public.current_staff_display_name() or accounting_pic_name = public.current_staff_display_name()));
+drop policy if exists tax_cases_update_scope on public.tax_cases;
+create policy tax_cases_update_scope on public.tax_cases for update to authenticated
+  using (public.current_user_is_leadership() or tax_pic_name = public.current_staff_display_name() or accounting_pic_name = public.current_staff_display_name())
+  with check (public.current_user_is_leadership() or tax_pic_name = public.current_staff_display_name() or accounting_pic_name = public.current_staff_display_name());
+
+create table if not exists public.announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  message text not null,
+  audience text not null default 'all' check (audience in ('all', 'tax', 'accounting')),
+  sender_profile_id uuid not null references public.staff_profiles(id),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.announcement_recipients (
+  announcement_id uuid not null references public.announcements(id) on delete cascade,
+  staff_profile_id uuid not null references public.staff_profiles(id) on delete cascade,
+  read_at timestamptz,
+  primary key (announcement_id, staff_profile_id)
+);
+
+create index if not exists idx_announcement_recipients_staff on public.announcement_recipients(staff_profile_id, read_at);
+alter table public.announcements enable row level security;
+alter table public.announcement_recipients enable row level security;
+drop policy if exists announcements_read_scope on public.announcements;
+create policy announcements_read_scope on public.announcements for select to authenticated
+  using (sender_profile_id in (select id from public.staff_profiles where auth_user_id = auth.uid()) or id in (select announcement_id from public.announcement_recipients where staff_profile_id in (select id from public.staff_profiles where auth_user_id = auth.uid())));
+drop policy if exists announcement_recipients_read_self on public.announcement_recipients;
+create policy announcement_recipients_read_self on public.announcement_recipients for select to authenticated
+  using (staff_profile_id in (select id from public.staff_profiles where auth_user_id = auth.uid()));
+drop policy if exists announcement_recipients_update_self on public.announcement_recipients;
+create policy announcement_recipients_update_self on public.announcement_recipients for update to authenticated
+  using (staff_profile_id in (select id from public.staff_profiles where auth_user_id = auth.uid()))
+  with check (staff_profile_id in (select id from public.staff_profiles where auth_user_id = auth.uid()));

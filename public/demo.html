@@ -457,6 +457,61 @@
       gap: 10px;
     }
 
+    .client-editor-backdrop {
+      position: fixed;
+      z-index: 70;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(19, 34, 44, 0.42);
+      backdrop-filter: blur(4px);
+    }
+
+    .client-editor-modal {
+      width: min(900px, 100%);
+      max-height: min(88vh, 860px);
+      overflow: auto;
+      padding: 18px;
+      border: 1px solid rgba(216, 212, 202, 0.95);
+      border-radius: 22px;
+      background: #fffefb;
+      box-shadow: 0 28px 80px rgba(19, 34, 44, 0.28);
+    }
+
+    .client-editor-head,
+    .client-editor-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .client-editor-head { margin-bottom: 14px; }
+    .client-editor-actions { margin-top: 14px; justify-content: flex-end; }
+
+    .workspace-clients .client-master-layout .client-setup-panel { display: none; }
+
+    .client-fab {
+      position: fixed;
+      z-index: 35;
+      right: 26px;
+      bottom: 26px;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 48px;
+      padding: 0 17px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--ink);
+      color: white;
+      box-shadow: 0 12px 28px rgba(19, 34, 44, 0.26);
+      font-weight: 800;
+    }
+
+    .client-fab span { font-size: 22px; line-height: 1; }
+
     .breadcrumb {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -2906,6 +2961,7 @@
   <div id="notes-popup-root"></div>
   <div id="notes-hover-root"></div>
   <div id="annual-action-popup-root"></div>
+  <div id="client-editor-root"></div>
   <div id="fame-announcement-root"></div>
   <div id="announcement-inbox-root"></div>
   <div class="app-loading-overlay" id="app-loading-overlay" aria-live="polite" aria-busy="true">
@@ -3567,8 +3623,8 @@
 
     let clients = restoreCollection("clients", DEFAULT_CLIENTS);
     let clientsLoadedFromDatabase = false;
-    const proposals = restoreCollection("proposals", DEFAULT_PROPOSALS);
-    const taxCases = restoreCollection("taxCases", DEFAULT_TAX_CASES);
+    let proposals = restoreCollection("proposals", DEFAULT_PROPOSALS);
+    let taxCases = restoreCollection("taxCases", DEFAULT_TAX_CASES);
     const annualAccountingRows = restoreCollection("annualAccountingRows", DEFAULT_ANNUAL_ACCOUNTING_ROWS);
     const annualTaxRows = restoreCollection("annualTaxRows", DEFAULT_ANNUAL_TAX_ROWS);
 
@@ -3639,6 +3695,7 @@
       selectedCaseId: persistedDemoState?.ui?.selectedCaseId || taxCases[0]?.id || "",
       clientManagementTab: persistedDemoState?.ui?.clientManagementTab || "active",
       activeProposalId: persistedDemoState?.ui?.activeProposalId || proposals[0]?.id || "",
+      clientEditor: null,
       contractFilter: persistedDemoState?.ui?.contractFilter || "all",
       managementTab: persistedDemoState?.ui?.managementTab || "overview",
       performance: {
@@ -3696,6 +3753,10 @@
       }
     };
 
+    if (!["active", "proposal", "contracts"].includes(state.clientManagementTab)) {
+      state.clientManagementTab = "active";
+    }
+
     function currency(amount) {
       return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -3737,12 +3798,12 @@
         clients: {
           active: ["Clients / Active Clients", "Clients Workspace", "Client master data remains the source of truth for obligations, fees, dual PIC ownership, and downstream operations."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
-          analytics: ["Clients / Portfolio Dashboard", "Clients Workspace", "Client portfolio summary and master-data health."],
           contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
         },
         management: {
           overview: ["Management / KPI Overview", "Management Workspace", "Decision workspace for exceptions, bottlenecks, and quick access only."],
           trends: ["Management / Client Growth", "Management Workspace", "Trend view for fee growth, proposal conversion, and client portfolio movement."],
+          portfolio: ["Management / Portfolio Dashboard", "Management Workspace", "Executive portfolio summary for client-master health, fee base, and PIC coverage."],
           workload: ["Management / Workload", "Management Workspace", "PIC workload and open case pressure, without exposing operational edit forms."],
           recognition: ["Management / Recognition", "Management Workspace", "Transparent points, monthly recognition, and supervisor-ready incentive estimates."],
           announcements: ["Management / Announcements", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."],
@@ -3809,7 +3870,7 @@
     }
 
     function clientFormTarget() {
-      return clients.find((client) => client.id === state.activeClientFormId) || clients[0];
+      return clients.find((client) => client.id === state.activeClientFormId) || clients[0] || createBlankClient();
     }
 
     function parseBooleanCell(value) {
@@ -3915,6 +3976,48 @@
 
     function activeProposal() {
       return proposals.find((item) => item.id === state.activeProposalId) || proposals[0] || null;
+    }
+
+    function nextClientCode() {
+      const highest = [...clients, ...proposals]
+        .map((item) => Number(String(item.clientCode || "").match(/(\d+)$/)?.[1] || 0))
+        .reduce((highestCode, code) => Math.max(highestCode, code), 0);
+      return `CL-${String(highest + 1).padStart(3, "0")}`;
+    }
+
+    function createBlankClient() {
+      const code = nextClientCode();
+      return {
+        id: `client-${code.slice(3)}`,
+        clientCode: code,
+        name: "",
+        pic: "",
+        taxPic: "",
+        accountingPic: "",
+        partner: "",
+        supervisor: "",
+        team: "Tax + Accounting",
+        clientStatus: "Active",
+        industry: "",
+        servicePackage: "",
+        engagementStart: "",
+        engagementEnd: "",
+        dataState: "missing",
+        followUpCount: 0,
+        notes: "",
+        lastUpdated: "",
+        year: new Date().getFullYear(),
+        month: "",
+        npwp: "",
+        address: "",
+        serviceFee: 0,
+        annualFee: 0,
+        claimStatus: "Draft",
+        paymentStatus: "No Billing Yet",
+        billingUploaded: false,
+        drivePath: "",
+        obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, obligationPayload(false)]))
+      };
     }
 
     function contractHealth(client) {
@@ -4867,13 +4970,13 @@
 
     function visibleAnnouncements(pic = state.selectedPic) {
       return state.announcements
-        .filter((item) => announcementRecipients(item).includes(pic))
+        .filter((item) => item.readAt !== undefined || announcementRecipients(item).includes(pic))
         .slice()
         .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     }
 
     function unreadAnnouncementCount(pic = state.selectedPic) {
-      return visibleAnnouncements(pic).filter((item) => !(item.readBy || []).includes(pic)).length;
+      return visibleAnnouncements(pic).filter((item) => item.readAt ? false : !(item.readBy || []).includes(pic)).length;
     }
 
     function renderAnnouncementInbox() {
@@ -4895,7 +4998,7 @@
           <div class="announcement-inbox-head"><div><div class="eyebrow">My Inbox</div><strong>Announcements</strong></div><button class="ghost-btn" data-close-announcement-inbox="yes">Close</button></div>
           <div class="announcement-list">
             ${items.map((item) => {
-              const unreadItem = !(item.readBy || []).includes(state.selectedPic);
+              const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
               return `<button class="announcement-item ${unreadItem ? "unread" : ""}" data-read-announcement="${item.id}">
                 <div class="announcement-item-head"><strong>${item.title}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
                 <p>${item.message}</p>
@@ -4907,25 +5010,24 @@
       `;
     }
 
-    function markAnnouncementRead(id) {
+    async function markAnnouncementRead(id) {
       const item = state.announcements.find((announcement) => announcement.id === id);
       if (!item) return;
-      item.readBy = Array.isArray(item.readBy) ? item.readBy : [];
-      if (!item.readBy.includes(state.selectedPic)) item.readBy.push(state.selectedPic);
-      persistDemoState();
-      renderAnnouncementInbox();
+      try {
+        const response = await appFetch("/api/announcements", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) }, "Updating announcement...");
+        if (!response.ok) throw new Error("Announcement could not be marked as read.");
+        item.readAt = new Date().toISOString();
+        renderAnnouncementInbox();
+      } catch (error) {
+        console.warn("[announcements] read update failed", error);
+      }
     }
 
-    function publishAnnouncement({ title, message, audience, sender = state.selectedPic }) {
-      state.announcements.unshift({
-        id: `announcement-${Date.now()}`,
-        title,
-        message,
-        audience,
-        sender,
-        createdAt: new Date().toISOString(),
-        readBy: []
-      });
+    async function publishAnnouncement({ title, message, audience }) {
+      const response = await appFetch("/api/announcements", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ title, message, audience }) }, "Publishing announcement...");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Announcement could not be published.");
+      await loadSharedAnnouncements();
     }
 
     function renderDashboard() {
@@ -4957,6 +5059,7 @@
               <div class="workspace-tabs">
                 <button class="${state.managementTab === "overview" ? "solid-btn" : "ghost-btn"}" data-management-tab="overview">KPI Overview</button>
                 <button class="${state.managementTab === "trends" ? "solid-btn" : "ghost-btn"}" data-management-tab="trends">Client Growth</button>
+                <button class="${state.managementTab === "portfolio" ? "solid-btn" : "ghost-btn"}" data-management-tab="portfolio">Portfolio Dashboard</button>
                 <button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">Workload</button>
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
                 <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Announcements</button>
@@ -5068,6 +5171,16 @@
                 </table>
               </div>
             </section>
+          ` : ``}
+
+          ${state.managementTab === "portfolio" ? `
+            <section class="compact-grid-4">
+              <div class="metric"><div class="eyebrow">Active Clients</div><strong>${clients.length}</strong><div class="sub">Shared client master records.</div></div>
+              <div class="metric"><div class="eyebrow">Monthly Fee Base</div><strong>${currency(clients.reduce((sum, client) => sum + client.serviceFee, 0))}</strong><div class="sub">Before VAT and withholding.</div></div>
+              <div class="metric"><div class="eyebrow">Annual Fee Base</div><strong>${currency(clients.reduce((sum, client) => sum + client.annualFee, 0))}</strong><div class="sub">Current active portfolio.</div></div>
+              <div class="metric"><div class="eyebrow">PIC Coverage</div><strong>${new Set(clients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean)).size}</strong><div class="sub">People assigned across clients.</div></div>
+            </section>
+            <section class="panel"><div class="section-title"><div><h3>Portfolio Snapshot</h3><p>High-level client health without exposing the editable client workspace.</p></div></div><div class="detail-list">${clientPortfolioSnapshot().picWorkload.slice(0, 10).map((row) => `<div class="list-item"><strong>${row.pic}</strong><span>${row.clients} client(s)</span></div>`).join("") || `<div class="empty-state">No shared client records yet.</div>`}</div></section>
           ` : ``}
 
           ${state.managementTab === "recognition" ? `
@@ -5354,18 +5467,13 @@
           <section class="panel">
             <div class="toolbar">
               <div class="workspace-tabs">
-                <button class="${state.clientManagementTab === "analytics" ? "solid-btn" : "ghost-btn"}" data-client-tab="analytics" data-supervisor-only="yes">Portfolio Dashboard</button>
                 <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
               </div>
               <div class="toolbar-right">
-                <button class="ghost-btn" data-new-client="yes">Add Client</button>
-                <button class="ghost-btn" data-new-proposal="yes">New Proposal</button>
                 <button class="ghost-btn" data-import-clients="yes">Import CSV</button>
                 <a class="ghost-btn" href="./client-import-template.csv" download>CSV Template</a>
-                <button class="ghost-btn" data-switch-view="matrix-view">Open Operations</button>
-                <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
               </div>
             </div>
           </section>
@@ -5778,6 +5886,7 @@
               </div>
             </section>
           ` : ``}
+          <button class="client-fab" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span>+</span>${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</button>
         </div>
       `;
     }
@@ -6811,6 +6920,146 @@
       }
     }
 
+    function databaseClientToDemo(row) {
+      const code = String(row.client_code || "");
+      const client = createClientFromRow({
+        clientCode: code,
+        name: row.legal_name,
+        npwp: row.npwp,
+        industry: row.industry,
+        address: row.address,
+        clientStatus: row.status,
+        taxPic: row.tax_pic_name,
+        accountingPic: row.accounting_pic_name,
+        partner: row.partner_name,
+        supervisor: row.supervisor_name,
+        servicePackage: row.service_package,
+        engagementStart: row.engagement_start,
+        engagementEnd: row.engagement_end,
+        notes: row.notes,
+        monthlyFee: row.monthly_fee,
+        annualFee: row.annual_fee,
+        pph21: row.has_pph21,
+        unifikasi: row.has_unifikasi,
+        pph25: row.has_pph25_pp55,
+        phrpb1: row.has_pb1,
+        ppn: row.has_ppn
+      });
+      client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
+      client.databaseId = row.id;
+      client.sourceSystem = row.source_system;
+      client.proposalStatus = row.proposal_status || "";
+      return client;
+    }
+
+    function databaseCaseToDemo(row) {
+      const linkedClient = clients.find((client) => client.databaseId === row.client_id);
+      return {
+        id: row.id,
+        clientId: linkedClient?.id || "",
+        databaseClientId: row.client_id || "",
+        clientName: row.client_name,
+        caseType: row.case_type,
+        taxPic: row.tax_pic_name || "",
+        accountingPic: row.accounting_pic_name || "",
+        stage: row.stage,
+        priority: row.priority,
+        dueDate: row.due_date || "",
+        notes: row.notes || "",
+        nextSteps: Array.isArray(row.next_steps) ? row.next_steps : [],
+        closedAt: row.closed_at || ""
+      };
+    }
+
+    async function loadSharedClients() {
+      try {
+        const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading shared clients...");
+        if (!response.ok) return;
+        const result = await response.json();
+        const rows = Array.isArray(result.data) ? result.data : [];
+        if (!rows.length) return;
+        const mapped = rows.map(databaseClientToDemo);
+        clients = mapped.filter((client) => client.clientStatus !== "Proposal");
+        proposals = mapped.filter((client) => client.clientStatus === "Proposal").map((client) => ({
+          ...client,
+          proposedPic: client.taxPic,
+          proposedAccPic: client.accountingPic,
+          obligations: OBLIGATIONS.filter((key) => client.obligations[key].status !== "na"),
+          monthlyFee: client.serviceFee,
+          annualFee: client.annualFee,
+          status: client.proposalStatus || "New Lead"
+        }));
+        clientsLoadedFromDatabase = true;
+        if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
+        if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
+        if (!proposals.some((proposal) => proposal.id === state.activeProposalId)) state.activeProposalId = proposals[0]?.id || "";
+        rerender();
+      } catch (error) {
+        console.warn("[clients] shared load failed", error);
+      }
+    }
+
+    async function saveClientToDatabase(client) {
+      const response = await appFetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ clients: [client] })
+      }, "Saving client...");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Client could not be saved.");
+      const saved = result.data?.[0];
+      if (saved?.id) client.databaseId = saved.id;
+    }
+
+    async function loadSharedCases() {
+      try {
+        const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading shared cases...");
+        if (!response.ok) return;
+        const result = await response.json();
+        taxCases = (Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo);
+        if (!taxCases.some((item) => item.id === state.selectedCaseId)) state.selectedCaseId = taxCases[0]?.id || "";
+        rerender();
+      } catch (error) {
+        console.warn("[cases] shared load failed", error);
+      }
+    }
+
+    async function saveCaseToDatabase(record) {
+      const payload = {
+        id: record.id.includes("case-") ? "" : record.id,
+        case: {
+          clientId: record.databaseClientId || clients.find((client) => client.id === record.clientId)?.databaseId || null,
+          clientName: record.clientName,
+          caseType: record.caseType,
+          taxPic: record.taxPic,
+          accountingPic: record.accountingPic,
+          stage: record.stage,
+          priority: record.priority,
+          dueDate: record.dueDate || null,
+          notes: record.notes,
+          nextSteps: record.nextSteps,
+          closedAt: record.closedAt || null
+        }
+      };
+      const method = payload.id ? "PATCH" : "POST";
+      const response = await appFetch("/api/cases", { method, headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) }, "Saving case...");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Case could not be saved.");
+      Object.assign(record, databaseCaseToDemo(result.data));
+    }
+
+    async function loadSharedAnnouncements() {
+      try {
+        const response = await appFetch("/api/announcements", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading announcements...");
+        if (!response.ok) return;
+        const result = await response.json();
+        state.announcements = Array.isArray(result.announcements) ? result.announcements : [];
+        rerender();
+      } catch (error) {
+        console.warn("[announcements] shared load failed", error);
+      }
+    }
+
     async function loadCurrentProfile() {
       try {
         const response = await appFetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading your profile...");
@@ -6975,6 +7224,51 @@
           </div>
         </div>
       `;
+    }
+
+    function renderClientEditor() {
+      const root = document.getElementById("client-editor-root");
+      if (!root) return;
+      const editor = state.clientEditor;
+      if (!editor) {
+        root.innerHTML = "";
+        return;
+      }
+      const isProposal = editor.kind === "proposal";
+      const record = isProposal ? proposals.find((item) => item.id === editor.id) : clients.find((item) => item.id === editor.id);
+      if (!record) {
+        state.clientEditor = null;
+        root.innerHTML = "";
+        return;
+      }
+      const taxPic = isProposal ? record.proposedPic : record.taxPic;
+      const accountingPic = isProposal ? record.proposedAccPic : record.accountingPic;
+      const selectedObligations = isProposal ? record.obligations : OBLIGATIONS.filter((key) => record.obligations[key].status !== "na");
+      const title = isProposal ? "Proposal / Quotation" : "Client Setup";
+      const saveAttribute = isProposal ? `data-save-proposal="${record.id}"` : "data-save-client=\"yes\"";
+      root.innerHTML = `
+        <div class="client-editor-backdrop" role="presentation">
+          <section class="client-editor-modal" role="dialog" aria-modal="true" aria-label="${title}">
+            <div class="client-editor-head"><div><div class="eyebrow">${isProposal ? "Prospective client" : "Client master"}</div><h3>${title}</h3></div><button class="ghost-btn" data-close-client-editor="yes">Close</button></div>
+            <div class="detail-list">
+              <section class="client-form-section">
+                <div class="client-form-section-title"><strong>Identity</strong><span>${isProposal ? "Proposal details" : "Master record"}</span></div>
+                ${isProposal ? "" : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-code">Client Code</label><input id="client-form-code" class="field" value="${record.clientCode || ""}" readonly /></div><div class="client-field"><label for="client-form-status">Status</label><select id="client-form-status" class="field">${optionsMarkup(CLIENT_STATUSES, record.clientStatus)}</select></div></div>`}
+                <div class="client-field"><label for="${isProposal ? "proposal-name" : "client-form-name"}">Name</label><input id="${isProposal ? "proposal-name" : "client-form-name"}" class="field" value="${record.name || ""}" placeholder="${isProposal ? "Prospective client" : "PT Example Indonesia"}" /></div>
+                <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-npwp" : "client-form-npwp"}">NPWP</label><input id="${isProposal ? "proposal-npwp" : "client-form-npwp"}" class="field" value="${record.npwp || ""}" /></div><div class="client-field"><label for="${isProposal ? "proposal-industry" : "client-form-industry"}">Industry</label><input id="${isProposal ? "proposal-industry" : "client-form-industry"}" class="field" value="${record.industry || ""}" /></div></div>
+                <div class="client-field"><label for="${isProposal ? "proposal-address" : "client-form-address"}">Address</label><input id="${isProposal ? "proposal-address" : "client-form-address"}" class="field" value="${record.address || ""}" /></div>
+              </section>
+              <section class="client-form-section">
+                <div class="client-form-section-title"><strong>PIC & Scope</strong><span>Ownership and obligations</span></div>
+                <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}">PIC Tax</label><select id="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}" class="field"><option value="">Select PIC Tax</option>${optionsMarkup(TAX_PICS, taxPic)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}">PIC ACC</label><select id="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}" class="field"><option value="">Select PIC ACC</option>${optionsMarkup(ACC_PICS, accountingPic)}</select></div></div>
+                ${isProposal ? `<div class="client-field"><label for="proposal-status">Proposal Status</label><select id="proposal-status" class="field">${optionsMarkup(PROPOSAL_STATUSES, record.status)}</select></div>` : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field"><option value="">Select partner</option>${optionsMarkup(PARTNERS, record.partner)}</select></div><div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field"><option value="">Select supervisor</option>${optionsMarkup(SUPERVISORS, record.supervisor)}</select></div></div><div class="detail-grid-2"><div class="client-field"><label for="client-form-start-date">Engagement Start</label><input id="client-form-start-date" class="field" type="date" value="${record.engagementStart || ""}" /></div><div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${record.engagementEnd || ""}" /></div></div><div class="client-field"><label for="client-form-package">Service Package</label><select id="client-form-package" class="field"><option value="">Select package</option>${optionsMarkup(SERVICE_PACKAGES, record.servicePackage)}</select></div>`}
+                <div class="chips">${OBLIGATIONS.map((key) => `<label class="pill ${selectedObligations.includes(key) ? "accent" : "neutral"}"><input id="${isProposal ? "proposal-ob" : "client-ob"}-${key}" type="checkbox" ${selectedObligations.includes(key) ? "checked" : ""} /> ${OBLIGATION_LABELS[key]}</label>`).join("")}</div>
+              </section>
+              <section class="client-form-section"><div class="client-form-section-title"><strong>Fee & Note</strong><span>Optional commercial context</span></div><div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}">Monthly Fee</label><input id="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}" class="field" type="number" value="${isProposal ? record.monthlyFee || 0 : record.serviceFee || 0}" /></div><div class="client-field"><label for="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}">Annual Fee</label><input id="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}" class="field" type="number" value="${record.annualFee || 0}" /></div></div><div class="client-field"><label for="${isProposal ? "proposal-notes" : "client-form-notes"}">Note</label><textarea id="${isProposal ? "proposal-notes" : "client-form-notes"}" class="inline-textarea">${record.notes || ""}</textarea></div></section>
+            </div>
+            <div class="client-editor-actions"><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
+          </section>
+        </div>`;
     }
 
     function showNoteHoverPreview(triggerElement, text) {
@@ -7254,6 +7548,7 @@
       renderShellChrome();
       renderNotesPopup();
       renderAnnualActionPopup();
+      renderClientEditor();
       renderFameAnnouncement();
       renderAnnouncementInbox();
       if (state.currentView === "matrix-view") bindDirectRowActions();
@@ -7274,6 +7569,7 @@
       const casesShortcutTrigger = target.closest("[data-cases-tab-shortcut]");
       const clientShortcutTrigger = target.closest("[data-client-tab-shortcut]");
       const newClientTrigger = target.closest("[data-new-client]");
+      const closeClientEditorTrigger = target.closest("[data-close-client-editor]");
       const newProposalTrigger = target.closest("[data-new-proposal]");
       const editProposalTrigger = target.closest("[data-edit-proposal]");
       const saveProposalTrigger = target.closest("[data-save-proposal]");
@@ -7345,7 +7641,7 @@
       }
 
       if (readAnnouncementTrigger) {
-        markAnnouncementRead(readAnnouncementTrigger.getAttribute("data-read-announcement"));
+        await markAnnouncementRead(readAnnouncementTrigger.getAttribute("data-read-announcement"));
         return;
       }
 
@@ -7357,8 +7653,12 @@
           window.alert("Isi subject dan message sebelum mengirim announcement.");
           return;
         }
-        publishAnnouncement({ title, message, audience });
-        commitUi("push");
+        try {
+          await publishAnnouncement({ title, message, audience });
+          commitUi("push");
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Announcement could not be published.");
+        }
         return;
       }
 
@@ -7453,6 +7753,9 @@
         const title = window.prompt("Next practical action:", "");
         if (!title?.trim()) return;
         record.nextSteps.push({ title: title.trim(), done: false });
+        if (!record.id.startsWith("case-")) {
+          try { await saveCaseToDatabase(record); } catch (error) { window.alert(error instanceof Error ? error.message : "Case could not be saved."); }
+        }
         commitUi("push");
         return;
       }
@@ -7475,6 +7778,13 @@
         }
         if (record.stage !== "Closed") {
           record.closedAt = "";
+        }
+        try {
+          await saveCaseToDatabase(record);
+          state.selectedCaseId = record.id;
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Case could not be saved.");
+          return;
         }
         commitUi("push");
         return;
@@ -7562,12 +7872,16 @@
         const existingIndex = state.performance.publishedMonths.findIndex((item) => item.period === snapshot.period);
         if (existingIndex >= 0) state.performance.publishedMonths.splice(existingIndex, 1, snapshot);
         else state.performance.publishedMonths.unshift(snapshot);
-        publishAnnouncement({
-          title: `Employee of the Month: ${snapshot.winnerPic}`,
-          message: `${snapshot.winnerPic} earned ${snapshot.winnerPoints} points in ${snapshot.period}. Congratulations to this month's Wall of Fame winner.`,
-          audience: "all",
-          sender: "Management"
-        });
+        try {
+          await publishAnnouncement({
+            title: `Employee of the Month: ${snapshot.winnerPic}`,
+            message: `${snapshot.winnerPic} earned ${snapshot.winnerPoints} points in ${snapshot.period}. Congratulations to this month's Wall of Fame winner.`,
+            audience: "all"
+          });
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Recognition announcement could not be published.");
+          return;
+        }
         commitUi("push");
         queueLatestFameAnnouncement();
         return;
@@ -7601,25 +7915,25 @@
       }
 
       if (newClientTrigger) {
-        const newClient = createClientFromRow({
-          name: `New Client ${clients.length + 1}`,
-          taxPic: TAX_PICS.includes(state.selectedPic) ? state.selectedPic : TAX_PICS[0],
-          accountingPic: ACC_PICS[0],
-          monthlyFee: 0,
-          month: "May",
-          year: "2026",
-          notes: ""
-        });
+        const newClient = createBlankClient();
         clients.unshift(newClient);
         state.activeClientFormId = newClient.id;
         state.selectedClientId = newClient.id;
+        state.clientEditor = { kind: "client", id: newClient.id };
         commitUi("push");
         return;
       }
 
       if (editClientTrigger) {
         state.activeClientFormId = editClientTrigger.getAttribute("data-edit-client");
+        state.clientEditor = { kind: "client", id: state.activeClientFormId };
         commitUi("push");
+        return;
+      }
+
+      if (closeClientEditorTrigger) {
+        state.clientEditor = null;
+        commitUi("replace");
         return;
       }
 
@@ -7644,12 +7958,13 @@
         const number = proposals.length + 1;
         const record = {
           id: `proposal-${String(number).padStart(3, "0")}`,
-          name: `New Proposal ${number}`,
+          clientCode: `PR-${String(number).padStart(3, "0")}`,
+          name: "",
           npwp: "",
           address: "",
           industry: "",
-          proposedPic: TAX_PICS.includes(state.selectedPic) ? state.selectedPic : TAX_PICS[0],
-          proposedAccPic: ACC_PICS.includes(state.selectedPic) ? state.selectedPic : ACC_PICS[0],
+          proposedPic: "",
+          proposedAccPic: "",
           obligations: [],
           monthlyFee: 0,
           annualFee: 0,
@@ -7661,6 +7976,7 @@
         proposals.unshift(record);
         state.activeProposalId = record.id;
         state.clientManagementTab = "proposal";
+        state.clientEditor = { kind: "proposal", id: record.id };
         commitUi("push");
         return;
       }
@@ -7668,6 +7984,7 @@
       if (editProposalTrigger) {
         state.activeProposalId = editProposalTrigger.getAttribute("data-edit-proposal");
         state.clientManagementTab = "proposal";
+        state.clientEditor = { kind: "proposal", id: state.activeProposalId };
         commitUi("push");
         return;
       }
@@ -7675,7 +7992,11 @@
       if (saveProposalTrigger) {
         const proposal = proposals.find((item) => item.id === saveProposalTrigger.getAttribute("data-save-proposal"));
         if (!proposal) return;
-        proposal.name = document.getElementById("proposal-name").value.trim() || proposal.name;
+        proposal.name = document.getElementById("proposal-name").value.trim();
+        if (!proposal.name) {
+          window.alert("Proposal name is required.");
+          return;
+        }
         proposal.npwp = document.getElementById("proposal-npwp").value.trim();
         proposal.industry = document.getElementById("proposal-industry").value.trim();
         proposal.address = document.getElementById("proposal-address").value.trim();
@@ -7686,6 +8007,27 @@
         proposal.annualFee = Number(document.getElementById("proposal-annual-fee").value || 0);
         proposal.notes = document.getElementById("proposal-notes").value.trim();
         proposal.obligations = OBLIGATIONS.filter((key) => document.getElementById(`proposal-ob-${key}`).checked);
+        try {
+          await saveClientToDatabase({
+            clientCode: proposal.clientCode || `PR-${String(proposals.indexOf(proposal) + 1).padStart(3, "0")}`,
+            name: proposal.name,
+            npwp: proposal.npwp,
+            address: proposal.address,
+            industry: proposal.industry,
+            taxPic: proposal.proposedPic,
+            accountingPic: proposal.proposedAccPic,
+            clientStatus: "Proposal",
+            serviceFee: proposal.monthlyFee,
+            annualFee: proposal.annualFee,
+            notes: proposal.notes,
+            proposalStatus: proposal.status,
+            obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
+          });
+          state.clientEditor = null;
+          await loadSharedClients();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Proposal could not be saved.");
+        }
         commitUi("push");
         return;
       }
@@ -7827,7 +8169,11 @@
       if (target.matches("[data-save-client]")) {
         const client = clientFormTarget();
         client.clientCode = document.getElementById("client-form-code").value.trim() || client.clientCode;
-        client.name = document.getElementById("client-form-name").value.trim() || client.name;
+        client.name = document.getElementById("client-form-name").value.trim();
+        if (!client.name) {
+          window.alert("Client name is required.");
+          return;
+        }
         client.npwp = document.getElementById("client-form-npwp").value.trim();
         client.address = document.getElementById("client-form-address").value.trim();
         client.taxPic = document.getElementById("client-form-tax-pic").value;
@@ -7853,6 +8199,13 @@
         });
         client.lastUpdated = "2026-05-20 16:10";
         state.selectedClientId = client.id;
+        try {
+          await saveClientToDatabase(client);
+          state.clientEditor = null;
+          await loadSharedClients();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Client could not be saved.");
+        }
         commitUi("push");
         return;
       }
@@ -8015,10 +8368,10 @@
         const proposal = proposals.find((item) => item.id === convertProposalButton.getAttribute("data-convert-proposal"));
         if (!proposal) return;
         proposal.status = "Won";
-        const newClientId = `client-${String(clients.length + 1).padStart(3, "0")}`;
-        clients.push({
-          id: newClientId,
-          clientCode: `CL-${String(clients.length + 1).padStart(3, "0")}`,
+        const convertedClientCode = nextClientCode();
+        const newClient = {
+          id: `client-${convertedClientCode.slice(3)}`,
+          clientCode: convertedClientCode,
           name: proposal.name,
           pic: proposal.proposedPic,
           taxPic: proposal.proposedPic,
@@ -8026,7 +8379,7 @@
           partner: PARTNERS[0],
           supervisor: SUPERVISORS[0],
           team: "Tax + Accounting",
-          clientStatus: "Onboarding",
+          clientStatus: "Active",
           industry: proposal.industry || "Other",
           servicePackage: proposal.obligations.length ? "Monthly + Annual" : "Annual Only",
           engagementStart: "2026-08-17",
@@ -8052,9 +8405,31 @@
             phrpb1: { status: proposal.obligations.includes("phrpb1") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
             ppn: { status: proposal.obligations.includes("ppn") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" }
           }
-        });
-        state.selectedClientId = newClientId;
-        state.activeClientFormId = newClientId;
+        };
+        try {
+          await saveClientToDatabase({
+            clientCode: proposal.clientCode,
+            name: proposal.name,
+            npwp: proposal.npwp,
+            address: proposal.address,
+            industry: proposal.industry,
+            taxPic: proposal.proposedPic,
+            accountingPic: proposal.proposedAccPic,
+            clientStatus: "Proposal",
+            serviceFee: proposal.monthlyFee,
+            annualFee: proposal.annualFee,
+            notes: proposal.notes,
+            proposalStatus: "Won",
+            obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
+          });
+          await saveClientToDatabase(newClient);
+          await loadSharedClients();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Proposal could not be converted.");
+          return;
+        }
+        state.selectedClientId = newClient.id;
+        state.activeClientFormId = newClient.id;
         state.activeProposalId = proposal.id;
         state.clientManagementTab = "active";
         switchView("client-management-view");
@@ -8071,6 +8446,9 @@
         const record = taxCases.find((item) => item.id === caseId);
         if (!record?.nextSteps?.[Number(stepIndex)]) return;
         record.nextSteps[Number(stepIndex)].done = target.checked;
+        if (!record.id.startsWith("case-")) {
+          saveCaseToDatabase(record).catch((error) => console.warn("[case] step save failed", error));
+        }
         commitUi("push");
         return;
       }
@@ -8209,6 +8587,21 @@
         const proposal = proposals.find((item) => item.id === target.getAttribute("data-proposal-status"));
         if (!proposal) return;
         proposal.status = target.value;
+        saveClientToDatabase({
+          clientCode: proposal.clientCode,
+          name: proposal.name,
+          npwp: proposal.npwp,
+          address: proposal.address,
+          industry: proposal.industry,
+          taxPic: proposal.proposedPic,
+          accountingPic: proposal.proposedAccPic,
+          clientStatus: "Proposal",
+          serviceFee: proposal.monthlyFee,
+          annualFee: proposal.annualFee,
+          notes: proposal.notes,
+          proposalStatus: proposal.status,
+          obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
+        }).catch((error) => console.warn("[proposal] status save failed", error));
         commitUi("push");
         return;
       }
@@ -8555,7 +8948,15 @@
     rerender();
     persistDemoState();
     loadCurrentProfile();
+    loadSharedClients();
+    loadSharedCases();
+    loadSharedAnnouncements();
     refreshDatabaseStatus();
+    window.setInterval(() => {
+      loadSharedClients();
+      loadSharedCases();
+      loadSharedAnnouncements();
+    }, 30000);
     window.setTimeout(() => {
       queueLatestFameAnnouncement();
     }, 280);

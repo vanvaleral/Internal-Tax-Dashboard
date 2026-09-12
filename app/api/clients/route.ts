@@ -55,15 +55,28 @@ export async function POST(request: Request) {
     annual_fee: Number(client.annualFee || 0),
     engagement_start: client.engagementStart || null,
     engagement_end: client.engagementEnd || null,
+    notes: client.notes || null,
+    partner_name: client.partner || null,
+    supervisor_name: client.supervisor || null,
+    service_package: client.servicePackage || null,
+    proposal_status: client.proposalStatus || null,
     has_pph21: Boolean(client.obligations?.pph21?.status !== "na"),
     has_unifikasi: Boolean(client.obligations?.unifikasi?.status !== "na"),
     has_pph25_pp55: Boolean(client.obligations?.pph25?.status !== "na"),
     has_pb1: Boolean(client.obligations?.phrpb1?.status !== "na"),
     has_ppn: Boolean(client.obligations?.ppn?.status !== "na"),
-    source_system: "csv-import"
+    source_system: client.sourceSystem || "manual"
   })).filter((client) => client.client_code && client.legal_name);
 
   const { data, error } = await supabase.from("client_master").upsert(payload, { onConflict: "client_code" }).select("id, client_code");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (data?.length) {
+    await supabase.from("client_master_activity").insert(data.map((client) => ({
+      client_id: client.id,
+      action: "client_master_upsert",
+      new_value: { client_code: client.client_code },
+      actor_user_id: user.id
+    })));
+  }
   return NextResponse.json({ data, mode: "database", imported: payload.length });
 }

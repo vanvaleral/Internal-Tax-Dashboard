@@ -9,7 +9,7 @@ The prototype in `public/demo.html` provides:
 - a Wall of Fame announcement after Employee of the Month is finalized
 - local browser persistence for demo review
 
-This is not yet a shared production messaging system. Browser-local data cannot deliver an announcement to another employee or to a phone when the website is closed.
+Announcements are now stored in Supabase with per-recipient read status. This makes the in-app inbox shared between logged-in employees. Phone push delivery remains a separate future phase.
 
 ## Production Delivery Model
 

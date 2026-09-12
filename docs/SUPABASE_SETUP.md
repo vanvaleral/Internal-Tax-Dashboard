@@ -32,6 +32,7 @@ Open **SQL Editor** in Supabase and run these files in order:
 8. `supabase/migrations/202609110002_staff_display_names.sql` for operational display names.
 9. `supabase/migrations/202609110003_username_registration_support.sql` if username support was added after your first setup.
 10. `supabase/migrations/202609120001_fix_new_user_display_name_trigger.sql` to make direct registration compatible with required display names.
+11. `supabase/migrations/202609120002_shared_clients_cases_announcements.sql` to persist shared client records, cases, and announcements.
 
 The second migration does not delete or rewrite existing prototype tables.
 
