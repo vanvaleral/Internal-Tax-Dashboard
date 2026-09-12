@@ -31,6 +31,7 @@ Open **SQL Editor** in Supabase and run these files in order:
 7. `supabase/migrations/202609110001_staff_usernames.sql` for username login.
 8. `supabase/migrations/202609110002_staff_display_names.sql` for operational display names.
 9. `supabase/migrations/202609110003_username_registration_support.sql` if username support was added after your first setup.
+10. `supabase/migrations/202609120001_fix_new_user_display_name_trigger.sql` to make direct registration compatible with required display names.
 
 The second migration does not delete or rewrite existing prototype tables.
 

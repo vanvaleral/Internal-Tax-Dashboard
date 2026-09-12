@@ -7,9 +7,10 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.staff_profiles (auth_user_id, full_name, team_division, role)
+  insert into public.staff_profiles (auth_user_id, full_name, display_name, team_division, role)
   values (
     new.id,
+    coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), split_part(new.email, '@', 1), 'New user'),
     coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), split_part(new.email, '@', 1), 'New user'),
     'Tax Team',
     'staff'
@@ -25,9 +26,10 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_auth_user();
 
 -- Backfill profiles for users created before this trigger was installed.
-insert into public.staff_profiles (auth_user_id, full_name, team_division, role)
+insert into public.staff_profiles (auth_user_id, full_name, display_name, team_division, role)
 select
   u.id,
+  coalesce(nullif(u.raw_user_meta_data ->> 'full_name', ''), split_part(u.email, '@', 1), 'Existing user'),
   coalesce(nullif(u.raw_user_meta_data ->> 'full_name', ''), split_part(u.email, '@', 1), 'Existing user'),
   'Tax Team',
   'staff'
