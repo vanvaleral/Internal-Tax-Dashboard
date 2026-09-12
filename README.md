@@ -24,15 +24,9 @@ Master data center for active clients, proposals, obligations, PIC ownership, an
 4. `Management`
 Supervisor oversight across operations, bottlenecks, high follow-up clients, and completed history.
 
-## Utility feature: Attendance integration
+## Attendance shortcut
 
-Attendance is a lightweight utility feature only. It is not a separate business module and should not evolve into HR or payroll management.
-
-- Employees stay inside the internal app
-- Clicking `Attend` triggers normal browser automation against `https://host-mylmats.com/login`
-- The flow supports first-layer login plus second-layer attendance password entry
-- Credentials should be encrypted before storage
-- The utility is designed to be future-ready for reminders and status checks without disturbing core tax operations
+The sidebar `Attend` button opens the existing MyLMATS login in a new tab. Attendance is not automated or stored by this application.
 
 ## Core operating model
 
@@ -110,21 +104,6 @@ It should not be mixed into the recurring compliance matrix.
 4. Enable Supabase Email or Magic Link auth for internal users.
 5. Deploy to Vercel.
 
-## Attendance setup
-
-1. Add the environment variables from [`.env.example`](./.env.example), especially:
-   - `ATTENDANCE_PORT`
-   - `ATTENDANCE_LOGIN_URL`
-   - Playwright selector variables for the two-step attendance flow
-2. Install dependencies so `express` and `playwright` are available.
-3. Start the attendance microservice with `npm run server`.
-4. Call `POST /api/attendance/checkin` with:
-   - `username`
-   - `password`
-   - `attendancePassword`
-5. For this demo, attendance credentials are kept in memory only during the request.
-6. For production, store user attendance secrets encrypted at rest and never in plaintext.
-
 ## Suggested next implementation steps
 
 1. Wire `staff_profiles.auth_user_id` to real authenticated users.
@@ -133,32 +112,8 @@ It should not be mixed into the recurring compliance matrix.
 4. Add filtered operations presets by PIC, month, attention-needed state, and completed-history toggles.
 5. Formalize client-management tables for active clients, proposal clients, client obligations, commercial terms, and dual PIC ownership.
 6. Add dedicated case tables and workflows separate from recurring compliance rows.
-7. Persist encrypted attendance credentials per user and connect the attendance widget to authenticated profiles.
-8. Replace the placeholder Playwright selectors with the real DOM selectors from `https://host-mylmats.com/login`.
-
-## Attendance local run
-
-To use the attendance utility locally, run both services:
-
-1. App UI:
-   - `run-dev.bat`
-2. Attendance microservice:
-   - `run-attendance.bat`
-
-Then set the attendance selectors in `.env.local`.
-
-Selector env vars support fallback values separated by `||`, for example:
-
-```env
-ATTENDANCE_USERNAME_SELECTOR=input[type="email"] || input[name="email"]
-ATTENDANCE_PASSWORD_SELECTOR=input[type="password"] || input[name="password"]
-ATTENDANCE_SUBMIT_SELECTOR=button[type="submit"] || button:has-text("Log In")
-```
-
 ## Notes
 
 - The app includes demo fallback data if Supabase env vars are missing, so the interface is still reviewable before database setup.
 - Accounting Team support is intentionally minimal in this MVP and can later reuse the same client/staff foundation with a lighter case workflow.
 - The standalone demo now reflects the intended production direction: four primary modules with operations matrix first, cases Kanban separate, client master data central, and management oversight distinct.
-- Attendance automation is intentionally implemented as a utility layer and should remain isolated from the core tax workflow model.
-- The current attendance backend is a lightweight Node/Express microservice in [`server/`](./server) so the HTML demo can call a real backend instead of attempting cross-site browser automation from frontend JavaScript.

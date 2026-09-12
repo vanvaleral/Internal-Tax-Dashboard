@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  createServerClient(url, key, {
+  const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -26,6 +26,21 @@ export async function middleware(request: NextRequest) {
       }
     }
   });
+
+  const pathname = request.nextUrl.pathname;
+  const publicPath = pathname === "/login" || pathname.startsWith("/auth/") || pathname === "/onboarding";
+  let user = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch (error) {
+    console.error("[auth middleware] Supabase request failed", error);
+    if (publicPath || pathname.startsWith("/_next/") || pathname.startsWith("/api/health/")) return response;
+    return NextResponse.redirect(new URL("/login?error=auth-unavailable", request.url));
+  }
+  if (!user && !publicPath && !pathname.startsWith("/_next/") && !pathname.startsWith("/api/health/")) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   return response;
 }

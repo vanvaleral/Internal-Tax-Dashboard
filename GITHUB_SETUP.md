@@ -95,7 +95,6 @@ Copy-Item .env.example .env.local
 Then fill in:
 
 - Supabase values
-- attendance automation values
 - any other deployment secrets
 
 ## 7. Run locally
@@ -104,18 +103,7 @@ Then fill in:
 npm run dev
 ```
 
-## 8. Attendance setup reminder
-
-The attendance feature still needs:
-
-- `ATTENDANCE_SECRET_KEY`
-- selectors for the first login layer
-- selectors for the second attendance password layer
-- a success selector after submission
-
-These are defined in `.env.example`.
-
-## 9. Suggested next push workflow
+## 8. Suggested next push workflow
 
 After changes:
 

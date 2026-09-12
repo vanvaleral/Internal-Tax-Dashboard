@@ -1,7 +1,5 @@
-import { DemoFrame } from "@/components/demo/demo-frame";
+import { LoginForm } from "@/components/auth/login-form";
 
 export default function LoginPage() {
-  return (
-    <DemoFrame />
-  );
+  return <LoginForm />;
 }
