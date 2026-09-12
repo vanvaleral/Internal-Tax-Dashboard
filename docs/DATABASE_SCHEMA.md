@@ -76,6 +76,9 @@ Migration `202609120004_my_work_tasks.sql` introduces a lightweight shared task 
 
 Completing a repeating task creates the next instance server-side. This preserves the creator and assignee relationship even when the original creator's browser is closed.
 
+### Leadership scope
+Migration `202609130001_leader_role_access.sql` adds `leader` alongside `supervisor`, `partner`, and `admin` as leadership roles. These roles can view the full operational workload; staff remain restricted to clients where they are PIC TAX or PIC ACC.
+
 ### No review tables
 No review, approval, or revision history entities exist.
 

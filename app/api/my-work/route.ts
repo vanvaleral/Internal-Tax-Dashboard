@@ -36,7 +36,7 @@ function displayName(profile: { display_name?: string | null; full_name?: string
 }
 
 function isLeadership(role: string | null | undefined) {
-  return ["supervisor", "partner", "admin"].includes(String(role || "").toLowerCase());
+  return ["leader", "supervisor", "partner", "admin"].includes(String(role || "").toLowerCase());
 }
 
 function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; favorited_at?: string | null } | null) {

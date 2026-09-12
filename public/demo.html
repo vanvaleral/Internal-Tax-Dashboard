@@ -3184,7 +3184,7 @@
     let PARTNERS = ["Widi"];
     let SUPERVISORS = ["Raka"];
     let staffDirectoryLoaded = false;
-    const hasLeadershipAccess = () => state.role === "supervisor" || state.role === "partner" || state.role === "admin";
+    const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
     const SERVICE_PACKAGES = ["Monthly Compliance", "Monthly + Annual", "Annual Only", "Case Support"];
@@ -4607,12 +4607,20 @@
       }));
     }
 
+    function isAssignedToAnnualRow(row) {
+      const linkedClient = clients.find((client) =>
+        (row.clientId && row.clientId === client.id) || normalizedEntityName(row.clientName) === normalizedEntityName(client.name)
+      );
+      const owners = linkedClient
+        ? [linkedClient.taxPic, linkedClient.accountingPic]
+        : [row.taxPic, row.accountingPic, row.reportPic];
+      return owners.includes(state.selectedPic);
+    }
+
     function visibleAnnualAccountingRows() {
       const scoped = hasLeadershipAccess()
         ? annualAccountingRows
-        : annualAccountingRows.filter((row) =>
-            [row.accountingPic, row.taxPic].includes(state.selectedPic)
-          );
+        : annualAccountingRows.filter((row) => isAssignedToAnnualRow(row));
       const query = state.filters.query.trim().toLowerCase();
       return sortAnnualAccountingRows(scoped.filter((row) => {
         const matchesQuery = !query || [
@@ -4629,9 +4637,7 @@
     function visibleAnnualTaxRows() {
       const scoped = hasLeadershipAccess()
         ? annualTaxRows
-        : annualTaxRows.filter((row) =>
-            [row.reportPic, row.taxPic].includes(state.selectedPic)
-          );
+        : annualTaxRows.filter((row) => isAssignedToAnnualRow(row));
       const query = state.filters.query.trim().toLowerCase();
       return sortAnnualTaxRows(scoped.filter((row) => {
         const matchesQuery = !query || [
@@ -6257,7 +6263,7 @@
       const annualSource = state.annualTeam === "accounting" ? annualAccountingList : annualTaxList;
       const annualDoneCount = state.annualTeam === "accounting"
         ? annualAccountingList.filter((row) => ["Reported", "Done"].includes(row.progress)).length
-        : annualTaxList.filter((row) => row.notes === "Done").length;
+        : annualTaxList.filter((row) => row.reported || row.notes === "Done").length;
       const annualPendingCount = Math.max(0, annualSource.length - annualDoneCount);
       const annualCutoffCount = state.annualTeam === "accounting"
         ? annualAccountingList.filter((row) => row.deadline === "CUT OFF").length
@@ -6274,6 +6280,19 @@
           done,
           active: rows.filter((row) => !["Reported", "Done"].includes(row.progress)).length,
           cutoff: rows.filter((row) => row.deadline === "CUT OFF").length,
+          percent: rows.length ? `${Math.round((done / rows.length) * 100)}%` : "0%"
+        };
+      }).filter((row) => row.total > 0);
+      const annualTaxProgressByPic = TAX_PICS.map((pic) => {
+        const rows = annualTaxRows.filter((row) => row.taxPic === pic);
+        const done = rows.filter((row) => row.reported || row.notes === "Done").length;
+        const pendingFollowUp = rows.filter((row) => !row.clientMeeting || !row.spt).length;
+        return {
+          pic,
+          total: rows.length,
+          done,
+          active: rows.length - done,
+          pendingFollowUp,
           percent: rows.length ? `${Math.round((done / rows.length) * 100)}%` : "0%"
         };
       }).filter((row) => row.total > 0);
@@ -6593,7 +6612,37 @@
                     </tbody>
                   </table>
                 </div>
-              ` : ``}
+              ` : `
+                <div class="pic-progress-table-wrap">
+                  <table class="pic-progress-table">
+                    <thead>
+                      <tr>
+                        <th style="width:140px;">PIC TAX</th>
+                        <th class="num">Total</th>
+                        <th class="num">Done</th>
+                        <th class="num">Active</th>
+                        <th class="num">Follow-Up</th>
+                        <th>Progress</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${annualTaxProgressByPic.map((row) => `
+                        <tr>
+                          <td class="pic-name">${row.pic}</td>
+                          <td class="num">${row.total}</td>
+                          <td class="num">${row.done}</td>
+                          <td class="num">${row.active}</td>
+                          <td class="num"><span class="cutoff-badge">${row.pendingFollowUp}</span></td>
+                          <td>
+                            <div class="mini-progress-track"><div class="mini-progress-fill" style="width:${row.percent};"></div></div>
+                            <div class="subline" style="margin-top:4px;">${row.percent} complete</div>
+                          </td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              `}
 
               <div class="toolbar compact-toolbar">
                 <div class="toolbar-left">
@@ -6918,17 +6967,19 @@
     function renderCases() {
       const scopedCases = hasLeadershipAccess()
         ? taxCases
-        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic || item.id === state.selectedCaseId);
+        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic || (item.id === state.selectedCaseId && item.id.startsWith("case-")));
       const caseQuery = state.caseSearch.trim().toLowerCase();
       const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
       const caseList = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes].join(" ").toLowerCase().includes(caseQuery)));
-      const activeCase = selectedCase();
       const root = document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const himbauanRows = caseList.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
         return `<tr><td>${index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
       }).join("") || `<tr><td colspan="12"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
+      const pemeriksaanRows = caseList.map((item, index) => {
+        return `<tr><td>${index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td></tr>`;
+      }).join("") || `<tr><td colspan="12"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
 
       root.innerHTML = `
         <div class="workspace-frame workspace-cases">
@@ -6948,39 +6999,10 @@
           <section class="panel">
             <div class="toolbar compact-toolbar"><input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Search wajib pajak, surat, PIC..." /></div>
             <div class="table-wrap"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th>`}</tr></thead><tbody>
-              ${category === "Himbauan" ? himbauanRows : caseList.map((item, index) => `<tr data-select-case="${item.id}"><td>${index + 1}</td><td><button class="client-link" data-select-case="${item.id}">${displayClientName(item.clientName)}</button></td><td>${item.letterNumber || "-"}</td><td>${item.letterDate || "-"}</td><td>${item.receivedDate || "-"}</td><td>${item.subject || "-"}</td><td>${item.taxYear || "-"}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${item.inspectorPic || "-"}</td><td>${item.sphpDate || "-"}</td><td>${item.completionNotes || "-"}</td></tr>`).join("") || `<tr><td colspan="12"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`}
+              ${category === "Himbauan" ? himbauanRows : pemeriksaanRows}
             </tbody></table></div>
           </section>
-          ${category === "Pemeriksaan" ? `<section class="panel case-detail-panel">
-              ${activeCase ? `
-                <div class="section-title">
-                  <div><h3>${activeCase.clientName}</h3><p>${activeCase.caseType} case workspace.</p></div>
-                  <button class="tiny-btn note-trigger" data-open-notes="case:${activeCase.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`case:${activeCase.id}`) || "No general note yet")}">NOTE</button>
-                </div>
-                <div class="case-detail-grid">
-                  <div class="client-field"><label for="case-client">Wajib Pajak</label><input id="case-client" class="field" value="${activeCase.clientName}" placeholder="Type client name" list="case-client-options" /></div>
-                  <div class="client-field"><label for="case-letter-number">No Surat</label><input id="case-letter-number" class="field" value="${activeCase.letterNumber || ""}" /></div>
-                  <div class="client-field"><label for="case-letter-date">Tanggal Surat</label><input id="case-letter-date" class="field" type="date" value="${activeCase.letterDate || ""}" /></div>
-                  <div class="client-field"><label for="case-received-date">Tanggal Terima</label><input id="case-received-date" class="field" type="date" value="${activeCase.receivedDate || ""}" /></div>
-                  <div class="client-field"><label for="case-subject">Perihal</label><input id="case-subject" class="field" value="${activeCase.subject || ""}" /></div>
-                  ${category === "Pemeriksaan" ? `<div class="client-field"><label for="case-tax-year">Tahun Pajak</label><input id="case-tax-year" class="field" value="${activeCase.taxYear || ""}" /></div><div class="client-field"><label for="case-inspector">PIC Pemeriksa</label><input id="case-inspector" class="field" value="${activeCase.inspectorPic || ""}" /></div><div class="client-field"><label for="case-sphp-date">Tanggal SPHP</label><input id="case-sphp-date" class="field" type="date" value="${activeCase.sphpDate || ""}" /></div>` : `<div class="client-field"><label>Jatuh Tempo</label><input class="field" readonly value="${activeCase.dueDate || "Tanggal terima + 14 hari"}" /></div><div class="client-field"><label for="case-completion-date">Tanggal Selesai</label><input id="case-completion-date" class="field" type="date" value="${activeCase.completionDate || ""}" /></div>`}
-                  <div class="client-field"><label for="case-type">Case Type</label><input id="case-type" class="field" value="${activeCase.caseType || category}" /></div>
-                  <div class="client-field"><label for="case-stage">Progress</label><select id="case-stage" class="field">${optionsMarkup(CASE_STAGES, activeCase.stage)}</select></div>
-                  <div class="client-field"><label for="case-priority">Priority</label><select id="case-priority" class="field">${optionsMarkup(["Low", "Medium", "High"], activeCase.priority)}</select></div>
-                  <div class="client-field"><label for="case-tax-pic">PIC Tax</label><select id="case-tax-pic" class="field">${optionsMarkup(TAX_PICS, activeCase.taxPic)}</select></div>
-                  <div class="client-field"><label for="case-acc-pic">PIC ACC</label><select id="case-acc-pic" class="field">${optionsMarkup(ACC_PICS, activeCase.accountingPic)}</select></div>
-                  <div class="client-field"><label for="case-due-date">Due Date</label><input id="case-due-date" class="field" type="date" value="${activeCase.dueDate || ""}" /></div>
-                </div>
-                <div class="case-steps">
-                  <div class="client-form-section-title"><strong>Next Steps</strong><button class="tiny-btn" data-add-case-step="${activeCase.id}">+ Next Step</button></div>
-                  ${activeCase.nextSteps.map((step, index) => `<label class="case-step"><input type="checkbox" data-case-step="${activeCase.id}|${index}" ${step.done ? "checked" : ""} /><span>${step.title}</span></label>`).join("") || `<div class="subline">No next step yet. Add the next practical action.</div>`}
-                </div>
-                <div class="client-field"><label for="case-notes">Working Note</label><textarea id="case-notes" class="inline-textarea" placeholder="Case handling note">${activeCase.notes || ""}</textarea></div>
-                <div class="inline-controls"><button class="solid-btn" data-save-case="${activeCase.id}">Save Case</button></div>
-              ` : `<div class="empty-state">Select a case or add a new case to begin.</div>`}
-            </section>
-            <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
-          </section>` : `<datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>`}
+          <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `;
     }
@@ -7257,7 +7279,7 @@
       document.getElementById("mobile-workspace-title").textContent = meta.label;
       document.getElementById("sidebar-user-name").textContent = state.selectedPic;
       document.getElementById("sidebar-user-role").textContent =
-        hasLeadershipAccess() ? (state.role === "partner" ? "Partner / All PIC Visibility" : "Supervisor / All PIC Visibility") : "Normal Staff / Assigned Scope";
+        hasLeadershipAccess() ? `${String(state.role || "leader").replace(/^./, (letter) => letter.toUpperCase())} / All PIC Visibility` : "Normal Staff / Assigned Scope";
       document.querySelectorAll("[data-supervisor-only]").forEach((element) => {
         element.hidden = !hasLeadershipAccess();
       });
@@ -8466,7 +8488,7 @@
         record.caseCategory = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
         record.caseType = record.caseCategory;
         taxCases.unshift(record);
-        state.casesTab = "active";
+        state.casesTab = record.caseCategory === "Pemeriksaan" ? "pemeriksaan" : "himbauan";
         state.selectedCaseId = record.id;
         commitUi("push");
         return;

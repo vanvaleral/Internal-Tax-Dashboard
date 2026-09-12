@@ -36,7 +36,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const current = await currentProfile();
   if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
-  if (!['supervisor', 'partner', 'admin'].includes(String(current.profile.role).toLowerCase())) {
+  if (!['leader', 'supervisor', 'partner', 'admin'].includes(String(current.profile.role).toLowerCase())) {
     return NextResponse.json({ error: "Only leadership can publish announcements." }, { status: 403 });
   }
   const body = await request.json();
