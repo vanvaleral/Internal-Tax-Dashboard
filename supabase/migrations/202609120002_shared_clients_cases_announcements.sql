@@ -6,6 +6,33 @@ alter table public.client_master add column if not exists supervisor_name text;
 alter table public.client_master add column if not exists service_package text;
 alter table public.client_master add column if not exists proposal_status text;
 
+create sequence if not exists public.client_master_client_code_seq;
+do $$
+declare
+  highest_code bigint;
+begin
+  select coalesce(max(nullif(regexp_replace(client_code, '\D', '', 'g'), '')::bigint), 0)
+  into highest_code
+  from public.client_master
+  where client_code ~ '^CL-[0-9]+$';
+  if highest_code > 0 then
+    perform setval('public.client_master_client_code_seq', highest_code, true);
+  else
+    perform setval('public.client_master_client_code_seq', 1, false);
+  end if;
+end;
+$$;
+
+create or replace function public.allocate_client_code()
+returns text
+language sql
+security definer set search_path = public
+as $$
+  select 'CL-' || lpad(nextval('public.client_master_client_code_seq')::text, 3, '0');
+$$;
+
+grant execute on function public.allocate_client_code() to authenticated;
+
 create table if not exists public.tax_cases (
   id uuid primary key default gen_random_uuid(),
   client_id uuid references public.client_master(id) on delete set null,

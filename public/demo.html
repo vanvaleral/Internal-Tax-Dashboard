@@ -3985,8 +3985,7 @@
       return `CL-${String(highest + 1).padStart(3, "0")}`;
     }
 
-    function createBlankClient() {
-      const code = nextClientCode();
+    function createBlankClient(code = nextClientCode()) {
       return {
         id: `client-${code.slice(3)}`,
         clientCode: code,
@@ -7011,6 +7010,13 @@
       if (saved?.id) client.databaseId = saved.id;
     }
 
+    async function allocateClientCode() {
+      const response = await appFetch("/api/clients/next-code", { method: "POST", headers: { Accept: "application/json" } }, "Allocating client code...");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.clientCode) throw new Error(result.error || "Client code could not be allocated.");
+      return result.clientCode;
+    }
+
     async function loadSharedCases() {
       try {
         const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, "Loading shared cases...");
@@ -7915,7 +7921,14 @@
       }
 
       if (newClientTrigger) {
-        const newClient = createBlankClient();
+        let code;
+        try {
+          code = await allocateClientCode();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Client code could not be allocated.");
+          return;
+        }
+        const newClient = createBlankClient(code);
         clients.unshift(newClient);
         state.activeClientFormId = newClient.id;
         state.selectedClientId = newClient.id;
