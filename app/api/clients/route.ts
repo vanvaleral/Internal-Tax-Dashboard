@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createOperationalAnnouncement } from "@/lib/notifications";
 
@@ -42,6 +42,16 @@ export async function POST(request: Request) {
   const body = await request.json();
   const rows: Array<Record<string, any>> = Array.isArray(body.clients) ? body.clients : [];
   if (!rows.length) return NextResponse.json({ error: "No clients supplied." }, { status: 400 });
+  const isBulkImport = body.operation === "bulk-import";
+
+  const { data: profile } = await supabase
+    .from("staff_profiles")
+    .select("id, display_name, full_name, role")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (isBulkImport && (!profile || !["leader", "supervisor", "partner", "admin"].includes(String(profile.role || "").toLowerCase()))) {
+    return NextResponse.json({ error: "Only leadership can import or update the client master in bulk." }, { status: 403 });
+  }
 
   const payload = rows.map((client) => ({
     client_code: String(client.clientCode || "").trim(),
@@ -70,7 +80,15 @@ export async function POST(request: Request) {
     source_system: client.sourceSystem || "manual"
   })).filter((client) => client.client_code && client.legal_name);
 
-  const { data, error } = await supabase.from("client_master").upsert(payload, { onConflict: "client_code" }).select("id, client_code");
+  const uniquePayload = [...new Map(payload.map((client) => [client.client_code, client])).values()];
+  const codes = uniquePayload.map((client) => client.client_code);
+  const { data: existingRows, error: existingError } = codes.length
+    ? await supabase.from("client_master").select("client_code").in("client_code", codes)
+    : { data: [], error: null };
+  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+  const existingCodes = new Set((existingRows || []).map((client) => client.client_code));
+
+  const { data, error } = await supabase.from("client_master").upsert(uniquePayload, { onConflict: "client_code" }).select("id, client_code");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (data?.length) {
     await supabase.from("client_master_activity").insert(data.map((client) => ({
@@ -80,11 +98,17 @@ export async function POST(request: Request) {
       actor_user_id: user.id
     })));
   }
-  const { data: creator } = await supabase.from("staff_profiles").select("id, display_name, full_name").eq("auth_user_id", user.id).maybeSingle();
-  if (creator) {
-    for (const client of payload) {
-      await createOperationalAnnouncement({ title: `New client: ${client.legal_name}`, message: `${creator.display_name || creator.full_name} added ${client.legal_name}. PIC Tax: ${client.tax_pic_name || "Unassigned"}; PIC ACC: ${client.accounting_pic_name || "Unassigned"}.`, senderProfileId: creator.id });
-    }
+  const createdClients = uniquePayload.filter((client) => !existingCodes.has(client.client_code));
+  if (createdClients.length && profile) {
+    after(async () => {
+      try {
+        const preview = createdClients.slice(0, 3).map((client) => client.legal_name).join(", ");
+        const suffix = createdClients.length > 3 ? ` and ${createdClients.length - 3} more` : "";
+        await createOperationalAnnouncement({ title: `New clients added: ${createdClients.length}`, message: `${profile.display_name || profile.full_name} added ${preview}${suffix}.`, senderProfileId: profile.id });
+      } catch (notificationError) {
+        console.error("[clients] import notification could not be created", notificationError);
+      }
+    });
   }
-  return NextResponse.json({ data, mode: "database", imported: payload.length });
+  return NextResponse.json({ data, mode: "database", imported: uniquePayload.length, created: createdClients.length, updated: uniquePayload.length - createdClients.length });
 }

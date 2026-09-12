@@ -4566,6 +4566,59 @@
       }, {}));
     }
 
+    const CLIENT_IMPORT_COLUMNS = ["clientCode", "name", "businessForm", "npwp", "address", "industry", "clientStatus", "taxPic", "accountingPic", "partner", "supervisor", "team", "servicePackage", "engagementStart", "engagementEnd", "monthlyFee", "annualFee", "pph21", "unifikasi", "pph25", "phrpb1", "ppn", "notes"];
+
+    function csvCell(value) {
+      return `"${String(value ?? "").replace(/"/g, '""')}"`;
+    }
+
+    function clientExportRecord(client) {
+      return {
+        clientCode: client.clientCode,
+        name: client.name,
+        businessForm: client.businessForm,
+        npwp: client.npwp,
+        address: client.address,
+        industry: client.industry,
+        clientStatus: client.clientStatus,
+        taxPic: client.taxPic,
+        accountingPic: client.accountingPic,
+        partner: client.partner,
+        supervisor: client.supervisor,
+        team: client.team,
+        servicePackage: client.servicePackage,
+        engagementStart: client.engagementStart,
+        engagementEnd: client.engagementEnd,
+        monthlyFee: client.serviceFee,
+        annualFee: client.annualFee,
+        pph21: client.obligations?.pph21?.status !== "na" ? "1" : "0",
+        unifikasi: client.obligations?.unifikasi?.status !== "na" ? "1" : "0",
+        pph25: client.obligations?.pph25?.status !== "na" ? "1" : "0",
+        phrpb1: client.obligations?.phrpb1?.status !== "na" ? "1" : "0",
+        ppn: client.obligations?.ppn?.status !== "na" ? "1" : "0",
+        notes: client.notes
+      };
+    }
+
+    async function exportClientMaster() {
+      const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Client data could not be exported.");
+      const source = (Array.isArray(result.data) ? result.data : []).map(databaseClientToDemo);
+      const csv = [CLIENT_IMPORT_COLUMNS.join(","), ...source.map((client) => {
+        const record = clientExportRecord(client);
+        return CLIENT_IMPORT_COLUMNS.map((column) => csvCell(record[column])).join(",");
+      })].join("\r\n");
+      const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `client-master-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    }
+
     function obligationStripMarkup(client) {
       return `
         <div class="obligation-strip">
@@ -5818,8 +5871,8 @@
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
               </div>
               <div class="toolbar-right">
-                <button class="ghost-btn" data-import-clients="yes">Import CSV</button>
-                <a class="ghost-btn" href="./client-import-template.csv" download>CSV Template</a>
+                <button class="ghost-btn" data-import-clients="yes">Import</button>
+                <button class="ghost-btn" data-export-clients="yes">Export Excel</button>
               </div>
             </div>
           </section>
@@ -7489,9 +7542,6 @@
           annualFee: client.annualFee,
           status: client.proposalStatus || "New Lead"
         }));
-        if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) {
-          clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
-        }
         clientsLoadedFromDatabase = true;
         if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
         if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
@@ -8258,6 +8308,7 @@
       const saveProposalTrigger = target.closest("[data-save-proposal]");
       const editClientTrigger = target.closest("[data-edit-client]");
       const importClientsTrigger = target.closest("[data-import-clients]");
+      const exportClientsTrigger = target.closest("[data-export-clients]");
       const openClientTrigger = target.closest("[data-open-client]");
       const sortTrigger = target.closest("[data-sort-scope]");
       const openNotesTrigger = target.closest("[data-open-notes]");
@@ -8745,6 +8796,15 @@
 
       if (importClientsTrigger) {
         document.getElementById("client-csv-input").click();
+        return;
+      }
+
+      if (exportClientsTrigger) {
+        try {
+          await exportClientMaster();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Client export could not be completed.");
+        }
         return;
       }
 
@@ -9704,25 +9764,27 @@
           .map((row) => createClientFromRow(row));
 
         if (!imported.length) {
-          window.alert("No valid client rows found in the CSV.");
+          window.alert("No valid client rows found. Use the file exported from this menu, keep the clientCode column, then save it as CSV from Excel.");
           return;
         }
 
-        imported.reverse().forEach((client) => clients.unshift(client));
-        state.activeClientFormId = imported[0].id;
-        state.selectedClientId = imported[0].id;
-        state.clientManagementTab = "active";
         try {
           const response = await appFetch("/api/clients", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ clients: imported })
+            body: JSON.stringify({ operation: "bulk-import", clients: imported })
           }, "Importing clients to database...");
-          if (!response.ok) throw new Error(`Import sync failed (${response.status})`);
-          window.alert(`${imported.length} client(s) imported and synced to the database.`);
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || `Import sync failed (${response.status})`);
+          await loadSharedClients();
+          const selected = clients.find((client) => client.clientCode === imported[0].clientCode);
+          state.activeClientFormId = selected?.id || state.activeClientFormId;
+          state.selectedClientId = selected?.id || state.selectedClientId;
+          state.clientManagementTab = "active";
+          window.alert(`Import complete: ${result.created || 0} new, ${result.updated || 0} updated.`);
         } catch (error) {
           console.warn("[client import] database sync failed", error);
-          window.alert(`${imported.length} client(s) imported locally, but database sync failed.`);
+          window.alert(error instanceof Error ? error.message : "Client import could not be completed.");
         }
         commitUi("push");
       } finally {
