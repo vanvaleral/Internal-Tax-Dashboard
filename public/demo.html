@@ -444,6 +444,12 @@
       color: #667482;
     }
 
+    .database-status-chip.is-updating {
+      border-color: #b9d5f4;
+      background: #edf6ff;
+      color: #23619b;
+    }
+
     .inbox-trigger {
       position: relative;
       min-height: 34px;
@@ -5334,12 +5340,17 @@
     async function markAnnouncementRead(id) {
       const item = state.announcements.find((announcement) => announcement.id === id);
       if (!item) return;
+      const previousReadAt = item.readAt;
+      // Remove the item immediately. The server acknowledgement continues in
+      // the background, so opening the inbox always feels instantaneous.
+      item.readAt = new Date().toISOString();
+      renderAnnouncementInbox();
       try {
-        const response = await appFetch("/api/announcements", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) }, "Updating announcement...");
+        const response = await appFetch("/api/announcements", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) });
         if (!response.ok) throw new Error("Announcement could not be marked as read.");
-        item.readAt = new Date().toISOString();
-        renderAnnouncementInbox();
       } catch (error) {
+        item.readAt = previousReadAt;
+        renderAnnouncementInbox();
         console.warn("[announcements] read update failed", error);
       }
     }
@@ -7312,19 +7323,38 @@
     }
 
     let appLoadingRequests = 0;
+    let databaseStatusBeforeUpdate = null;
 
-    function setAppLoading(visible, message = "Updating workspace...") {
+    function setAppLoading(visible) {
       const overlay = document.getElementById("app-loading-overlay");
-      const label = document.getElementById("app-loading-message");
-      if (label) label.textContent = message;
-      if (overlay) overlay.classList.toggle("visible", visible);
+      // Global blocking overlays interrupt data entry. Keep the element hidden
+      // and use the database chip as a lightweight background-sync indicator.
+      if (overlay) overlay.classList.remove("visible");
+      const chip = document.getElementById("database-status-chip");
+      if (!chip) return;
+      if (visible) {
+        if (!databaseStatusBeforeUpdate) {
+          databaseStatusBeforeUpdate = { text: chip.textContent, className: chip.className, title: chip.title };
+        }
+        chip.textContent = "Database: updating...";
+        chip.className = "database-status-chip is-updating";
+        chip.title = "Saving your changes in the background.";
+        return;
+      }
+      if (databaseStatusBeforeUpdate) {
+        chip.textContent = databaseStatusBeforeUpdate.text;
+        chip.className = databaseStatusBeforeUpdate.className;
+        chip.title = databaseStatusBeforeUpdate.title;
+        databaseStatusBeforeUpdate = null;
+      }
     }
 
     async function appFetch(url, options, message = "") {
-      const showLoading = Boolean(message);
-      if (showLoading) {
+      const method = String(options?.method || "GET").toUpperCase();
+      const isDatabaseUpdate = ["POST", "PATCH", "PUT", "DELETE"].includes(method);
+      if (isDatabaseUpdate) {
         appLoadingRequests += 1;
-        setAppLoading(true, message);
+        setAppLoading(true);
       }
       try {
         // Opening public/demo.html directly uses file://, where relative API
@@ -7334,7 +7364,7 @@
         }
         return await fetch(url, options);
       } finally {
-        if (showLoading) {
+        if (isDatabaseUpdate) {
           appLoadingRequests = Math.max(0, appLoadingRequests - 1);
           if (!appLoadingRequests) setAppLoading(false);
         }
