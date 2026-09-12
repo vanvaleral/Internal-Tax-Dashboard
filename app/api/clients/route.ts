@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createOperationalAnnouncement } from "@/lib/notifications";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -78,6 +79,12 @@ export async function POST(request: Request) {
       new_value: { client_code: client.client_code },
       actor_user_id: user.id
     })));
+  }
+  const { data: creator } = await supabase.from("staff_profiles").select("id, display_name, full_name").eq("auth_user_id", user.id).maybeSingle();
+  if (creator) {
+    for (const client of payload) {
+      await createOperationalAnnouncement({ title: `New client: ${client.legal_name}`, message: `${creator.display_name || creator.full_name} added ${client.legal_name}. PIC Tax: ${client.tax_pic_name || "Unassigned"}; PIC ACC: ${client.accounting_pic_name || "Unassigned"}.`, senderProfileId: creator.id });
+    }
   }
   return NextResponse.json({ data, mode: "database", imported: payload.length });
 }

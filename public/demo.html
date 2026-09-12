@@ -3758,6 +3758,8 @@
       },
       clientSearch: persistedDemoState?.ui?.clientSearch || "",
       profileClientSearch: persistedDemoState?.ui?.profileClientSearch || "",
+      proposalSearch: persistedDemoState?.ui?.proposalSearch || "",
+      caseSearch: persistedDemoState?.ui?.caseSearch || "",
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       sorts: {
@@ -3969,14 +3971,23 @@
 
     function createCaseRecord() {
       const nextNumber = taxCases.length + 1;
-      const relatedClient = visibleClients()[0] || clients[0] || null;
       return {
         id: `case-${String(nextNumber).padStart(3, "0")}`,
-        clientId: relatedClient?.id || "",
-        clientName: relatedClient?.name || `New Case Client ${nextNumber}`,
-        caseType: "Tax Consultation",
-        taxPic: TAX_PICS.includes(state.selectedPic) ? state.selectedPic : relatedClient?.taxPic || TAX_PICS[0],
-        accountingPic: ACC_PICS.includes(state.selectedPic) ? state.selectedPic : relatedClient?.accountingPic || ACC_PICS[0],
+        clientId: "",
+        clientName: "",
+        caseType: "Himbauan",
+        caseCategory: "Himbauan",
+        letterNumber: "",
+        letterDate: "",
+        receivedDate: "",
+        subject: "",
+        taxYear: "",
+        inspectorPic: "",
+        sphpDate: "",
+        completionDate: "",
+        completionNotes: "",
+        taxPic: "",
+        accountingPic: "",
         stage: "Waiting Client Docs",
         priority: "Medium",
         dueDate: "",
@@ -4166,6 +4177,46 @@
     function displayClientName(clientOrName) {
       const name = typeof clientOrName === "string" ? clientOrName : clientOrName?.name;
       return String(name || "").trim().replace(/^(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+/i, "") || "-";
+    }
+
+    let searchDebounceTimer = 0;
+    const SEARCH_STATE_BY_INPUT = {
+      "active-client-search": "clientSearch",
+      "profile-client-search": "profileClientSearch",
+      "proposal-search": "proposalSearch",
+      "case-search": "caseSearch",
+      "query-input": "filters.query",
+      "history-query": "historyFilters.query",
+      "allocation-query": "allocationQuery"
+    };
+
+    function setSearchState(path, value) {
+      if (path === "filters.query") state.filters.query = value;
+      else if (path === "historyFilters.query") state.historyFilters.query = value;
+      else state[path] = value;
+    }
+
+    function scheduleAutoSearch(input) {
+      const path = SEARCH_STATE_BY_INPUT[input.id];
+      if (!path) return;
+      const raw = input.value.trim();
+      window.clearTimeout(searchDebounceTimer);
+      if (!raw) {
+        setSearchState(path, "");
+        commitUi("replace");
+        return;
+      }
+      searchDebounceTimer = window.setTimeout(() => {
+        setSearchState(path, raw.length >= 3 ? raw : "");
+        commitUi("replace");
+        requestAnimationFrame(() => {
+          const nextInput = document.getElementById(input.id);
+          if (nextInput instanceof HTMLInputElement) {
+            nextInput.focus();
+            nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+          }
+        });
+      }, 250);
     }
 
     function activeMonthlyClients() {
@@ -5064,10 +5115,10 @@
         root.innerHTML = "";
         return;
       }
-      const items = visibleAnnouncements();
+      const items = visibleAnnouncements().filter((item) => !item.readAt);
       root.innerHTML = `
         <section class="announcement-inbox" role="dialog" aria-label="Announcement inbox">
-          <div class="announcement-inbox-head"><div><div class="eyebrow">My Inbox</div><strong>Announcements</strong></div><button class="ghost-btn" data-close-announcement-inbox="yes">Close</button></div>
+          <div class="announcement-inbox-head"><div><div class="eyebrow">My Inbox</div><strong>Announcements</strong></div><div class="inline-controls"><button class="ghost-btn" data-open-announcement-history="yes">History</button><button class="ghost-btn" data-close-announcement-inbox="yes">Close</button></div></div>
           <div class="announcement-list">
             ${items.map((item) => {
               const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
@@ -5539,6 +5590,8 @@
         const rightIdentity = splitBusinessName(right);
         return leftIdentity.form.localeCompare(rightIdentity.form) || leftIdentity.name.localeCompare(rightIdentity.name);
       });
+      const proposalQuery = state.proposalSearch.trim().toLowerCase();
+      const proposalRows = proposals.filter((proposal) => !proposalQuery || [displayClientName(proposal), proposal.proposedPic, proposal.proposedAccPic, proposal.status, proposal.notes].join(" ").toLowerCase().includes(proposalQuery));
 
       root.innerHTML = `
         <div class="workspace-frame workspace-clients">
@@ -5731,6 +5784,7 @@
                   <h3>Proposal / Quotation Clients</h3>
                   <p>Operational proposal tracking only. No CRM complexity and no mixing with active clients.</p>
                 </div>
+                <input id="proposal-search" class="filter-input" type="search" value="${escapeAttr(state.proposalSearch)}" placeholder="Search proposal, PIC, status..." />
               </div>
               <div class="table-wrap desktop-only">
                 <table class="operations-table">
@@ -5746,7 +5800,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    ${proposals.map((proposal) => `
+                    ${proposalRows.map((proposal) => `
                       <tr>
                         <td>${proposal.name}<div class="subline">${proposal.address}</div></td>
                         <td>
@@ -5766,7 +5820,7 @@
               </div>
               <div class="mobile-only">
                 <div class="list-grid">
-                  ${proposals.map((proposal) => `
+                  ${proposalRows.map((proposal) => `
                     <div class="mobile-card">
                       <div class="mobile-card-header">
                         <div>
@@ -6656,11 +6710,9 @@
       const scopedCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
-      const caseTabMap = {
-        active: scopedCases.filter((item) => item.stage !== "Closed"),
-        closed: scopedCases.filter((item) => item.stage === "Closed")
-      };
-      const caseList = caseTabMap[state.casesTab] || scopedCases;
+      const caseQuery = state.caseSearch.trim().toLowerCase();
+      const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
+      const caseList = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes].join(" ").toLowerCase().includes(caseQuery)));
       const activeCase = selectedCase();
       const root = document.getElementById("cases-view");
 
@@ -6669,8 +6721,8 @@
           <section class="panel">
             <div class="toolbar">
               <div class="workspace-tabs">
-                <button class="${state.casesTab === "active" ? "solid-btn" : "ghost-btn"}" data-cases-tab="active">Active Cases</button>
-                <button class="${state.casesTab === "closed" ? "solid-btn" : "ghost-btn"}" data-cases-tab="closed">Closed Cases</button>
+                <button class="${category === "Himbauan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="himbauan">Himbauan</button>
+                <button class="${category === "Pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan">Pemeriksaan</button>
               </div>
               <div class="toolbar-right">
                 <span class="pill neutral">${caseList.length} cases</span>
@@ -6679,29 +6731,26 @@
             </div>
           </section>
 
-          <section class="case-workspace-layout">
-            <aside class="panel case-list-panel">
-              <div class="section-title"><div><h3>My Case List</h3><p>Only cases where you are PIC Tax or PIC ACC.</p></div></div>
-              <div class="case-list">
-                ${caseList.map((item) => `
-                  <button class="case-list-item ${activeCase?.id === item.id ? "selected" : ""}" data-select-case="${item.id}">
-                    <span class="case-list-indicator ${item.priority === "High" ? "high" : ""}"></span>
-                    <span class="case-list-main"><strong>${item.clientName}</strong><small>${item.caseType} · ${item.stage}</small></span>
-                    <span class="case-list-date">${item.dueDate || "No due date"}</span>
-                  </button>
-                `).join("") || `<div class="empty-state">No ${state.casesTab} cases in your PIC scope.</div>`}
-              </div>
-            </aside>
-
-            <section class="panel case-detail-panel">
+          <section class="panel">
+            <div class="toolbar compact-toolbar"><input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Search wajib pajak, surat, PIC..." /></div>
+            <div class="table-wrap"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th>`}</tr></thead><tbody>
+              ${caseList.map((item, index) => { const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null; return `<tr data-select-case="${item.id}"><td>${index + 1}</td><td><button class="client-link" data-select-case="${item.id}">${displayClientName(item.clientName)}</button></td><td>${item.letterNumber || "-"}</td><td>${item.letterDate || "-"}</td><td>${item.receivedDate || "-"}</td><td>${item.subject || "-"}</td>${category === "Himbauan" ? `<td>${item.dueDate || "-"}</td><td>${days === null ? "-" : `${days} days`}</td><td>${item.completionDate || "-"}</td>` : `<td>${item.taxYear || "-"}</td>`}<td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td>${category === "Pemeriksaan" ? `<td>${item.inspectorPic || "-"}</td><td>${item.sphpDate || "-"}</td><td>${item.completionNotes || "-"}</td>` : `<td>${item.notes || "-"}</td>`}</tr>`; }).join("") || `<tr><td colspan="12"><div class="empty-state">No ${category} records in your PIC scope.</div></td></tr>`}
+            </tbody></table></div>
+          </section>
+          <section class="panel case-detail-panel">
               ${activeCase ? `
                 <div class="section-title">
                   <div><h3>${activeCase.clientName}</h3><p>${activeCase.caseType} case workspace.</p></div>
                   <button class="tiny-btn note-trigger" data-open-notes="case:${activeCase.id}" data-note-preview="${escapeAttr(notesPreviewByTarget(`case:${activeCase.id}`) || "No general note yet")}">NOTE</button>
                 </div>
                 <div class="case-detail-grid">
-                  <div class="client-field"><label for="case-client">Client</label><input id="case-client" class="field" value="${activeCase.clientName}" placeholder="Client name" /></div>
-                  <div class="client-field"><label for="case-type">Case Type</label><select id="case-type" class="field">${optionsMarkup(CASE_TYPES, activeCase.caseType)}</select></div>
+                  <div class="client-field"><label for="case-client">Wajib Pajak</label><input id="case-client" class="field" value="${activeCase.clientName}" placeholder="Type client name" list="case-client-options" /></div>
+                  <div class="client-field"><label for="case-letter-number">No Surat</label><input id="case-letter-number" class="field" value="${activeCase.letterNumber || ""}" /></div>
+                  <div class="client-field"><label for="case-letter-date">Tanggal Surat</label><input id="case-letter-date" class="field" type="date" value="${activeCase.letterDate || ""}" /></div>
+                  <div class="client-field"><label for="case-received-date">Tanggal Terima</label><input id="case-received-date" class="field" type="date" value="${activeCase.receivedDate || ""}" /></div>
+                  <div class="client-field"><label for="case-subject">Perihal</label><input id="case-subject" class="field" value="${activeCase.subject || ""}" /></div>
+                  ${category === "Pemeriksaan" ? `<div class="client-field"><label for="case-tax-year">Tahun Pajak</label><input id="case-tax-year" class="field" value="${activeCase.taxYear || ""}" /></div><div class="client-field"><label for="case-inspector">PIC Pemeriksa</label><input id="case-inspector" class="field" value="${activeCase.inspectorPic || ""}" /></div><div class="client-field"><label for="case-sphp-date">Tanggal SPHP</label><input id="case-sphp-date" class="field" type="date" value="${activeCase.sphpDate || ""}" /></div>` : `<div class="client-field"><label>Jatuh Tempo</label><input class="field" readonly value="${activeCase.dueDate || "Tanggal terima + 14 hari"}" /></div><div class="client-field"><label for="case-completion-date">Tanggal Selesai</label><input id="case-completion-date" class="field" type="date" value="${activeCase.completionDate || ""}" /></div>`}
+                  <div class="client-field"><label for="case-type">Case Type</label><input id="case-type" class="field" value="${activeCase.caseType || category}" /></div>
                   <div class="client-field"><label for="case-stage">Progress</label><select id="case-stage" class="field">${optionsMarkup(CASE_STAGES, activeCase.stage)}</select></div>
                   <div class="client-field"><label for="case-priority">Priority</label><select id="case-priority" class="field">${optionsMarkup(["Low", "Medium", "High"], activeCase.priority)}</select></div>
                   <div class="client-field"><label for="case-tax-pic">PIC Tax</label><select id="case-tax-pic" class="field">${optionsMarkup(TAX_PICS, activeCase.taxPic)}</select></div>
@@ -6716,6 +6765,7 @@
                 <div class="inline-controls"><button class="solid-btn" data-save-case="${activeCase.id}">Save Case</button></div>
               ` : `<div class="empty-state">Select a case or add a new case to begin.</div>`}
             </section>
+            <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
           </section>
         </div>
       `;
@@ -6921,6 +6971,7 @@
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
               ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${client.taxPic === state.selectedPic ? "PIC TAX" : "PIC ACC"}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div>
+            <div class="detail-card" style="margin-top:16px;"><div class="eyebrow">Announcement History</div>${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${item.title}</strong><div class="subline">${item.message}</div></div><span class="pill neutral">Read</span></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>
           </section>
         </div>`;
     }
@@ -7078,6 +7129,16 @@
         databaseClientId: row.client_id || "",
         clientName: row.client_name,
         caseType: row.case_type,
+        caseCategory: row.case_category || (String(row.case_type).toLowerCase() === "pemeriksaan" ? "Pemeriksaan" : "Himbauan"),
+        letterNumber: row.letter_number || "",
+        letterDate: row.letter_date || "",
+        receivedDate: row.received_date || "",
+        subject: row.subject || "",
+        taxYear: row.tax_year || "",
+        inspectorPic: row.inspector_pic || "",
+        sphpDate: row.sph_p_date || "",
+        completionDate: row.completion_date || "",
+        completionNotes: row.completion_notes || "",
         taxPic: row.tax_pic_name || "",
         accountingPic: row.accounting_pic_name || "",
         stage: row.stage,
@@ -7159,6 +7220,16 @@
           clientId: record.databaseClientId || clients.find((client) => client.id === record.clientId)?.databaseId || null,
           clientName: record.clientName,
           caseType: record.caseType,
+          caseCategory: record.caseCategory,
+          letterNumber: record.letterNumber,
+          letterDate: record.letterDate,
+          receivedDate: record.receivedDate,
+          subject: record.subject,
+          taxYear: record.taxYear,
+          inspectorPic: record.inspectorPic,
+          sphpDate: record.sphpDate,
+          completionDate: record.completionDate,
+          completionNotes: record.completionNotes,
           taxPic: record.taxPic,
           accountingPic: record.accountingPic,
           stage: record.stage,
@@ -7491,6 +7562,8 @@
               historyFilters: state.historyFilters,
               clientSearch: state.clientSearch,
               profileClientSearch: state.profileClientSearch,
+              proposalSearch: state.proposalSearch,
+              caseSearch: state.caseSearch,
               monthlyProgress: state.monthlyProgress,
               activeMonthlyPeriod: state.activeMonthlyPeriod,
               sorts: state.sorts
@@ -7748,6 +7821,7 @@
       const publishPerformanceTrigger = target.closest("[data-publish-performance]");
       const dismissFameAnnouncementTrigger = target.closest("[data-dismiss-fame-announcement]");
       const openAnnouncementInboxTrigger = target.closest("[data-open-announcement-inbox]");
+      const openAnnouncementHistoryTrigger = target.closest("[data-open-announcement-history]");
       const closeAnnouncementInboxTrigger = target.closest("[data-close-announcement-inbox]");
       const readAnnouncementTrigger = target.closest("[data-read-announcement]");
       const sendAnnouncementTrigger = target.closest("[data-send-announcement]");
@@ -7775,6 +7849,13 @@
       if (openAnnouncementInboxTrigger) {
         state.announcementInboxOpen = true;
         renderAnnouncementInbox();
+        return;
+      }
+
+      if (openAnnouncementHistoryTrigger) {
+        state.announcementInboxOpen = false;
+        switchView("profile-view");
+        commitUi("push");
         return;
       }
 
@@ -7899,6 +7980,8 @@
 
       if (newCaseTrigger) {
         const record = createCaseRecord();
+        record.caseCategory = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
+        record.caseType = record.caseCategory;
         taxCases.unshift(record);
         state.casesTab = "active";
         state.selectedCaseId = record.id;
@@ -7931,7 +8014,25 @@
         record.clientName = document.getElementById("case-client").value.trim() || record.clientName;
         const linkedClient = clients.find((client) => normalizedEntityName(client.name) === normalizedEntityName(record.clientName));
         record.clientId = linkedClient?.id || "";
+        record.databaseClientId = linkedClient?.databaseId || record.databaseClientId || "";
+        if (linkedClient) {
+          record.taxPic = linkedClient.taxPic;
+          record.accountingPic = linkedClient.accountingPic;
+        }
         record.caseType = document.getElementById("case-type").value;
+        record.letterNumber = document.getElementById("case-letter-number").value.trim();
+        record.letterDate = document.getElementById("case-letter-date").value;
+        record.receivedDate = document.getElementById("case-received-date").value;
+        record.subject = document.getElementById("case-subject").value.trim();
+        record.taxYear = document.getElementById("case-tax-year")?.value.trim() || "";
+        record.inspectorPic = document.getElementById("case-inspector")?.value.trim() || "";
+        record.sphpDate = document.getElementById("case-sphp-date")?.value || "";
+        record.completionDate = document.getElementById("case-completion-date")?.value || "";
+        if (record.caseCategory === "Himbauan" && record.receivedDate) {
+          const due = new Date(`${record.receivedDate}T00:00:00`);
+          due.setDate(due.getDate() + 14);
+          record.dueDate = due.toISOString().slice(0, 10);
+        }
         record.stage = document.getElementById("case-stage").value;
         record.priority = document.getElementById("case-priority").value;
         record.taxPic = document.getElementById("case-tax-pic").value;
@@ -8646,6 +8747,11 @@
       }
     });
 
+    document.addEventListener("input", (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (target && SEARCH_STATE_BY_INPUT[target.id]) scheduleAutoSearch(target);
+    });
+
     document.addEventListener("change", (event) => {
       const target = event.target;
 
@@ -8713,25 +8819,25 @@
       }
 
       if (target.id === "query-input") {
-        state.filters.query = target.value;
+        state.filters.query = target.value.trim().length >= 3 ? target.value.trim() : "";
         commitUi("push");
         return;
       }
 
       if (target.id === "active-client-search") {
-        state.clientSearch = target.value;
+        state.clientSearch = target.value.trim().length >= 3 ? target.value.trim() : "";
         commitUi("replace");
         return;
       }
 
       if (target.id === "profile-client-search") {
-        state.profileClientSearch = target.value;
+        state.profileClientSearch = target.value.trim().length >= 3 ? target.value.trim() : "";
         commitUi("replace");
         return;
       }
 
       if (target.id === "allocation-query") {
-        state.allocationQuery = target.value;
+        state.allocationQuery = target.value.trim().length >= 3 ? target.value.trim() : "";
         commitUi("replace");
         return;
       }
@@ -8773,7 +8879,7 @@
       }
 
       if (target.id === "history-query") {
-        state.historyFilters.query = target.value;
+        state.historyFilters.query = target.value.trim().length >= 3 ? target.value.trim() : "";
         commitUi("push");
         return;
       }
