@@ -68,6 +68,14 @@ No persistence exists for:
 ### No task engine
 `compliance_tasks` is a recurring compliance record, not a universal task/next-action table.
 
+### My Work task sharing
+Migration `202609120004_my_work_tasks.sql` introduces a lightweight shared task model:
+- `my_work_tasks` keeps the original creator, content, completion timestamps, reminders, and repeat rules.
+- `my_work_task_assignees` adds additional PICs without changing original ownership.
+- `my_work_task_preferences` stores each user's favorite ordering separately.
+
+Completing a repeating task creates the next instance server-side. This preserves the creator and assignee relationship even when the original creator's browser is closed.
+
 ### No review tables
 No review, approval, or revision history entities exist.
 

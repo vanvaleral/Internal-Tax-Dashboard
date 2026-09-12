@@ -201,6 +201,55 @@
       max-width: 100%;
     }
 
+    .my-work-shell { max-width: none; padding: 0; }
+    .my-work-panel { min-height: calc(100vh - 100px); display:grid; grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); overflow:hidden; border-radius:20px; }
+    .my-work-list { padding:30px; color:#fff; background:linear-gradient(145deg,#5068b8,#8498e8); }
+    .my-work-list h2 { font-size:28px; color:#fff; }
+    .my-work-row { width:100%; display:grid; grid-template-columns:24px 1fr 24px; gap:12px; align-items:start; margin:3px 0; padding:12px; text-align:left; border-radius:4px; background:rgba(255,255,255,.94); color:#1f2732; }
+    .my-work-row.is-new { animation:taskEnter 230ms ease both; }
+    .my-work-row.is-completing { animation:taskCompleteMove 360ms ease both; }
+    .my-work-row.is-restoring { animation:taskRestoreMove 360ms ease both; }
+    .my-work-row.is-complete { background:rgba(44,58,91,.78); color:#d7deef; }
+    .my-work-row.is-complete strong { color:#c7d0e5; text-decoration:line-through; }
+    .my-work-row.is-complete .subline { color:#aeb9d2; }
+    .circle-check { appearance:none; width:19px; height:19px; margin:2px 0 0; border:2px solid #6b7280; border-radius:50%; background:#fff; }
+    .circle-check:checked { border-color:#4660bb; background:radial-gradient(circle,#4660bb 45%,#fff 48%); }
+    .my-work-composer { position:sticky; bottom:0; display:flex; gap:10px; margin-top:12px; padding:12px; background:#e8edff; border-radius:5px; }
+    .my-work-composer input { flex:1; border:0; background:transparent; outline:0; }
+    .my-work-detail { display:flex; flex-direction:column; padding:28px 22px; background:#fff; }
+    .my-work-detail.is-opening { animation:drawerIn 260ms ease both; }
+    .my-work-detail h3 { font-size:22px; line-height:1.25; margin:10px 0 18px; }
+    .my-work-title-input { width:calc(100% - 35px); min-height:35px; padding:4px 0 6px; border:0; border-bottom:1px solid transparent; color:#1f2732; background:transparent; font:700 22px/1.25 var(--font-body); outline:0; overflow:hidden; resize:none; vertical-align:top; }
+    .my-work-title-input:focus { border-bottom-color:#6078d2; }
+    .my-work-option { display:block; padding:14px 0; border-bottom:1px solid #e5e7eb; }
+    .my-work-card { padding:14px; border:1px solid #e5e7eb; border-radius:3px; margin-bottom:10px; }
+    .my-work-star { float:right; font-size:22px; background:transparent; color:#6b7280; }
+    .my-work-star.active { color:#eab308; }
+    .my-work-add-step { display:flex; align-items:center; gap:10px; width:100%; min-height:38px; padding:10px 8px; border:0; color:#1473d2; background:transparent; font:600 14px/1 var(--font-body); text-align:left; }
+    button.my-work-add-step:hover:not(:disabled), button.my-work-add-step:focus-visible:not(:disabled) { color:#075eb7; background:#f3f6ff; box-shadow:none !important; filter:none; transform:none !important; }
+    .my-work-step-entry { display:grid; grid-template-columns:19px 1fr; gap:10px; align-items:center; margin:8px 0; }
+    .my-work-step-entry .circle-check { display:block; }
+    .my-work-step-entry input { width:100%; padding:7px 0; border:0; border-bottom:1px solid #e5e7eb; background:#fff; outline:0; }
+    .my-work-step-entry input:focus { border-bottom-color:#3679cf; }
+    .my-work-step-row { display:grid; grid-template-columns:19px 1fr 16px; gap:10px; align-items:center; margin:10px 0; color:#4b5563; }
+    .my-work-action-card { display:flex; align-items:center; gap:12px; width:100%; min-height:68px; margin-bottom:10px; padding:18px; border:1px solid #e5e7eb; border-radius:3px; color:#414b59; background:#fff; text-align:left; transition:background-color 160ms ease; }
+    button.my-work-action-card:hover:not(:disabled), button.my-work-action-card:focus-visible:not(:disabled) { background:#f3f6ff; box-shadow:none !important; filter:none; transform:none !important; }
+    .my-work-action-icon { width:19px; height:19px; flex:0 0 auto; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+    .my-work-assignment { display:flex; align-items:center; gap:12px; width:100%; }
+    .my-work-assignment input { flex:1; min-width:0; }
+    .my-work-assignees { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 12px; }
+    .my-work-assignee-chip { padding:4px 8px; border-radius:999px; color:#31517d; background:#e8f0ff; font-size:12px; }
+    .my-work-meta { margin-top:auto; padding-top:16px; color:#7a8493; font-size:12px; }
+    .my-work-time-dialog-backdrop { position:fixed; z-index:70; inset:0; display:grid; place-items:center; padding:20px; background:rgba(28,36,54,.32); }
+    .my-work-time-dialog { width:min(360px, 100%); padding:18px; border:1px solid #d9dfeb; border-radius:12px; background:#fff; box-shadow:0 20px 50px rgba(25,34,54,.25); }
+    .my-work-time-dialog h3 { margin:0 0 12px; font-size:18px; }
+    .my-work-time-dialog button { display:flex; justify-content:space-between; width:100%; padding:12px; border-bottom:1px solid #e5e7eb; background:#fff; text-align:left; }
+    .my-work-time-dialog button:hover { background:#f3f6ff; box-shadow:none; transform:none; }
+    @keyframes taskEnter { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes taskCompleteMove { from { opacity:.3; transform:translateY(-22px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes taskRestoreMove { from { opacity:.3; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes drawerIn { from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
+
     .role-bar {
       display: none;
     }
@@ -2905,6 +2954,7 @@
       <div class="nav">
         <button class="nav-btn active" data-view="matrix-view">Operations <span>Recurring</span></button>
         <button class="nav-btn" data-view="cases-view">Cases <span>Non-Recurring</span></button>
+        <button class="nav-btn" data-view="my-work-view">My Work <span>Daily Tasks</span></button>
         <button class="nav-btn" data-view="client-management-view">Clients <span>Master</span></button>
         <button class="nav-btn" data-view="dashboard-view" data-supervisor-only="yes">Management <span>Oversight</span></button>
         <button class="nav-btn" data-view="allocation-view" data-supervisor-only="yes">Allocation <span>PIC Update</span></button>
@@ -2960,6 +3010,7 @@
 
       <section id="matrix-view" class="view"></section>
       <section id="cases-view" class="view hidden"></section>
+      <section id="my-work-view" class="view hidden"></section>
       <section id="client-management-view" class="view hidden"></section>
       <section id="dashboard-view" class="view hidden"></section>
       <section id="allocation-view" class="view hidden"></section>
@@ -3634,6 +3685,7 @@
 
     let clients = restoreCollection("clients", DEFAULT_CLIENTS);
     let clientsLoadedFromDatabase = false;
+    let myWorkLoadedFromDatabase = false;
     let proposals = restoreCollection("proposals", DEFAULT_PROPOSALS);
     let taxCases = restoreCollection("taxCases", DEFAULT_TAX_CASES);
     const annualAccountingRows = restoreCollection("annualAccountingRows", DEFAULT_ANNUAL_ACCOUNTING_ROWS);
@@ -3760,6 +3812,15 @@
       profileClientSearch: persistedDemoState?.ui?.profileClientSearch || "",
       proposalSearch: persistedDemoState?.ui?.proposalSearch || "",
       caseSearch: persistedDemoState?.ui?.caseSearch || "",
+      profileTab: persistedDemoState?.ui?.profileTab || "profile",
+      myWork: Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
+      selectedMyWorkId: persistedDemoState?.ui?.selectedMyWorkId || "",
+      myWorkMenu: "",
+      addingMyWorkStepId: "",
+      newMyWorkTaskId: "",
+      myWorkDrawerTaskId: "",
+      movingMyWorkTaskId: "",
+      restoringMyWorkTaskId: "",
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       sorts: {
@@ -4872,6 +4933,20 @@
         .replace(/"/g, "&quot;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+    }
+
+    function escapeHtml(value) {
+      return escapeAttr(value);
+    }
+
+    function myWorkActionIcon(type) {
+      const icons = {
+        reminder: '<circle cx="12" cy="12" r="7"></circle><path d="M12 8v4l3 2"></path><path d="M5 4 3 6"></path><path d="m19 4 2 2"></path>',
+        due: '<rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M8 3v4M16 3v4M4 10h16"></path>',
+        repeat: '<path d="M17 3l4 4-4 4"></path><path d="M3 11V9a2 2 0 0 1 2-2h16"></path><path d="m7 21-4-4 4-4"></path><path d="M21 13v2a2 2 0 0 1-2 2H3"></path>',
+        assign: '<circle cx="9" cy="8" r="3"></circle><path d="M3.5 20a5.5 5.5 0 0 1 11 0"></path><path d="M19 8v6M16 11h6"></path>'
+      };
+      return `<svg class="my-work-action-icon" viewBox="0 0 24 24" aria-hidden="true">${icons[type] || ""}</svg>`;
     }
 
     function formatRupiahInput(value) {
@@ -6947,7 +7022,8 @@
         <div class="workspace-frame">
           <section class="panel">
             <div class="section-title"><div><div class="eyebrow">My Profile</div><h2>Profile & Client Scope</h2><p>Update the display name used for PIC assignments and review your assigned clients.</p></div></div>
-            <div class="detail-grid">
+            <div class="workspace-tabs"><button class="${state.profileTab === "profile" ? "solid-btn" : "ghost-btn"}" data-profile-tab="profile">Profile</button><button class="${state.profileTab === "clients" ? "solid-btn" : "ghost-btn"}" data-profile-tab="clients">Client List</button><button class="${state.profileTab === "history" ? "solid-btn" : "ghost-btn"}" data-profile-tab="history">Announcement History</button></div>
+            <div class="detail-grid" ${state.profileTab === "profile" ? "" : "hidden"}>
               <div class="detail-card">
                 <div class="eyebrow">Display Name</div>
                 <input class="field" id="profile-full-name" value="${escapeAttr(state.selectedPic)}" placeholder="Your name or nickname" />
@@ -6967,13 +7043,73 @@
               </div>
               <div class="detail-card"><div class="eyebrow">Assigned Clients</div><strong>${assignedClients.length}</strong><div class="subline">Based on PIC ACC or PIC TAX.</div></div>
             </div>
-            <div class="toolbar compact-toolbar" style="margin-top:16px;"><input id="profile-client-search" class="filter-input" type="search" value="${escapeAttr(state.profileClientSearch)}" placeholder="Search my clients..." /></div>
+            <div ${state.profileTab === "clients" ? "" : "hidden"}><div class="toolbar compact-toolbar" style="margin-top:16px;"><input id="profile-client-search" class="filter-input" type="search" value="${escapeAttr(state.profileClientSearch)}" placeholder="Search my clients..." /></div>
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
               ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${client.taxPic === state.selectedPic ? "PIC TAX" : "PIC ACC"}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
-            </tbody></table></div>
-            <div class="detail-card" style="margin-top:16px;"><div class="eyebrow">Announcement History</div>${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${item.title}</strong><div class="subline">${item.message}</div></div><span class="pill neutral">Read</span></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>
+            </tbody></table></div></div>
+            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="eyebrow">Announcement History</div>${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${item.title}</strong><div class="subline">${item.message}</div></div><span class="pill neutral">Read</span></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>
           </section>
         </div>`;
+    }
+
+    function renderMyWork() {
+      const root = document.getElementById("my-work-view");
+      const tasks = [...state.myWork].sort((a, b) => {
+        if (Boolean(a.done) !== Boolean(b.done)) return a.done ? 1 : -1;
+        if (a.done) return Number(b.completedAt || 0) - Number(a.completedAt || 0);
+        return Number(Boolean(b.favorite)) - Number(Boolean(a.favorite)) || Number(b.favoritedAt || 0) - Number(a.favoritedAt || 0);
+      });
+      const selected = state.myWork.find((task) => task.id === state.selectedMyWorkId);
+      const shouldAnimateDrawer = Boolean(selected && state.myWorkDrawerTaskId !== selected.id);
+      state.myWorkDrawerTaskId = selected?.id || "";
+      const timeDialog = state.myWorkMenu && selected ? `
+        <div class="my-work-time-dialog-backdrop" data-close-my-work-menu="yes">
+          <section class="my-work-time-dialog" role="dialog" aria-modal="true" aria-label="Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}">
+            <h3>${state.myWorkMenu === "due" ? "Add due date" : state.myWorkMenu === "repeat" ? "Repeat task" : "Remind me"}</h3>
+            ${state.myWorkMenu === "reminder" ? `<button data-set-my-work-time="later">Later today <span>20:00</span></button><button data-set-my-work-time="tomorrow">Tomorrow <span>09:00</span></button>` : ``}
+            ${state.myWorkMenu === "repeat" ? `<button data-set-my-work-repeat="daily">Daily</button><button data-set-my-work-repeat="weekly">Weekly</button><button data-set-my-work-repeat="monthly">Monthly</button><button data-set-my-work-repeat="annually">Annually</button>` : ``}
+            <label class="eyebrow" style="display:block; margin:16px 0 6px;">${state.myWorkMenu === "repeat" ? "Custom date" : "Pick a date & time"}</label>
+            <input id="my-work-picker" class="field" type="${state.myWorkMenu === "repeat" ? "datetime-local" : "datetime-local"}" />
+            <div class="inline-controls" style="margin-top:12px;"><button class="solid-btn" data-save-my-work-time="yes">Set ${state.myWorkMenu === "repeat" ? "custom repeat" : state.myWorkMenu === "due" ? "due date" : "reminder"}</button><button class="ghost-btn" data-close-my-work-menu="yes">Cancel</button></div>
+          </section>
+        </div>` : "";
+      root.innerHTML = `
+        <div class="workspace-frame my-work-shell">
+          <section class="my-work-panel">
+            <div class="my-work-list">
+              <div class="eyebrow" style="color:#dce5ff">MY WORK</div><h2>Progress ${escapeHtml(state.selectedPic)}</h2>
+              <div style="margin-top:24px; max-height:calc(100vh - 255px); overflow:auto;">
+                ${tasks.map((task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" role="button" tabindex="0"><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" ${task.done ? "checked" : ""} /><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps</div></div><button class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`).join("")}
+              </div>
+              <div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>
+            </div>
+            <aside class="my-work-detail ${shouldAnimateDrawer ? "is-opening" : ""}">
+              ${selected ? `
+                <div class="my-work-card">
+                  <button class="${selected.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${selected.id}" aria-label="Favorite task">☆</button>
+                  <input class="circle-check" type="checkbox" data-my-work-done="${selected.id}" ${selected.done ? "checked" : ""} />
+                  <textarea id="my-work-title-detail" class="my-work-title-input" rows="1" aria-label="Task title">${escapeHtml(selected.title)}</textarea>
+                  ${(selected.steps || []).map((step, index) => `<label class="my-work-step-row"><input class="circle-check" type="checkbox" data-my-work-step-done="${selected.id}:${index}" ${step.done ? "checked" : ""} /><span ${step.done ? 'style="text-decoration:line-through; color:#8a93a3;"' : ""}>${escapeHtml(step.title)}</span><span aria-hidden="true">&#8942;</span></label>`).join("")}
+                  ${state.addingMyWorkStepId === selected.id ? `<div class="my-work-step-entry"><span class="circle-check" aria-hidden="true"></span><input id="my-work-step" placeholder="Type a step and press Enter" autocomplete="off" /></div>` : ""}
+                  <button class="my-work-add-step" data-start-my-work-step="${selected.id}"><span aria-hidden="true">+</span><span>Add step</span></button>
+                </div>
+                <button class="my-work-action-card" data-open-my-work-menu="reminder">${myWorkActionIcon("reminder")}<span>${selected.reminder ? `Remind: ${escapeHtml(selected.reminder.replace("T", " "))}` : "Remind me"}</span></button>
+                <button class="my-work-action-card" data-open-my-work-menu="due">${myWorkActionIcon("due")}<span>${selected.dueDate ? `Due: ${escapeHtml(selected.dueDate)}` : "Add due date"}</span></button>
+                <button class="my-work-action-card" data-open-my-work-menu="repeat">${myWorkActionIcon("repeat")}<span>${selected.repeatRule && selected.repeatRule !== "none" ? `Repeat: ${selected.repeatRule}` : "Repeat"}</span></button>
+                <div class="my-work-action-card"><label class="my-work-assignment">${myWorkActionIcon("assign")}<span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
+                <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
+                ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
+                <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>` : `<div class="empty-state">Select a task to open details.</div>`}
+              ${selected ? `<div class="my-work-meta">Created by ${escapeHtml(selected.creatorName || state.selectedPic)} · ${selected.createdAtText ? new Date(selected.createdAtText).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : new Date(selected.createdAt || Date.now()).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>` : ""}
+            </aside>
+          </section>
+        </div>${timeDialog}`;
+      if (state.addingMyWorkStepId === selected?.id) requestAnimationFrame(() => document.getElementById("my-work-step")?.focus());
+      const titleInput = document.getElementById("my-work-title-detail");
+      if (titleInput) { titleInput.style.height = "auto"; titleInput.style.height = `${titleInput.scrollHeight}px`; }
+      if (state.newMyWorkTaskId) window.setTimeout(() => { state.newMyWorkTaskId = ""; }, 260);
+      if (state.movingMyWorkTaskId) window.setTimeout(() => { state.movingMyWorkTaskId = ""; }, 380);
+      if (state.restoringMyWorkTaskId) window.setTimeout(() => { state.restoringMyWorkTaskId = ""; }, 380);
     }
 
     function renderShellChrome() {
@@ -7245,6 +7381,60 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Case could not be saved.");
       Object.assign(record, databaseCaseToDemo(result.data));
+    }
+
+    function myWorkPayload(task, extra = {}) {
+      return {
+        id: task.id?.startsWith("task-") ? "" : task.id,
+        title: task.title,
+        note: task.note || "",
+        steps: task.steps || [],
+        reminder: task.reminder || "",
+        dueDate: task.dueDate || "",
+        repeatRule: task.repeatRule || "none",
+        repeatCustomDate: task.repeatCustomDate || "",
+        ...extra
+      };
+    }
+
+    async function loadSharedMyWork(background = false) {
+      try {
+        const response = await appFetch("/api/my-work", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading My Work...");
+        if (!response.ok) return;
+        const result = await response.json();
+        const tasks = Array.isArray(result.tasks) ? result.tasks : [];
+        // Do not discard pre-migration local tasks until the first shared task exists.
+        if (tasks.length || !state.myWork.length || myWorkLoadedFromDatabase) state.myWork = tasks;
+        myWorkLoadedFromDatabase = true;
+        if (!state.myWork.some((task) => task.id === state.selectedMyWorkId)) state.selectedMyWorkId = state.myWork[0]?.id || "";
+        if (state.currentView === "my-work-view") rerender();
+      } catch (error) {
+        console.warn("[my-work] shared load failed", error);
+      }
+    }
+
+    async function saveMyWorkTaskToDatabase(task, extra = {}) {
+      try {
+        const creating = task.id?.startsWith("task-");
+        const response = await appFetch("/api/my-work", {
+          method: creating ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(creating ? { ...myWorkPayload(task), assignees: task.assignees || [] } : myWorkPayload(task, extra))
+        }, "");
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "My Work could not be saved.");
+        if (result.task) {
+          const previousId = task.id;
+          Object.assign(task, result.task);
+          if (state.selectedMyWorkId === previousId) state.selectedMyWorkId = task.id;
+          if (state.newMyWorkTaskId === previousId) state.newMyWorkTaskId = task.id;
+          persistDemoState();
+          if (state.currentView === "my-work-view") rerender();
+        }
+        if (!creating && task.done) loadSharedMyWork(true);
+      } catch (error) {
+        console.warn("[my-work] save failed", error);
+      }
     }
 
     async function loadSharedAnnouncements(background = false) {
@@ -7564,6 +7754,9 @@
               profileClientSearch: state.profileClientSearch,
               proposalSearch: state.proposalSearch,
               caseSearch: state.caseSearch,
+              profileTab: state.profileTab,
+              myWork: state.myWork,
+              selectedMyWorkId: state.selectedMyWorkId,
               monthlyProgress: state.monthlyProgress,
               activeMonthlyPeriod: state.activeMonthlyPeriod,
               sorts: state.sorts
@@ -7636,6 +7829,7 @@
     function renderActiveView() {
       if (state.currentView === "matrix-view") return renderMatrix();
       if (state.currentView === "cases-view") return renderCases();
+      if (state.currentView === "my-work-view") return renderMyWork();
       if (state.currentView === "client-management-view") return renderClientManagement();
       if (state.currentView === "dashboard-view") return renderDashboard();
       if (state.currentView === "allocation-view") return renderAllocation();
@@ -7653,6 +7847,7 @@
       renderActiveView();
       applyViewVisibility(viewId);
       renderShellChrome();
+      if (viewId === "my-work-view") loadSharedMyWork(true);
     }
 
     function simulateBillingImport(client) {
@@ -7826,6 +8021,18 @@
       const readAnnouncementTrigger = target.closest("[data-read-announcement]");
       const sendAnnouncementTrigger = target.closest("[data-send-announcement]");
       const logoutTrigger = target.closest("[data-logout]");
+      const profileTabTrigger = target.closest("[data-profile-tab]");
+      const addMyWorkTrigger = target.closest("[data-add-my-work]");
+      const completeMyWorkTrigger = target.closest("[data-my-work-done]");
+      const selectMyWorkTrigger = target.closest("[data-select-my-work]");
+      const startMyWorkStepTrigger = target.closest("[data-start-my-work-step]");
+      const starMyWorkTrigger = target.closest("[data-toggle-my-work-star]");
+      const openMyWorkMenuTrigger = target.closest("[data-open-my-work-menu]");
+      const setMyWorkTimeTrigger = target.closest("[data-set-my-work-time]");
+      const setMyWorkRepeatTrigger = target.closest("[data-set-my-work-repeat]");
+      const saveMyWorkTimeTrigger = target.closest("[data-save-my-work-time]");
+      const closeMyWorkMenuTrigger = target.closest("[data-close-my-work-menu]");
+      const completeMyWorkStepTrigger = target.closest("[data-my-work-step-done]");
 
       if (logoutTrigger) {
         logoutTrigger.setAttribute("disabled", "disabled");
@@ -7840,6 +8047,19 @@
         }
         return;
       }
+
+      if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); commitUi("replace"); return; }
+      if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "" }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
+      if (completeMyWorkTrigger) { const task = state.myWork.find((item) => item.id === completeMyWorkTrigger.getAttribute("data-my-work-done")); if (task) { task.done = completeMyWorkTrigger.checked; task.completedAt = task.done ? Date.now() : 0; state.movingMyWorkTaskId = task.done ? task.id : ""; state.restoringMyWorkTaskId = task.done ? "" : task.id; } commitUi("push"); if (task) saveMyWorkTaskToDatabase(task, { done: task.done }); return; }
+      if (starMyWorkTrigger) { const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star")); if (task) { task.favorite = !task.favorite; task.favoritedAt = task.favorite ? Date.now() : 0; } commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite }); return; }
+      if (openMyWorkMenuTrigger) { state.myWorkMenu = openMyWorkMenuTrigger.getAttribute("data-open-my-work-menu"); commitUi("replace"); return; }
+      if (closeMyWorkMenuTrigger && (target === closeMyWorkMenuTrigger || closeMyWorkMenuTrigger.tagName === "BUTTON")) { state.myWorkMenu = ""; commitUi("replace"); return; }
+      if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (state.myWorkMenu === "due") task.dueDate = date.toISOString().slice(0, 10); else task.reminder = date.toISOString().slice(0, 16); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (setMyWorkRepeatTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) task.repeatRule = setMyWorkRepeatTrigger.getAttribute("data-set-my-work-repeat"); state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else if (state.myWorkMenu === "repeat") { task.repeatRule = "custom"; task.repeatCustomDate = value; } else task.reminder = value; } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (selectMyWorkTrigger) { state.selectedMyWorkId = selectMyWorkTrigger.getAttribute("data-select-my-work"); state.addingMyWorkStepId = ""; commitUi("replace"); return; }
+      if (startMyWorkStepTrigger) { state.addingMyWorkStepId = startMyWorkStepTrigger.getAttribute("data-start-my-work-step"); commitUi("replace"); return; }
+      if (completeMyWorkStepTrigger) { const [taskId, stepIndex] = completeMyWorkStepTrigger.getAttribute("data-my-work-step-done").split(":"); const task = state.myWork.find((item) => item.id === taskId); const step = task?.steps?.[Number(stepIndex)]; if (step) step.done = completeMyWorkStepTrigger.checked; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
 
       if (dismissFameAnnouncementTrigger) {
         dismissFameAnnouncement();
@@ -8752,8 +8972,36 @@
       if (target && SEARCH_STATE_BY_INPUT[target.id]) scheduleAutoSearch(target);
     });
 
+    document.addEventListener("input", (event) => {
+      const target = event.target instanceof HTMLTextAreaElement ? event.target : null;
+      if (!target || target.id !== "my-work-title-detail") return;
+      target.style.height = "auto";
+      target.style.height = `${target.scrollHeight}px`;
+    });
+
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof Element && ["my-work-title-detail", "my-work-assignee", "my-work-note"].includes(target.id)) {
+        const task = state.myWork.find((item) => item.id === state.selectedMyWorkId);
+        if (!task) return;
+        if (target.id === "my-work-title-detail") task.title = target.value.trim() || task.title;
+        if (target.id === "my-work-assignee") {
+          const value = target.value.trim();
+          const available = [...new Set([...ACC_PICS, ...TAX_PICS])];
+          const matched = available.find((pic) => pic.toLowerCase() === value.toLowerCase());
+          if (!matched || matched === task.creatorName || (task.assignees || []).includes(matched)) return;
+          task.assignees = [...(task.assignees || []), matched];
+          target.value = "";
+          commitUi("replace");
+          saveMyWorkTaskToDatabase(task, { addAssignees: [matched] });
+          return;
+        }
+        if (target.id === "my-work-note") task.note = target.value;
+        commitUi("replace");
+        saveMyWorkTaskToDatabase(task);
+        return;
+      }
 
       if (target.matches("[data-case-step]")) {
         const [caseId, stepIndex] = target.getAttribute("data-case-step").split("|");
@@ -9232,6 +9480,26 @@
     });
 
     window.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.target?.id === "my-work-title") {
+        event.preventDefault();
+        const title = event.target.value.trim();
+        if (title) { const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), steps: [], reminder: "", assignee: "", note: "" }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); }
+      }
+      if (event.key === "Enter" && event.target?.id === "my-work-step") {
+        event.preventDefault();
+        const task = state.myWork.find((item) => item.id === state.selectedMyWorkId);
+        const title = event.target.value.trim();
+        if (task && title) {
+          task.steps.push({ title, done: false });
+          state.addingMyWorkStepId = "";
+          commitUi("replace");
+          saveMyWorkTaskToDatabase(task);
+        }
+      }
+      if (event.key === "Enter" && event.target?.id === "my-work-assignee") {
+        event.preventDefault();
+        event.target.blur();
+      }
       if (event.key === "Escape" && state.notesPopupTarget) {
         state.notesPopupTarget = "";
         commitUi("replace");
@@ -9281,6 +9549,7 @@
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
     scheduleBackgroundLoad(() => {
       loadSharedCases(true);
+      loadSharedMyWork(true);
       loadSharedAnnouncements(true);
       refreshDatabaseStatus(true);
     });
@@ -9292,6 +9561,7 @@
       if (document.visibilityState !== "visible") return;
       loadSharedClients(true);
       loadSharedCases(true);
+      loadSharedMyWork(true);
       loadSharedAnnouncements(true);
     });
     window.setTimeout(() => {
