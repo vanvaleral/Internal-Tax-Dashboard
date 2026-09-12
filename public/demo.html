@@ -3959,6 +3959,7 @@
           access: ["Management / Quick Access", "Management Workspace", "Launch directly into clients, cases, and operations that need attention."]
         },
         profile: ["Profile / My Scope", "Profile Workspace", "Update your display name and review clients assigned to you."],
+        myWork: ["My Work / Daily Tasks", "My Work", "Personal and shared daily tasks, reminders, and next actions."],
         allocation: ["Allocation / PIC Reassignment", "Allocation Workspace", "Leader workspace for mass PIC reassignment, controlled rollout, and printable change reporting."],
         client: ["Clients / Client Detail", "Client Detail Workspace", "Compact client timeline and grouped obligation history for drill-down without leaving the workspace model."]
       };
@@ -3987,6 +3988,10 @@
       }
       if (state.currentView === "profile-view") {
         const [breadcrumb, label, note] = maps.profile;
+        return { breadcrumb, label, note };
+      }
+      if (state.currentView === "my-work-view") {
+        const [breadcrumb, label, note] = maps.myWork;
         return { breadcrumb, label, note };
       }
       const activeClient = selectedClient();
