@@ -3209,6 +3209,7 @@
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
     const SERVICE_PACKAGES = ["Monthly Compliance", "Monthly + Annual", "Annual Only", "Case Support"];
     const INDUSTRIES = ["Hospitality", "Trading", "Property", "Services", "F&B", "Professional", "Other"];
+    const TAX_OFFICE_REGIONS = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
     const CASE_TYPES = ["SP2DK", "Pemeriksaan", "Keberatan", "Banding", "Restitusi", "NPWP Registration", "PKP Registration", "Tax Consultation"];
     const CASE_STAGES = ["Waiting Client Docs", "Document Review", "Submission Prep", "Ongoing Review", "Closed"];
     const ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
@@ -3926,7 +3927,7 @@
       }
     };
 
-    if (!["active", "proposal", "contracts"].includes(state.clientManagementTab)) {
+    if (!["active", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     applyAppearance();
@@ -4000,6 +4001,7 @@
         },
         clients: {
           active: ["Clients / Active Clients", "Clients Workspace", "Client master data remains the source of truth for obligations, fees, dual PIC ownership, and downstream operations."],
+          inactive: ["Clients / Inactive Clients", "Clients Workspace", "Inactive clients are retained for history but excluded from the active operating list."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
           contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
         },
@@ -4133,6 +4135,9 @@
         servicePackage: row.servicePackage || "Monthly + Annual",
         engagementStart: row.engagementStart || "2026-01-01",
         engagementEnd: row.engagementEnd || "",
+        contractStartedAt: row.contractStartedAt || row.engagementStart || "",
+        inactivatedAt: row.inactivatedAt || "",
+        taxOfficeRegion: row.taxOfficeRegion || "Lainnya",
         dataState: row.dataState || "missing",
         followUpCount: Number(row.followUpCount || 0),
         notes: row.notes || "",
@@ -4615,7 +4620,7 @@
       }, {}));
     }
 
-    const CLIENT_IMPORT_COLUMNS = ["clientCode", "name", "businessForm", "npwp", "address", "industry", "clientStatus", "taxPic", "accountingPic", "partner", "supervisor", "team", "servicePackage", "engagementStart", "engagementEnd", "monthlyFee", "annualFee", "pph21", "unifikasi", "pph25", "phrpb1", "ppn", "notes"];
+    const CLIENT_IMPORT_COLUMNS = ["clientCode", "name", "businessForm", "npwp", "address", "industry", "clientStatus", "taxOfficeRegion", "taxPic", "accountingPic", "partner", "supervisor", "team", "servicePackage", "contractStartedAt", "inactivatedAt", "engagementStart", "engagementEnd", "monthlyFee", "annualFee", "pph21", "unifikasi", "pph25", "phrpb1", "ppn", "notes"];
 
     function csvCell(value) {
       return `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -4638,6 +4643,9 @@
         servicePackage: client.servicePackage,
         engagementStart: client.engagementStart,
         engagementEnd: client.engagementEnd,
+        contractStartedAt: client.contractStartedAt || client.engagementStart,
+        inactivatedAt: client.inactivatedAt,
+        taxOfficeRegion: client.taxOfficeRegion,
         monthlyFee: client.serviceFee,
         annualFee: client.annualFee,
         pph21: client.obligations?.pph21?.status !== "na" ? "1" : "0",
@@ -5489,6 +5497,19 @@
         activeRows: clients.filter((client) => client.taxPic === pic || client.accountingPic === pic).length,
         openCases: taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic).length
       }));
+      const currentYear = new Date().getFullYear();
+      const growthYears = Array.from({ length: 6 }, (_, index) => currentYear - 5 + index);
+      const clientGrowth = growthYears.map((year) => {
+        const endOfYear = `${year}-12-31`;
+        const started = clients.filter((client) => (client.contractStartedAt || client.engagementStart || "").slice(0, 4) === String(year));
+        const ended = clients.filter((client) => client.inactivatedAt?.slice(0, 4) === String(year));
+        const active = clients.filter((client) => { const start = client.contractStartedAt || client.engagementStart || ""; return start && start <= endOfYear && (!client.inactivatedAt || client.inactivatedAt > endOfYear); });
+        const monthlyFee = active.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
+        return { year, started: started.length, ended: ended.length, active: active.length, monthlyFee };
+      });
+      const maxGrowthFee = Math.max(...clientGrowth.map((row) => row.monthlyFee), 1);
+      const regions = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
+      const regionalCounts = regions.map((region) => ({ region, count: clients.filter((client) => (client.taxOfficeRegion || "Lainnya") === region && client.clientStatus !== "Inactive").length }));
       const root = document.getElementById("dashboard-view");
 
       root.innerHTML = `
@@ -5559,29 +5580,13 @@
 
           ${state.managementTab === "trends" ? `
             <section class="compact-grid-4">
-              <div class="metric"><div class="eyebrow">Active Clients</div><strong>${activeCount}</strong><div class="sub">Current portfolio size.</div></div>
-              <div class="metric"><div class="eyebrow">Open Proposals</div><strong>${proposalCount}</strong><div class="sub">Still in non-active pipeline.</div></div>
-              <div class="metric"><div class="eyebrow">Won Proposals</div><strong>${proposals.filter((item) => item.status === "Won").length}</strong><div class="sub">Converted into active clients.</div></div>
-              <div class="metric"><div class="eyebrow">Completed Rows</div><strong>${completedCount}</strong><div class="sub">Recurring work already moved out of the live queue.</div></div>
+              <div class="metric"><div class="eyebrow">Active Managed Clients</div><strong>${clientGrowth.at(-1)?.active || 0}</strong><div class="sub">Current active portfolio.</div></div>
+              <div class="metric"><div class="eyebrow">Monthly Fee Base</div><strong>${currency(clientGrowth.at(-1)?.monthlyFee || 0)}</strong><div class="sub">DPP monthly, active clients.</div></div>
+              <div class="metric"><div class="eyebrow">New Clients This Year</div><strong>${clientGrowth.at(-1)?.started || 0}</strong><div class="sub">Based on contract start date.</div></div>
+              <div class="metric"><div class="eyebrow">Clients Ended This Year</div><strong>${clientGrowth.at(-1)?.ended || 0}</strong><div class="sub">Based on inactivation date.</div></div>
             </section>
-            <section class="dashboard-grid">
-              <div class="panel">
-                <div class="section-title"><div><h3>Fee Growth Foundation</h3><p>Keep this light until actual trend data is stored historically.</p></div></div>
-                <div class="detail-list">
-                  <div class="detail-card"><strong>Monthly fee portfolio</strong><div class="subline">${currency(clients.reduce((sum, client) => sum + client.serviceFee, 0))}</div></div>
-                  <div class="detail-card"><strong>Proposal monthly total</strong><div class="subline">${currency(proposals.reduce((sum, item) => sum + item.monthlyFee, 0))}</div></div>
-                  <div class="detail-card"><strong>Conversion signal</strong><div class="subline">${proposals.filter((item) => item.status === "Won").length} won / ${proposals.length} total proposals</div></div>
-                </div>
-              </div>
-              <div class="panel">
-                <div class="section-title"><div><h3>Portfolio Notes</h3><p>Management trend space should stay summary-only.</p></div></div>
-                <div class="detail-list">
-                  <div class="detail-card"><strong>Client growth</strong><div class="subline">Future yearly chart area.</div></div>
-                  <div class="detail-card"><strong>Fee growth</strong><div class="subline">Future recurring and annual fee trend line.</div></div>
-                  <div class="detail-card"><strong>Proposal conversion</strong><div class="subline">Future funnel from lead to active client.</div></div>
-                </div>
-              </div>
-            </section>
+            <section class="panel"><div class="section-title"><div><h3>Monthly Fee Growth & Active Client Accumulation</h3><p>Six-year view based on contract start and inactivation dates.</p></div></div><div class="portfolio-bars">${clientGrowth.map((row) => `<div class="portfolio-bar-row"><strong>${row.year}</strong><div class="portfolio-bar-track"><div class="portfolio-bar-fill" style="width:${Math.round(row.monthlyFee / maxGrowthFee * 100)}%"></div></div><span>${currency(row.monthlyFee)} · ${row.active} clients</span></div>`).join("")}</div><div class="table-wrap"><table><thead><tr><th>Year</th><th>Client Volume</th><th>Monthly Fee Scale</th><th>YoY Growth</th><th>Avg Monthly Fee / Client</th><th>New / Ended</th></tr></thead><tbody>${clientGrowth.map((row, index) => { const previous = clientGrowth[index - 1]; const yoy = previous?.monthlyFee ? ((row.monthlyFee - previous.monthlyFee) / previous.monthlyFee) * 100 : null; return `<tr><td>${row.year}</td><td>${row.active} clients</td><td>${currency(row.monthlyFee)}</td><td>${yoy === null ? "-" : `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`}</td><td>${currency(row.active ? row.monthlyFee / row.active : 0)}</td><td>+${row.started} / -${row.ended}</td></tr>`; }).join("")}</tbody></table></div></section>
+            <section class="panel"><div class="section-title"><div><h3>Regional Tax Office (KPP) Client Distribution</h3><p>Active portfolio by registered tax office region.</p></div></div><div class="compact-grid-4">${regionalCounts.map((row) => `<div class="detail-card"><div class="eyebrow">${row.region}</div><strong>${row.count} clients</strong><div class="subline">${clientGrowth.at(-1)?.active ? (row.count / clientGrowth.at(-1).active * 100).toFixed(1) : "0.0"}% share of portfolio</div></div>`).join("")}</div></section>
           ` : ``}
 
           ${state.managementTab === "workload" ? `
@@ -5889,7 +5894,7 @@
 
     function windowedRows(rows, tableId, rowHeight) {
       const requestedStart = Number(state.tableViewport[tableId] || 0);
-      const pageSize = 56;
+      const pageSize = tableId === "active-clients" ? 500 : 56;
       const start = Math.max(0, Math.min(requestedStart, Math.max(0, rows.length - pageSize)));
       const end = Math.min(rows.length, start + pageSize);
       return {
@@ -5936,7 +5941,11 @@
           || (state.contractFilter === "open" && health.label === "Open-ended");
       });
       const clientSearch = state.clientSearch.trim().toLowerCase();
-      const activeClientRows = [...clients].filter((client) => !clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch)).sort((left, right) => {
+      const viewingInactiveClients = state.clientManagementTab === "inactive";
+      const activeClientRows = [...clients].filter((client) => {
+        const matchesStatus = viewingInactiveClients ? client.clientStatus === "Inactive" : client.clientStatus !== "Inactive";
+        return matchesStatus && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
+      }).sort((left, right) => {
         const leftIdentity = splitBusinessName(left);
         const rightIdentity = splitBusinessName(right);
         return leftIdentity.form.localeCompare(rightIdentity.form) || leftIdentity.name.localeCompare(rightIdentity.name);
@@ -5951,6 +5960,7 @@
             <div class="toolbar">
               <div class="workspace-tabs">
                 <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
+                <button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
               </div>
@@ -5961,13 +5971,13 @@
             </div>
           </section>
 
-          ${state.clientManagementTab === "active" ? `
+          ${["active", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
             <div class="panel">
               <div class="section-title">
                 <div>
-                  <h3>Active Clients</h3>
-                  <p>Client master overview. Select a client to review or update its operational profile.</p>
+                  <h3>${viewingInactiveClients ? "Inactive Clients" : "Active Clients"}</h3>
+                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : "Client master overview. Select a client to review or update its operational profile."}</p>
                 </div>
                 <input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." />
               </div>
@@ -6015,7 +6025,7 @@
                         <td>${client.clientStatus}</td>
                         <td>${currency(client.serviceFee)}</td>
                         <td>${currency(client.annualFee)}</td>
-                        <td class="center-cell"><button class="tiny-btn icon-edit-btn" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
+                        <td class="center-cell"><button class="tiny-btn" data-toggle-client-status="${client.id}" title="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}">${viewingInactiveClients ? "Activate" : "Inactive"}</button><button class="tiny-btn icon-edit-btn" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
                     `;
                     }).join("")}${virtualSpacer(10, activeClientWindow.bottom)}
@@ -6073,6 +6083,7 @@
                     <div class="client-field"><label for="client-form-npwp">NPWP</label><input id="client-form-npwp" class="field" value="${activeSample.npwp || ""}" placeholder="NPWP" /></div>
                     <div class="client-field"><label for="client-form-industry">Industry</label><input id="client-form-industry" class="field" value="${activeSample.industry || ""}" placeholder="e.g. Hospitality" /></div>
                   </div>
+                  <div class="client-field"><label for="client-form-kpp">Tax Office Region (KPP)</label><select id="client-form-kpp" class="field"><option value="">Select KPP region</option>${optionsMarkup(TAX_OFFICE_REGIONS, activeSample.taxOfficeRegion)}</select></div>
                   <div class="client-field"><label for="client-form-address">Address</label><input id="client-form-address" class="field" value="${activeSample.address || ""}" placeholder="Client address" /></div>
                 </section>
 
@@ -6087,7 +6098,7 @@
                     <div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field">${optionsMarkup(SUPERVISORS, activeSample.supervisor)}</select></div>
                   </div>
                   <div class="detail-grid-2">
-                    <div class="client-field"><label for="client-form-start-date">Engagement Start</label><input id="client-form-start-date" class="field" type="date" value="${activeSample.engagementStart || ""}" /></div>
+                    <div class="client-field"><label for="client-form-start-date">Contract Start</label><input id="client-form-start-date" class="field" type="date" value="${activeSample.contractStartedAt || activeSample.engagementStart || ""}" /></div>
                     <div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${activeSample.engagementEnd || ""}" /></div>
                   </div>
                 </section>
@@ -7113,10 +7124,10 @@
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
       }).join("") || `<tr><td colspan="12"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
       const pemeriksaanRows = caseWindow.rows.map((item, index) => {
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td></tr>`;
       }).join("") || `<tr><td colspan="12"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
 
       root.innerHTML = `
@@ -7584,6 +7595,9 @@
         servicePackage: row.service_package,
         engagementStart: row.engagement_start,
         engagementEnd: row.engagement_end,
+        contractStartedAt: row.contract_started_at,
+        inactivatedAt: row.inactivated_at,
+        taxOfficeRegion: row.tax_office_region,
         notes: row.notes,
         monthlyFee: row.monthly_fee,
         annualFee: row.annual_fee,
@@ -7726,7 +7740,7 @@
       }
     }
 
-    async function saveCaseToDatabase(record, { showLoading = true } = {}) {
+    async function saveCaseToDatabase(record, { showLoading = true, acceptServerDerivedFields = true } = {}) {
       const payload = {
         id: record.id.includes("case-") ? "" : record.id,
         case: {
@@ -7766,7 +7780,7 @@
       // and deadline fields, instead of replacing the entire local record.
       record.id = saved.id;
       record.databaseClientId = saved.databaseClientId;
-      record.dueDate = saved.dueDate;
+      if (acceptServerDerivedFields && !record.keepLocalDerivedFields) record.dueDate = saved.dueDate;
       clearSyncFailure(`Case ${record.clientName || "new row"}`);
     }
 
@@ -7793,16 +7807,22 @@
       });
     }
 
+    function syncInlineCaseOwnership(record) {
+      const linkedClient = clients.find((client) => normalizedEntityName(client.name) === normalizedEntityName(record.clientName));
+      record.clientId = linkedClient?.id || "";
+      record.databaseClientId = linkedClient?.databaseId || "";
+      record.taxPic = linkedClient?.taxPic || "";
+      record.accountingPic = linkedClient?.accountingPic || "";
+      const escapedId = window.CSS?.escape ? window.CSS.escape(record.id) : record.id;
+      document.querySelectorAll(`[data-case-pic-tax="${escapedId}"]`).forEach((cell) => { cell.textContent = record.taxPic || "-"; });
+      document.querySelectorAll(`[data-case-pic-acc="${escapedId}"]`).forEach((cell) => { cell.textContent = record.accountingPic || "-"; });
+      return linkedClient;
+    }
+
     function saveInlineHimbauanCase(record, field, value) {
       record[field] = value;
       if (field === "clientName") {
-        const linkedClient = clients.find((client) => normalizedEntityName(client.name) === normalizedEntityName(record.clientName));
-        record.clientId = linkedClient?.id || "";
-        record.databaseClientId = linkedClient?.databaseId || record.databaseClientId || "";
-        if (linkedClient) {
-          record.taxPic = linkedClient.taxPic;
-          record.accountingPic = linkedClient.accountingPic;
-        }
+        syncInlineCaseOwnership(record);
       }
       if (field === "receivedDate" && (record.caseCategory || "Himbauan") === "Himbauan") {
         if (record.receivedDate) {
@@ -7815,6 +7835,7 @@
       }
       refreshInlineHimbauanRow(record);
       persistDemoState();
+      record.inlineRevision = Number(record.inlineRevision || 0) + 1;
 
       // Batch nearby edits and serialize each case's requests. Inline fields
       // never repaint the table or use the full-screen loader while saving.
@@ -7826,8 +7847,16 @@
           // the database requires a client name for every case record.
           if (record.id.startsWith("case-") && !record.clientName.trim()) return;
           const previousId = record.id;
-          await saveCaseToDatabase(record, { showLoading: false });
+          const saveRevision = record.inlineRevision;
+          record.keepLocalDerivedFields = true;
+          try {
+            await saveCaseToDatabase(record, { showLoading: false });
+          } finally {
+            delete record.keepLocalDerivedFields;
+          }
           replaceInlineCaseId(previousId, record);
+          // Do not overwrite a newer received date with an older response.
+          if (saveRevision !== record.inlineRevision) return;
           delete record.pendingSync;
           refreshInlineHimbauanRow(record);
           persistDemoState();
@@ -8140,12 +8169,13 @@
                 ${isProposal ? "" : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-code">Client Code</label><input id="client-form-code" class="field" value="${record.clientCode || ""}" readonly /></div><div class="client-field"><label for="client-form-status">Status</label><select id="client-form-status" class="field">${optionsMarkup(CLIENT_STATUSES, record.clientStatus)}</select></div></div>`}
                 <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-business-form" : "client-form-business-form"}">Form</label><select id="${isProposal ? "proposal-business-form" : "client-form-business-form"}" class="field">${optionsMarkup(BUSINESS_FORMS, identity.form)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-name" : "client-form-name"}">Name</label><input id="${isProposal ? "proposal-name" : "client-form-name"}" class="field" value="${identity.name || ""}" placeholder="${isProposal ? "Prospective client" : "Company or individual name"}" /></div></div>
                 <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-npwp" : "client-form-npwp"}">NPWP</label><input id="${isProposal ? "proposal-npwp" : "client-form-npwp"}" class="field" value="${record.npwp || ""}" /></div><div class="client-field"><label for="${isProposal ? "proposal-industry" : "client-form-industry"}">Industry</label><input id="${isProposal ? "proposal-industry" : "client-form-industry"}" class="field" value="${record.industry || ""}" /></div></div>
+                ${isProposal ? "" : `<div class="client-field"><label for="client-form-kpp">Tax Office Region (KPP)</label><select id="client-form-kpp" class="field"><option value="">Select KPP region</option>${optionsMarkup(TAX_OFFICE_REGIONS, record.taxOfficeRegion)}</select></div>`}
                 <div class="client-field"><label for="${isProposal ? "proposal-address" : "client-form-address"}">Address</label><input id="${isProposal ? "proposal-address" : "client-form-address"}" class="field" value="${record.address || ""}" /></div>
               </section>
               <section class="client-form-section">
                 <div class="client-form-section-title"><strong>PIC & Scope</strong><span>Ownership and obligations</span></div>
                 <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}">PIC Tax</label><select id="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}" class="field"><option value="">Select PIC Tax</option>${optionsMarkup(TAX_PICS, taxPic)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}">PIC ACC</label><select id="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}" class="field"><option value="">Select PIC ACC</option>${optionsMarkup(ACC_PICS, accountingPic)}</select></div></div>
-                ${isProposal ? `<div class="client-field"><label for="proposal-status">Proposal Status</label><select id="proposal-status" class="field">${optionsMarkup(PROPOSAL_STATUSES, record.status)}</select></div>` : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field"><option value="">Select partner</option>${optionsMarkup(PARTNERS, record.partner)}</select></div><div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field"><option value="">Select supervisor</option>${optionsMarkup(SUPERVISORS, record.supervisor)}</select></div></div><div class="detail-grid-2"><div class="client-field"><label for="client-form-start-date">Engagement Start</label><input id="client-form-start-date" class="field" type="date" value="${record.engagementStart || ""}" /></div><div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${record.engagementEnd || ""}" /></div></div><div class="client-field"><label for="client-form-package">Service Package</label><select id="client-form-package" class="field"><option value="">Select package</option>${optionsMarkup(SERVICE_PACKAGES, record.servicePackage)}</select></div>`}
+                ${isProposal ? `<div class="client-field"><label for="proposal-status">Proposal Status</label><select id="proposal-status" class="field">${optionsMarkup(PROPOSAL_STATUSES, record.status)}</select></div>` : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field"><option value="">Select partner</option>${optionsMarkup(PARTNERS, record.partner)}</select></div><div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field"><option value="">Select supervisor</option>${optionsMarkup(SUPERVISORS, record.supervisor)}</select></div></div><div class="detail-grid-2"><div class="client-field"><label for="client-form-start-date">Contract Start</label><input id="client-form-start-date" class="field" type="date" value="${record.contractStartedAt || record.engagementStart || ""}" /></div><div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${record.engagementEnd || ""}" /></div></div><div class="client-field"><label for="client-form-package">Service Package</label><select id="client-form-package" class="field"><option value="">Select package</option>${optionsMarkup(SERVICE_PACKAGES, record.servicePackage)}</select></div>`}
                 <div class="chips">${OBLIGATIONS.map((key) => `<label class="pill ${selectedObligations.includes(key) ? "accent" : "neutral"}"><input id="${isProposal ? "proposal-ob" : "client-ob"}-${key}" type="checkbox" ${selectedObligations.includes(key) ? "checked" : ""} /> ${OBLIGATION_LABELS[key]}</label>`).join("")}</div>
               </section>
               <section class="client-form-section"><div class="client-form-section-title"><strong>Fee & Note</strong><span>Optional commercial context</span></div><div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}">Monthly Fee</label><input id="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}" class="field" type="number" value="${isProposal ? record.monthlyFee || 0 : record.serviceFee || 0}" /></div><div class="client-field"><label for="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}">Annual Fee</label><input id="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}" class="field" type="number" value="${record.annualFee || 0}" /></div></div><div class="client-field"><label for="${isProposal ? "proposal-notes" : "client-form-notes"}">Note</label><textarea id="${isProposal ? "proposal-notes" : "client-form-notes"}" class="inline-textarea">${record.notes || ""}</textarea></div></section>
@@ -8558,6 +8588,7 @@
       const editClientTrigger = target.closest("[data-edit-client]");
       const importClientsTrigger = target.closest("[data-import-clients]");
       const exportClientsTrigger = target.closest("[data-export-clients]");
+      const toggleClientStatusTrigger = target.closest("[data-toggle-client-status]");
       const openClientTrigger = target.closest("[data-open-client]");
       const sortTrigger = target.closest("[data-sort-scope]");
       const openNotesTrigger = target.closest("[data-open-notes]");
@@ -9307,6 +9338,8 @@
         client.supervisor = clientEditorField("client-form-supervisor").value;
         client.engagementStart = clientEditorField("client-form-start-date").value;
         client.engagementEnd = clientEditorField("client-form-end-date").value;
+        client.contractStartedAt = client.engagementStart;
+        client.taxOfficeRegion = clientEditorField("client-form-kpp")?.value || client.taxOfficeRegion || "Lainnya";
         client.serviceFee = Number(clientEditorField("client-form-monthly-fee").value || 0);
         client.annualFee = Number(clientEditorField("client-form-annual-fee").value || annualFeeFromMonthly(client.serviceFee));
         client.notes = clientEditorField("client-form-notes").value.trim();
@@ -9398,6 +9431,29 @@
         }
         closeAnnualActionPopup();
         commitUi("push");
+        return;
+      }
+
+      if (toggleClientStatusTrigger) {
+        const client = clients.find((item) => item.id === toggleClientStatusTrigger.getAttribute("data-toggle-client-status"));
+        if (!client) return;
+        const previousStatus = client.clientStatus;
+        const previousInactivatedAt = client.inactivatedAt || "";
+        client.clientStatus = previousStatus === "Inactive" ? "Active" : "Inactive";
+        client.inactivatedAt = client.clientStatus === "Inactive" ? new Date().toISOString().slice(0, 10) : "";
+        setDatabaseStatus("updating");
+        try {
+          await saveClientToDatabase(client, { showLoading: false });
+          clearSyncFailure(`Client status ${client.clientCode}`);
+          setDatabaseStatus("connected");
+          commitUi("replace");
+        } catch (error) {
+          client.clientStatus = previousStatus;
+          client.inactivatedAt = previousInactivatedAt;
+          markSyncFailure(`Client status ${client.clientCode}`, error);
+          setDatabaseStatus("failed");
+          commitUi("replace");
+        }
         return;
       }
 
@@ -9583,6 +9639,11 @@
     document.addEventListener("input", (event) => {
       const target = event.target instanceof HTMLInputElement ? event.target : null;
       if (target && SEARCH_STATE_BY_INPUT[target.id]) scheduleAutoSearch(target);
+      if (!target || !target.matches('[data-case-field="clientName"]')) return;
+      const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
+      if (!record) return;
+      record.clientName = target.value.trim();
+      syncInlineCaseOwnership(record);
     });
 
     document.addEventListener("input", (event) => {

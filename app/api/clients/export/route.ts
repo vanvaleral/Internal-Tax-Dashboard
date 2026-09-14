@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { currentActor, isLeadership } from "@/lib/access";
 
-const columns = ["clientCode", "businessForm", "name", "npwp", "industry", "address", "clientStatus", "taxPic", "accountingPic", "partner", "supervisor", "engagementStart", "engagementEnd", "monthlyFee", "annualFee", "pph21", "unifikasi", "pph25", "phrpb1", "ppn", "notes"];
+const columns = ["clientCode", "businessForm", "name", "npwp", "industry", "address", "clientStatus", "taxOfficeRegion", "taxPic", "accountingPic", "partner", "supervisor", "contractStartedAt", "inactivatedAt", "engagementStart", "engagementEnd", "monthlyFee", "annualFee", "pph21", "unifikasi", "pph25", "phrpb1", "ppn", "notes"];
 
 function text(value: unknown) {
   // The leading apostrophe prevents Excel from evaluating code/NPWP as a formula.
@@ -18,7 +18,7 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const rows = (data || []).map((client) => ({
     clientCode: text(client.client_code), businessForm: text(client.company_form), name: text(client.legal_name), npwp: text(client.npwp), industry: text(client.industry), address: text(client.address), clientStatus: text(client.status),
-    taxPic: text(client.tax_pic_name), accountingPic: text(client.accounting_pic_name), partner: text(client.partner_name), supervisor: text(client.supervisor_name), engagementStart: text(client.engagement_start), engagementEnd: text(client.engagement_end),
+    taxOfficeRegion: text(client.tax_office_region), taxPic: text(client.tax_pic_name), accountingPic: text(client.accounting_pic_name), partner: text(client.partner_name), supervisor: text(client.supervisor_name), contractStartedAt: text(client.contract_started_at), inactivatedAt: text(client.inactivated_at), engagementStart: text(client.engagement_start), engagementEnd: text(client.engagement_end),
     monthlyFee: client.monthly_fee || 0, annualFee: client.annual_fee || 0, pph21: client.has_pph21 ? "1" : "0", unifikasi: client.has_unifikasi ? "1" : "0", pph25: client.has_pph25_pp55 ? "1" : "0", phrpb1: client.has_pb1 ? "1" : "0", ppn: client.has_ppn ? "1" : "0", notes: text(client.notes)
   }));
   const sheet = XLSX.utils.json_to_sheet(rows, { header: columns });

@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { createOperationalAnnouncement, notificationEventKey, uniqueProfileIds } from "@/lib/notifications";
 import { calculateHimbauanDueDate } from "@/lib/operational-rules";
@@ -51,7 +51,12 @@ export async function POST(request: Request) {
     const payload = await payloadFor(actor, body.case || body);
     const { data, error } = await actor.admin.from("tax_cases").insert(payload).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    after(async () => { try { await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${actor.profile.display_name || actor.profile.full_name} created a new ${payload.case_category} case.`, senderProfileId: actor.profile.id, recipientProfileIds: await recipients(actor.admin, payload), eventKey: notificationEventKey("case", data.id), sourceType: "tax_case", sourceId: data.id }); } catch (error) { console.error("[cases] notification failed", error); } });
+    try {
+      await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${actor.profile.display_name || actor.profile.full_name} created a new ${payload.case_category} case.`, senderProfileId: actor.profile.id, recipientProfileIds: await recipients(actor.admin, payload), eventKey: notificationEventKey("case", data.id), sourceType: "tax_case", sourceId: data.id });
+    } catch (notificationError) {
+      // The case itself is durable even when notification delivery is retried later.
+      console.error("[cases] notification failed", notificationError);
+    }
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save case." }, { status: 403 }); }
 }
