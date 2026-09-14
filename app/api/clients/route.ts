@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { currentActor, isLeadership } from "@/lib/access";
+import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
 import { asSafeText, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 
@@ -18,17 +18,22 @@ async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/li
     const key = asSafeText(label).toLowerCase();
     if (key) matches.set(key, [...(matches.get(key) || []), profile.id]);
   }
-  const resolve = (value: unknown, field: string, row: number) => {
+  const issues = rows.map(() => [] as string[]);
+  const resolve = (value: unknown, field: string, rowIndex: number) => {
     const label = asSafeText(value);
     if (!label) return null;
     const ids = [...new Set(matches.get(label.toLowerCase()) || [])];
-    if (ids.length !== 1) throw new Error(`Row ${row}: ${field} must match exactly one active staff directory name.`);
+    if (ids.length !== 1) {
+      issues[rowIndex].push(`${field} must match exactly one active staff directory name.`);
+      return null;
+    }
     return ids[0];
   };
-  return rows.map((row, index): StaffIds => ({
-    tax: resolve(row.taxPic, "PIC Tax", index + 2), accounting: resolve(row.accountingPic, "PIC Acc", index + 2),
-    partner: resolve(row.partner, "Partner", index + 2), supervisor: resolve(row.supervisor, "Supervisor", index + 2)
+  const ids = rows.map((row, index): StaffIds => ({
+    tax: resolve(row.taxPic, "PIC Tax", index), accounting: resolve(row.accountingPic, "PIC Acc", index),
+    partner: resolve(row.partner, "Partner", index), supervisor: resolve(row.supervisor, "Supervisor", index)
   }));
+  return { ids, issues };
 }
 
 function buildPayload(client: ClientInput, ids: StaffIds) {
@@ -74,13 +79,25 @@ export async function POST(request: Request) {
   const body = await request.json();
   const rows: ClientInput[] = Array.isArray(body.clients) ? body.clients : [];
   if (!rows.length) return NextResponse.json({ error: "No clients supplied." }, { status: 400 });
+  if (["bulk-import", "validate-import"].includes(body.operation) && !canImportClientMaster(actor.profile.role)) {
+    return NextResponse.json({ error: "Only a Supervisor or Leader can import the client master." }, { status: 403 });
+  }
   const validation = validateClientImportRows(rows);
+  let ownership: Awaited<ReturnType<typeof resolveStaffIds>>;
+  try { ownership = await resolveStaffIds(actor.admin, rows); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not validate PIC ownership." }, { status: 422 }); }
+  ownership.issues.forEach((issues, index) => validation[index].errors.push(...issues));
   const rejected = validation.filter((entry) => entry.errors.length);
-  if (body.operation === "validate-import") return NextResponse.json({ validation, valid: rows.length - rejected.length });
+  if (body.operation === "validate-import") {
+    const codes = validation.filter((entry) => entry.clientCode).map((entry) => entry.clientCode);
+    const { data: existing, error } = codes.length ? await actor.admin.from("client_master").select("client_code").in("client_code", codes) : { data: [], error: null };
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const existingCodes = new Set((existing || []).map((client) => client.client_code));
+    const validRows = validation.filter((entry) => !entry.errors.length);
+    return NextResponse.json({ validation, valid: validRows.length, summary: { total: rows.length, invalid: rejected.length, created: validRows.filter((entry) => !existingCodes.has(entry.clientCode)).length, updated: validRows.filter((entry) => existingCodes.has(entry.clientCode)).length } });
+  }
   if (rejected.length) return NextResponse.json({ error: "Import contains invalid rows.", validation }, { status: 422 });
-  let ids: StaffIds[];
-  try { ids = await resolveStaffIds(actor.admin, rows); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not validate PIC ownership." }, { status: 422 }); }
-  const payload = rows.map((row, index) => buildPayload(row, ids[index]));
+  const payload = rows.map((row, index) => buildPayload(row, ownership.ids[index]));
   const { data: existing, error: existingError } = await actor.admin.from("client_master").select("*").in("client_code", payload.map((row) => row.client_code));
   if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
   const before = new Map((existing || []).map((client) => [client.client_code, client]));

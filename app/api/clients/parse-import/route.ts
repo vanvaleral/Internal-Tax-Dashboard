@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { currentActor, isLeadership } from "@/lib/access";
+import { canImportClientMaster, currentActor } from "@/lib/access";
 import { validateClientImportRows } from "@/lib/client-import";
 
 export async function POST(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can import the client master." }, { status: 403 });
+  if (!canImportClientMaster(actor.profile.role)) return NextResponse.json({ error: "Only a Supervisor or Leader can import the client master." }, { status: 403 });
   const form = await request.formData();
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) return NextResponse.json({ error: "Choose an Excel or CSV file." }, { status: 400 });

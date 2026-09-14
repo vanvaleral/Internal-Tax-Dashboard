@@ -1,5 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { canImportClientMaster } from "@/lib/staff-directory";
+
+export { canImportClientMaster };
 
 export type StaffRole = "staff" | "leader" | "supervisor" | "partner" | "admin";
 

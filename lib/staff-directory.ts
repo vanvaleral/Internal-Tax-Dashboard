@@ -7,6 +7,10 @@ export function isStaffDirectoryRole(value: string): value is StaffRole {
   return (STAFF_DIRECTORY_ROLES as readonly string[]).includes(value);
 }
 
+export function canImportClientMaster(role: string | null | undefined) {
+  return ["leader", "supervisor"].includes(String(role || "").toLowerCase());
+}
+
 /** Partners retain final control over Partner/Admin identities. */
 export function canManageDirectoryRole(actorRole: StaffRole, targetRole: StaffRole, nextRole: StaffRole) {
   if (["partner", "admin"].includes(actorRole)) return true;

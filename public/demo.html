@@ -566,6 +566,14 @@
     .client-editor-head { margin-bottom: 14px; }
     .client-editor-actions { margin-top: 14px; justify-content: flex-end; }
 
+    .import-preview-modal { width: min(1120px, 100%); }
+    .import-preview-summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .import-preview-warning { color: #a61b1b; font-weight: 800; }
+    .import-preview-error-row { background: #fff5f5; }
+    .import-preview-error { display: inline-flex; align-items: center; gap: 5px; color: #a61b1b; font-size: 11px; font-weight: 750; line-height: 1.35; }
+    .import-preview-table { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+    @media (max-width: 760px) { .import-preview-summary { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
+
     .workspace-clients .client-master-layout .client-setup-panel { display: none; }
 
     .workspace-clients { max-width: none; }
@@ -3153,6 +3161,7 @@
   <div id="notes-hover-root"></div>
   <div id="annual-action-popup-root"></div>
   <div id="client-editor-root"></div>
+  <div id="client-import-preview-root"></div>
   <div id="fame-announcement-root"></div>
   <div id="announcement-inbox-root"></div>
   <div id="appearance-settings-root"></div>
@@ -3250,6 +3259,7 @@
     let staffDirectory = [];
     let latestStaffClaimCode = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
+    const canImportClientMaster = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
     const SERVICE_PACKAGES = ["Monthly Compliance", "Monthly + Annual", "Annual Only", "Case Support"];
@@ -3898,6 +3908,7 @@
       clientManagementTab: persistedDemoState?.ui?.clientManagementTab || "active",
       activeProposalId: persistedDemoState?.ui?.activeProposalId || proposals[0]?.id || "",
       clientEditor: null,
+      importPreview: null,
       contractFilter: persistedDemoState?.ui?.contractFilter || "all",
       managementTab: persistedDemoState?.ui?.managementTab || "overview",
       performance: {
@@ -4164,7 +4175,7 @@
         .join("");
     }
 
-    function createClientFromRow(row) {
+    function createClientFromRow(row, { useDefaults = true } = {}) {
       const id = `client-${String(clients.length + 1).padStart(3, "0")}`;
       const monthlyFee = Number(row.monthlyFee || 0);
       return {
@@ -4172,11 +4183,11 @@
         clientCode: row.clientCode || `CL-${String(clients.length + 1).padStart(3, "0")}`,
         name: row.name || "New Client",
         businessForm: row.businessForm || "",
-        pic: row.taxPic || TAX_PICS[0],
-        taxPic: row.taxPic || TAX_PICS[0],
-        accountingPic: row.accountingPic || row.taxPic || ACC_PICS[0],
-        partner: row.partner || PARTNERS[0],
-        supervisor: row.supervisor || SUPERVISORS[0],
+        pic: row.taxPic || (useDefaults ? TAX_PICS[0] : ""),
+        taxPic: row.taxPic || (useDefaults ? TAX_PICS[0] : ""),
+        accountingPic: row.accountingPic || row.taxPic || (useDefaults ? ACC_PICS[0] : ""),
+        partner: row.partner || (useDefaults ? PARTNERS[0] : ""),
+        supervisor: row.supervisor || (useDefaults ? SUPERVISORS[0] : ""),
         team: row.team || "Tax + Accounting",
         clientStatus: row.clientStatus || "Active",
         industry: row.industry || "Other",
@@ -6064,7 +6075,7 @@
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
               </div>
               <div class="toolbar-right">
-                <button class="ghost-btn" data-import-clients="yes">Import</button>
+                ${canImportClientMaster() ? `<button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
                 <button class="ghost-btn" data-export-clients="yes">Export Excel</button>
               </div>
             </div>
@@ -8396,6 +8407,34 @@
       return document.querySelector(`#client-editor-root [id="${id}"]`);
     }
 
+    function renderClientImportPreview() {
+      const root = document.getElementById("client-import-preview-root");
+      if (!root) return;
+      const preview = state.importPreview;
+      if (!preview) {
+        root.innerHTML = "";
+        return;
+      }
+      const summary = preview.summary || {};
+      const validationByRow = new Map((preview.validation || []).map((item) => [item.row, item]));
+      const invalid = Number(summary.invalid || 0);
+      root.innerHTML = `
+        <div class="client-editor-backdrop" role="presentation">
+          <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client import preview">
+            <div class="client-editor-head"><div><div class="eyebrow">Client Master Import</div><h3>Review changes before importing</h3><p class="subline">${escapeHtml(preview.fileName || "Selected file")}. Existing client codes will update matching records only after confirmation.</p></div><button class="ghost-btn" data-close-import-preview="yes">Close</button></div>
+            <div class="import-preview-summary">
+              <div class="detail-card"><div class="eyebrow">Rows</div><strong>${summary.total || 0}</strong></div>
+              <div class="detail-card"><div class="eyebrow">New Clients</div><strong>${summary.created || 0}</strong></div>
+              <div class="detail-card"><div class="eyebrow">Will Update</div><strong>${summary.updated || 0}</strong></div>
+              <div class="detail-card"><div class="eyebrow">Needs Fixing</div><strong class="${invalid ? "import-preview-warning" : ""}">${invalid}</strong></div>
+            </div>
+            ${invalid ? `<p class="import-preview-warning">&#9888; ${invalid} row(s) contain errors. Correct the file and upload it again; import is disabled to protect the client master.</p>` : `<p class="subline">All rows passed validation. Confirming will create ${summary.created || 0} and update ${summary.updated || 0} client record(s).</p>`}
+            <div class="import-preview-table"><table><thead><tr><th>Row</th><th>Client Code</th><th>Client</th><th>PIC Tax / ACC</th><th>Result</th></tr></thead><tbody>${preview.clients.map((client, index) => { const validation = validationByRow.get(index + 2); const errors = validation?.errors || []; return `<tr class="${errors.length ? "import-preview-error-row" : ""}"><td>${index + 2}</td><td>${escapeHtml(client.clientCode || "-")}</td><td>${escapeHtml(displayClientName(client) || client.name || "-")}</td><td>${escapeHtml(client.taxPic || "-")} / ${escapeHtml(client.accountingPic || "-")}</td><td>${errors.length ? `<span class="import-preview-error">! ${escapeHtml(errors.join(" "))}</span>` : `<span class="pill accent">Ready</span>`}</td></tr>`; }).join("")}</tbody></table></div>
+            <div class="client-editor-actions"><button class="ghost-btn" data-close-import-preview="yes">Cancel</button><button class="solid-btn" data-confirm-client-import="yes" ${invalid ? "disabled" : ""}>Confirm Import</button></div>
+          </section>
+        </div>`;
+    }
+
     function showNoteHoverPreview(triggerElement, text) {
       const root = document.getElementById("notes-hover-root");
       if (!root || !text) {
@@ -8727,6 +8766,7 @@
       renderNotesPopup();
       renderAnnualActionPopup();
       renderClientEditor();
+      renderClientImportPreview();
       renderFameAnnouncement();
       renderAnnouncementInbox();
       renderAppearanceSettings();
@@ -8792,6 +8832,8 @@
       const saveProposalTrigger = target.closest("[data-save-proposal]");
       const editClientTrigger = target.closest("[data-edit-client]");
       const importClientsTrigger = target.closest("[data-import-clients]");
+      const closeImportPreviewTrigger = target.closest("[data-close-import-preview]");
+      const confirmClientImportTrigger = target.closest("[data-confirm-client-import]");
       const exportClientsTrigger = target.closest("[data-export-clients]");
       const toggleClientStatusTrigger = target.closest("[data-toggle-client-status]");
       const openClientTrigger = target.closest("[data-open-client]");
@@ -9392,7 +9434,43 @@
       }
 
       if (importClientsTrigger) {
+        if (!canImportClientMaster()) {
+          window.alert("Only a Supervisor or Leader can import the client master.");
+          return;
+        }
         document.getElementById("client-csv-input").click();
+        return;
+      }
+
+      if (closeImportPreviewTrigger) {
+        state.importPreview = null;
+        rerender();
+        return;
+      }
+
+      if (confirmClientImportTrigger) {
+        const preview = state.importPreview;
+        if (!preview || Number(preview.summary?.invalid || 0)) return;
+        try {
+          const response = await appFetch("/api/clients", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ operation: "bulk-import", clients: preview.clients, fileName: preview.fileName })
+          }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || `Import sync failed (${response.status})`);
+          state.importPreview = null;
+          await loadSharedClients();
+          const selected = clients.find((client) => client.clientCode === preview.clients[0]?.clientCode);
+          state.activeClientFormId = selected?.id || state.activeClientFormId;
+          state.selectedClientId = selected?.id || state.selectedClientId;
+          state.clientManagementTab = "active";
+          window.alert(`Import complete: ${result.created || 0} new, ${result.updated || 0} updated.`);
+          commitUi("push");
+        } catch (error) {
+          console.warn("[client import] database sync failed", error);
+          window.alert(error instanceof Error ? error.message : "Client import could not be completed.");
+        }
         return;
       }
 
@@ -10403,47 +10481,30 @@
       if (!file) return;
 
       try {
-        let rows;
-        if (/\.xlsx?$/i.test(file.name)) {
-          const form = new FormData();
-          form.append("file", file);
-          const preview = await appFetch("/api/clients/parse-import", { method: "POST", body: form }, "Validating import...");
-          const result = await preview.json().catch(() => ({}));
-          if (!preview.ok) throw new Error(result.error || "Excel file could not be read.");
-          const problems = (result.validation || []).filter((entry) => entry.errors?.length);
-          if (problems.length) throw new Error(`Import preview found ${problems.length} invalid row(s). Fix the file before committing.`);
-          rows = result.rows || [];
-        } else {
-          rows = parseCsv(await file.text());
-        }
-        const imported = rows
+        const form = new FormData();
+        form.append("file", file);
+        const parsed = await appFetch("/api/clients/parse-import", { method: "POST", body: form }, "");
+        const parsedResult = await parsed.json().catch(() => ({}));
+        if (!parsed.ok) throw new Error(parsedResult.error || "Import file could not be read.");
+        const imported = (parsedResult.rows || [])
           .filter((row) => (row.name || "").trim())
-          .map((row) => createClientFromRow(row));
+          .map((row) => createClientFromRow(row, { useDefaults: false }));
 
         if (!imported.length) {
           window.alert("No valid client rows found. Use the file exported from this menu and keep the clientCode column.");
           return;
         }
-
-        try {
-          const response = await appFetch("/api/clients", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ operation: "bulk-import", clients: imported })
-          }, "Importing clients to database...");
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(result.error || `Import sync failed (${response.status})`);
-          await loadSharedClients();
-          const selected = clients.find((client) => client.clientCode === imported[0].clientCode);
-          state.activeClientFormId = selected?.id || state.activeClientFormId;
-          state.selectedClientId = selected?.id || state.selectedClientId;
-          state.clientManagementTab = "active";
-          window.alert(`Import complete: ${result.created || 0} new, ${result.updated || 0} updated.`);
-        } catch (error) {
-          console.warn("[client import] database sync failed", error);
-          window.alert(error instanceof Error ? error.message : "Client import could not be completed.");
-        }
-        commitUi("push");
+        const validated = await appFetch("/api/clients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ operation: "validate-import", clients: imported })
+        }, "");
+        const validationResult = await validated.json().catch(() => ({}));
+        if (!validated.ok) throw new Error(validationResult.error || "Import preview could not be validated.");
+        state.importPreview = { fileName: file.name, clients: imported, validation: validationResult.validation || [], summary: validationResult.summary || {} };
+        rerender();
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Import preview could not be prepared.");
       } finally {
         event.target.value = "";
       }
