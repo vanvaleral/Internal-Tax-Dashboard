@@ -16,6 +16,33 @@ export function normalizeNpwp(value: unknown) {
   return asSafeText(value).replace(/[^0-9]/g, "");
 }
 
+export function normalizeClientIdentityName(value: unknown) {
+  return asSafeText(value)
+    .toLowerCase()
+    .replace(/^(pt|cv|fa|but|ud|firma|yayasan|koperasi)\.?\s+/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export type DuplicateClientCandidate = { id?: string; clientCode: string; name: string; npwp?: string | null; createdAt?: string | null };
+
+export function findDuplicateClientGroups(rows: DuplicateClientCandidate[]) {
+  const groups = new Map<string, { key: string; reason: "NPWP" | "name"; clients: DuplicateClientCandidate[] }>();
+  for (const row of rows) {
+    const npwp = normalizeNpwp(row.npwp);
+    const name = normalizeClientIdentityName(row.name);
+    const key = npwp.length >= 15 ? `npwp:${npwp}` : name ? `name:${name}` : "";
+    if (!key) continue;
+    const reason: "NPWP" | "name" = key.startsWith("npwp:") ? "NPWP" : "name";
+    const group = groups.get(key) || { key, reason, clients: [] };
+    group.clients.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .filter((group) => group.clients.length > 1)
+    .map((group) => ({ ...group, clients: [...group.clients].sort((left, right) => String(left.createdAt || "").localeCompare(String(right.createdAt || "")) || left.clientCode.localeCompare(right.clientCode)) }));
+}
+
 /** Converts a year-only Excel value into a valid date for PostgreSQL. */
 export function normalizeImportedDate(value: unknown) {
   const source = asSafeText(value);
@@ -39,6 +66,7 @@ export function normalizeImportedDate(value: unknown) {
 
 export function validateClientImportRows(rows: ClientImportRow[]) {
   const seenCodes = new Set<string>();
+  const seenIdentityKeys = new Set<string>();
   const validations: ImportValidation[] = [];
   rows.forEach((row, index) => {
     const clientCode = asSafeText(row.clientCode);
@@ -50,6 +78,9 @@ export function validateClientImportRows(rows: ClientImportRow[]) {
     if (clientCode) seenCodes.add(clientCode.toLowerCase());
     const npwp = normalizeNpwp(row.npwp);
     if (asSafeText(row.npwp) && (npwp.length < 15 || npwp.length > 16)) errors.push("NPWP must contain 15 or 16 digits.");
+    const identityKey = npwp.length >= 15 ? `npwp:${npwp}` : `name:${normalizeClientIdentityName(name)}`;
+    if (identityKey !== "name:" && seenIdentityKeys.has(identityKey)) errors.push("Possible duplicate client identity in this file.");
+    if (identityKey !== "name:") seenIdentityKeys.add(identityKey);
     for (const field of ["contractStartedAt", "inactivatedAt", "engagementStart", "engagementEnd"]) {
       if (asSafeText(row[field]) && !normalizeImportedDate(row[field])) errors.push(`${field} must be a year or a valid date.`);
     }

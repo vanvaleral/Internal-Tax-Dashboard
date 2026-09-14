@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "../lib/client-import.ts";
+import { findDuplicateClientGroups, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "../lib/client-import.ts";
 
 test("NPWP stays text-safe and only digits are normalized", () => {
   assert.equal(normalizeNpwp("12.345.678.9-012.345"), "123456789012345");
@@ -26,4 +26,15 @@ test("year-only contract dates are normalized while invalid dates are rejected",
   const validation = validateClientImportRows([{ clientCode: "CL-002", name: "Beta", contractStartedAt: "2019", inactivatedAt: "not a date" }]);
   assert.doesNotMatch(validation[0].errors.join(" "), /contractStartedAt/);
   assert.match(validation[0].errors.join(" "), /inactivatedAt/);
+});
+
+test("client identity duplicate groups prefer NPWP and normalize Indonesian corporate forms", () => {
+  const groups = findDuplicateClientGroups([
+    { clientCode: "CL-010", name: "PT Example Indonesia", npwp: "12.345.678.9-012.345" },
+    { clientCode: "CL-011", name: "Example Indonesia", npwp: "123456789012345" },
+    { clientCode: "CL-012", name: "CV Beta Jaya", npwp: null },
+    { clientCode: "CL-013", name: "Beta Jaya", npwp: null }
+  ]);
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map((group) => group.reason), ["NPWP", "name"]);
 });

@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
-import { asSafeText, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
+import { asSafeText, normalizeClientIdentityName, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 
 type ClientInput = Record<string, unknown>;
@@ -34,6 +34,28 @@ async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/li
     partner: resolve(row.partner, "Partner", index), supervisor: resolve(row.supervisor, "Supervisor", index)
   }));
   return { ids, issues };
+}
+
+async function addExistingClientDuplicateIssues(admin: NonNullable<ReturnType<typeof import("@/lib/supabase/admin").createAdminClient>>, rows: ClientInput[], validation: ReturnType<typeof validateClientImportRows>) {
+  const { data, error } = await admin.from("client_master").select("client_code, legal_name, npwp");
+  if (error) throw new Error(error.message);
+  const byCode = new Set((data || []).map((client) => asSafeText(client.client_code).toLowerCase()));
+  const byIdentity = new Map<string, string[]>();
+  for (const client of data || []) {
+    const npwp = normalizeNpwp(client.npwp);
+    const name = normalizeClientIdentityName(client.legal_name);
+    const key = npwp.length >= 15 ? `npwp:${npwp}` : name ? `name:${name}` : "";
+    if (key) byIdentity.set(key, [...(byIdentity.get(key) || []), asSafeText(client.client_code)]);
+  }
+  rows.forEach((row, index) => {
+    const code = asSafeText(row.clientCode).toLowerCase();
+    if (byCode.has(code)) return; // Same code is an intentional update.
+    const npwp = normalizeNpwp(row.npwp);
+    const name = normalizeClientIdentityName(row.name);
+    const key = npwp.length >= 15 ? `npwp:${npwp}` : name ? `name:${name}` : "";
+    const matches = key ? byIdentity.get(key) || [] : [];
+    if (matches.length) validation[index].errors.push(`Possible duplicate of existing client code(s): ${matches.join(", ")}. Use the existing code to update it, or resolve the duplicate first.`);
+  });
 }
 
 function buildPayload(client: ClientInput, ids: StaffIds) {
@@ -87,6 +109,10 @@ export async function POST(request: Request) {
   try { ownership = await resolveStaffIds(actor.admin, rows); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not validate PIC ownership." }, { status: 422 }); }
   ownership.issues.forEach((issues, index) => validation[index].errors.push(...issues));
+  if (["bulk-import", "validate-import"].includes(body.operation)) {
+    try { await addExistingClientDuplicateIssues(actor.admin, rows, validation); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not check existing client duplicates." }, { status: 500 }); }
+  }
   const rejected = validation.filter((entry) => entry.errors.length);
   if (body.operation === "validate-import") {
     const codes = validation.filter((entry) => entry.clientCode).map((entry) => entry.clientCode);

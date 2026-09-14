@@ -572,6 +572,10 @@
     .import-preview-error-row { background: #fff5f5; }
     .import-preview-error { display: inline-flex; align-items: center; gap: 5px; color: #a61b1b; font-size: 11px; font-weight: 750; line-height: 1.35; }
     .import-preview-table { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+    .duplicate-group { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel-solid); }
+    .duplicate-group + .duplicate-group { margin-top: 12px; }
+    .duplicate-option { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); cursor: pointer; }
+    .duplicate-option:first-of-type { border-top: 0; }
     @media (max-width: 760px) { .import-preview-summary { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
 
     .workspace-clients .client-master-layout .client-setup-panel { display: none; }
@@ -3162,6 +3166,7 @@
   <div id="annual-action-popup-root"></div>
   <div id="client-editor-root"></div>
   <div id="client-import-preview-root"></div>
+  <div id="client-duplicate-review-root"></div>
   <div id="fame-announcement-root"></div>
   <div id="announcement-inbox-root"></div>
   <div id="appearance-settings-root"></div>
@@ -3909,6 +3914,7 @@
       activeProposalId: persistedDemoState?.ui?.activeProposalId || proposals[0]?.id || "",
       clientEditor: null,
       importPreview: null,
+      duplicateReview: null,
       contractFilter: persistedDemoState?.ui?.contractFilter || "all",
       managementTab: persistedDemoState?.ui?.managementTab || "overview",
       performance: {
@@ -4180,8 +4186,8 @@
       const monthlyFee = Number(row.monthlyFee || 0);
       return {
         id,
-        clientCode: row.clientCode || `CL-${String(clients.length + 1).padStart(3, "0")}`,
-        name: row.name || "New Client",
+        clientCode: row.clientCode || (useDefaults ? `CL-${String(clients.length + 1).padStart(3, "0")}` : ""),
+        name: row.name || (useDefaults ? "New Client" : ""),
         businessForm: row.businessForm || "",
         pic: row.taxPic || (useDefaults ? TAX_PICS[0] : ""),
         taxPic: row.taxPic || (useDefaults ? TAX_PICS[0] : ""),
@@ -6075,7 +6081,7 @@
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
               </div>
               <div class="toolbar-right">
-                ${canImportClientMaster() ? `<button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
+                ${canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
                 <button class="ghost-btn" data-export-clients="yes">Export Excel</button>
               </div>
             </div>
@@ -8435,6 +8441,23 @@
         </div>`;
     }
 
+    function renderClientDuplicateReview() {
+      const root = document.getElementById("client-duplicate-review-root");
+      if (!root) return;
+      const groups = state.duplicateReview;
+      if (!Array.isArray(groups)) {
+        root.innerHTML = "";
+        return;
+      }
+      root.innerHTML = `
+        <div class="client-editor-backdrop" role="presentation">
+          <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client duplicate review">
+            <div class="client-editor-head"><div><div class="eyebrow">Client Master Cleanup</div><h3>Review possible duplicates</h3><p class="subline">Keep one canonical client. The other records are archived and linked to it, never permanently deleted.</p></div><button class="ghost-btn" data-close-client-duplicates="yes">Close</button></div>
+            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Select the duplicate groups to clean up in bulk.</span><button class="solid-btn" data-resolve-selected-duplicates="yes">Archive Selected Groups</button></div><div class="detail-list">${groups.map((group, index) => `<section class="duplicate-group"><div class="section-title"><div class="inline-controls"><input type="checkbox" id="duplicate-group-${index}" data-duplicate-group-select="${index}" /><label for="duplicate-group-${index}"><strong>Matched by ${group.reason}</strong></label></div><div class="subline">${group.reason === "NPWP" ? "The same NPWP appears on multiple records." : "The same normalized legal name appears on multiple records."}</div></div>${group.clients.map((client, clientIndex) => `<label class="duplicate-option"><input type="radio" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /><span><strong>${escapeHtml(client.clientCode)}</strong> · ${escapeHtml(client.name)}<span class="subline"> · ${escapeHtml(client.npwp || "No NPWP")} · ${escapeHtml(client.status)}</span></span></label>`).join("")}<div class="inline-controls" style="margin-top:10px;"><button class="solid-btn" data-resolve-client-duplicate="${index}">Keep selected and archive the other ${group.clients.length - 1}</button></div></section>`).join("")}</div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
+          </section>
+        </div>`;
+    }
+
     function showNoteHoverPreview(triggerElement, text) {
       const root = document.getElementById("notes-hover-root");
       if (!root || !text) {
@@ -8767,6 +8790,7 @@
       renderAnnualActionPopup();
       renderClientEditor();
       renderClientImportPreview();
+      renderClientDuplicateReview();
       renderFameAnnouncement();
       renderAnnouncementInbox();
       renderAppearanceSettings();
@@ -8832,6 +8856,10 @@
       const saveProposalTrigger = target.closest("[data-save-proposal]");
       const editClientTrigger = target.closest("[data-edit-client]");
       const importClientsTrigger = target.closest("[data-import-clients]");
+      const reviewClientDuplicatesTrigger = target.closest("[data-review-client-duplicates]");
+      const closeClientDuplicatesTrigger = target.closest("[data-close-client-duplicates]");
+      const resolveClientDuplicateTrigger = target.closest("[data-resolve-client-duplicate]");
+      const resolveSelectedDuplicatesTrigger = target.closest("[data-resolve-selected-duplicates]");
       const closeImportPreviewTrigger = target.closest("[data-close-import-preview]");
       const confirmClientImportTrigger = target.closest("[data-confirm-client-import]");
       const exportClientsTrigger = target.closest("[data-export-clients]");
@@ -9439,6 +9467,80 @@
           return;
         }
         document.getElementById("client-csv-input").click();
+        return;
+      }
+
+      if (reviewClientDuplicatesTrigger) {
+        try {
+          const response = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Duplicate client review could not be loaded.");
+          state.duplicateReview = result.groups || [];
+          rerender();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Duplicate client review could not be loaded.");
+        }
+        return;
+      }
+
+      if (closeClientDuplicatesTrigger) {
+        state.duplicateReview = null;
+        rerender();
+        return;
+      }
+
+      if (resolveClientDuplicateTrigger) {
+        const groupIndex = Number(resolveClientDuplicateTrigger.getAttribute("data-resolve-client-duplicate"));
+        const group = state.duplicateReview?.[groupIndex];
+        const selected = document.querySelector(`input[name="duplicate-keep-${groupIndex}"]:checked`);
+        const canonicalId = selected instanceof HTMLInputElement ? selected.value : "";
+        if (!group || !canonicalId) return;
+        const duplicateIds = group.clients.map((client) => client.id).filter((id) => id && id !== canonicalId);
+        if (!duplicateIds.length || !window.confirm("Archive the selected duplicate record(s)? Their history will be preserved.")) return;
+        try {
+          const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ canonicalId, duplicateIds }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Duplicate records could not be resolved.");
+          await loadSharedClients();
+          const refreshed = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
+          const refreshedResult = await refreshed.json().catch(() => ({}));
+          state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
+          rerender();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Duplicate records could not be resolved.");
+        }
+        return;
+      }
+
+      if (resolveSelectedDuplicatesTrigger) {
+        const selectedIndexes = [...document.querySelectorAll("[data-duplicate-group-select]:checked")]
+          .map((input) => Number(input.getAttribute("data-duplicate-group-select")))
+          .filter((index) => Number.isInteger(index));
+        if (!selectedIndexes.length) {
+          window.alert("Select at least one duplicate group first.");
+          return;
+        }
+        const actions = selectedIndexes.map((groupIndex) => {
+          const group = state.duplicateReview?.[groupIndex];
+          const selected = document.querySelector(`input[name="duplicate-keep-${groupIndex}"]:checked`);
+          const canonicalId = selected instanceof HTMLInputElement ? selected.value : "";
+          return group && canonicalId ? { canonicalId, duplicateIds: group.clients.map((client) => client.id).filter((id) => id && id !== canonicalId) } : null;
+        }).filter((action) => action?.duplicateIds.length);
+        if (!actions.length || !window.confirm(`Archive duplicate copies from ${actions.length} selected group(s)? Their histories will be preserved.`)) return;
+        try {
+          for (const action of actions) {
+            const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(action) }, "");
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || "Duplicate records could not be resolved.");
+          }
+          await loadSharedClients();
+          const refreshed = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
+          const refreshedResult = await refreshed.json().catch(() => ({}));
+          state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
+          rerender();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Selected duplicates could not be resolved.");
+        }
         return;
       }
 
