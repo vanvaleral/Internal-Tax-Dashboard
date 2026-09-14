@@ -3104,7 +3104,7 @@
     </main>
   </div>
 
-  <input id="client-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
+  <input id="client-csv-input" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="hidden" />
   <input id="appearance-my-work-background" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
   <div id="notes-popup-root"></div>
   <div id="notes-hover-root"></div>
@@ -3933,6 +3933,32 @@
     if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) {
       clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
     }
+    const operationalVersions = {};
+    const operationalSaveTimers = {};
+
+    function workspacePayload(scope) {
+      if (scope === "monthly_compliance") return state.monthlyProgress;
+      if (scope === "annual_accounting") return annualAccountingRows;
+      return annualTaxRows;
+    }
+
+    function queueWorkspaceSave(scope) {
+      window.clearTimeout(operationalSaveTimers[scope]);
+      setDatabaseStatus("updating");
+      operationalSaveTimers[scope] = window.setTimeout(async () => {
+        try {
+          const response = await appFetch("/api/operations", { method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ scope, payload: workspacePayload(scope), version: operationalVersions[scope] || 0 }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Workspace change could not be saved.");
+          operationalVersions[scope] = result.data.version;
+          clearSyncFailure(`${scope} workspace`);
+          setDatabaseStatus("connected");
+        } catch (error) {
+          markSyncFailure(`${scope} workspace`, error);
+          setDatabaseStatus("failed");
+        }
+      }, 700);
+    }
 
     function currency(amount) {
       return new Intl.NumberFormat("id-ID", {
@@ -4388,6 +4414,7 @@
     function saveMonthlyProgress() {
       if (!state.activeMonthlyPeriod) return;
       state.monthlyProgress[state.activeMonthlyPeriod] = structuredClone(clients);
+      queueWorkspaceSave("monthly_compliance");
     }
 
     function openMonthlyPeriod(period) {
@@ -4623,18 +4650,15 @@
     }
 
     async function exportClientMaster() {
-      const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Client data could not be exported.");
-      const source = (Array.isArray(result.data) ? result.data : []).map(databaseClientToDemo);
-      const csv = [CLIENT_IMPORT_COLUMNS.join(","), ...source.map((client) => {
-        const record = clientExportRecord(client);
-        return CLIENT_IMPORT_COLUMNS.map((column) => csvCell(record[column])).join(",");
-      })].join("\r\n");
-      const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+      const response = await appFetch("/api/clients/export", { cache: "no-store" });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Client data could not be exported.");
+      }
+      const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `client-master-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `client-master-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -7649,12 +7673,28 @@
       }
     }
 
-    async function saveClientToDatabase(client) {
+    async function loadSharedOperationalWorkspaces(background = false) {
+      try {
+        const response = await appFetch("/api/operations", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared operations...");
+        if (!response.ok) return;
+        const result = await response.json();
+        for (const row of result.data || []) {
+          operationalVersions[row.scope] = row.version;
+          if (row.scope === "monthly_compliance" && row.payload && typeof row.payload === "object") state.monthlyProgress = row.payload;
+          if (row.scope === "annual_accounting" && Array.isArray(row.payload)) annualAccountingRows.splice(0, annualAccountingRows.length, ...row.payload);
+          if (row.scope === "annual_tax" && Array.isArray(row.payload)) annualTaxRows.splice(0, annualTaxRows.length, ...row.payload);
+        }
+        if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
+        renderAfterSharedDataUpdate(["matrix-view"]);
+      } catch (error) { console.warn("[operations] shared load failed", error); }
+    }
+
+    async function saveClientToDatabase(client, { showLoading = true } = {}) {
       const response = await appFetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ clients: [client] })
-      }, "Saving client...");
+      }, showLoading ? "Saving client..." : "");
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         const error = new Error(result.error || "Client could not be saved.");
@@ -8402,6 +8442,7 @@
 
     function commitUi(mode = "push") {
       if (state.operationsMode === "monthly" && state.activeMonthlyPeriod) saveMonthlyProgress();
+      if (state.operationsMode === "annual") queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
       rerender();
       persistDemoState();
       syncBrowserHistory(mode);
@@ -9406,7 +9447,26 @@
           commitUi("replace");
           return;
         }
-        commitUi("push");
+        setDatabaseStatus("updating");
+        try {
+          await Promise.all(report.map((change) => saveClientToDatabase(clients.find((client) => client.id === change.clientId), { showLoading: false })));
+          clearSyncFailure("PIC allocation");
+          setDatabaseStatus("connected");
+          commitUi("push");
+        } catch (error) {
+          report.forEach((change) => {
+            const client = clients.find((item) => item.id === change.clientId);
+            if (!client) return;
+            client.accountingPic = change.previousAccPic;
+            client.taxPic = change.previousTaxPic;
+            client.pic = client.taxPic;
+            syncClientToAnnualRows(client);
+          });
+          state.allocationDrafts = Object.fromEntries(report.map((change) => [change.clientId, { nextAccPic: change.nextAccPic, nextTaxPic: change.nextTaxPic }]));
+          markSyncFailure("PIC allocation", error);
+          setDatabaseStatus("failed");
+          commitUi("replace");
+        }
         return;
       }
 
@@ -9965,14 +10025,25 @@
       if (!file) return;
 
       try {
-        const text = await file.text();
-        const rows = parseCsv(text);
+        let rows;
+        if (/\.xlsx?$/i.test(file.name)) {
+          const form = new FormData();
+          form.append("file", file);
+          const preview = await appFetch("/api/clients/parse-import", { method: "POST", body: form }, "Validating import...");
+          const result = await preview.json().catch(() => ({}));
+          if (!preview.ok) throw new Error(result.error || "Excel file could not be read.");
+          const problems = (result.validation || []).filter((entry) => entry.errors?.length);
+          if (problems.length) throw new Error(`Import preview found ${problems.length} invalid row(s). Fix the file before committing.`);
+          rows = result.rows || [];
+        } else {
+          rows = parseCsv(await file.text());
+        }
         const imported = rows
           .filter((row) => (row.name || "").trim())
           .map((row) => createClientFromRow(row));
 
         if (!imported.length) {
-          window.alert("No valid client rows found. Use the file exported from this menu, keep the clientCode column, then save it as CSV from Excel.");
+          window.alert("No valid client rows found. Use the file exported from this menu and keep the clientCode column.");
           return;
         }
 
@@ -10157,6 +10228,7 @@
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
     scheduleBackgroundLoad(() => {
       loadSharedCases(true);
+      loadSharedOperationalWorkspaces(true);
       loadSharedMyWork(true);
       loadSharedAnnouncements(true);
       refreshDatabaseStatus(true);

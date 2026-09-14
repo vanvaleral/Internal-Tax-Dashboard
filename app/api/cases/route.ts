@@ -1,112 +1,74 @@
 import { after, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createOperationalAnnouncement, notificationEventKey, resolveProfileIdsByNames, uniqueProfileIds } from "@/lib/notifications";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { currentActor, isLeadership } from "@/lib/access";
+import { createOperationalAnnouncement, notificationEventKey, uniqueProfileIds } from "@/lib/notifications";
 import { calculateHimbauanDueDate } from "@/lib/operational-rules";
 
-function casePayload(input: Record<string, unknown>, userId: string) {
-  const stage = String(input.stage || "Waiting Client Docs").trim();
+function canAccess(actor: any, client: any) {
+  return isLeadership(actor.profile.role) || [client.tax_pic_profile_id, client.accounting_pic_profile_id].includes(actor.profile.id);
+}
+
+async function payloadFor(actor: any, input: Record<string, unknown>) {
+  const clientId = String(input.clientId || "");
+  if (!clientId) throw new Error("Choose a client before saving a case.");
+  const { data: client, error } = await actor.admin.from("client_master").select("id, legal_name, tax_pic_name, accounting_pic_name, tax_pic_profile_id, accounting_pic_profile_id").eq("id", clientId).maybeSingle();
+  if (error || !client) throw new Error(error?.message || "Client was not found.");
+  if (!canAccess(actor, client)) throw new Error("You are not assigned to this client.");
   const category = input.caseCategory === "Pemeriksaan" ? "Pemeriksaan" : "Himbauan";
   const receivedDate = String(input.receivedDate || "");
-  const dueDate = category === "Himbauan" ? calculateHimbauanDueDate(receivedDate) : null;
   return {
-    client_id: input.clientId || null,
-    client_name: String(input.clientName || "").trim(),
-    case_type: String(input.caseType || "Tax Consultation").trim(),
-    case_category: category,
-    letter_number: String(input.letterNumber || "").trim() || null,
-    letter_date: input.letterDate || null,
-    received_date: receivedDate || null,
-    subject: String(input.subject || "").trim() || null,
-    tax_year: String(input.taxYear || "").trim() || null,
-    inspector_pic: String(input.inspectorPic || "").trim() || null,
-    sph_p_date: input.sphpDate || null,
-    completion_date: input.completionDate || null,
-    completion_notes: String(input.completionNotes || "").trim() || null,
-    stage,
-    priority: ["Low", "Medium", "High"].includes(String(input.priority)) ? input.priority : "Medium",
-    tax_pic_name: String(input.taxPic || "").trim() || null,
-    accounting_pic_name: String(input.accountingPic || "").trim() || null,
-    due_date: dueDate || (input.dueDate || null),
-    notes: String(input.notes || "").trim() || null,
-    next_steps: Array.isArray(input.nextSteps) ? input.nextSteps : [],
-    closed_at: stage === "Closed" ? (input.closedAt || new Date().toISOString().slice(0, 10)) : null,
-    created_by: userId
+    client_id: client.id, client_name: client.legal_name, case_type: String(input.caseType || "Tax Consultation").trim(), case_category: category,
+    letter_number: String(input.letterNumber || "").trim() || null, letter_date: input.letterDate || null, received_date: receivedDate || null,
+    subject: String(input.subject || "").trim() || null, tax_year: String(input.taxYear || "").trim() || null, inspector_pic: String(input.inspectorPic || "").trim() || null,
+    sph_p_date: input.sphpDate || null, completion_date: input.completionDate || null, completion_notes: String(input.completionNotes || "").trim() || null,
+    stage: String(input.stage || "Waiting Client Docs").trim(), priority: ["Low", "Medium", "High"].includes(String(input.priority)) ? input.priority : "Medium",
+    tax_pic_name: client.tax_pic_name, accounting_pic_name: client.accounting_pic_name, tax_pic_profile_id: client.tax_pic_profile_id, accounting_pic_profile_id: client.accounting_pic_profile_id,
+    due_date: category === "Himbauan" ? calculateHimbauanDueDate(receivedDate) || input.dueDate || null : null, notes: String(input.notes || "").trim() || null,
+    next_steps: Array.isArray(input.nextSteps) ? input.nextSteps : [], closed_at: input.stage === "Closed" ? (input.closedAt || new Date().toISOString().slice(0, 10)) : null, created_by: actor.userId
   };
 }
 
-async function caseNotificationRecipientIds(payload: ReturnType<typeof casePayload>) {
-  const admin = createAdminClient();
-  if (!admin) return [];
-  const names = [payload.tax_pic_name, payload.accounting_pic_name];
-  if (payload.client_id) {
-    const { data: client } = await admin
-      .from("client_master")
-      .select("tax_pic_name, accounting_pic_name, partner_name, supervisor_name")
-      .eq("id", payload.client_id)
-      .maybeSingle();
-    if (client) names.push(client.tax_pic_name, client.accounting_pic_name, client.partner_name, client.supervisor_name);
-  }
-  const directIds = await resolveProfileIdsByNames(admin, names);
-  const { data: leadership, error } = await admin
-    .from("staff_profiles")
-    .select("id")
-    .in("role", ["leader", "supervisor", "partner", "admin"]);
+async function recipients(admin: any, payload: any) {
+  const { data, error } = await admin.from("staff_profiles").select("id").in("role", ["leader", "supervisor", "partner", "admin"]);
   if (error) throw new Error(error.message);
-  return uniqueProfileIds([...directIds, ...(leadership || []).map((profile) => profile.id)]);
+  return uniqueProfileIds([payload.tax_pic_profile_id, payload.accounting_pic_profile_id, ...(data || []).map((profile: any) => profile.id)]);
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  if (!supabase) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
-  const { data, error } = await supabase.from("tax_cases").select("*").order("updated_at", { ascending: false });
+  const actor = await currentActor();
+  if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  let query = actor.admin.from("tax_cases").select("*").order("updated_at", { ascending: false });
+  if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  if (!supabase) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
-  const body = await request.json();
-  const payload = casePayload(body.case || body, user.id);
-  if (!payload.client_name) return NextResponse.json({ error: "Client name is required." }, { status: 400 });
-  const { data, error } = await supabase.from("tax_cases").insert(payload).select("*").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  // Notification creation performs several extra queries. It must not delay a
-  // successful case save until the Vercel request reaches its timeout limit.
-  after(async () => {
-    try {
-      const { data: creator } = await supabase.from("staff_profiles").select("id, display_name, full_name").eq("auth_user_id", user.id).maybeSingle();
-      if (creator) await createOperationalAnnouncement({
-        title: `New ${payload.case_category}: ${payload.client_name}`,
-        message: `${creator.display_name || creator.full_name} created a new ${payload.case_category} case.`,
-        senderProfileId: creator.id,
-        recipientProfileIds: await caseNotificationRecipientIds(payload),
-        eventKey: notificationEventKey("case", data.id),
-        sourceType: "tax_case",
-        sourceId: data.id
-      });
-    } catch (notificationError) {
-      console.error("[cases] notification could not be created", notificationError);
-    }
-  });
-  return NextResponse.json({ data }, { status: 201 });
+  const actor = await currentActor();
+  if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  try {
+    const body = await request.json();
+    const payload = await payloadFor(actor, body.case || body);
+    const { data, error } = await actor.admin.from("tax_cases").insert(payload).select("*").single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    after(async () => { try { await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${actor.profile.display_name || actor.profile.full_name} created a new ${payload.case_category} case.`, senderProfileId: actor.profile.id, recipientProfileIds: await recipients(actor.admin, payload), eventKey: notificationEventKey("case", data.id), sourceType: "tax_case", sourceId: data.id }); } catch (error) { console.error("[cases] notification failed", error); } });
+    return NextResponse.json({ data }, { status: 201 });
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save case." }, { status: 403 }); }
 }
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient();
-  if (!supabase) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+  const actor = await currentActor();
+  if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   const body = await request.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Case id is required." }, { status: 400 });
-  const { created_by: _createdBy, ...payload } = casePayload(body.case || body, user.id);
-  const { data, error } = await supabase.from("tax_cases").update(payload).eq("id", id).select("*").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data });
+  try {
+    const payload = await payloadFor(actor, body.case || body);
+    const { data: existing } = await actor.admin.from("tax_cases").select("tax_pic_profile_id, accounting_pic_profile_id").eq("id", id).maybeSingle();
+    if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
+    const { created_by: _createdBy, ...update } = payload;
+    const { data, error } = await actor.admin.from("tax_cases").update(update).eq("id", id).select("*").single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data });
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update case." }, { status: 403 }); }
 }
