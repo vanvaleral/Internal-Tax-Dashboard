@@ -24,3 +24,10 @@ test("the client and case lists use windowed table rendering", async () => {
   assert.match(demo, /data-virtual-table="active-clients"/);
   assert.match(demo, /data-virtual-table="cases"/);
 });
+
+test("Client Growth normalizes KPP labels before calculating regional distribution", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /function normalizeTaxOfficeRegion\(value\)/);
+  assert.match(demo, /\["denpasar timur", "Denpasar Timur"\]/);
+  assert.match(demo, /normalizeTaxOfficeRegion\(client\.taxOfficeRegion\) === region/);
+});

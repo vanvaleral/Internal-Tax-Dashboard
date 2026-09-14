@@ -25,6 +25,34 @@ async function deleteDuplicateCopies(
   return { deleted: duplicateIds.length, canonical: canonical?.client_code };
 }
 
+type DuplicateDeletePlan = { canonicalId: string; duplicateIds: string[] };
+
+async function deleteDuplicateBatch(actor: CurrentActor, plans: DuplicateDeletePlan[]) {
+  const validPlans = plans
+    .map((plan) => ({ canonicalId: String(plan.canonicalId || ""), duplicateIds: [...new Set((plan.duplicateIds || []).map(String))].filter((id) => id && id !== String(plan.canonicalId || "")) }))
+    .filter((plan) => plan.canonicalId && plan.duplicateIds.length);
+  const duplicateIds = [...new Set(validPlans.flatMap((plan) => plan.duplicateIds))];
+  const allIds = [...new Set([...validPlans.map((plan) => plan.canonicalId), ...duplicateIds])];
+  if (!validPlans.length || !duplicateIds.length) throw new Error("Select one client to keep and at least one duplicate to delete.");
+
+  const { data: rows, error: lookupError } = await actor.admin.from("client_master").select("*").in("id", allIds);
+  if (lookupError || (rows || []).length !== allIds.length) throw new Error(lookupError?.message || "One or more client records could not be found.");
+  const { data: activities, error: activityLookupError } = await actor.admin.from("client_master_activity").select("*").in("client_id", duplicateIds);
+  if (activityLookupError) throw new Error(activityLookupError.message);
+  const canonicalByDuplicateId = new Map(validPlans.flatMap((plan) => plan.duplicateIds.map((id) => [id, plan.canonicalId])));
+  const { error: snapshotError } = await actor.admin.from("client_master_duplicate_trash").upsert(duplicateIds.map((id) => ({
+    original_client_id: id,
+    canonical_client_id: canonicalByDuplicateId.get(id),
+    client_record: rows?.find((row) => row.id === id),
+    activity_records: (activities || []).filter((activity) => activity.client_id === id),
+    deleted_by_profile_id: actor.profile.id
+  })), { onConflict: "original_client_id" });
+  if (snapshotError) throw new Error(snapshotError.message);
+  const { error: deleteError } = await actor.admin.from("client_master").delete().in("id", duplicateIds);
+  if (deleteError) throw new Error(deleteError.message);
+  return { deleted: duplicateIds.length, groups: validPlans.length };
+}
+
 export async function GET() {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
@@ -47,18 +75,21 @@ export async function PATCH(request: Request) {
     const { data, error } = await actor.admin.from("client_master").select("id, client_code, legal_name, npwp, created_at").order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const groups = findDuplicateClientGroups((data || []).map((client) => ({ id: client.id, clientCode: client.client_code, name: client.legal_name, npwp: client.npwp, createdAt: client.created_at })));
-    let deleted = 0;
     try {
-      for (const group of groups) {
+      const plans = groups.map((group) => {
         const orderedClients = keep === "newest" ? [...group.clients].reverse() : group.clients;
-        const canonicalId = String(orderedClients[0]?.id || "");
-        const duplicateIds = orderedClients.slice(1).map((client) => String(client.id)).filter(Boolean);
-        if (canonicalId && duplicateIds.length) deleted += (await deleteDuplicateCopies(actor, canonicalId, duplicateIds)).deleted;
-      }
+        return { canonicalId: String(orderedClients[0]?.id || ""), duplicateIds: orderedClients.slice(1).map((client) => String(client.id)).filter(Boolean) };
+      });
+      const result = await deleteDuplicateBatch(actor, plans);
+      return NextResponse.json({ ok: true, ...result });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Duplicate cleanup could not be completed." }, { status: 500 });
     }
-    return NextResponse.json({ ok: true, groups: groups.length, deleted });
+  }
+  if (body.action === "resolve-batch") {
+    const plans = Array.isArray(body.actions) ? body.actions : [];
+    try { return NextResponse.json({ ok: true, ...(await deleteDuplicateBatch(actor, plans)) }); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Duplicate cleanup could not be completed." }, { status: 500 }); }
   }
   const canonicalId = String(body.canonicalId || "");
   const duplicateIds: string[] = [...new Set<string>(Array.isArray(body.duplicateIds) ? body.duplicateIds.map(String) : [])].filter((id) => id && id !== canonicalId);

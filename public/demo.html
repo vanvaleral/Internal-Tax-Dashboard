@@ -3301,6 +3301,18 @@
     const SERVICE_PACKAGES = ["Monthly Compliance", "Monthly + Annual", "Annual Only", "Case Support"];
     const INDUSTRIES = ["Hospitality", "Trading", "Property", "Services", "F&B", "Professional", "Other"];
     const TAX_OFFICE_REGIONS = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
+
+    function normalizeTaxOfficeRegion(value) {
+      const source = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const aliases = [
+        ["denpasar timur", "Denpasar Timur"], ["denpasar barat", "Denpasar Barat"],
+        ["badung utara", "Badung Utara"], ["badung selatan", "Badung Selatan"],
+        ["tangerang selatan", "Tangerang Selatan"], ["pasar minggu", "Pasar Minggu"],
+        ["singaraja", "Singaraja"], ["tabanan", "Tabanan"], ["gianyar", "Gianyar"],
+        ["bojong", "Bojong"], ["lombok", "Lombok"], ["madya", "Madya"], ["jakarta", "Jakarta"]
+      ];
+      return aliases.find(([alias]) => source.includes(alias))?.[1] || "Lainnya";
+    }
     const CASE_TYPES = ["SP2DK", "Pemeriksaan", "Keberatan", "Banding", "Restitusi", "NPWP Registration", "PKP Registration", "Tax Consultation"];
     const CASE_STAGES = ["Waiting Client Docs", "Document Review", "Submission Prep", "Ongoing Review", "Closed"];
     let ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
@@ -5617,14 +5629,15 @@
       const clientGrowth = growthYears.map((year) => {
         const endOfYear = `${year}-12-31`;
         const started = clients.filter((client) => (client.contractStartedAt || client.engagementStart || "").slice(0, 4) === String(year));
-        const ended = clients.filter((client) => client.inactivatedAt?.slice(0, 4) === String(year));
-        const active = clients.filter((client) => { const start = client.contractStartedAt || client.engagementStart || ""; return start && start <= endOfYear && (!client.inactivatedAt || client.inactivatedAt > endOfYear); });
+        const endedAt = (client) => client.clientStatus === "Inactive" ? (client.engagementEnd || client.inactivatedAt || "") : (client.inactivatedAt || "");
+        const ended = clients.filter((client) => endedAt(client).slice(0, 4) === String(year));
+        const active = clients.filter((client) => { const start = client.contractStartedAt || client.engagementStart || ""; const end = endedAt(client); return start && start <= endOfYear && (!end || end > endOfYear); });
         const monthlyFee = active.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
         return { year, started: started.length, ended: ended.length, active: active.length, monthlyFee };
       });
       const maxGrowthFee = Math.max(...clientGrowth.map((row) => row.monthlyFee), 1);
       const regions = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
-      const regionalCounts = regions.map((region) => ({ region, count: clients.filter((client) => (client.taxOfficeRegion || "Lainnya") === region && client.clientStatus !== "Inactive").length }));
+      const regionalCounts = regions.map((region) => ({ region, count: clients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region && client.clientStatus !== "Inactive").length }));
       const root = document.getElementById("dashboard-view");
 
       root.innerHTML = `
@@ -9561,11 +9574,9 @@
         }).filter((action) => action?.duplicateIds.length);
         if (!actions.length || !window.confirm(`Delete duplicate copies from ${actions.length} selected group(s)? A recovery backup is retained for three days.`)) return;
         try {
-          for (const action of actions) {
-            const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(action) }, "");
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(result.error || "Duplicate records could not be resolved.");
-          }
+          const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ action: "resolve-batch", actions }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Duplicate records could not be resolved.");
           await loadSharedClients();
           const refreshed = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
           const refreshedResult = await refreshed.json().catch(() => ({}));

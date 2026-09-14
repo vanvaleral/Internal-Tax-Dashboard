@@ -19,3 +19,13 @@ test("client lifecycle trigger dates status changes and clears reactivations", (
   assert.match(migration, /new\.inactivated_at = null/);
   assert.match(migration, /create trigger client_master_track_lifecycle/);
 });
+
+test("lifecycle correction preserves an inactive client's recorded engagement end", () => {
+  const correction = readFileSync(
+    new URL("../supabase/migrations/202609140009_client_lifecycle_history_correction.sql", import.meta.url),
+    "utf8"
+  );
+  assert.match(correction, /set inactivated_at = engagement_end/);
+  assert.match(correction, /inactivated_at is null or inactivated_at > engagement_end/);
+  assert.match(correction, /coalesce\(new\.inactivated_at, new\.engagement_end, old\.inactivated_at, current_date\)/);
+});
