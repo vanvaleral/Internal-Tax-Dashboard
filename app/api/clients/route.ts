@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createOperationalAnnouncement } from "@/lib/notifications";
+import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -104,7 +104,13 @@ export async function POST(request: Request) {
       try {
         const preview = createdClients.slice(0, 3).map((client) => client.legal_name).join(", ");
         const suffix = createdClients.length > 3 ? ` and ${createdClients.length - 3} more` : "";
-        await createOperationalAnnouncement({ title: `New clients added: ${createdClients.length}`, message: `${profile.display_name || profile.full_name} added ${preview}${suffix}.`, senderProfileId: profile.id });
+        await createOperationalAnnouncement({
+          title: `New clients added: ${createdClients.length}`,
+          message: `${profile.display_name || profile.full_name} added ${preview}${suffix}.`,
+          senderProfileId: profile.id,
+          eventKey: notificationEventKey("client-import", createdClients.map((client) => client.client_code).sort().join(",")),
+          sourceType: "client_master"
+        });
       } catch (notificationError) {
         console.error("[clients] import notification could not be created", notificationError);
       }

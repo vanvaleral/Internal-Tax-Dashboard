@@ -1613,6 +1613,26 @@
       background: var(--panel-solid);
     }
 
+    .table-wrap[data-virtual-table] {
+      max-height: min(68vh, 720px);
+      overscroll-behavior: contain;
+    }
+
+    .virtual-spacer td {
+      height: var(--virtual-height, 0px);
+      padding: 0;
+      border: 0;
+      pointer-events: none;
+    }
+
+    tr[data-keyboard-row]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+      background: var(--accent-soft);
+    }
+
+    .database-status-chip { cursor: pointer; }
+
     table {
       width: 100%;
       min-width: 860px;
@@ -3066,7 +3086,7 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <span class="database-status-chip" id="database-status-chip" title="Checking database connection">Database: checking...</span>
+          <button class="database-status-chip" id="database-status-chip" type="button" title="Checking database connection">Database: checking...</button>
           <button class="ghost-btn inbox-trigger" data-open-announcement-inbox="yes" aria-label="Open announcements">Announcements <span class="inbox-badge" id="announcement-unread-count" hidden>0</span></button>
           <button class="ghost-btn settings-btn" data-open-appearance-settings="yes" aria-label="Appearance settings" title="Appearance settings">&#9881;</button>
           <button class="ghost-btn logout-btn" data-logout="yes" aria-label="Log out of the workspace">Log out</button>
@@ -3894,6 +3914,8 @@
       myWorkDrawerTaskId: "",
       movingMyWorkTaskId: "",
       restoringMyWorkTaskId: "",
+      syncIssues: [],
+      tableViewport: {},
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       sorts: {
@@ -5386,9 +5408,9 @@
             ${items.map((item) => {
               const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
               return `<button class="announcement-item ${unreadItem ? "unread" : ""}" data-read-announcement="${item.id}">
-                <div class="announcement-item-head"><strong>${item.title}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
-                <p>${item.message}</p>
-                <div class="announcement-meta">${item.sender} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
+                <div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
+                <p>${escapeHtml(item.message)}</p>
+                <div class="announcement-meta">${escapeHtml(item.sender)} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
               </button>`;
             }).join("") || `<div class="empty-state">No announcements for you yet.</div>`}
           </div>
@@ -5407,9 +5429,11 @@
       try {
         const response = await appFetch("/api/announcements", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) });
         if (!response.ok) throw new Error("Announcement could not be marked as read.");
+        clearSyncFailure("Announcement read status");
       } catch (error) {
         item.readAt = previousReadAt;
         renderAnnouncementInbox();
+        markSyncFailure("Announcement read status", error);
         console.warn("[announcements] read update failed", error);
       }
     }
@@ -5634,7 +5658,7 @@
               <div class="panel">
                 <div class="section-title"><div><h3>Recent Broadcasts</h3><p>Employees receive notices in their inbox when they open the app.</p></div></div>
                 <div class="announcement-list">
-                  ${state.announcements.slice(0, 6).map((item) => `<div class="announcement-item"><div class="announcement-item-head"><strong>${item.title}</strong><span class="pill neutral">${announcementAudienceLabel(item.audience)}</span></div><p>${item.message}</p><div class="announcement-meta">${item.sender} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div></div>`).join("") || `<div class="empty-state">No announcements sent yet.</div>`}
+                  ${state.announcements.slice(0, 6).map((item) => `<div class="announcement-item"><div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong><span class="pill neutral">${announcementAudienceLabel(item.audience)}</span></div><p>${escapeHtml(item.message)}</p><div class="announcement-meta">${escapeHtml(item.sender)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div></div>`).join("") || `<div class="empty-state">No announcements sent yet.</div>`}
                 </div>
               </div>
             </section>
@@ -5839,6 +5863,41 @@
       return { activeClients, portfolio, monthlyFee, annualFee, coveredPICS, picWorkload, industryCounts, statusCounts, expiringContracts };
     }
 
+    function windowedRows(rows, tableId, rowHeight) {
+      const requestedStart = Number(state.tableViewport[tableId] || 0);
+      const pageSize = 56;
+      const start = Math.max(0, Math.min(requestedStart, Math.max(0, rows.length - pageSize)));
+      const end = Math.min(rows.length, start + pageSize);
+      return {
+        start,
+        rows: rows.slice(start, end),
+        top: start * rowHeight,
+        bottom: Math.max(0, rows.length - end) * rowHeight
+      };
+    }
+
+    function virtualSpacer(columns, height) {
+      if (!height) return "";
+      return `<tr class="virtual-spacer" aria-hidden="true" style="--virtual-height:${height}px"><td colspan="${columns}"></td></tr>`;
+    }
+
+    function updateVirtualTableViewport(wrap) {
+      const tableId = wrap.getAttribute("data-virtual-table");
+      const rowHeight = Number(wrap.getAttribute("data-row-height") || 44);
+      if (!tableId || !rowHeight) return;
+      const targetStart = Math.max(0, Math.floor(wrap.scrollTop / rowHeight) - 12);
+      const currentStart = Number(state.tableViewport[tableId] || 0);
+      if (Math.abs(targetStart - currentStart) < 8) return;
+      const scrollTop = wrap.scrollTop;
+      state.tableViewport[tableId] = targetStart;
+      renderActiveView();
+      applyViewVisibility(state.currentView);
+      window.requestAnimationFrame(() => {
+        const replacement = document.querySelector(`[data-virtual-table="${tableId}"]`);
+        if (replacement) replacement.scrollTop = scrollTop;
+      });
+    }
+
     function renderClientManagement() {
       const root = document.getElementById("client-management-view");
       const activeSample = clientFormTarget();
@@ -5858,6 +5917,7 @@
         const rightIdentity = splitBusinessName(right);
         return leftIdentity.form.localeCompare(rightIdentity.form) || leftIdentity.name.localeCompare(rightIdentity.name);
       });
+      const activeClientWindow = windowedRows(activeClientRows, "active-clients", 43);
       const proposalQuery = state.proposalSearch.trim().toLowerCase();
       const proposalRows = proposals.filter((proposal) => !proposalQuery || [displayClientName(proposal), proposal.proposedPic, proposal.proposedAccPic, proposal.status, proposal.notes].join(" ").toLowerCase().includes(proposalQuery));
 
@@ -5887,7 +5947,7 @@
                 </div>
                 <input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." />
               </div>
-              <div class="table-wrap desktop-only">
+              <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43">
                 <table class="client-table">
                   <colgroup>
                     <col class="client-form-col">
@@ -5916,10 +5976,10 @@
                     </tr>
                   </thead>
                   <tbody>
-                    ${activeClientRows.map((client) => {
+                    ${virtualSpacer(10, activeClientWindow.top)}${activeClientWindow.rows.map((client) => {
                       const identity = splitBusinessName(client);
                       return `
-                      <tr>
+                      <tr data-keyboard-row="client" tabindex="0">
                         <td>${identity.form || "Individual"}</td>
                         <td class="client-name-cell" title="${client.name}">
                           <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
@@ -5934,7 +5994,7 @@
                         <td class="center-cell"><button class="tiny-btn icon-edit-btn" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
                     `;
-                    }).join("")}
+                    }).join("")}${virtualSpacer(10, activeClientWindow.bottom)}
                   </tbody>
                 </table>
               </div>
@@ -7024,14 +7084,15 @@
       const caseQuery = state.caseSearch.trim().toLowerCase();
       const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
       const caseList = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes].join(" ").toLowerCase().includes(caseQuery)));
+      const caseWindow = windowedRows(caseList, "cases", 44);
       const root = document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
-      const himbauanRows = caseList.map((item, index) => {
+      const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr><td>${index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td>${item.taxPic || "-"}</td><td>${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
       }).join("") || `<tr><td colspan="12"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
-      const pemeriksaanRows = caseList.map((item, index) => {
-        return `<tr><td>${index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td></tr>`;
+      const pemeriksaanRows = caseWindow.rows.map((item, index) => {
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td></tr>`;
       }).join("") || `<tr><td colspan="12"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
 
       root.innerHTML = `
@@ -7051,8 +7112,8 @@
 
           <section class="panel">
             <div class="toolbar compact-toolbar"><input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Search wajib pajak, surat, PIC..." /></div>
-            <div class="table-wrap"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th>`}</tr></thead><tbody>
-              ${category === "Himbauan" ? himbauanRows : pemeriksaanRows}
+            <div class="table-wrap" data-virtual-table="cases" data-row-height="44"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th>`}</tr></thead><tbody>
+              ${virtualSpacer(12, caseWindow.top)}${category === "Himbauan" ? himbauanRows : pemeriksaanRows}${virtualSpacer(12, caseWindow.bottom)}
             </tbody></table></div>
           </section>
           <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
@@ -7399,29 +7460,65 @@
 
     let appLoadingRequests = 0;
     let databaseStatusBeforeUpdate = null;
+    let databaseHealthStatus = null;
+
+    function syncIssueKey(scope) {
+      return String(scope || "Update").replace(/\s+/g, " ").trim();
+    }
+
+    function markSyncFailure(scope, error) {
+      const key = syncIssueKey(scope);
+      const message = error instanceof Error ? error.message : String(error || "Unknown save error");
+      state.syncIssues = [...state.syncIssues.filter((issue) => issue.scope !== key), { scope: key, message, at: Date.now() }];
+      renderDatabaseSyncStatus();
+      persistDemoState();
+    }
+
+    function clearSyncFailure(scope) {
+      const key = syncIssueKey(scope);
+      const before = state.syncIssues.length;
+      state.syncIssues = state.syncIssues.filter((issue) => issue.scope !== key);
+      if (before !== state.syncIssues.length) persistDemoState();
+      renderDatabaseSyncStatus();
+    }
+
+    function renderDatabaseSyncStatus() {
+      const chip = document.getElementById("database-status-chip");
+      if (!chip) return;
+      if (appLoadingRequests > 0) {
+        chip.textContent = `Database: saving${appLoadingRequests > 1 ? ` (${appLoadingRequests})` : "..."}`;
+        chip.className = "database-status-chip is-updating";
+        chip.title = "Changes are saving in the background. You can continue working.";
+        return;
+      }
+      if (state.syncIssues.length) {
+        chip.textContent = `Database: needs attention (${state.syncIssues.length})`;
+        chip.className = "database-status-chip is-warning";
+        chip.title = state.syncIssues.map((issue) => `${issue.scope}: ${issue.message}`).join("\n");
+        return;
+      }
+      const baseStatus = databaseHealthStatus || databaseStatusBeforeUpdate;
+      if (baseStatus) {
+        chip.textContent = baseStatus.text;
+        chip.className = baseStatus.className;
+        chip.title = baseStatus.title;
+      }
+    }
 
     function setAppLoading(visible) {
       const overlay = document.getElementById("app-loading-overlay");
       // Global blocking overlays interrupt data entry. Keep the element hidden
       // and use the database chip as a lightweight background-sync indicator.
       if (overlay) overlay.classList.remove("visible");
-      const chip = document.getElementById("database-status-chip");
-      if (!chip) return;
       if (visible) {
-        if (!databaseStatusBeforeUpdate) {
+        const chip = document.getElementById("database-status-chip");
+        if (chip && !databaseStatusBeforeUpdate) {
           databaseStatusBeforeUpdate = { text: chip.textContent, className: chip.className, title: chip.title };
         }
-        chip.textContent = "Database: updating...";
-        chip.className = "database-status-chip is-updating";
-        chip.title = "Saving your changes in the background.";
+        renderDatabaseSyncStatus();
         return;
       }
-      if (databaseStatusBeforeUpdate) {
-        chip.textContent = databaseStatusBeforeUpdate.text;
-        chip.className = databaseStatusBeforeUpdate.className;
-        chip.title = databaseStatusBeforeUpdate.title;
-        databaseStatusBeforeUpdate = null;
-      }
+      renderDatabaseSyncStatus();
     }
 
     async function appFetch(url, options, message = "") {
@@ -7546,7 +7643,7 @@
         if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
         if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
         if (!proposals.some((proposal) => proposal.id === state.activeProposalId)) state.activeProposalId = proposals[0]?.id || "";
-        rerender();
+        renderAfterSharedDataUpdate(["client-management-view", "client-view", "matrix-view", "profile-view"]);
       } catch (error) {
         console.warn("[clients] shared load failed", error);
       }
@@ -7559,9 +7656,14 @@
         body: JSON.stringify({ clients: [client] })
       }, "Saving client...");
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Client could not be saved.");
+      if (!response.ok) {
+        const error = new Error(result.error || "Client could not be saved.");
+        markSyncFailure(`Client ${client.name || client.clientCode}`, error);
+        throw error;
+      }
       const saved = result.data?.[0];
       if (saved?.id) client.databaseId = saved.id;
+      clearSyncFailure(`Client ${client.name || client.clientCode}`);
     }
 
     async function allocateClientCode() {
@@ -7578,7 +7680,7 @@
         const result = await response.json();
         taxCases = (Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo);
         if (!taxCases.some((item) => item.id === state.selectedCaseId)) state.selectedCaseId = taxCases[0]?.id || "";
-        rerender();
+        renderAfterSharedDataUpdate(["cases-view"]);
       } catch (error) {
         console.warn("[cases] shared load failed", error);
       }
@@ -7614,14 +7716,25 @@
       const method = payload.id ? "PATCH" : "POST";
       const response = await appFetch("/api/cases", { method, headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) }, showLoading ? "Saving case..." : "");
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Case could not be saved.");
-      Object.assign(record, databaseCaseToDemo(result.data));
+      if (!response.ok) {
+        const error = new Error(result.error || "Case could not be saved.");
+        markSyncFailure(`Case ${record.clientName || "new row"}`, error);
+        throw error;
+      }
+      const saved = databaseCaseToDemo(result.data);
+      // Keep newer unsent typing intact. Only update server-generated identity
+      // and deadline fields, instead of replacing the entire local record.
+      record.id = saved.id;
+      record.databaseClientId = saved.databaseClientId;
+      record.dueDate = saved.dueDate;
+      clearSyncFailure(`Case ${record.clientName || "new row"}`);
     }
 
     const inlineCaseSaveQueues = new WeakMap();
     const inlineCaseSaveTimers = new WeakMap();
 
     function refreshInlineHimbauanRow(record) {
+      if ((record.caseCategory || "Himbauan") !== "Himbauan") return;
       document.querySelectorAll("[data-case-inline]").forEach((input) => {
         if (input.getAttribute("data-case-inline") !== record.id) return;
         const row = input.closest("tr");
@@ -7651,7 +7764,7 @@
           record.accountingPic = linkedClient.accountingPic;
         }
       }
-      if (field === "receivedDate") {
+      if (field === "receivedDate" && (record.caseCategory || "Himbauan") === "Himbauan") {
         if (record.receivedDate) {
           const due = new Date(`${record.receivedDate}T00:00:00`);
           due.setDate(due.getDate() + 14);
@@ -7721,7 +7834,7 @@
         ];
         myWorkLoadedFromDatabase = true;
         if (!state.myWork.some((task) => task.id === state.selectedMyWorkId)) state.selectedMyWorkId = state.myWork[0]?.id || "";
-        if (state.currentView === "my-work-view") rerender();
+        renderAfterSharedDataUpdate(["my-work-view"]);
         pendingTasks.forEach((task) => {
           if (!sharedIds.has(task.id)) saveMyWorkTaskToDatabase(task);
         });
@@ -7730,31 +7843,49 @@
       }
     }
 
-    async function saveMyWorkTaskToDatabase(task, extra = {}) {
-      try {
+    const myWorkSaveQueues = new WeakMap();
+
+    function saveMyWorkTaskToDatabase(task, extra = {}) {
+      task.syncRevision = Number(task.syncRevision || 0) + 1;
+      const revision = task.syncRevision;
+      const previousSave = myWorkSaveQueues.get(task) || Promise.resolve();
+      const nextSave = previousSave.catch(() => {}).then(async () => {
         const creating = task.id?.startsWith("task-");
-        const response = await appFetch("/api/my-work", {
-          method: creating ? "POST" : "PATCH",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(creating ? { ...myWorkPayload(task), assignees: task.assignees || [] } : myWorkPayload(task, extra))
-        }, "");
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || "My Work could not be saved.");
-        if (result.task) {
-          const previousId = task.id;
-          Object.assign(task, result.task);
+        const previousId = task.id;
+        try {
+          // Build the payload after the previous save completes. This turns a
+          // rapid create + edit sequence into POST then PATCH, never two POSTs.
+          const response = await appFetch("/api/my-work", {
+            method: creating ? "POST" : "PATCH",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(creating ? { ...myWorkPayload(task), assignees: task.assignees || [] } : myWorkPayload(task, extra))
+          }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "My Work could not be saved.");
+          if (result.task?.id && creating) {
+            task.id = result.task.id;
+            task.createdAt = result.task.createdAt || task.createdAt;
+            task.createdAtText = result.task.createdAtText || task.createdAtText;
+            task.creatorName = result.task.creatorName || task.creatorName;
+            if (state.selectedMyWorkId === previousId) state.selectedMyWorkId = task.id;
+            if (state.newMyWorkTaskId === previousId) state.newMyWorkTaskId = task.id;
+          }
+          // Do not replace task fields from an old response; a newer edit may
+          // already be present locally and will be saved by the queued request.
           delete task.pendingSync;
-          if (state.selectedMyWorkId === previousId) state.selectedMyWorkId = task.id;
-          if (state.newMyWorkTaskId === previousId) state.newMyWorkTaskId = task.id;
+          clearSyncFailure(`Task ${task.title || "untitled"}`);
           persistDemoState();
-          if (state.currentView === "my-work-view") rerender();
+          if (state.currentView === "my-work-view" && !activeEditorSnapshot()) rerender();
+          if (!creating && task.done) loadSharedMyWork(true);
+        } catch (error) {
+          task.pendingSync = true;
+          markSyncFailure(`Task ${task.title || "untitled"}`, error);
+          persistDemoState();
+          console.warn("[my-work] save failed", error);
         }
-        if (!creating && task.done) loadSharedMyWork(true);
-      } catch (error) {
-        task.pendingSync = true;
-        persistDemoState();
-        console.warn("[my-work] save failed", error);
-      }
+      });
+      myWorkSaveQueues.set(task, nextSave);
+      return nextSave;
     }
 
     async function loadSharedAnnouncements(background = false) {
@@ -7765,7 +7896,8 @@
         const nextAnnouncements = Array.isArray(result.announcements) ? result.announcements : [];
         if (JSON.stringify(state.announcements) === JSON.stringify(nextAnnouncements)) return;
         state.announcements = nextAnnouncements;
-        rerender();
+        renderShellChrome();
+        renderAnnouncementInbox();
       } catch (error) {
         console.warn("[announcements] shared load failed", error);
       }
@@ -8080,6 +8212,7 @@
               selectedMyWorkId: state.selectedMyWorkId,
               monthlyProgress: state.monthlyProgress,
               activeMonthlyPeriod: state.activeMonthlyPeriod,
+              syncIssues: state.syncIssues,
               sorts: state.sorts
             }
           })
@@ -8255,6 +8388,7 @@
       state.showCompletedRows = typeof snapshot.showCompletedRows === "boolean" ? snapshot.showCompletedRows : state.showCompletedRows;
       state.filters = { ...state.filters, ...(snapshot.filters || {}) };
       state.historyFilters = { ...state.historyFilters, ...(snapshot.historyFilters || {}) };
+      state.syncIssues = Array.isArray(snapshot.syncIssues) ? snapshot.syncIssues.slice(0, 8) : state.syncIssues;
       state.sorts = {
         ...state.sorts,
         ...(snapshot.sorts || {})
@@ -8273,7 +8407,44 @@
       syncBrowserHistory(mode);
     }
 
+    function activeEditorSnapshot() {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement)) return null;
+      const id = active.id;
+      const inlineId = active.getAttribute("data-case-inline");
+      const field = active.getAttribute("data-case-field");
+      if (!id && !inlineId) return null;
+      return {
+        id,
+        inlineId,
+        field,
+        start: "selectionStart" in active ? active.selectionStart : null,
+        end: "selectionEnd" in active ? active.selectionEnd : null
+      };
+    }
+
+    function restoreActiveEditor(snapshot) {
+      if (!snapshot) return;
+      const escapedId = window.CSS?.escape ? window.CSS.escape(snapshot.id || "") : snapshot.id;
+      const selector = snapshot.id
+        ? `#${escapedId}`
+        : `[data-case-inline="${escapeAttr(snapshot.inlineId)}"][data-case-field="${escapeAttr(snapshot.field)}"]`;
+      const field = document.querySelector(selector);
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
+      field.focus({ preventScroll: true });
+      if (snapshot.start !== null && "setSelectionRange" in field) field.setSelectionRange(snapshot.start, snapshot.end);
+    }
+
+    function renderAfterSharedDataUpdate(views) {
+      if (!views.includes(state.currentView)) return;
+      // Background polling must never replace an input while someone is typing.
+      if (activeEditorSnapshot()) return;
+      rerender();
+    }
+
     function rerender() {
+      const activeEditor = activeEditorSnapshot();
+      const scrollY = window.scrollY;
       renderActiveView();
       applyViewVisibility(state.currentView);
       renderShellChrome();
@@ -8284,11 +8455,48 @@
       renderAnnouncementInbox();
       renderAppearanceSettings();
       if (state.currentView === "matrix-view") bindDirectRowActions();
+      restoreActiveEditor(activeEditor);
+      if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
     }
+
+    document.addEventListener("scroll", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.matches("[data-virtual-table]")) updateVirtualTableViewport(target);
+    }, true);
+
+    document.addEventListener("keydown", (event) => {
+      if (!(event.target instanceof HTMLElement) || event.target.matches("input, textarea, select")) return;
+      const row = event.target.closest("[data-keyboard-row]");
+      if (!row || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return;
+      if (event.key === "Enter") {
+        const clientTrigger = row.querySelector("[data-open-client]");
+        const caseInput = row.querySelector("[data-case-inline]");
+        if (clientTrigger instanceof HTMLElement) clientTrigger.click();
+        else if (caseInput instanceof HTMLElement) caseInput.focus();
+        event.preventDefault();
+        return;
+      }
+      const rows = [...row.parentElement.querySelectorAll("[data-keyboard-row]")];
+      const index = rows.indexOf(row);
+      const next = rows[index + (event.key === "ArrowDown" ? 1 : -1)];
+      if (next instanceof HTMLElement) {
+        next.focus();
+        next.scrollIntoView({ block: "nearest" });
+        event.preventDefault();
+      }
+    });
 
     document.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      if (target.closest("#database-status-chip")) {
+        if (state.syncIssues.length) {
+          window.alert(`Perubahan yang perlu diperiksa:\n\n${state.syncIssues.map((issue) => `• ${issue.scope}: ${issue.message}`).join("\n")}`);
+        } else {
+          window.alert(appLoadingRequests ? "Perubahan sedang disimpan di background. Anda tetap dapat melanjutkan pekerjaan." : "Database tersinkronisasi. Tidak ada perubahan yang gagal disimpan.");
+        }
+        return;
+      }
       const navButton = target.closest(".nav-btn");
       const switchViewTrigger = target.closest("[data-switch-view]");
       const toggleScopeTrigger = target.closest("[data-toggle-scope]");
@@ -9924,23 +10132,17 @@
         const response = await appFetch("/api/health/database", { cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } }, background ? "" : "Checking database connection...");
         const result = await response.json();
         if (result.connected) {
-          chip.textContent = "Database: connected";
-          chip.className = "database-status-chip is-connected";
-          chip.title = "This environment is connected to Supabase.";
+          databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Core operational tables are reachable in Supabase." };
         } else if (result.configured) {
-          chip.textContent = "Database: migration needed";
-          chip.className = "database-status-chip is-warning";
-          chip.title = result.message || "Supabase is configured but the schema is not ready.";
+          databaseHealthStatus = { text: "Database: migration needed", className: "database-status-chip is-warning", title: result.message || "Supabase is configured but the schema is not ready." };
         } else {
-          chip.textContent = "Database: demo mode";
-          chip.className = "database-status-chip is-demo";
-          chip.title = "Local demo data is active. Configure Supabase to persist records.";
+          databaseHealthStatus = { text: "Database: demo mode", className: "database-status-chip is-demo", title: "Local demo data is active. Configure Supabase to persist records." };
         }
+        renderDatabaseSyncStatus();
       } catch (error) {
         console.warn("[database health] request failed", error);
-        chip.textContent = "Database: demo mode";
-        chip.className = "database-status-chip is-demo";
-        chip.title = "The demo is running without a reachable backend.";
+        databaseHealthStatus = { text: "Database: demo mode", className: "database-status-chip is-demo", title: "The demo is running without a reachable backend." };
+        renderDatabaseSyncStatus();
       } finally {
         window.clearTimeout(timeout);
       }
@@ -9963,6 +10165,10 @@
       if (document.visibilityState !== "visible") return;
       loadSharedAnnouncements(true);
     }, 120000);
+    window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshDatabaseStatus(true);
+    }, 300000);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       loadSharedClients(true);

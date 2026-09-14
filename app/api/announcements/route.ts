@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createOperationalAnnouncement } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 
 async function currentProfile() {
@@ -44,22 +44,21 @@ export async function POST(request: Request) {
   const message = String(body.message || "").trim();
   const audience = ["all", "tax", "accounting"].includes(body.audience) ? body.audience : "all";
   if (!title || !message) return NextResponse.json({ error: "Subject and message are required." }, { status: 400 });
-  const admin = createAdminClient();
-  if (!admin) return NextResponse.json({ error: "Announcement service is not configured." }, { status: 503 });
-  const { data: announcement, error: announcementError } = await admin
-    .from("announcements")
-    .insert({ title, message, audience, sender_profile_id: current.profile.id })
-    .select("id, title, message, audience, created_at")
-    .single();
-  if (announcementError || !announcement) return NextResponse.json({ error: announcementError?.message || "Could not publish announcement." }, { status: 500 });
-  let recipientQuery = admin.from("staff_profiles").select("id");
-  if (audience === "tax") recipientQuery = recipientQuery.eq("team_division", "Tax Team");
-  if (audience === "accounting") recipientQuery = recipientQuery.eq("team_division", "Accounting Team");
-  const { data: recipients, error: recipientError } = await recipientQuery;
-  if (recipientError) return NextResponse.json({ error: recipientError.message }, { status: 500 });
-  const { error: deliveryError } = await admin.from("announcement_recipients").insert((recipients || []).map((recipient) => ({ announcement_id: announcement.id, staff_profile_id: recipient.id })));
-  if (deliveryError) return NextResponse.json({ error: deliveryError.message }, { status: 500 });
-  return NextResponse.json({ announcement }, { status: 201 });
+  try {
+    const result = await createOperationalAnnouncement({
+      title,
+      message,
+      audience,
+      senderProfileId: current.profile.id,
+      // A manual broadcast may intentionally have the same wording twice, so
+      // its event key is unique to this explicit publish action.
+      eventKey: `broadcast:${current.profile.id}:${crypto.randomUUID()}`,
+      sourceType: "broadcast"
+    });
+    return NextResponse.json({ announcement: { id: result.id, title, message, audience }, recipients: result.recipientCount }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not publish announcement." }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request) {

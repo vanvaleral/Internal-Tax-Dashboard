@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { createOperationalAnnouncement } from "@/lib/notifications";
+import { after, NextResponse } from "next/server";
+import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -142,7 +142,21 @@ export async function POST(request: Request) {
   const assignees = await staffByNames(admin, Array.isArray(body.assignees) ? body.assignees : []);
   const additional = assignees.filter((staff) => staff.id !== current.profile.id);
   if (additional.length) await admin.from("my_work_task_assignees").insert(additional.map((staff) => ({ task_id: data.id, staff_profile_id: staff.id })));
-  if (additional.length) await createOperationalAnnouncement({ title: "Task assigned to you", message: `${displayName(current.profile)} assigned you: ${title}`, senderProfileId: current.profile.id, recipientNames: additional.map(displayName) });
+  if (additional.length) after(async () => {
+    try {
+      await createOperationalAnnouncement({
+        title: "Task assigned to you",
+        message: `${displayName(current.profile)} assigned you: ${title}`,
+        senderProfileId: current.profile.id,
+        recipientProfileIds: additional.map((staff) => staff.id),
+        eventKey: notificationEventKey("my-work-assignment", data.id),
+        sourceType: "my_work_task",
+        sourceId: data.id
+      });
+    } catch (error) {
+      console.error("[my-work] assignment notification could not be created", error);
+    }
+  });
   const { data: complete } = await admin.from("my_work_tasks").select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").eq("id", data.id).single();
   return NextResponse.json({ task: taskResponse(complete as TaskRow) }, { status: 201 });
 }
@@ -191,7 +205,21 @@ export async function PATCH(request: Request) {
     if (staff.length) {
       const { error } = await admin.from("my_work_task_assignees").insert(staff.map((person) => ({ task_id: id, staff_profile_id: person.id })));
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      await createOperationalAnnouncement({ title: "Task assigned to you", message: `${displayName(current.profile)} assigned you: ${updated.title}`, senderProfileId: current.profile.id, recipientNames: staff.map(displayName) });
+      after(async () => {
+        try {
+          await createOperationalAnnouncement({
+            title: "Task assigned to you",
+            message: `${displayName(current.profile)} assigned you: ${updated.title}`,
+            senderProfileId: current.profile.id,
+            recipientProfileIds: staff.map((person) => person.id),
+            eventKey: notificationEventKey("my-work-assignment", `${id}:${staff.map((person) => person.id).sort().join(",")}`),
+            sourceType: "my_work_task",
+            sourceId: id
+          });
+        } catch (error) {
+          console.error("[my-work] assignment notification could not be created", error);
+        }
+      });
     }
   }
   if (body.done === true && !task.is_completed) await createFollowUpTask(admin, updated);
