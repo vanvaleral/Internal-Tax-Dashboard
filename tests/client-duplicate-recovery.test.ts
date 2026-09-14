@@ -11,5 +11,7 @@ test("duplicate detection matches NPWP first and normalized legal name when NPWP
   ]);
   assert.equal(groups.length, 2);
   assert.equal(groups[0].reason, "NPWP");
+  assert.equal(groups[0].clients[0].id, "a");
+  assert.equal(groups[0].clients.at(-1)?.id, "b");
   assert.equal(groups[1].reason, "name");
 });

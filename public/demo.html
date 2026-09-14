@@ -8453,7 +8453,7 @@
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client duplicate review">
             <div class="client-editor-head"><div><div class="eyebrow">Client Master Cleanup</div><h3>Review possible duplicates</h3><p class="subline">Keep one canonical client. The other records are archived and linked to it, never permanently deleted.</p></div><button class="ghost-btn" data-close-client-duplicates="yes">Close</button></div>
-            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Select the duplicate groups to clean up in bulk.</span><button class="solid-btn" data-resolve-selected-duplicates="yes">Archive Selected Groups</button></div><div class="detail-list">${groups.map((group, index) => `<section class="duplicate-group"><div class="section-title"><div class="inline-controls"><input type="checkbox" id="duplicate-group-${index}" data-duplicate-group-select="${index}" /><label for="duplicate-group-${index}"><strong>Matched by ${group.reason}</strong></label></div><div class="subline">${group.reason === "NPWP" ? "The same NPWP appears on multiple records." : "The same normalized legal name appears on multiple records."}</div></div>${group.clients.map((client, clientIndex) => `<label class="duplicate-option"><input type="radio" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /><span><strong>${escapeHtml(client.clientCode)}</strong> · ${escapeHtml(client.name)}<span class="subline"> · ${escapeHtml(client.npwp || "No NPWP")} · ${escapeHtml(client.status)}</span></span></label>`).join("")}<div class="inline-controls" style="margin-top:10px;"><button class="solid-btn" data-resolve-client-duplicate="${index}">Keep selected and archive the other ${group.clients.length - 1}</button></div></section>`).join("")}</div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
+            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Choose the record to retain automatically, or select only specific groups below.</span><div class="inline-controls"><button class="ghost-btn" data-auto-resolve-client-duplicates="oldest">Auto clean: keep oldest</button><button class="ghost-btn" data-auto-resolve-client-duplicates="newest">Auto clean: keep newest</button><button class="solid-btn" data-resolve-selected-duplicates="yes">Delete/Archive Selected</button></div></div><div class="detail-list">${groups.map((group, index) => `<section class="duplicate-group"><div class="section-title"><div class="inline-controls"><input type="checkbox" id="duplicate-group-${index}" data-duplicate-group-select="${index}" /><label for="duplicate-group-${index}"><strong>Matched by ${group.reason}</strong></label></div><div class="subline">${group.reason === "NPWP" ? "The same NPWP appears on multiple records." : "The same normalized legal name appears on multiple records."}</div></div>${group.clients.map((client, clientIndex) => `<label class="duplicate-option"><input type="radio" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /><span><strong>${escapeHtml(client.clientCode)}</strong> · ${escapeHtml(client.name)}<span class="subline"> · ${escapeHtml(client.npwp || "No NPWP")} · ${escapeHtml(client.status)}</span></span></label>`).join("")}<div class="inline-controls" style="margin-top:10px;"><button class="danger-icon-btn" data-resolve-client-duplicate="${index}" title="Delete/archive the duplicate copies">&#128465;</button><button class="ghost-btn" data-resolve-client-duplicate="${index}">Keep selected, delete/archive ${group.clients.length - 1}</button></div></section>`).join("")}</div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
           </section>
         </div>`;
     }
@@ -8860,6 +8860,7 @@
       const closeClientDuplicatesTrigger = target.closest("[data-close-client-duplicates]");
       const resolveClientDuplicateTrigger = target.closest("[data-resolve-client-duplicate]");
       const resolveSelectedDuplicatesTrigger = target.closest("[data-resolve-selected-duplicates]");
+      const autoResolveClientDuplicatesTrigger = target.closest("[data-auto-resolve-client-duplicates]");
       const closeImportPreviewTrigger = target.closest("[data-close-import-preview]");
       const confirmClientImportTrigger = target.closest("[data-confirm-client-import]");
       const exportClientsTrigger = target.closest("[data-export-clients]");
@@ -9540,6 +9541,25 @@
           rerender();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Selected duplicates could not be resolved.");
+        }
+        return;
+      }
+
+      if (autoResolveClientDuplicatesTrigger) {
+        const groups = state.duplicateReview || [];
+        const keep = autoResolveClientDuplicatesTrigger.dataset.autoResolveClientDuplicates;
+        const keepLabel = keep === "newest" ? "newest" : "oldest";
+        if (!groups.length || !window.confirm(`Auto clean all ${groups.length} duplicate group(s)? The ${keepLabel} record in each group will be retained and the other copies archived.`)) return;
+        try {
+          const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ action: "resolve-all", keep }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Automatic duplicate cleanup could not be completed.");
+          await loadSharedClients();
+          state.duplicateReview = [];
+          rerender();
+          window.alert(`Cleanup complete: ${result.archived || 0} duplicate record(s) archived from ${result.groups || 0} group(s).`);
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Automatic duplicate cleanup could not be completed.");
         }
         return;
       }
