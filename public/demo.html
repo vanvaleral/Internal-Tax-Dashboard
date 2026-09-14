@@ -2521,6 +2521,33 @@
       white-space: nowrap;
     }
 
+    .client-action-cell {
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .client-action-icon {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .client-action-icon:hover:not(:disabled) {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .client-action-icon.client-deactivate { color: #c62828; }
+    .client-action-icon.client-deactivate:hover:not(:disabled) { background: #fff0f0; color: #a61b1b; }
+    .client-action-icon.client-reactivate { color: #087443; }
+    .client-action-icon.client-reactivate:hover:not(:disabled) { background: #e8f7ef; color: #056034; }
+
     .case-workspace-layout {
       display: grid;
       grid-template-columns: minmax(260px, 0.55fr) minmax(0, 1.45fr);
@@ -5894,7 +5921,7 @@
 
     function windowedRows(rows, tableId, rowHeight) {
       const requestedStart = Number(state.tableViewport[tableId] || 0);
-      const pageSize = tableId === "active-clients" ? 500 : 56;
+      const pageSize = 56;
       const start = Math.max(0, Math.min(requestedStart, Math.max(0, rows.length - pageSize)));
       const end = Math.min(rows.length, start + pageSize);
       return {
@@ -5917,13 +5944,19 @@
       const targetStart = Math.max(0, Math.floor(wrap.scrollTop / rowHeight) - 12);
       const currentStart = Number(state.tableViewport[tableId] || 0);
       if (Math.abs(targetStart - currentStart) < 8) return;
-      const scrollTop = wrap.scrollTop;
+      state.virtualScrollTop = state.virtualScrollTop || {};
+      state.virtualScrollTop[tableId] = wrap.scrollTop;
       state.tableViewport[tableId] = targetStart;
-      renderActiveView();
-      applyViewVisibility(state.currentView);
-      window.requestAnimationFrame(() => {
-        const replacement = document.querySelector(`[data-virtual-table="${tableId}"]`);
-        if (replacement) replacement.scrollTop = scrollTop;
+      if (state.virtualRenderFrame) return;
+      state.virtualRenderFrame = window.requestAnimationFrame(() => {
+        state.virtualRenderFrame = 0;
+        if (state.currentView !== "client-management-view") return;
+        renderClientManagement();
+        applyViewVisibility(state.currentView);
+        window.requestAnimationFrame(() => {
+          const replacement = document.querySelector(`[data-virtual-table="${tableId}"]`);
+          if (replacement) replacement.scrollTop = state.virtualScrollTop?.[tableId] || 0;
+        });
       });
     }
 
@@ -6025,7 +6058,7 @@
                         <td>${client.clientStatus}</td>
                         <td>${currency(client.serviceFee)}</td>
                         <td>${currency(client.annualFee)}</td>
-                        <td class="center-cell"><button class="tiny-btn" data-toggle-client-status="${client.id}" title="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}">${viewingInactiveClients ? "Activate" : "Inactive"}</button><button class="tiny-btn icon-edit-btn" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
+                        <td class="client-action-cell"><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"} ${escapeAttr(identity.name)}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
                     `;
                     }).join("")}${virtualSpacer(10, activeClientWindow.bottom)}
@@ -6052,7 +6085,7 @@
                         <div class="mobile-meta-box"><div class="eyebrow">Package</div><strong>${client.servicePackage}</strong></div>
                       </div>
                   ${obligationStripMarkup(client)}
-                  <button class="tiny-btn" data-edit-client="${client.id}">Edit in form</button>
+                  <div class="mobile-action-row"><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit client" title="Edit client">&#9998;</button></div>
                 </div>
               `;
                   }).join("")}
