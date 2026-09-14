@@ -7,8 +7,8 @@ const migration = readFileSync(
   "utf8"
 );
 
-test("pending staff directory seeds the complete 14-person roster", () => {
-  for (const name of ["Dewa Sumerta", "Ivan Sadhana", "Ita", "Cemari", "Okta", "Harry", "Denny", "Dewayu", "Tantri", "Dina", "Dimas", "Devira", "Budi", "Dinar"]) {
+test("pending staff directory seeds the complete 15-person roster", () => {
+  for (const name of ["Dewa Sumerta", "Ivan Sadhana", "Ita", "Cemari", "Okta", "Harry", "Denny", "Dewayu", "Tantri", "Dina", "Dimas", "Devira", "Budi", "Bagus", "Dinar"]) {
     assert.match(migration, new RegExp(`'${name}'`));
   }
 });

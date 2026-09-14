@@ -27,6 +27,7 @@ with roster(full_name, display_name, employment_title, team_division, role, clai
     ('Dimas', 'Dimas', 'Junior Accounting Associate', 'Tax Team', 'staff', 'c931bfad9e8c6e13f9e59db112bca39ff5c5ee248d62966c20533393437f7b94'),
     ('Devira', 'Devira', 'Junior Tax Associate', 'Tax Team', 'staff', '6550350cd93596ac9ae4b80866b60b1f1fc835900b34c2a8abd53bf250623431'),
     ('Budi', 'Budi', 'Junior Tax Associate', 'Tax Team', 'staff', 'e90f3c70b0c9baca0a4327f0c0fd36775ffc535bc6d107fd5d3023adbe61bc51'),
+    ('Bagus', 'Bagus', 'Junior Tax Associate', 'Tax Team', 'staff', '0388e1c9da1aac97ba510f7b7b59267fe17d99d982bcc3d938da9e8367f73eb0'),
     ('Dinar', 'Dinar', 'Junior Tax Associate', 'Tax Team', 'staff', '05b44b4c699cc87d3c6697d964b5dd26e04248ddf1da804d8edb2a23cd080a54')
 )
 update public.staff_profiles staff
@@ -64,6 +65,7 @@ with roster(full_name, display_name, employment_title, team_division, role, clai
     ('Dimas', 'Dimas', 'Junior Accounting Associate', 'Tax Team', 'staff', 'c931bfad9e8c6e13f9e59db112bca39ff5c5ee248d62966c20533393437f7b94'),
     ('Devira', 'Devira', 'Junior Tax Associate', 'Tax Team', 'staff', '6550350cd93596ac9ae4b80866b60b1f1fc835900b34c2a8abd53bf250623431'),
     ('Budi', 'Budi', 'Junior Tax Associate', 'Tax Team', 'staff', 'e90f3c70b0c9baca0a4327f0c0fd36775ffc535bc6d107fd5d3023adbe61bc51'),
+    ('Bagus', 'Bagus', 'Junior Tax Associate', 'Tax Team', 'staff', '0388e1c9da1aac97ba510f7b7b59267fe17d99d982bcc3d938da9e8367f73eb0'),
     ('Dinar', 'Dinar', 'Junior Tax Associate', 'Tax Team', 'staff', '05b44b4c699cc87d3c6697d964b5dd26e04248ddf1da804d8edb2a23cd080a54')
 )
 insert into public.staff_profiles (full_name, display_name, employment_title, team_division, role, claim_code_hash)
@@ -85,7 +87,7 @@ with roster(full_name, display_name) as (
     ('Dewa Sumerta', 'Dewa'), ('Ivan Sadhana', 'Ivan'), ('Ita', 'Ita'), ('Cemari', 'Cemari'),
     ('Okta', 'Okta'), ('Harry', 'Harry'), ('Denny', 'Denny'), ('Dewayu', 'Dewayu'),
     ('Tantri', 'Tantri'), ('Dina', 'Dina'), ('Dimas', 'Dimas'), ('Devira', 'Devira'),
-    ('Budi', 'Budi'), ('Dinar', 'Dinar')
+    ('Budi', 'Budi'), ('Bagus', 'Bagus'), ('Dinar', 'Dinar')
 )
 update public.staff_profiles staff
 set directory_active = true

@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
-import { asSafeText, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
+import { asSafeText, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 
 type ClientInput = Record<string, unknown>;
@@ -46,9 +46,9 @@ function buildPayload(client: ClientInput, ids: StaffIds) {
     tax_pic_name: asSafeText(client.taxPic) || null, accounting_pic_name: asSafeText(client.accountingPic) || null,
     tax_pic_profile_id: ids.tax, accounting_pic_profile_id: ids.accounting, partner_profile_id: ids.partner, supervisor_profile_id: ids.supervisor,
     monthly_fee: Number(client.serviceFee || client.monthlyFee || 0), annual_fee: Number(client.annualFee || 0),
-    engagement_start: asSafeText(client.engagementStart) || null, engagement_end: asSafeText(client.engagementEnd) || null,
-    contract_started_at: asSafeText(client.contractStartedAt || client.engagementStart) || null,
-    inactivated_at: asSafeText(client.inactivatedAt) || null,
+    engagement_start: normalizeImportedDate(client.engagementStart), engagement_end: normalizeImportedDate(client.engagementEnd),
+    contract_started_at: normalizeImportedDate(client.contractStartedAt || client.engagementStart),
+    inactivated_at: normalizeImportedDate(client.inactivatedAt),
     tax_office_region: asSafeText(client.taxOfficeRegion) || null,
     notes: asSafeText(client.notes) || null, partner_name: asSafeText(client.partner) || null, supervisor_name: asSafeText(client.supervisor) || null,
     service_package: asSafeText(client.servicePackage) || null, proposal_status: asSafeText(client.proposalStatus) || null,
