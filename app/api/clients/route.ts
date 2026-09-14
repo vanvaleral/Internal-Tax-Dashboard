@@ -11,7 +11,7 @@ function redactFees<T extends Record<string, unknown>>(client: T): T {
 }
 
 async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/lib/supabase/admin").createAdminClient>>, rows: ClientInput[]) {
-  const { data, error } = await admin.from("staff_profiles").select("id, full_name, display_name");
+  const { data, error } = await admin.from("staff_profiles").select("id, full_name, display_name").eq("directory_active", true);
   if (error) throw new Error(error.message);
   const matches = new Map<string, string[]>();
   for (const profile of data || []) for (const label of [profile.display_name, profile.full_name]) {
@@ -22,7 +22,7 @@ async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/li
     const label = asSafeText(value);
     if (!label) return null;
     const ids = [...new Set(matches.get(label.toLowerCase()) || [])];
-    if (ids.length !== 1) throw new Error(`Row ${row}: ${field} must match exactly one registered staff display name.`);
+    if (ids.length !== 1) throw new Error(`Row ${row}: ${field} must match exactly one active staff directory name.`);
     return ids[0];
   };
   return rows.map((row, index): StaffIds => ({

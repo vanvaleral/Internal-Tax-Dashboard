@@ -3247,6 +3247,8 @@
     let PARTNERS = ["Widi"];
     let SUPERVISORS = ["Raka"];
     let staffDirectoryLoaded = false;
+    let staffDirectory = [];
+    let latestStaffClaimCode = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
@@ -3255,7 +3257,7 @@
     const TAX_OFFICE_REGIONS = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
     const CASE_TYPES = ["SP2DK", "Pemeriksaan", "Keberatan", "Banding", "Restitusi", "NPWP Registration", "PKP Registration", "Tax Consultation"];
     const CASE_STAGES = ["Waiting Client Docs", "Document Review", "Submission Prep", "Ongoing Review", "Closed"];
-    const ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
+    let ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
     const DEMO_STORAGE_KEY = "tax-practice-demo-v1";
     const FAME_ANNOUNCEMENT_STORAGE_KEY = "tax-practice-wall-of-fame-seen-v1";
     const RECOGNITION_PRESENTATION_BY_PIC = {
@@ -4055,7 +4057,7 @@
           overview: ["Management / KPI Overview", "Management Workspace", "Decision workspace for exceptions, bottlenecks, and quick access only."],
           trends: ["Management / Client Growth", "Management Workspace", "Trend view for fee growth, proposal conversion, and client portfolio movement."],
           portfolio: ["Management / Portfolio Dashboard", "Management Workspace", "Executive portfolio summary for client-master health, fee base, and PIC coverage."],
-          workload: ["Management / Workload", "Management Workspace", "PIC workload and open case pressure, without exposing operational edit forms."],
+          workload: ["Management / PIC Access", "Management Workspace", "Leadership-only directory controls for PIC roles, teams, and access status."],
           recognition: ["Management / Recognition", "Management Workspace", "Transparent points, monthly recognition, and supervisor-ready incentive estimates."],
           announcements: ["Management / Announcements", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."],
           access: ["Management / Quick Access", "Management Workspace", "Launch directly into clients, cases, and operations that need attention."]
@@ -5585,7 +5587,7 @@
                 <button class="${state.managementTab === "overview" ? "solid-btn" : "ghost-btn"}" data-management-tab="overview">KPI Overview</button>
                 <button class="${state.managementTab === "trends" ? "solid-btn" : "ghost-btn"}" data-management-tab="trends">Client Growth</button>
                 <button class="${state.managementTab === "portfolio" ? "solid-btn" : "ghost-btn"}" data-management-tab="portfolio">Portfolio Dashboard</button>
-                <button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">Workload</button>
+                <button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button>
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
                 <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Announcements</button>
                 <button class="${state.managementTab === "access" ? "solid-btn" : "ghost-btn"}" data-management-tab="access">Quick Access</button>
@@ -5660,29 +5662,45 @@
 
           ${state.managementTab === "workload" ? `
             <section class="panel">
-              <div class="section-title"><div><h3>PIC Workload</h3><p>Cross-workspace workload summary only, without exposing operational edit forms.</p></div></div>
+              <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff directory roles, operational teams, and access status. Every change notifies active Partners and Leaders.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
+              <div class="detail-grid-2" style="margin-bottom:16px;">
+                <div class="client-field"><label for="staff-new-full-name">Full Name</label><input class="field" id="staff-new-full-name" placeholder="Legal name" /></div>
+                <div class="client-field"><label for="staff-new-display-name">Display Name</label><input class="field" id="staff-new-display-name" placeholder="PIC name shown in the app" /></div>
+                <div class="client-field"><label for="staff-new-title">Position Title</label><input class="field" id="staff-new-title" placeholder="Example: Junior Tax Associate" /></div>
+                <div class="client-field"><label for="staff-new-team">Team</label><select class="field" id="staff-new-team"><option value="Tax Team">Tax Team</option><option value="Accounting Team">Accounting Team</option></select></div>
+                <div class="client-field"><label for="staff-new-role">Access Role</label><select class="field" id="staff-new-role"><option value="staff">Staff</option><option value="leader">Leader</option><option value="supervisor">Supervisor</option><option value="partner">Partner</option></select></div>
+                <div class="client-field" style="align-self:end;"><button class="solid-btn" data-create-staff="yes">Add Staff Profile</button></div>
+              </div>
+              ${latestStaffClaimCode ? `<div class="detail-card" style="margin-bottom:16px;"><div class="eyebrow">New Staff Claim Code</div><strong>${escapeHtml(latestStaffClaimCode)}</strong><div class="subline">Share this one-time code privately. The employee uses it with the firm referral code during registration.</div></div>` : ""}
               <div class="table-wrap desktop-only">
                 <table>
                   <thead>
                     <tr>
-                      <th>PIC</th>
-                      <th>Active Client Rows</th>
-                      <th>Open Cases</th>
-                      <th>High Follow-Up Clients</th>
+                      <th>Staff</th>
+                      <th>Display Name</th>
+                      <th>Position</th>
+                      <th>Team</th>
+                      <th>Role</th>
+                      <th>Account</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    ${workloadByPic.map((row) => `
+                    ${staffDirectory.map((staff) => `
                       <tr>
-                        <td>${row.pic}</td>
-                        <td>${row.activeRows}</td>
-                        <td>${row.openCases}</td>
-                        <td>${clients.filter((client) => (client.taxPic === row.pic || client.accountingPic === row.pic) && client.followUpCount > 3).length}</td>
+                        <td><input class="field" data-staff-full-name="${staff.id}" value="${escapeAttr(staff.full_name || "")}" /></td>
+                        <td><input class="field" data-staff-display-name="${staff.id}" value="${escapeAttr(staff.display_name || staff.full_name || "")}" /></td>
+                        <td><input class="field" data-staff-title="${staff.id}" value="${escapeAttr(staff.employment_title || "")}" placeholder="Position" /></td>
+                        <td><select class="field" data-staff-team="${staff.id}"><option value="Tax Team" ${staff.team_division === "Tax Team" ? "selected" : ""}>Tax Team</option><option value="Accounting Team" ${staff.team_division === "Accounting Team" ? "selected" : ""}>Accounting Team</option></select></td>
+                        <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner"].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select></td>
+                        <td><span class="pill ${staff.auth_user_id ? "accent" : "neutral"}">${staff.auth_user_id ? "Registered" : "Pending"}</span></td>
+                        <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${staff.directory_active === false ? `<button class="ghost-btn restore-icon-btn" data-restore-staff="${staff.id}">Restore</button>` : `<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">&#128465;</button>`}</div></td>
                       </tr>
-                    `).join("")}
+                    `).join("") || `<tr><td colspan="7"><div class="empty-state">Loading staff directory...</div></td></tr>`}
                   </tbody>
                 </table>
               </div>
+              <p class="subline" style="margin-top:12px;">Archive removes a profile from future PIC choices but preserves client, case, task, and audit history. Only a Partner may manage Partner access.</p>
             </section>
           ` : ``}
 
@@ -8172,6 +8190,7 @@
         const result = await response.json();
         const staff = Array.isArray(result.staff) ? result.staff : [];
         if (!staff.length) return;
+        staffDirectory = staff;
         const picName = (item) => item.display_name || item.full_name;
         const names = (items) => [...new Set(items.map(picName).filter(Boolean))];
         const canonicalPic = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -8219,8 +8238,10 @@
           draft.nextAccPic = normalizePic(draft.nextAccPic);
           draft.nextTaxPic = normalizePic(draft.nextTaxPic);
         });
-        ACC_PICS = names(staff.filter((item) => item.team_division === "Accounting Team"));
-        TAX_PICS = names(staff.filter((item) => item.team_division === "Tax Team"));
+        // Partners supervise the portfolio but are not operational PIC choices.
+        ACC_PICS = names(staff.filter((item) => item.team_division === "Accounting Team" && item.role !== "partner"));
+        TAX_PICS = names(staff.filter((item) => item.team_division === "Tax Team" && item.role !== "partner"));
+        ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
         PARTNERS = names(staff.filter((item) => item.role === "partner"));
         SUPERVISORS = names(staff.filter((item) => item.role === "supervisor"));
         staffDirectoryLoaded = true;
@@ -8228,6 +8249,19 @@
       } catch (error) {
         console.warn("[staff directory] request failed", error);
         // Keep fallback demo lists when the directory is temporarily unavailable.
+      }
+    }
+
+    async function loadStaffAccessDirectory() {
+      try {
+        const response = await appFetch("/api/staff?includeInactive=1", { cache: "no-store", headers: { Accept: "application/json" } });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Staff directory could not be loaded.");
+        staffDirectory = Array.isArray(result.staff) ? result.staff : [];
+        rerender();
+      } catch (error) {
+        console.warn("[staff access] request failed", error);
+        window.alert(error instanceof Error ? error.message : "Staff directory could not be loaded.");
       }
     }
 
@@ -8791,6 +8825,11 @@
       const savePerformanceSettingsTrigger = target.closest("[data-save-performance-settings]");
       const addPerformanceAdjustmentTrigger = target.closest("[data-add-performance-adjustment]");
       const publishPerformanceTrigger = target.closest("[data-publish-performance]");
+      const refreshStaffAccessTrigger = target.closest("[data-refresh-staff-access]");
+      const createStaffTrigger = target.closest("[data-create-staff]");
+      const saveStaffTrigger = target.closest("[data-save-staff]");
+      const archiveStaffTrigger = target.closest("[data-archive-staff]");
+      const restoreStaffTrigger = target.closest("[data-restore-staff]");
       const dismissFameAnnouncementTrigger = target.closest("[data-dismiss-fame-announcement]");
       const openAnnouncementInboxTrigger = target.closest("[data-open-announcement-inbox]");
       const openAnnouncementHistoryTrigger = target.closest("[data-open-announcement-history]");
@@ -9238,6 +9277,66 @@
       if (managementTabTrigger) {
         state.managementTab = managementTabTrigger.getAttribute("data-management-tab");
         commitUi("push");
+        if (state.managementTab === "workload") loadStaffAccessDirectory();
+        return;
+      }
+
+      if (refreshStaffAccessTrigger) {
+        loadStaffAccessDirectory();
+        return;
+      }
+
+      if (createStaffTrigger) {
+        const fullName = document.getElementById("staff-new-full-name")?.value.trim() || "";
+        const displayName = document.getElementById("staff-new-display-name")?.value.trim() || fullName;
+        const employmentTitle = document.getElementById("staff-new-title")?.value.trim() || "";
+        const teamDivision = document.getElementById("staff-new-team")?.value || "Tax Team";
+        const role = document.getElementById("staff-new-role")?.value || "staff";
+        try {
+          const response = await appFetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ fullName, displayName, employmentTitle, teamDivision, role }) });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Staff profile could not be created.");
+          latestStaffClaimCode = result.claimCode || "";
+          await loadStaffAccessDirectory();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Staff profile could not be created.");
+        }
+        return;
+      }
+
+      if (saveStaffTrigger || restoreStaffTrigger) {
+        const id = (saveStaffTrigger || restoreStaffTrigger).getAttribute(saveStaffTrigger ? "data-save-staff" : "data-restore-staff");
+        if (!id) return;
+        const readStaffField = (name) => document.querySelector(`[data-staff-${name}="${id}"]`)?.value || "";
+        const payload = restoreStaffTrigger ? { directoryActive: true } : {
+          fullName: readStaffField("full-name"),
+          displayName: readStaffField("display-name"),
+          employmentTitle: readStaffField("title"),
+          teamDivision: readStaffField("team"),
+          role: readStaffField("role")
+        };
+        try {
+          const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Staff access could not be saved.");
+          await loadStaffAccessDirectory();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Staff access could not be saved.");
+        }
+        return;
+      }
+
+      if (archiveStaffTrigger) {
+        const id = archiveStaffTrigger.getAttribute("data-archive-staff");
+        if (!id || !window.confirm("Archive this staff profile? Historical PIC assignments will be preserved.")) return;
+        try {
+          const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Accept: "application/json" } });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Staff profile could not be archived.");
+          await loadStaffAccessDirectory();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Staff profile could not be archived.");
+        }
         return;
       }
 
