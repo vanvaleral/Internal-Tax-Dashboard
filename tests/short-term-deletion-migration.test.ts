@@ -17,3 +17,14 @@ test("deleted cases are hidden from ordinary direct reads", () => {
   assert.match(migration, /deleted_at is null/);
   assert.match(migration, /create policy tax_cases_read_scope/);
 });
+
+test("duplicate client deletion has an isolated three-day recovery snapshot", () => {
+  const duplicateMigration = readFileSync(
+    new URL("../supabase/migrations/202609140008_client_duplicate_hard_delete_recovery.sql", import.meta.url),
+    "utf8"
+  );
+  assert.match(duplicateMigration, /create table if not exists public\.client_master_duplicate_trash/);
+  assert.match(duplicateMigration, /client_record jsonb not null/);
+  assert.match(duplicateMigration, /activity_records jsonb not null/);
+  assert.match(duplicateMigration, /revoke all on table public\.client_master_duplicate_trash from authenticated/);
+});

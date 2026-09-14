@@ -572,10 +572,12 @@
     .import-preview-error-row { background: #fff5f5; }
     .import-preview-error { display: inline-flex; align-items: center; gap: 5px; color: #a61b1b; font-size: 11px; font-weight: 750; line-height: 1.35; }
     .import-preview-table { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
-    .duplicate-group { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel-solid); }
-    .duplicate-group + .duplicate-group { margin-top: 12px; }
-    .duplicate-option { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); cursor: pointer; }
-    .duplicate-option:first-of-type { border-top: 0; }
+    .duplicate-review-table { max-height: min(62vh, 620px); }
+    .duplicate-review-table table { min-width: 860px; }
+    .duplicate-review-table th, .duplicate-review-table td { padding: 7px 9px; font-size: 12px; white-space: nowrap; }
+    .duplicate-review-table td:nth-child(5) { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }
+    .duplicate-review-table .duplicate-group-start td { border-top: 2px solid var(--ink); }
+    .duplicate-review-table input { margin: 0; vertical-align: middle; }
     @media (max-width: 760px) { .import-preview-summary { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
 
     .workspace-clients .client-master-layout .client-setup-panel { display: none; }
@@ -1209,6 +1211,35 @@
       border-radius: inherit;
       background: linear-gradient(90deg, #2563eb, #38bdf8);
     }
+
+    .fee-growth-chart {
+      display: flex;
+      align-items: end;
+      gap: clamp(10px, 2vw, 24px);
+      min-height: 300px;
+      margin: 8px 0 18px;
+      padding: 22px 20px 12px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 44%, var(--panel-solid)), var(--panel-solid));
+    }
+
+    .fee-growth-column {
+      display: grid;
+      grid-template-rows: auto 212px auto;
+      justify-items: center;
+      flex: 1 0 110px;
+      gap: 8px;
+      min-width: 110px;
+    }
+
+    .fee-growth-value { font-size: 11px; font-weight: 800; color: var(--ink); text-align: center; white-space: nowrap; }
+    .fee-growth-track { display: flex; align-items: end; width: 100%; height: 212px; padding: 0 14px; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to top, transparent 0 52px, color-mix(in srgb, var(--line) 65%, transparent) 52px 53px); }
+    .fee-growth-fill { width: 100%; min-height: 5px; border-radius: 8px 8px 2px 2px; background: linear-gradient(180deg, var(--accent), var(--accent-strong)); box-shadow: 0 8px 16px color-mix(in srgb, var(--accent) 24%, transparent); transition: height 360ms ease; }
+    .fee-growth-label { display: grid; gap: 3px; text-align: center; font-size: 11px; color: var(--muted); }
+    .fee-growth-label strong { color: var(--ink); font-size: 13px; }
+    .fee-growth-yoy { color: var(--accent-strong); font-weight: 800; }
 
     .attention-list,
     .list-grid,
@@ -5673,7 +5704,7 @@
               <div class="metric"><div class="eyebrow">New Clients This Year</div><strong>${clientGrowth.at(-1)?.started || 0}</strong><div class="sub">Based on contract start date.</div></div>
               <div class="metric"><div class="eyebrow">Clients Ended This Year</div><strong>${clientGrowth.at(-1)?.ended || 0}</strong><div class="sub">Based on inactivation date.</div></div>
             </section>
-            <section class="panel"><div class="section-title"><div><h3>Monthly Fee Growth & Active Client Accumulation</h3><p>Six-year view based on contract start and inactivation dates.</p></div></div><div class="portfolio-bars">${clientGrowth.map((row) => `<div class="portfolio-bar-row"><strong>${row.year}</strong><div class="portfolio-bar-track"><div class="portfolio-bar-fill" style="width:${Math.round(row.monthlyFee / maxGrowthFee * 100)}%"></div></div><span>${currency(row.monthlyFee)} · ${row.active} clients</span></div>`).join("")}</div><div class="table-wrap"><table><thead><tr><th>Year</th><th>Client Volume</th><th>Monthly Fee Scale</th><th>YoY Growth</th><th>Avg Monthly Fee / Client</th><th>New / Ended</th></tr></thead><tbody>${clientGrowth.map((row, index) => { const previous = clientGrowth[index - 1]; const yoy = previous?.monthlyFee ? ((row.monthlyFee - previous.monthlyFee) / previous.monthlyFee) * 100 : null; return `<tr><td>${row.year}</td><td>${row.active} clients</td><td>${currency(row.monthlyFee)}</td><td>${yoy === null ? "-" : `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`}</td><td>${currency(row.active ? row.monthlyFee / row.active : 0)}</td><td>+${row.started} / -${row.ended}</td></tr>`; }).join("")}</tbody></table></div></section>
+            <section class="panel"><div class="section-title"><div><h3>Monthly Fee Growth & Active Client Accumulation</h3><p>Six-year view based on contract start and inactivation dates.</p></div></div><div class="fee-growth-chart" role="img" aria-label="Monthly fee growth by year">${clientGrowth.map((row, index) => { const previous = clientGrowth[index - 1]; const yoy = previous?.monthlyFee ? ((row.monthlyFee - previous.monthlyFee) / previous.monthlyFee) * 100 : null; const height = Math.max(3, Math.round(row.monthlyFee / maxGrowthFee * 100)); return `<div class="fee-growth-column" title="${row.year}: ${currency(row.monthlyFee)} monthly fee, ${row.active} active clients"><div class="fee-growth-value">${currency(row.monthlyFee)}</div><div class="fee-growth-track"><div class="fee-growth-fill" style="height:${height}%"></div></div><div class="fee-growth-label"><strong>${row.year}</strong><span>${row.active} clients</span><span class="fee-growth-yoy">${yoy === null ? "New baseline" : `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}% YoY`}</span></div></div>`; }).join("")}</div><div class="table-wrap"><table><thead><tr><th>Year</th><th>Client Volume</th><th>Monthly Fee Scale</th><th>YoY Growth</th><th>Avg Monthly Fee / Client</th><th>New / Ended</th></tr></thead><tbody>${clientGrowth.map((row, index) => { const previous = clientGrowth[index - 1]; const yoy = previous?.monthlyFee ? ((row.monthlyFee - previous.monthlyFee) / previous.monthlyFee) * 100 : null; return `<tr><td>${row.year}</td><td>${row.active} clients</td><td>${currency(row.monthlyFee)}</td><td>${yoy === null ? "-" : `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`}</td><td>${currency(row.active ? row.monthlyFee / row.active : 0)}</td><td>+${row.started} / -${row.ended}</td></tr>`; }).join("")}</tbody></table></div></section>
             <section class="panel"><div class="section-title"><div><h3>Regional Tax Office (KPP) Client Distribution</h3><p>Active portfolio by registered tax office region.</p></div></div><div class="compact-grid-4">${regionalCounts.map((row) => `<div class="detail-card"><div class="eyebrow">${row.region}</div><strong>${row.count} clients</strong><div class="subline">${clientGrowth.at(-1)?.active ? (row.count / clientGrowth.at(-1).active * 100).toFixed(1) : "0.0"}% share of portfolio</div></div>`).join("")}</div></section>
           ` : ``}
 
@@ -8452,8 +8483,8 @@
       root.innerHTML = `
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client duplicate review">
-            <div class="client-editor-head"><div><div class="eyebrow">Client Master Cleanup</div><h3>Review possible duplicates</h3><p class="subline">Keep one canonical client. The other records are archived and linked to it, never permanently deleted.</p></div><button class="ghost-btn" data-close-client-duplicates="yes">Close</button></div>
-            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Choose the record to retain automatically, or select only specific groups below.</span><div class="inline-controls"><button class="ghost-btn" data-auto-resolve-client-duplicates="oldest">Auto clean: keep oldest</button><button class="ghost-btn" data-auto-resolve-client-duplicates="newest">Auto clean: keep newest</button><button class="solid-btn" data-resolve-selected-duplicates="yes">Delete/Archive Selected</button></div></div><div class="detail-list">${groups.map((group, index) => `<section class="duplicate-group"><div class="section-title"><div class="inline-controls"><input type="checkbox" id="duplicate-group-${index}" data-duplicate-group-select="${index}" /><label for="duplicate-group-${index}"><strong>Matched by ${group.reason}</strong></label></div><div class="subline">${group.reason === "NPWP" ? "The same NPWP appears on multiple records." : "The same normalized legal name appears on multiple records."}</div></div>${group.clients.map((client, clientIndex) => `<label class="duplicate-option"><input type="radio" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /><span><strong>${escapeHtml(client.clientCode)}</strong> · ${escapeHtml(client.name)}<span class="subline"> · ${escapeHtml(client.npwp || "No NPWP")} · ${escapeHtml(client.status)}</span></span></label>`).join("")}<div class="inline-controls" style="margin-top:10px;"><button class="danger-icon-btn" data-resolve-client-duplicate="${index}" title="Delete/archive the duplicate copies">&#128465;</button><button class="ghost-btn" data-resolve-client-duplicate="${index}">Keep selected, delete/archive ${group.clients.length - 1}</button></div></section>`).join("")}</div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
+            <div class="client-editor-head"><div><div class="eyebrow">Client Master Cleanup</div><h3>Review possible duplicates</h3><p class="subline">Keep one canonical client. Duplicate records are removed from Client Master and retained in a three-day recovery backup.</p></div><button class="ghost-btn" data-close-client-duplicates="yes">Close</button></div>
+            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Choose the record to retain automatically, or select only specific groups in the compact table.</span><div class="inline-controls"><button class="ghost-btn" data-auto-resolve-client-duplicates="oldest">Auto clean: keep oldest</button><button class="ghost-btn" data-auto-resolve-client-duplicates="newest">Auto clean: keep newest</button><button class="solid-btn" data-resolve-selected-duplicates="yes">Delete Selected</button></div></div><div class="import-preview-table duplicate-review-table"><table><thead><tr><th>Group</th><th>Match</th><th>Keep</th><th>Code</th><th>Client</th><th>NPWP</th><th>Status</th><th>Action</th></tr></thead><tbody>${groups.map((group, index) => group.clients.map((client, clientIndex) => `<tr class="${clientIndex === 0 ? "duplicate-group-start" : ""}"><td>${clientIndex === 0 ? `<input type="checkbox" aria-label="Select duplicate group ${index + 1}" data-duplicate-group-select="${index}" /> #${index + 1}` : ""}</td><td>${clientIndex === 0 ? escapeHtml(group.reason) : ""}</td><td><input type="radio" aria-label="Keep ${escapeAttr(client.name)}" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /></td><td><strong>${escapeHtml(client.clientCode)}</strong></td><td title="${escapeAttr(client.name)}">${escapeHtml(client.name)}</td><td>${escapeHtml(client.npwp || "-")}</td><td>${escapeHtml(client.status)}</td><td>${clientIndex === 0 ? `<button class="danger-icon-btn" data-resolve-client-duplicate="${index}" title="Keep selected record and delete ${group.clients.length - 1} duplicate(s)">&#128465;</button>` : ""}</td></tr>`).join("")).join("")}</tbody></table></div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
           </section>
         </div>`;
     }
@@ -9497,7 +9528,7 @@
         const canonicalId = selected instanceof HTMLInputElement ? selected.value : "";
         if (!group || !canonicalId) return;
         const duplicateIds = group.clients.map((client) => client.id).filter((id) => id && id !== canonicalId);
-        if (!duplicateIds.length || !window.confirm("Archive the selected duplicate record(s)? Their history will be preserved.")) return;
+        if (!duplicateIds.length || !window.confirm("Delete the selected duplicate record(s)? A recovery backup is retained for three days.")) return;
         try {
           const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ canonicalId, duplicateIds }) }, "");
           const result = await response.json().catch(() => ({}));
@@ -9507,6 +9538,7 @@
           const refreshedResult = await refreshed.json().catch(() => ({}));
           state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
           rerender();
+          window.alert(`Deleted ${result.deleted || 0} duplicate record(s).`);
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Duplicate records could not be resolved.");
         }
@@ -9527,7 +9559,7 @@
           const canonicalId = selected instanceof HTMLInputElement ? selected.value : "";
           return group && canonicalId ? { canonicalId, duplicateIds: group.clients.map((client) => client.id).filter((id) => id && id !== canonicalId) } : null;
         }).filter((action) => action?.duplicateIds.length);
-        if (!actions.length || !window.confirm(`Archive duplicate copies from ${actions.length} selected group(s)? Their histories will be preserved.`)) return;
+        if (!actions.length || !window.confirm(`Delete duplicate copies from ${actions.length} selected group(s)? A recovery backup is retained for three days.`)) return;
         try {
           for (const action of actions) {
             const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(action) }, "");
@@ -9539,6 +9571,7 @@
           const refreshedResult = await refreshed.json().catch(() => ({}));
           state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
           rerender();
+          window.alert(`Deleted duplicate records from ${actions.length} group(s).`);
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Selected duplicates could not be resolved.");
         }
@@ -9549,7 +9582,7 @@
         const groups = state.duplicateReview || [];
         const keep = autoResolveClientDuplicatesTrigger.dataset.autoResolveClientDuplicates;
         const keepLabel = keep === "newest" ? "newest" : "oldest";
-        if (!groups.length || !window.confirm(`Auto clean all ${groups.length} duplicate group(s)? The ${keepLabel} record in each group will be retained and the other copies archived.`)) return;
+        if (!groups.length || !window.confirm(`Auto clean all ${groups.length} duplicate group(s)? The ${keepLabel} record in each group will be retained and the other copies deleted. A recovery backup is retained for three days.`)) return;
         try {
           const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ action: "resolve-all", keep }) }, "");
           const result = await response.json().catch(() => ({}));
@@ -9557,7 +9590,7 @@
           await loadSharedClients();
           state.duplicateReview = [];
           rerender();
-          window.alert(`Cleanup complete: ${result.archived || 0} duplicate record(s) archived from ${result.groups || 0} group(s).`);
+          window.alert(`Cleanup complete: ${result.deleted || 0} duplicate record(s) deleted from ${result.groups || 0} group(s).`);
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Automatic duplicate cleanup could not be completed.");
         }
