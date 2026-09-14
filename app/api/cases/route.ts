@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { createOperationalAnnouncement, notificationEventKey, uniqueProfileIds } from "@/lib/notifications";
 import { calculateHimbauanDueDate } from "@/lib/operational-rules";
@@ -33,11 +33,18 @@ async function recipients(admin: any, payload: any) {
   return uniqueProfileIds([payload.tax_pic_profile_id, payload.accounting_pic_profile_id, ...(data || []).map((profile: any) => profile.id)]);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const includeDeleted = request.nextUrl.searchParams.get("deleted") === "1";
   let query = actor.admin.from("tax_cases").select("*").order("updated_at", { ascending: false });
-  if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
+  if (includeDeleted) {
+    query = query.not("deleted_at", "is", null);
+    if (!isLeadership(actor.profile.role)) query = query.eq("deleted_by_profile_id", actor.profile.id);
+  } else {
+    query = query.is("deleted_at", null);
+    if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
+  }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
@@ -68,6 +75,15 @@ export async function PATCH(request: Request) {
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Case id is required." }, { status: 400 });
   try {
+    if (body.action === "restore") {
+      let query = actor.admin.from("tax_cases").select("tax_pic_profile_id, accounting_pic_profile_id, deleted_by_profile_id").eq("id", id).not("deleted_at", "is", null);
+      if (!isLeadership(actor.profile.role)) query = query.eq("deleted_by_profile_id", actor.profile.id);
+      const { data: deletedCase, error: lookupError } = await query.maybeSingle();
+      if (lookupError || !deletedCase) return NextResponse.json({ error: "This deleted case cannot be restored by your profile." }, { status: 403 });
+      const { data, error } = await actor.admin.from("tax_cases").update({ deleted_at: null, deleted_by_profile_id: null }).eq("id", id).select("*").single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ data });
+    }
     const payload = await payloadFor(actor, body.case || body);
     const { data: existing } = await actor.admin.from("tax_cases").select("tax_pic_profile_id, accounting_pic_profile_id").eq("id", id).maybeSingle();
     if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
@@ -76,4 +92,24 @@ export async function PATCH(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ data });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update case." }, { status: 403 }); }
+}
+
+export async function DELETE(request: Request) {
+  const actor = await currentActor();
+  if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const { id } = await request.json().catch(() => ({}));
+  if (!id) return NextResponse.json({ error: "Case id is required." }, { status: 400 });
+  const { data: existing, error: lookupError } = await actor.admin
+    .from("tax_cases")
+    .select("tax_pic_profile_id, accounting_pic_profile_id")
+    .eq("id", String(id))
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (lookupError || !existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not allowed to delete this case." }, { status: 403 });
+  const { error } = await actor.admin
+    .from("tax_cases")
+    .update({ deleted_at: new Date().toISOString(), deleted_by_profile_id: actor.profile.id })
+    .eq("id", String(id));
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }

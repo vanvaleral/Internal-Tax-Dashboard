@@ -2548,6 +2548,22 @@
     .client-action-icon.client-reactivate { color: #087443; }
     .client-action-icon.client-reactivate:hover:not(:disabled) { background: #e8f7ef; color: #056034; }
 
+    .danger-icon-btn {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #c62828;
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .danger-icon-btn:hover:not(:disabled) { background: #fff0f0; color: #a61b1b; }
+    .restore-icon-btn { color: #087443; }
+    .restore-icon-btn:hover:not(:disabled) { background: #e8f7ef; color: #056034; }
+
     .case-workspace-layout {
       display: grid;
       grid-template-columns: minmax(260px, 0.55fr) minmax(0, 1.45fr);
@@ -3944,6 +3960,9 @@
       restoringMyWorkTaskId: "",
       syncIssues: [],
       tableViewport: {},
+      deletedCases: [],
+      deletedAnnouncements: [],
+      caseTrashOpen: false,
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       sorts: {
@@ -5524,6 +5543,25 @@
         activeRows: clients.filter((client) => client.taxPic === pic || client.accountingPic === pic).length,
         openCases: taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic).length
       }));
+      const teamPerformance = ALL_PICS.map((pic) => {
+        const assignedClients = clients.filter((client) => client.taxPic === pic || client.accountingPic === pic);
+        const assignedCases = taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic);
+        const monthlyCompleted = Object.values(state.monthlyProgress).flat().filter((client) => (client.taxPic === pic || client.accountingPic === pic) && isClientCompleted(client)).length;
+        const annualAccountingDone = annualAccountingRows.filter((row) => row.accountingPic === pic && String(row.progress || "").toLowerCase().includes("done")).length;
+        const annualTaxDone = annualTaxRows.filter((row) => row.taxPic === pic && String(row.status || "").toLowerCase().includes("done")).length;
+        const points = performanceRow(pic).total;
+        return {
+          pic,
+          team: TAX_PICS.includes(pic) ? "Tax" : "Accounting",
+          clientCount: assignedClients.length,
+          openCases: assignedCases.filter((item) => item.stage !== "Closed").length,
+          closedCases: assignedCases.filter((item) => item.stage === "Closed" || item.completionDate).length,
+          monthlyCompleted,
+          annualDone: annualAccountingDone + annualTaxDone,
+          points,
+          attention: assignedClients.filter((client) => clientNeedsAttention(client).length > 0).length
+        };
+      }).sort((left, right) => right.points - left.points || right.monthlyCompleted - left.monthlyCompleted || left.pic.localeCompare(right.pic));
       const currentYear = new Date().getFullYear();
       const growthYears = Array.from({ length: 6 }, (_, index) => currentYear - 5 + index);
       const clientGrowth = growthYears.map((year) => {
@@ -5557,10 +5595,14 @@
 
           ${state.managementTab === "overview" ? `
             <section class="compact-grid-4">
-              <div class="metric"><div class="eyebrow">Revisions</div><strong>${stats.revisions}</strong><div class="sub">Open revision exceptions.</div></div>
-              <div class="metric"><div class="eyebrow">Missing Obligations</div><strong>${stats.awaiting + stats.temporary}</strong><div class="sub">Awaiting data or temporary still unresolved.</div></div>
-              <div class="metric"><div class="eyebrow">High Follow-Up</div><strong>${stats.followUpRisk}</strong><div class="sub">Clients above three follow-ups.</div></div>
-              <div class="metric"><div class="eyebrow">Open Cases</div><strong>${taxCases.length}</strong><div class="sub">Non-recurring tax work still active.</div></div>
+              <div class="metric"><div class="eyebrow">Active Client Portfolio</div><strong>${activeCount}</strong><div class="sub">${currency(clients.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0))} monthly fee base.</div></div>
+              <div class="metric"><div class="eyebrow">Open Cases</div><strong>${taxCases.filter((item) => item.stage !== "Closed").length}</strong><div class="sub">${taxCases.filter((item) => item.stage === "Closed" || item.completionDate).length} cases completed.</div></div>
+              <div class="metric"><div class="eyebrow">Operational Risk</div><strong>${stats.revisions + stats.followUpRisk}</strong><div class="sub">Revisions and high follow-up clients.</div></div>
+              <div class="metric"><div class="eyebrow">Team Points</div><strong>${teamPerformance.reduce((sum, row) => sum + row.points, 0)}</strong><div class="sub">${teamPerformance.length} active PIC profiles.</div></div>
+            </section>
+            <section class="panel">
+              <div class="section-title"><div><h3>Team Performance Board</h3><p>Cross-workspace view of workload, completion signals, cases, and current points.</p></div></div>
+              <div class="table-wrap"><table><thead><tr><th>PIC</th><th>Team</th><th>Clients</th><th>Monthly Done</th><th>Annual Done</th><th>Open / Closed Cases</th><th>Attention</th><th>Points</th></tr></thead><tbody>${teamPerformance.map((row) => `<tr><td><strong>${escapeHtml(row.pic)}</strong></td><td>${row.team}</td><td>${row.clientCount}</td><td>${row.monthlyCompleted}</td><td>${row.annualDone}</td><td>${row.openCases} / ${row.closedCases}</td><td><span class="pill ${row.attention ? "warning" : "neutral"}">${row.attention}</span></td><td><strong>${row.points}</strong></td></tr>`).join("") || `<tr><td colspan="8"><div class="empty-state">No team performance data is available yet.</div></td></tr>`}</tbody></table></div>
             </section>
             <section class="dashboard-grid">
               <div class="panel">
@@ -5943,25 +5985,31 @@
       if (!tableId || !rowHeight) return;
       const targetStart = Math.max(0, Math.floor(wrap.scrollTop / rowHeight) - 12);
       const currentStart = Number(state.tableViewport[tableId] || 0);
-      if (Math.abs(targetStart - currentStart) < 8) return;
       state.virtualScrollTop = state.virtualScrollTop || {};
       state.virtualScrollTop[tableId] = wrap.scrollTop;
+      // Always retain the user's latest scroll position, even when the
+      // render window has enough buffer and does not need moving yet.
+      if (Math.abs(targetStart - currentStart) < 8) return;
       state.tableViewport[tableId] = targetStart;
       if (state.virtualRenderFrame) return;
       state.virtualRenderFrame = window.requestAnimationFrame(() => {
         state.virtualRenderFrame = 0;
         if (state.currentView !== "client-management-view") return;
-        renderClientManagement();
-        applyViewVisibility(state.currentView);
-        window.requestAnimationFrame(() => {
-          const replacement = document.querySelector(`[data-virtual-table="${tableId}"]`);
-          if (replacement) replacement.scrollTop = state.virtualScrollTop?.[tableId] || 0;
-        });
+        // Build the next row window off-screen, then replace only tbody.
+        // Keeping the scroll container in place prevents a visible jump to
+        // row one while a large client list is being virtualized.
+        const scratch = document.createElement("div");
+        renderClientManagement(scratch);
+        const nextBody = scratch.querySelector(`[data-virtual-table="${tableId}"] tbody`);
+        const currentBody = wrap.querySelector("tbody");
+        if (nextBody && currentBody) currentBody.replaceWith(nextBody);
+        else renderClientManagement();
+        wrap.scrollTop = state.virtualScrollTop?.[tableId] || 0;
       });
     }
 
-    function renderClientManagement() {
-      const root = document.getElementById("client-management-view");
+    function renderClientManagement(rootOverride = null) {
+      const root = rootOverride || document.getElementById("client-management-view");
       const activeSample = clientFormTarget();
       const portfolio = clientPortfolioSnapshot();
       const monthlyFees = feeModel(activeSample.serviceFee, true, true);
@@ -7155,13 +7203,14 @@
       const caseWindow = windowedRows(caseList, "cases", 44);
       const root = document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
+      const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">&#128465;</button>`;
       const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td></tr>`;
-      }).join("") || `<tr><td colspan="12"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${deleteCaseButton(item)}</td></tr>`;
+      }).join("") || `<tr><td colspan="13"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
       const pemeriksaanRows = caseWindow.rows.map((item, index) => {
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td></tr>`;
-      }).join("") || `<tr><td colspan="12"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${deleteCaseButton(item)}</td></tr>`;
+      }).join("") || `<tr><td colspan="13"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
 
       root.innerHTML = `
         <div class="workspace-frame workspace-cases">
@@ -7172,6 +7221,7 @@
                 <button class="${category === "Pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan">Pemeriksaan</button>
               </div>
               <div class="toolbar-right">
+                <button class="ghost-btn" data-toggle-case-trash="yes">Recently Deleted${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
                 <span class="pill neutral">${caseList.length} cases</span>
                 <button class="solid-btn" data-new-case="yes">Add Case</button>
               </div>
@@ -7180,10 +7230,11 @@
 
           <section class="panel">
             <div class="toolbar compact-toolbar"><input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Search wajib pajak, surat, PIC..." /></div>
-            <div class="table-wrap" data-virtual-table="cases" data-row-height="44"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th>`}</tr></thead><tbody>
-              ${virtualSpacer(12, caseWindow.top)}${category === "Himbauan" ? himbauanRows : pemeriksaanRows}${virtualSpacer(12, caseWindow.bottom)}
+            <div class="table-wrap" data-virtual-table="cases" data-row-height="44"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th><th></th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th><th></th>`}</tr></thead><tbody>
+              ${virtualSpacer(13, caseWindow.top)}${category === "Himbauan" ? himbauanRows : pemeriksaanRows}${virtualSpacer(13, caseWindow.bottom)}
             </tbody></table></div>
           </section>
+          ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Recently Deleted Cases</h3><p>Restore is available for three days after deletion.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No deleted cases available for restoration.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `;
@@ -7390,7 +7441,7 @@
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
               ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${client.taxPic === state.selectedPic ? "PIC TAX" : "PIC ACC"}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
-            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="eyebrow">Announcement History</div>${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${item.title}</strong><div class="subline">${item.message}</div></div><span class="pill neutral">Read</span></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>
+            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Announcement History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete announcement" title="Delete from my history">&#128465;</button></div></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
         </div>`;
     }
@@ -7688,7 +7739,8 @@
         dueDate: row.due_date || "",
         notes: row.notes || "",
         nextSteps: Array.isArray(row.next_steps) ? row.next_steps : [],
-        closedAt: row.closed_at || ""
+        closedAt: row.closed_at || "",
+        deletedAt: row.deleted_at || ""
       };
     }
 
@@ -7771,6 +7823,51 @@
       } catch (error) {
         console.warn("[cases] shared load failed", error);
       }
+    }
+
+    async function loadDeletedCases(background = false) {
+      try {
+        const response = await appFetch("/api/cases?deleted=1", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading deleted cases...");
+        if (!response.ok) throw new Error("Deleted cases could not be loaded.");
+        const result = await response.json();
+        state.deletedCases = (Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo);
+        if (state.currentView === "cases-view") renderCases();
+      } catch (error) {
+        markSyncFailure("Deleted cases", error);
+      }
+    }
+
+    async function deleteCaseFromDatabase(record) {
+      if (record.id.startsWith("case-")) {
+        taxCases = taxCases.filter((item) => item.id !== record.id);
+        rerender();
+        return;
+      }
+      const index = taxCases.findIndex((item) => item.id === record.id);
+      taxCases = taxCases.filter((item) => item.id !== record.id);
+      renderCases();
+      try {
+        const response = await appFetch("/api/cases", { method: "DELETE", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ id: record.id }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Case could not be deleted.");
+        state.deletedCases.unshift({ ...record, deletedAt: new Date().toISOString() });
+        clearSyncFailure(`Case ${record.clientName}`);
+      } catch (error) {
+        taxCases.splice(Math.max(0, index), 0, record);
+        markSyncFailure(`Case ${record.clientName}`, error);
+        renderCases();
+      }
+    }
+
+    async function restoreCaseFromDatabase(record) {
+      const response = await appFetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ id: record.id, action: "restore" }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Case could not be restored.");
+      const restored = databaseCaseToDemo(result.data);
+      state.deletedCases = state.deletedCases.filter((item) => item.id !== record.id);
+      taxCases.unshift(restored);
+      state.selectedCaseId = restored.id;
+      renderCases();
     }
 
     async function saveCaseToDatabase(record, { showLoading = true, acceptServerDerivedFields = true } = {}) {
@@ -8003,6 +8100,47 @@
       } catch (error) {
         console.warn("[announcements] shared load failed", error);
       }
+    }
+
+    async function loadDeletedAnnouncements(background = false) {
+      try {
+        const response = await appFetch("/api/announcements?deleted=1", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading deleted announcements...");
+        if (!response.ok) throw new Error("Deleted announcements could not be loaded.");
+        const result = await response.json();
+        state.deletedAnnouncements = Array.isArray(result.announcements) ? result.announcements : [];
+        if (state.currentView === "profile-view") renderProfile();
+      } catch (error) {
+        markSyncFailure("Deleted announcements", error);
+      }
+    }
+
+    async function deleteAnnouncementFromHistory(id) {
+      const item = state.announcements.find((announcement) => announcement.id === id);
+      if (!item) return;
+      state.announcements = state.announcements.filter((announcement) => announcement.id !== id);
+      renderProfile();
+      try {
+        const response = await appFetch("/api/announcements", { method: "DELETE", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Announcement could not be deleted.");
+        state.deletedAnnouncements.unshift({ ...item, deletedAt: new Date().toISOString() });
+        renderShellChrome();
+      } catch (error) {
+        state.announcements.unshift(item);
+        markSyncFailure("Announcement deletion", error);
+        renderProfile();
+      }
+    }
+
+    async function restoreAnnouncementFromHistory(id) {
+      const response = await appFetch("/api/announcements", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id, action: "restore" }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Announcement could not be restored.");
+      const item = state.deletedAnnouncements.find((announcement) => announcement.id === id);
+      state.deletedAnnouncements = state.deletedAnnouncements.filter((announcement) => announcement.id !== id);
+      if (item) state.announcements.unshift({ ...item, deletedAt: null });
+      renderProfile();
+      renderShellChrome();
     }
 
     async function loadCurrentProfile(background = false) {
@@ -8642,6 +8780,9 @@
       const newCaseTrigger = target.closest("[data-new-case]");
       const selectCaseTrigger = target.closest("[data-select-case]");
       const saveCaseTrigger = target.closest("[data-save-case]");
+      const deleteCaseTrigger = target.closest("[data-delete-case]");
+      const restoreCaseTrigger = target.closest("[data-restore-case]");
+      const toggleCaseTrashTrigger = target.closest("[data-toggle-case-trash]");
       const saveProfileTrigger = target.closest("[data-save-profile]");
       const changePasswordTrigger = target.closest("[data-change-password]");
       const addCaseStepTrigger = target.closest("[data-add-case-step]");
@@ -8655,6 +8796,9 @@
       const openAnnouncementHistoryTrigger = target.closest("[data-open-announcement-history]");
       const closeAnnouncementInboxTrigger = target.closest("[data-close-announcement-inbox]");
       const readAnnouncementTrigger = target.closest("[data-read-announcement]");
+      const deleteAnnouncementTrigger = target.closest("[data-delete-announcement]");
+      const restoreAnnouncementTrigger = target.closest("[data-restore-announcement]");
+      const loadDeletedAnnouncementsTrigger = target.closest("[data-load-deleted-announcements]");
       const sendAnnouncementTrigger = target.closest("[data-send-announcement]");
       const logoutTrigger = target.closest("[data-logout]");
       const openAppearanceSettingsTrigger = target.closest("[data-open-appearance-settings]");
@@ -8697,7 +8841,7 @@
       if (selectMyWorkBackgroundTrigger) { document.getElementById("appearance-my-work-background")?.click(); return; }
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
 
-      if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); commitUi("replace"); return; }
+      if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitUi("replace"); return; }
       if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
       if (completeMyWorkTrigger) { const task = state.myWork.find((item) => item.id === completeMyWorkTrigger.getAttribute("data-my-work-done")); if (task) { task.done = completeMyWorkTrigger.checked; task.completedAt = task.done ? Date.now() : 0; state.movingMyWorkTaskId = task.done ? task.id : ""; state.restoringMyWorkTaskId = task.done ? "" : task.id; } commitUi("push"); if (task) saveMyWorkTaskToDatabase(task, { done: task.done }); return; }
       if (starMyWorkTrigger) { const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star")); if (task) { task.favorite = !task.favorite; task.favoritedAt = task.favorite ? Date.now() : 0; } commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite }); return; }
@@ -8723,7 +8867,9 @@
 
       if (openAnnouncementHistoryTrigger) {
         state.announcementInboxOpen = false;
+        state.profileTab = "history";
         switchView("profile-view");
+        loadDeletedAnnouncements(true);
         commitUi("push");
         return;
       }
@@ -8736,6 +8882,22 @@
 
       if (readAnnouncementTrigger) {
         await markAnnouncementRead(readAnnouncementTrigger.getAttribute("data-read-announcement"));
+        return;
+      }
+
+      if (loadDeletedAnnouncementsTrigger) {
+        await loadDeletedAnnouncements();
+        return;
+      }
+
+      if (deleteAnnouncementTrigger) {
+        await deleteAnnouncementFromHistory(deleteAnnouncementTrigger.getAttribute("data-delete-announcement"));
+        return;
+      }
+
+      if (restoreAnnouncementTrigger) {
+        try { await restoreAnnouncementFromHistory(restoreAnnouncementTrigger.getAttribute("data-restore-announcement")); }
+        catch (error) { window.alert(error instanceof Error ? error.message : "Announcement could not be restored."); }
         return;
       }
 
@@ -8841,6 +9003,13 @@
         return;
       }
 
+      if (toggleCaseTrashTrigger) {
+        state.caseTrashOpen = !state.caseTrashOpen;
+        if (state.caseTrashOpen) await loadDeletedCases(true);
+        else renderCases();
+        return;
+      }
+
       if (contractFilterTrigger) {
         state.contractFilter = contractFilterTrigger.getAttribute("data-contract-filter");
         commitUi("push");
@@ -8855,6 +9024,22 @@
         state.casesTab = record.caseCategory === "Pemeriksaan" ? "pemeriksaan" : "himbauan";
         state.selectedCaseId = record.id;
         commitUi("push");
+        return;
+      }
+
+      if (deleteCaseTrigger) {
+        const record = taxCases.find((item) => item.id === deleteCaseTrigger.getAttribute("data-delete-case"));
+        if (!record) return;
+        if (!window.confirm(`Delete case for ${record.clientName}? It can be restored for three days.`)) return;
+        await deleteCaseFromDatabase(record);
+        return;
+      }
+
+      if (restoreCaseTrigger) {
+        const record = state.deletedCases.find((item) => item.id === restoreCaseTrigger.getAttribute("data-restore-case"));
+        if (!record) return;
+        try { await restoreCaseFromDatabase(record); }
+        catch (error) { window.alert(error instanceof Error ? error.message : "Case could not be restored."); }
         return;
       }
 

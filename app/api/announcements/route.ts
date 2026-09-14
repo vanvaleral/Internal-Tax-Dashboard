@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createOperationalAnnouncement } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,24 +12,37 @@ async function currentProfile() {
   return { user, profile, supabase };
 }
 
-export async function GET() {
-  const current = await currentProfile();
-  if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
-  const { data, error } = await current.supabase
-    .from("announcement_recipients")
-    .select("read_at, announcements(id, title, message, audience, created_at, staff_profiles!announcements_sender_profile_id_fkey(display_name, full_name))")
-    .eq("staff_profile_id", current.profile.id)
-    .order("announcement_id", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const announcements = (data || []).map((row: any) => ({
+function mapAnnouncement(row: any) {
+  return {
     id: row.announcements?.id,
     title: row.announcements?.title,
     message: row.announcements?.message,
     audience: row.announcements?.audience,
     createdAt: row.announcements?.created_at,
     sender: row.announcements?.staff_profiles?.display_name || row.announcements?.staff_profiles?.full_name || "Management",
-    readAt: row.read_at
-  })).filter((item) => item.id);
+    readAt: row.read_at,
+    deletedAt: row.deleted_at
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const current = await currentProfile();
+  if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
+  const includeDeleted = request.nextUrl.searchParams.get("deleted") === "1";
+  const { data: deletedRows, error: deletedError } = await current.supabase
+    .from("announcement_recipient_trash")
+    .select("announcement_id, deleted_at")
+    .eq("staff_profile_id", current.profile.id);
+  if (deletedError) return NextResponse.json({ error: deletedError.message }, { status: 500 });
+  const deletedById = new Map((deletedRows || []).map((row: any) => [row.announcement_id, row.deleted_at]));
+  const { data, error } = await current.supabase
+    .from("announcement_recipients")
+    .select("read_at, announcements(id, title, message, audience, created_at, staff_profiles!announcements_sender_profile_id_fkey(display_name, full_name))")
+    .eq("staff_profile_id", current.profile.id)
+    .order("announcement_id", { ascending: false });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const announcements = (data || []).map((row: any) => ({ ...mapAnnouncement(row), deletedAt: deletedById.get(row.announcements?.id) || null }))
+    .filter((item) => item.id && (includeDeleted ? item.deletedAt : !item.deletedAt));
   return NextResponse.json({ announcements });
 }
 
@@ -64,9 +77,31 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const current = await currentProfile();
   if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
-  const { announcementId } = await request.json();
+  const { announcementId, action } = await request.json();
   if (!announcementId) return NextResponse.json({ error: "Announcement id is required." }, { status: 400 });
+  if (action === "restore") {
+    const { error } = await current.supabase.from("announcement_recipient_trash").delete().eq("announcement_id", announcementId).eq("staff_profile_id", current.profile.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
   const { error } = await current.supabase.from("announcement_recipients").update({ read_at: new Date().toISOString() }).eq("announcement_id", announcementId).eq("staff_profile_id", current.profile.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(request: Request) {
+  const current = await currentProfile();
+  if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
+  const { announcementId } = await request.json().catch(() => ({}));
+  if (!announcementId) return NextResponse.json({ error: "Announcement id is required." }, { status: 400 });
+  const { data: recipient, error: recipientError } = await current.supabase
+    .from("announcement_recipients")
+    .select("announcement_id")
+    .eq("announcement_id", announcementId)
+    .eq("staff_profile_id", current.profile.id)
+    .maybeSingle();
+  if (recipientError || !recipient) return NextResponse.json({ error: "This announcement is not in your inbox." }, { status: 403 });
+  const { error } = await current.supabase.from("announcement_recipient_trash").upsert({ announcement_id: announcementId, staff_profile_id: current.profile.id, deleted_at: new Date().toISOString() });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
