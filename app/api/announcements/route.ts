@@ -94,14 +94,7 @@ export async function DELETE(request: Request) {
   if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
   const { announcementId } = await request.json().catch(() => ({}));
   if (!announcementId) return NextResponse.json({ error: "Announcement id is required." }, { status: 400 });
-  const { data: recipient, error: recipientError } = await current.supabase
-    .from("announcement_recipients")
-    .select("announcement_id")
-    .eq("announcement_id", announcementId)
-    .eq("staff_profile_id", current.profile.id)
-    .maybeSingle();
-  if (recipientError || !recipient) return NextResponse.json({ error: "This announcement is not in your inbox." }, { status: 403 });
   const { error } = await current.supabase.from("announcement_recipient_trash").upsert({ announcement_id: announcementId, staff_profile_id: current.profile.id, deleted_at: new Date().toISOString() });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message === "new row violates row-level security policy" ? "This announcement is not in your inbox." : error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

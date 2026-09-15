@@ -28,3 +28,13 @@ test("duplicate client deletion has an isolated three-day recovery snapshot", ()
   assert.match(duplicateMigration, /activity_records jsonb not null/);
   assert.match(duplicateMigration, /revoke all on table public\.client_master_duplicate_trash from authenticated/);
 });
+
+test("announcement recovery storage can only be written by the intended recipient", () => {
+  const recipientPolicy = readFileSync(
+    new URL("../supabase/migrations/202609140010_announcement_trash_recipient_policy.sql", import.meta.url),
+    "utf8"
+  );
+  assert.match(recipientPolicy, /create policy announcement_recipient_trash_recipient_only/);
+  assert.match(recipientPolicy, /from public\.announcement_recipients recipient/);
+  assert.match(recipientPolicy, /with check/);
+});

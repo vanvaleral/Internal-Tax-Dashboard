@@ -3349,6 +3349,9 @@
     const persistedDemoState = loadPersistedDemoState();
 
     function restoreCollection(key, fallback) {
+      // Client master is server-authoritative. Never resurrect an older browser
+      // snapshot in place of the shared Supabase records.
+      if (["clients", "proposals"].includes(key)) return deepClone(fallback);
       const restored = persistedDemoState?.collections?.[key];
       return Array.isArray(restored) ? restored : deepClone(fallback);
     }
@@ -4044,28 +4047,39 @@
     }
     const operationalVersions = {};
     const operationalSaveTimers = {};
+    const operationalSaveQueues = {};
+    const operationalPendingPayloads = {};
+    let clientMasterClients = structuredClone(clients);
 
     function workspacePayload(scope) {
-      if (scope === "monthly_compliance") return state.monthlyProgress;
+      if (scope === "monthly_compliance") return state.activeMonthlyPeriod ? { [state.activeMonthlyPeriod]: state.monthlyProgress[state.activeMonthlyPeriod] || [] } : {};
       if (scope === "annual_accounting") return annualAccountingRows;
       return annualTaxRows;
     }
 
-    function queueWorkspaceSave(scope) {
+    function queueWorkspaceSave(scope, payload = workspacePayload(scope)) {
+      if (scope === "monthly_compliance") operationalPendingPayloads[scope] = { ...(operationalPendingPayloads[scope] || {}), ...structuredClone(payload) };
+      else operationalPendingPayloads[scope] = structuredClone(payload);
       window.clearTimeout(operationalSaveTimers[scope]);
       setDatabaseStatus("updating");
-      operationalSaveTimers[scope] = window.setTimeout(async () => {
-        try {
-          const response = await appFetch("/api/operations", { method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ scope, payload: workspacePayload(scope), version: operationalVersions[scope] || 0 }) }, "");
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(result.error || "Workspace change could not be saved.");
-          operationalVersions[scope] = result.data.version;
-          clearSyncFailure(`${scope} workspace`);
-          setDatabaseStatus("connected");
-        } catch (error) {
-          markSyncFailure(`${scope} workspace`, error);
-          setDatabaseStatus("failed");
-        }
+      operationalSaveTimers[scope] = window.setTimeout(() => {
+        const payloadToSave = operationalPendingPayloads[scope];
+        operationalPendingPayloads[scope] = scope === "monthly_compliance" ? {} : null;
+        const previousSave = operationalSaveQueues[scope] || Promise.resolve();
+        const nextSave = previousSave.catch(() => {}).then(async () => {
+          try {
+            const response = await appFetch("/api/operations", { method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ scope, payload: payloadToSave, version: operationalVersions[scope] || 0 }) }, "");
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || "Workspace change could not be saved.");
+            operationalVersions[scope] = result.data.version;
+            clearSyncFailure(`${scope} workspace`);
+            setDatabaseStatus("connected");
+          } catch (error) {
+            markSyncFailure(`${scope} workspace`, error);
+            setDatabaseStatus("failed");
+          }
+        });
+        operationalSaveQueues[scope] = nextSave;
       }, 700);
     }
 
@@ -4527,7 +4541,7 @@
     function saveMonthlyProgress() {
       if (!state.activeMonthlyPeriod) return;
       state.monthlyProgress[state.activeMonthlyPeriod] = structuredClone(clients);
-      queueWorkspaceSave("monthly_compliance");
+      queueWorkspaceSave("monthly_compliance", { [state.activeMonthlyPeriod]: state.monthlyProgress[state.activeMonthlyPeriod] });
     }
 
     function openMonthlyPeriod(period) {
@@ -4540,7 +4554,7 @@
     }
 
     function createMonthlyPeriodRows(month, year) {
-      return structuredClone(clients).map((client) => {
+      return structuredClone(clientMasterClients.filter((client) => client.clientStatus === "Active" && client.taxPic === state.selectedPic)).map((client) => {
         client.month = month;
         client.year = year;
         client.dataState = "missing";
@@ -4810,6 +4824,8 @@
         const matchesPeriod = state.filters.period === "all" || periodKey(client.month, client.year) === state.filters.period;
         const matchesQuery = !query || [
           client.name,
+          client.clientCode,
+          client.npwp,
           client.taxPic,
           client.accountingPic,
           client.notes,
@@ -7719,9 +7735,9 @@
       renderDatabaseSyncStatus();
     }
 
-    async function appFetch(url, options, message = "") {
+    async function appFetch(url, options, message = "", { trackUpdate = true } = {}) {
       const method = String(options?.method || "GET").toUpperCase();
-      const isDatabaseUpdate = ["POST", "PATCH", "PUT", "DELETE"].includes(method);
+      const isDatabaseUpdate = trackUpdate && ["POST", "PATCH", "PUT", "DELETE"].includes(method);
       if (isDatabaseUpdate) {
         appLoadingRequests += 1;
         setAppLoading(true);
@@ -7826,12 +7842,18 @@
     async function loadSharedClients(background = false) {
       try {
         const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared clients...");
-        if (!response.ok) return;
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result.error || `Client master could not be loaded (${response.status}).`);
+        }
         const rows = Array.isArray(result.data) ? result.data : [];
-        if (!rows.length) return;
         const mapped = rows.map(databaseClientToDemo);
-        clients = mapped.filter((client) => client.clientStatus !== "Proposal");
+        clientMasterClients = mapped.filter((client) => client.clientStatus !== "Proposal");
+        // A client-master refresh must not replace the in-progress monthly
+        // snapshot, otherwise a later autosave can erase queue progress.
+        clients = state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]
+          ? structuredClone(state.monthlyProgress[state.activeMonthlyPeriod])
+          : structuredClone(clientMasterClients);
         proposals = mapped.filter((client) => client.clientStatus === "Proposal").map((client) => ({
           ...client,
           proposedPic: client.taxPic,
@@ -7846,8 +7868,10 @@
         if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
         if (!proposals.some((proposal) => proposal.id === state.activeProposalId)) state.activeProposalId = proposals[0]?.id || "";
         renderAfterSharedDataUpdate(["client-management-view", "client-view", "matrix-view", "profile-view"]);
+        clearSyncFailure("Client master");
       } catch (error) {
         console.warn("[clients] shared load failed", error);
+        markSyncFailure("Client master", error);
       }
     }
 
@@ -7858,7 +7882,9 @@
         const result = await response.json();
         for (const row of result.data || []) {
           operationalVersions[row.scope] = row.version;
-          if (row.scope === "monthly_compliance" && row.payload && typeof row.payload === "object") state.monthlyProgress = row.payload;
+          if (row.scope === "monthly_compliance" && row.payload && typeof row.payload === "object") {
+            state.monthlyProgress = { ...state.monthlyProgress, ...row.payload, ...(operationalPendingPayloads.monthly_compliance || {}) };
+          }
           if (row.scope === "annual_accounting" && Array.isArray(row.payload)) annualAccountingRows.splice(0, annualAccountingRows.length, ...row.payload);
           if (row.scope === "annual_tax" && Array.isArray(row.payload)) annualTaxRows.splice(0, annualTaxRows.length, ...row.payload);
         }
@@ -8199,7 +8225,7 @@
       state.announcements = state.announcements.filter((announcement) => announcement.id !== id);
       renderProfile();
       try {
-        const response = await appFetch("/api/announcements", { method: "DELETE", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) });
+        const response = await appFetch("/api/announcements", { method: "DELETE", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ announcementId: id }) }, "", { trackUpdate: false });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Announcement could not be deleted.");
         state.deletedAnnouncements.unshift({ ...item, deletedAt: new Date().toISOString() });
@@ -8550,8 +8576,6 @@
           DEMO_STORAGE_KEY,
           JSON.stringify({
             collections: {
-              clients,
-              proposals,
               taxCases,
               annualAccountingRows,
               annualTaxRows
@@ -8610,7 +8634,7 @@
           event.stopPropagation();
           state.annualTeam = button.getAttribute("data-annual-team");
           state.operationsMode = "annual";
-          commitUi("push");
+          commitWorkspaceNavigation("push");
         };
       });
 
@@ -8785,6 +8809,17 @@
       if (state.operationsMode === "monthly" && state.activeMonthlyPeriod) saveMonthlyProgress();
       if (state.operationsMode === "annual") queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
       rerender();
+      persistDemoState();
+      syncBrowserHistory(mode);
+    }
+
+    // Tabs only change the local workspace lens. Keep them out of the broader
+    // persistence cycle so the selected panel updates in the same click.
+    function commitWorkspaceNavigation(mode = "push") {
+      renderActiveView();
+      applyViewVisibility(state.currentView);
+      renderShellChrome();
+      if (state.currentView === "matrix-view") bindDirectRowActions();
       persistDemoState();
       syncBrowserHistory(mode);
     }
@@ -8995,7 +9030,7 @@
       if (selectMyWorkBackgroundTrigger) { document.getElementById("appearance-my-work-background")?.click(); return; }
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
 
-      if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitUi("replace"); return; }
+      if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitWorkspaceNavigation("replace"); return; }
       if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
       if (completeMyWorkTrigger) { const task = state.myWork.find((item) => item.id === completeMyWorkTrigger.getAttribute("data-my-work-done")); if (task) { task.done = completeMyWorkTrigger.checked; task.completedAt = task.done ? Date.now() : 0; state.movingMyWorkTaskId = task.done ? task.id : ""; state.restoringMyWorkTaskId = task.done ? "" : task.id; } commitUi("push"); if (task) saveMyWorkTaskToDatabase(task, { done: task.done }); return; }
       if (starMyWorkTrigger) { const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star")); if (task) { task.favorite = !task.favorite; task.favoritedAt = task.favorite ? Date.now() : 0; } commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite }); return; }
@@ -9109,7 +9144,7 @@
       if (operationsModeTrigger) {
         state.operationsMode = operationsModeTrigger.getAttribute("data-operations-mode");
         state.expandedClientId = "";
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -9136,13 +9171,13 @@
 
       if (operationsTabTrigger) {
         state.operationsTab = operationsTabTrigger.getAttribute("data-operations-tab");
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         return;
       }
 
       if (annualTeamTrigger) {
         state.annualTeam = annualTeamTrigger.getAttribute("data-annual-team");
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -9153,7 +9188,7 @@
           : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
         const matching = visible.find((item) => state.casesTab === "closed" ? item.stage === "Closed" : item.stage !== "Closed");
         state.selectedCaseId = matching?.id || "";
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -9166,7 +9201,7 @@
 
       if (contractFilterTrigger) {
         state.contractFilter = contractFilterTrigger.getAttribute("data-contract-filter");
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -9391,7 +9426,7 @@
 
       if (managementTabTrigger) {
         state.managementTab = managementTabTrigger.getAttribute("data-management-tab");
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         if (state.managementTab === "workload") loadStaffAccessDirectory();
         return;
       }
@@ -9457,22 +9492,22 @@
 
       if (operationsShortcutTrigger) {
         state.operationsTab = operationsShortcutTrigger.getAttribute("data-operations-tab-shortcut");
-        switchView("matrix-view");
-        commitUi("push");
+        state.currentView = "matrix-view";
+        commitWorkspaceNavigation("push");
         return;
       }
 
       if (casesShortcutTrigger) {
         state.casesTab = casesShortcutTrigger.getAttribute("data-cases-tab-shortcut");
-        switchView("cases-view");
-        commitUi("push");
+        state.currentView = "cases-view";
+        commitWorkspaceNavigation("push");
         return;
       }
 
       if (clientShortcutTrigger) {
         state.clientManagementTab = clientShortcutTrigger.getAttribute("data-client-tab-shortcut");
-        switchView("client-management-view");
-        commitUi("push");
+        state.currentView = "client-management-view";
+        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -9785,7 +9820,7 @@
       if (target.matches("[data-client-tab]")) {
         const requestedTab = target.getAttribute("data-client-tab");
         state.clientManagementTab = requestedTab === "analytics" && !hasLeadershipAccess() ? "active" : requestedTab;
-        commitUi("push");
+        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -9879,6 +9914,7 @@
 
       if (target.matches("[data-save-client]")) {
         const client = clientFormTarget();
+        const previousClient = structuredClone(client);
         client.clientCode = clientEditorField("client-form-code").value.trim() || client.clientCode;
         const clientName = clientEditorField("client-form-name").value.trim();
         if (!clientName) {
@@ -9919,6 +9955,7 @@
           state.clientEditor = null;
           await loadSharedClients();
         } catch (error) {
+          Object.assign(client, previousClient);
           window.alert(error instanceof Error ? error.message : "Client could not be saved.");
         }
         commitUi("push");
