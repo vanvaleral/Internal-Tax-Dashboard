@@ -211,6 +211,15 @@
       color: white;
     }
 
+    .mobile-nav-only {
+      display: none;
+    }
+
+    .mobile-nav-icon,
+    .mobile-nav-label {
+      display: none;
+    }
+
     input,
     select,
     textarea,
@@ -2873,7 +2882,7 @@
 
       .nav {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 6px;
         overflow: visible;
         padding: 0;
@@ -2890,10 +2899,33 @@
         justify-content: center;
       }
 
-      .nav-btn span {
+      .nav-desktop-label,
+      .nav-desktop-subtitle {
+        display: none;
+      }
+
+      .mobile-nav-icon {
+        display: block;
+        height: 20px;
+        font-size: 18px;
+        font-weight: 400;
+        line-height: 20px;
+      }
+
+      .mobile-nav-label {
+        display: block;
         font-size: 9px;
-        font-weight: 600;
-        opacity: 0.75;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        line-height: 1;
+      }
+
+      .nav-btn[data-mobile-hidden] {
+        display: none;
+      }
+
+      .mobile-nav-only {
+        display: flex;
       }
 
       .main {
@@ -3122,13 +3154,14 @@
       </div>
 
       <div class="nav">
-        <button class="nav-btn active" data-view="matrix-view">Operations <span>Recurring</span></button>
-        <button class="nav-btn" data-view="cases-view">Cases <span>Non-Recurring</span></button>
-        <button class="nav-btn" data-view="my-work-view">My Work <span>Daily Tasks</span></button>
-        <button class="nav-btn" data-view="client-management-view">Clients <span>Master</span></button>
-        <button class="nav-btn" data-view="dashboard-view" data-supervisor-only="yes">Management <span>Oversight</span></button>
-        <button class="nav-btn" data-view="allocation-view" data-supervisor-only="yes">Allocation <span>PIC Update</span></button>
-        <button class="nav-btn" data-view="profile-view">Profile <span>My Scope</span></button>
+        <button class="nav-btn active" data-view="matrix-view" data-mobile-hidden="yes"><span class="nav-desktop-label">Operations</span><span class="nav-desktop-subtitle">Recurring</span></button>
+        <button class="nav-btn" data-view="cases-view"><span class="nav-desktop-label">Cases</span><span class="nav-desktop-subtitle">Non-Recurring</span><span class="mobile-nav-icon" aria-hidden="true">&#9888;</span><span class="mobile-nav-label">Cases</span></button>
+        <button class="nav-btn" data-view="my-work-view"><span class="nav-desktop-label">My Work</span><span class="nav-desktop-subtitle">Daily Tasks</span><span class="mobile-nav-icon" aria-hidden="true">&#10003;</span><span class="mobile-nav-label">My Work</span></button>
+        <button class="nav-btn" data-view="client-management-view"><span class="nav-desktop-label">Clients</span><span class="nav-desktop-subtitle">Master</span><span class="mobile-nav-icon" aria-hidden="true">&#9783;</span><span class="mobile-nav-label">Clients</span></button>
+        <button class="nav-btn" data-view="dashboard-view" data-supervisor-only="yes" data-mobile-hidden="yes"><span class="nav-desktop-label">Management</span><span class="nav-desktop-subtitle">Oversight</span></button>
+        <button class="nav-btn" data-view="allocation-view" data-supervisor-only="yes" data-mobile-hidden="yes"><span class="nav-desktop-label">Allocation</span><span class="nav-desktop-subtitle">PIC Update</span></button>
+        <button class="nav-btn mobile-nav-only" data-open-announcement-inbox="yes" aria-label="Open notifications"><span class="nav-desktop-label">Alerts</span><span class="nav-desktop-subtitle">Notifications</span><span class="mobile-nav-icon" aria-hidden="true">&#128276;</span><span class="mobile-nav-label">Alerts</span></button>
+        <button class="nav-btn" data-view="profile-view"><span class="nav-desktop-label">Profile</span><span class="nav-desktop-subtitle">My Scope</span><span class="mobile-nav-icon" aria-hidden="true">&#9787;</span><span class="mobile-nav-label">Profile</span></button>
       </div>
 
       <div class="sidebar-stack">
@@ -5889,9 +5922,11 @@
       `;
     }
 
-    function renderAllocation() {
-      const root = document.getElementById("allocation-view");
+    function renderAllocation(rootOverride = null) {
+      const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
+      const allocationWindow = windowedRows(rows, "allocation-clients", 48);
+      const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
       const pendingChanges = rows.filter((client) => {
         const draft = state.allocationDrafts[client.id] || {};
         return (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) || (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic);
@@ -5918,7 +5953,7 @@
               </div>
             </div>
 
-            <div class="table-wrap desktop-only">
+            ${!isMobileLayout ? `<div class="table-wrap" data-virtual-table="allocation-clients" data-row-height="48">
               <table>
                 <thead>
                   <tr>
@@ -5932,7 +5967,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${rows.map((client) => {
+                  ${virtualSpacer(7, allocationWindow.top)}${allocationWindow.rows.map((client) => {
                     const draft = state.allocationDrafts[client.id] || {};
                     const nextAcc = draft.nextAccPic || client.accountingPic;
                     const nextTax = draft.nextTaxPic || client.taxPic;
@@ -5956,12 +5991,12 @@
                         <td><span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending Update" : "Unchanged"}</span></td>
                       </tr>
                     `;
-                  }).join("") || `<tr><td colspan="7"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}
+                  }).join("") || `<tr><td colspan="7"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(7, allocationWindow.bottom)}
                 </tbody>
               </table>
-            </div>
+            </div>` : ""}
 
-            <div class="mobile-only">
+            ${isMobileLayout ? `<div>
               <div class="list-grid">
                 ${rows.map((client) => {
                   const draft = state.allocationDrafts[client.id] || {};
@@ -5989,7 +6024,7 @@
                   `;
                 }).join("")}
               </div>
-            </div>
+            </div>` : ""}
           </section>
 
           <section class="panel">
@@ -6089,22 +6124,24 @@
       if (state.virtualRenderFrame) return;
       state.virtualRenderFrame = window.requestAnimationFrame(() => {
         state.virtualRenderFrame = 0;
-        if (state.currentView !== "client-management-view") return;
+        if (!["client-management-view", "allocation-view"].includes(state.currentView)) return;
         // Build the next row window off-screen, then replace only tbody.
         // Keeping the scroll container in place prevents a visible jump to
         // row one while a large client list is being virtualized.
         const scratch = document.createElement("div");
-        renderClientManagement(scratch);
+        const renderVirtualView = state.currentView === "allocation-view" ? renderAllocation : renderClientManagement;
+        renderVirtualView(scratch);
         const nextBody = scratch.querySelector(`[data-virtual-table="${tableId}"] tbody`);
         const currentBody = wrap.querySelector("tbody");
         if (nextBody && currentBody) currentBody.replaceWith(nextBody);
-        else renderClientManagement();
+        else renderVirtualView();
         wrap.scrollTop = state.virtualScrollTop?.[tableId] || 0;
       });
     }
 
     function renderClientManagement(rootOverride = null) {
       const root = rootOverride || document.getElementById("client-management-view");
+      const isMobileWorkspace = window.matchMedia("(max-width: 900px)").matches;
       const activeSample = clientFormTarget();
       const portfolio = clientPortfolioSnapshot();
       const monthlyFees = feeModel(activeSample.serviceFee, true, true);
@@ -6136,13 +6173,13 @@
             <div class="toolbar">
               <div class="workspace-tabs">
                 <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
-                <button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
+                ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
-                <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>
+                <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
               </div>
               <div class="toolbar-right">
-                ${canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
-                <button class="ghost-btn" data-export-clients="yes">Export Excel</button>
+                ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
+                ${!isMobileWorkspace ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
               </div>
             </div>
           </section>
@@ -8685,7 +8722,17 @@
       });
     }
 
+    const MOBILE_WORKSPACE_VIEWS = new Set(["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view"]);
+
+    function normalizeMobileWorkspaceView() {
+      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)) {
+        state.currentView = "my-work-view";
+        state.clientManagementTab = "active";
+      }
+    }
+
     function renderActiveView() {
+      normalizeMobileWorkspaceView();
       if (state.currentView === "matrix-view") return renderMatrix();
       if (state.currentView === "cases-view") return renderCases();
       if (state.currentView === "my-work-view") return renderMyWork();
@@ -8701,6 +8748,12 @@
       // an old link or clicks an embedded management shortcut.
       if ((viewId === "dashboard-view" || viewId === "allocation-view") && !hasLeadershipAccess()) {
         viewId = "matrix-view";
+      }
+      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)) {
+        viewId = "my-work-view";
+      }
+      if (viewId === "client-management-view" && window.matchMedia("(max-width: 900px)").matches) {
+        state.clientManagementTab = "active";
       }
       state.currentView = viewId;
       renderActiveView();

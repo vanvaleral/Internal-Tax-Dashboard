@@ -61,3 +61,21 @@ test("sub-menu navigation uses the complete renderer without triggering an autos
   assert.match(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{\s*rerender\(\);\s*persistDemoState\(\);/);
   assert.doesNotMatch(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{[\s\S]{0,240}saveMonthlyProgress\(/);
 });
+
+test("allocation uses virtual rows and does not build the hidden mobile layout on desktop", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /const allocationWindow = windowedRows\(rows, "allocation-clients", 48\)/);
+  assert.match(demo, /data-virtual-table="allocation-clients"/);
+  assert.match(demo, /\$\{!isMobileLayout \? `<div class="table-wrap"/);
+  assert.match(demo, /\["client-management-view", "allocation-view"\]\.includes\(state\.currentView\)/);
+});
+
+test("mobile navigation is limited to operational companion workspaces", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /const MOBILE_WORKSPACE_VIEWS = new Set\(\["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view"\]\)/);
+  assert.match(demo, /data-view="matrix-view" data-mobile-hidden="yes"/);
+  assert.match(demo, /data-open-announcement-inbox="yes" aria-label="Open notifications"/);
+  assert.match(demo, /!isMobileWorkspace && canImportClientMaster\(\)/);
+  assert.match(demo, /mobile-nav-icon/);
+  assert.match(demo, /mobile-nav-label">My Work/);
+});
