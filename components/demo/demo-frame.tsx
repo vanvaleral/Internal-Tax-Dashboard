@@ -3,7 +3,7 @@ export function DemoFrame() {
     <iframe
       src="/demo.html?v=operations-hardening-v1"
       title="Tax Operations Demo"
-      className="h-screen w-full border-0"
+      className="demo-frame w-full border-0"
     />
   );
 }

@@ -72,9 +72,9 @@ test("allocation uses virtual rows and does not build the hidden mobile layout o
 
 test("mobile navigation is limited to operational companion workspaces", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /const MOBILE_WORKSPACE_VIEWS = new Set\(\["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view"\]\)/);
+  assert.match(demo, /const MOBILE_WORKSPACE_VIEWS = new Set\(\["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view", "announcement-view"\]\)/);
   assert.match(demo, /data-view="matrix-view" data-mobile-hidden="yes"/);
-  assert.match(demo, /data-open-announcement-inbox="yes" aria-label="Open notifications"/);
+  assert.match(demo, /data-view="announcement-view" aria-label="Open notifications"/);
   assert.match(demo, /!isMobileWorkspace && canImportClientMaster\(\)/);
   assert.match(demo, /mobile-nav-icon/);
   assert.match(demo, /mobile-nav-label">My Work/);
@@ -113,4 +113,19 @@ test("mobile navigation is a persistent composited layer", async () => {
   assert.match(demo, /z-index: 1000;/);
   assert.match(demo, /bottom: calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(demo, /transform: translate3d\(0, 0, 0\);/);
+});
+
+test("mobile alerts open a full notifications workspace instead of an inbox popover", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /function renderAnnouncementView\(\)/);
+  assert.match(demo, /<section id="announcement-view" class="view hidden"><\/section>/);
+  assert.match(demo, /if \(state\.currentView === "announcement-view"\) return renderAnnouncementView\(\);/);
+  assert.match(demo, /if \(state\.currentView === "announcement-view"\) renderAnnouncementView\(\);/);
+});
+
+test("mobile header keeps attendance and custom icons centered", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /database-status-chip[\s\S]*mobile-attendance-trigger[\s\S]*settings-btn[\s\S]*logout-btn/);
+  assert.match(demo, /\.topbar-actions \.mobile-attendance-trigger \{[\s\S]{0,320}place-items: center;/);
+  assert.match(demo, /client-fab[\s\S]{0,520}<svg viewBox="0 0 24 24" aria-hidden="true">/);
 });

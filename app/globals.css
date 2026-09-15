@@ -36,6 +36,12 @@ button {
   font: inherit;
 }
 
+.demo-frame {
+  display: block;
+  height: 100vh;
+  height: 100dvh;
+}
+
 .auth-page {
   min-height: 100vh;
   display: grid;
