@@ -79,3 +79,28 @@ test("mobile navigation is limited to operational companion workspaces", async (
   assert.match(demo, /mobile-nav-icon/);
   assert.match(demo, /mobile-nav-label">My Work/);
 });
+
+test("mobile workspace keeps the header, cases controls, and client list compact", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /workspace-cases \.case-mobile-tabs/);
+  assert.match(demo, /workspace-clients \.client-fab[\s\S]{0,160}bottom: 104px/);
+  assert.match(demo, /client-mobile-row/);
+  assert.doesNotMatch(demo, /client-mobile-card[\s\S]{0,1800}obligationStripMarkup\(client\)/);
+  assert.match(demo, /topbar-mobile-icon/);
+  assert.match(demo, /z-index: 100/);
+});
+
+test("mobile My Work opens details only after selecting a task", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /myWorkDetailOpen: false/);
+  assert.match(demo, /const showMyWorkDetail = Boolean\(selected && \(!isMobileMyWork \|\| state\.myWorkDetailOpen\)\)/);
+  assert.match(demo, /data-close-my-work-detail="yes"/);
+  assert.match(demo, /state\.myWorkDetailOpen = true/);
+  assert.match(demo, /topbar-actions \.inbox-trigger \{\s*display: none;/);
+});
+
+test("announcement inbox can be toggled without leaving the current workspace", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /if \(openAnnouncementInboxTrigger\) \{\s*state\.announcementInboxOpen = !state\.announcementInboxOpen;/);
+  assert.match(demo, /height: calc\(100dvh - 190px\)/);
+});
