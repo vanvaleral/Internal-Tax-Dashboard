@@ -2857,7 +2857,7 @@
 
     @media (max-width: 900px) {
       body {
-        padding-bottom: 112px;
+        padding-bottom: calc(112px + env(safe-area-inset-bottom));
       }
 
       .shell {
@@ -2866,18 +2866,21 @@
       }
 
       .sidebar {
-        position: fixed;
+        position: fixed !important;
         left: 8px;
         right: 8px;
-        bottom: 8px;
+        bottom: calc(8px + env(safe-area-inset-bottom));
         top: auto;
         height: auto;
-        z-index: 100;
+        z-index: 1000;
         padding: 8px;
         border-radius: 22px;
         background: rgba(255, 255, 255, 0.96);
         box-shadow: 0 16px 36px rgba(24, 38, 48, 0.16);
         backdrop-filter: blur(14px);
+        transform: translate3d(0, 0, 0);
+        will-change: transform;
+        isolation: isolate;
       }
 
       .sidebar > div:first-child,
@@ -3302,7 +3305,7 @@
 
     @media (max-width: 520px) {
       body {
-        padding-bottom: 112px;
+        padding-bottom: calc(112px + env(safe-area-inset-bottom));
       }
 
       .shell {
@@ -3312,7 +3315,7 @@
       .sidebar {
         left: 6px;
         right: 6px;
-        bottom: 6px;
+        bottom: calc(6px + env(safe-area-inset-bottom));
       }
 
       .nav-btn {

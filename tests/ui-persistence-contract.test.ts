@@ -106,3 +106,11 @@ test("announcement inbox can be toggled without leaving the current workspace", 
   assert.match(demo, /mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24">/);
   assert.match(demo, /settings-btn[\s\S]{0,360}<svg viewBox="0 0 24 24">/);
 });
+
+test("mobile navigation is a persistent composited layer", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /position: fixed !important;/);
+  assert.match(demo, /z-index: 1000;/);
+  assert.match(demo, /bottom: calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(demo, /transform: translate3d\(0, 0, 0\);/);
+});
