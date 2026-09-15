@@ -127,5 +127,7 @@ test("mobile header keeps attendance and custom icons centered", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /database-status-chip[\s\S]*mobile-attendance-trigger[\s\S]*settings-btn[\s\S]*logout-btn/);
   assert.match(demo, /\.topbar-actions \.mobile-attendance-trigger \{[\s\S]{0,320}place-items: center;/);
+  assert.match(demo, /\.topbar-actions \.ghost-btn \{[\s\S]{0,320}display: grid;[\s\S]{0,320}place-items: center;[\s\S]{0,320}line-height: 0;/);
+  assert.match(demo, /\.workspace-cases \.case-mobile-actions \.solid-btn \{[\s\S]{0,360}display: grid;[\s\S]{0,360}place-items: center;/);
   assert.match(demo, /client-fab[\s\S]{0,520}<svg viewBox="0 0 24 24" aria-hidden="true">/);
 });
