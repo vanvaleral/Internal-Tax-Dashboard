@@ -55,3 +55,9 @@ test("client master is not restored from browser storage after a shared-data sav
   assert.match(demo, /const previousClient = structuredClone\(client\);/);
   assert.match(demo, /Object\.assign\(client, previousClient\);/);
 });
+
+test("sub-menu navigation uses the complete renderer without triggering an autosave", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{\s*rerender\(\);\s*persistDemoState\(\);/);
+  assert.doesNotMatch(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{[\s\S]{0,240}saveMonthlyProgress\(/);
+});

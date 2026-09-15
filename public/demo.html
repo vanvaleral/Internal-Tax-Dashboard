@@ -8813,13 +8813,10 @@
       syncBrowserHistory(mode);
     }
 
-    // Tabs only change the local workspace lens. Keep them out of the broader
-    // persistence cycle so the selected panel updates in the same click.
+    // Tabs do not save or refetch data, but they must use the complete render
+    // pass so nested controls are rebound before the next interaction.
     function commitWorkspaceNavigation(mode = "push") {
-      renderActiveView();
-      applyViewVisibility(state.currentView);
-      renderShellChrome();
-      if (state.currentView === "matrix-view") bindDirectRowActions();
+      rerender();
       persistDemoState();
       syncBrowserHistory(mode);
     }
