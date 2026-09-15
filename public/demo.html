@@ -3022,7 +3022,7 @@
         align-items: center;
       }
 
-      .topbar-actions .inbox-trigger {
+      .topbar-actions .ghost-btn.inbox-trigger {
         display: none;
       }
 
@@ -3066,6 +3066,10 @@
         place-items: center;
         border-radius: 9px;
         font-size: 0;
+      }
+
+      .topbar-actions .topbar-desktop-label {
+        display: none;
       }
 
       .topbar-actions .topbar-mobile-icon {
@@ -3479,9 +3483,9 @@
         </div>
         <div class="topbar-actions">
           <button class="database-status-chip" id="database-status-chip" type="button" title="Checking database connection">Database: checking...</button>
-          <button class="solid-btn mobile-attendance-trigger" data-open-attendance-site="yes" aria-label="Open attendance"><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 9.2 17 19 7"></path></svg></span>Attend</button>
+          <button class="solid-btn mobile-attendance-trigger" data-open-attendance-site="yes" aria-label="Open attendance"><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 9.2 17 19 7"></path></svg></span><span class="topbar-desktop-label">Attend</span></button>
           <button class="ghost-btn inbox-trigger" data-open-announcement-inbox="yes" aria-label="Open announcements"><span class="topbar-desktop-label">Announcements</span><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 17h12l-1.5-2.2V10a4.5 4.5 0 0 0-9 0v4.8z"></path><path d="M10 20h4"></path></svg></span><span class="inbox-badge" id="announcement-unread-count" hidden>0</span></button>
-          <button class="ghost-btn settings-btn" data-open-appearance-settings="yes" aria-label="Appearance settings" title="Appearance settings"><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19 13.5v-3l-2-.6a5.7 5.7 0 0 0-.7-1.6l1-1.8-2.1-2.1-1.8 1.1a5.7 5.7 0 0 0-1.7-.7L11 2.8H8l-.6 2a5.7 5.7 0 0 0-1.6.7L4 4.4 1.9 6.5l1 1.8a5.7 5.7 0 0 0-.7 1.6l-2 .6v3l2 .6a5.7 5.7 0 0 0 .7 1.6l-1 1.8L4 19.6l1.8-1.1a5.7 5.7 0 0 0 1.6.7l.6 2h3l.6-2a5.7 5.7 0 0 0 1.7-.7l1.8 1.1 2.1-2.1-1-1.8a5.7 5.7 0 0 0 .7-1.6z"></path></svg></span><span class="topbar-desktop-label">&#9881;</span></button>
+          <button class="ghost-btn settings-btn" data-open-appearance-settings="yes" aria-label="Appearance settings" title="Appearance settings"><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.25"></circle><path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M18 6l-1.4 1.4M7.4 16.6 6 18M18 18l-1.4-1.4M7.4 7.4 6 6"></path></svg></span><span class="topbar-desktop-label">&#9881;</span></button>
           <button class="ghost-btn logout-btn" data-logout="yes" aria-label="Log out of the workspace"><span class="topbar-desktop-label">Log out</span><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5"></path><path d="m14 8 4 4-4 4M9 12h9"></path></svg></span></button>
         </div>
       </section>

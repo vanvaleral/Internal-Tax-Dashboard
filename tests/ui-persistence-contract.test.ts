@@ -96,7 +96,7 @@ test("mobile My Work opens details only after selecting a task", async () => {
   assert.match(demo, /const showMyWorkDetail = Boolean\(selected && \(!isMobileMyWork \|\| state\.myWorkDetailOpen\)\)/);
   assert.match(demo, /data-close-my-work-detail="yes"/);
   assert.match(demo, /state\.myWorkDetailOpen = true/);
-  assert.match(demo, /topbar-actions \.inbox-trigger \{\s*display: none;/);
+  assert.match(demo, /topbar-actions \.ghost-btn\.inbox-trigger \{\s*display: none;/);
 });
 
 test("announcement inbox can be toggled without leaving the current workspace", async () => {
@@ -126,6 +126,7 @@ test("mobile alerts open a full notifications workspace instead of an inbox popo
 test("mobile header keeps attendance and custom icons centered", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /database-status-chip[\s\S]*mobile-attendance-trigger[\s\S]*settings-btn[\s\S]*logout-btn/);
+  assert.match(demo, /\.topbar-actions \.ghost-btn\.inbox-trigger \{\s*display: none;/);
   assert.match(demo, /\.topbar-actions \.mobile-attendance-trigger \{[\s\S]{0,320}place-items: center;/);
   assert.match(demo, /\.topbar-actions \.ghost-btn \{[\s\S]{0,320}display: grid;[\s\S]{0,320}place-items: center;[\s\S]{0,320}line-height: 0;/);
   assert.match(demo, /\.workspace-cases \.case-mobile-actions \.solid-btn \{[\s\S]{0,360}display: grid;[\s\S]{0,360}place-items: center;/);
