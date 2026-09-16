@@ -32,6 +32,12 @@ test("Client Growth normalizes KPP labels before calculating regional distributi
   assert.match(demo, /normalizeTaxOfficeRegion\(client\.taxOfficeRegion\) === region/);
 });
 
+test("Client Growth uses Client Master and includes active clients without a precise contract date", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /const growthClients = clientMasterClients/);
+  assert.match(demo, /year === currentYear\s+\? growthClients\.filter\(\(client\) => client\.clientStatus !== "Inactive"\)/);
+});
+
 test("Monthly Compliance saves only changed periods and preserves the active queue during client refresh", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /\[state\.activeMonthlyPeriod\]: state\.monthlyProgress\[state\.activeMonthlyPeriod\]/);

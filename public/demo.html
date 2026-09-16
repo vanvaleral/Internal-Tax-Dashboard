@@ -275,7 +275,9 @@
     button.my-work-action-card:hover:not(:disabled), button.my-work-action-card:focus-visible:not(:disabled) { background:#f3f6ff; box-shadow:none !important; filter:none; transform:none !important; }
     .my-work-action-icon { width:19px; height:19px; flex:0 0 auto; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round; }
     .my-work-assignment { display:flex; align-items:center; gap:12px; width:100%; }
-    .my-work-assignment input { flex:1; min-width:0; }
+    .my-work-assignment > span { flex:0 0 66px; }
+    .my-work-assignment input,
+    .my-work-assignment select { flex:1; min-width:0; width:100%; }
     .my-work-assignees { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 12px; }
     .my-work-assignee-chip { padding:4px 8px; border-radius:999px; color:#31517d; background:#e8f0ff; font-size:12px; }
     .my-work-meta { margin-top:auto; padding-top:16px; color:#7a8493; font-size:12px; }
@@ -6146,18 +6148,21 @@
       }).sort((left, right) => right.points - left.points || right.monthlyCompleted - left.monthlyCompleted || left.pic.localeCompare(right.pic));
       const currentYear = new Date().getFullYear();
       const growthYears = Array.from({ length: 6 }, (_, index) => currentYear - 5 + index);
+      const growthClients = clientMasterClients;
       const clientGrowth = growthYears.map((year) => {
         const endOfYear = `${year}-12-31`;
-        const started = clients.filter((client) => (client.contractStartedAt || client.engagementStart || "").slice(0, 4) === String(year));
+        const started = growthClients.filter((client) => (client.contractStartedAt || client.engagementStart || "").slice(0, 4) === String(year));
         const endedAt = (client) => client.clientStatus === "Inactive" ? (client.engagementEnd || client.inactivatedAt || "") : (client.inactivatedAt || "");
-        const ended = clients.filter((client) => endedAt(client).slice(0, 4) === String(year));
-        const active = clients.filter((client) => { const start = client.contractStartedAt || client.engagementStart || ""; const end = endedAt(client); return start && start <= endOfYear && (!end || end > endOfYear); });
+        const ended = growthClients.filter((client) => endedAt(client).slice(0, 4) === String(year));
+        const active = year === currentYear
+          ? growthClients.filter((client) => client.clientStatus !== "Inactive")
+          : growthClients.filter((client) => { const start = client.contractStartedAt || client.engagementStart || ""; const end = endedAt(client); return start && start <= endOfYear && (!end || end > endOfYear); });
         const monthlyFee = active.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
         return { year, started: started.length, ended: ended.length, active: active.length, monthlyFee };
       });
       const maxGrowthFee = Math.max(...clientGrowth.map((row) => row.monthlyFee), 1);
       const regions = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
-      const regionalCounts = regions.map((region) => ({ region, count: clients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region && client.clientStatus !== "Inactive").length }));
+      const regionalCounts = regions.map((region) => ({ region, count: growthClients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region && client.clientStatus !== "Inactive").length }));
       const root = document.getElementById("dashboard-view");
 
       root.innerHTML = safeHtml(`
@@ -7799,7 +7804,7 @@
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">&#128465;</button>`;
       const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${item.id.startsWith("case-") ? `<div class="empty-state">Save this Himbauan first, then add progress updates.</div>` : expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed linked tasks yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress</div><div class="case-progress-list">${expandedProgress.progressEntries.map((entry) => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName)} · ${entry.createdAt ? new Date(entry.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${item.id}">Add</button></div></div></div>` : `<div class="subline">Loading progress...</div>`}</td></tr>` : "";
-      const caseActionButtons = (item) => `<div class="inline-controls"><span class="pill neutral">${item.id === state.expandedHimbauanId ? "Close" : "Progress"}</span>${deleteCaseButton(item)}</div>`;
+      const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
       const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
         return `<tr class="case-main-row" data-keyboard-row="case" data-toggle-himbauan-progress="${item.id}" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`;
@@ -8099,8 +8104,8 @@
                 </div>
                 <button class="my-work-action-card" data-open-my-work-menu="reminder">${myWorkActionIcon("reminder")}<span>${selected.reminder ? `Remind: ${escapeHtml(selected.reminder.replace("T", " "))}` : "Remind me"}</span></button>
                 <button class="my-work-action-card" data-open-my-work-menu="due">${myWorkActionIcon("due")}<span>${selected.dueDate ? `Due: ${escapeHtml(selected.dueDate)}` : "Add due date"}</span></button>
-                <label class="my-work-action-card">${myWorkActionIcon("case")}<span class="my-work-assignment"><span>${linkedCase ? "Linked Case" : "Link to Case"}</span><select class="field" data-my-work-case-select="${selected.id}" aria-label="Link task to Case"><option value="">No linked Case</option>${availableCases.map((item) => `<option value="${item.id}" ${item.id === selected.caseId ? "selected" : ""}>${escapeHtml(`${item.caseCategory || item.caseType} - ${item.clientName || "Untitled Case"}${item.letterNumber ? ` (${item.letterNumber})` : ""}`)}</option>`).join("")}</select></span></label>
-                <div class="my-work-action-card"><label class="my-work-assignment">${myWorkActionIcon("assign")}<span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
+                <div class="my-work-action-card">${myWorkActionIcon("case")}<label class="my-work-assignment"><span>Linked to</span><select class="field" data-my-work-case-select="${selected.id}" aria-label="Link task to Case"><option value="">No linked Case</option>${availableCases.map((item) => `<option value="${item.id}" ${item.id === selected.caseId ? "selected" : ""}>${escapeHtml(`${item.caseCategory || item.caseType} - ${item.clientName || "Untitled Case"}${item.letterNumber ? ` (${item.letterNumber})` : ""}`)}</option>`).join("")}</select></label></div>
+                <div class="my-work-action-card">${myWorkActionIcon("assign")}<label class="my-work-assignment"><span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
                 <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
                 <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>
@@ -8209,6 +8214,16 @@
       const before = state.syncIssues.length;
       state.syncIssues = state.syncIssues.filter((issue) => issue.scope !== key);
       if (before !== state.syncIssues.length) persistDemoState();
+      renderDatabaseSyncStatus();
+    }
+
+    function setDatabaseStatus(status) {
+      const statusMap = {
+        updating: { text: "Database: updating", className: "database-status-chip is-updating", title: "Changes are saving in the background. You can continue working." },
+        connected: { text: "Database: connected", className: "database-status-chip is-connected", title: "Database connected" },
+        failed: { text: "Database: needs attention", className: "database-status-chip is-warning", title: "One or more changes could not be saved. Select this status for details." }
+      };
+      if (statusMap[status]) databaseHealthStatus = statusMap[status];
       renderDatabaseSyncStatus();
     }
 
@@ -10276,13 +10291,13 @@
       if (editClientTrigger) {
         state.activeClientFormId = editClientTrigger.getAttribute("data-edit-client");
         state.clientEditor = { kind: "client", id: state.activeClientFormId };
-        commitUi("push");
+        renderClientEditor();
         return;
       }
 
       if (closeClientEditorTrigger) {
         state.clientEditor = null;
-        commitUi("replace");
+        renderClientEditor();
         return;
       }
 

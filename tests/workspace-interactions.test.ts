@@ -17,9 +17,16 @@ test("monthly generation previews scoped rows before writing", () => {
 test("client editor resolves records from Client Master instead of a monthly snapshot", () => {
   assert.match(demo, /const managedClients = clientMasterClients/);
   assert.match(demo, /clientMasterClients\.find\(\(item\) => item\.id === editor\.id\)/);
+  assert.match(demo, /if \(editClientTrigger\)[\s\S]*?state\.clientEditor = \{ kind: "client", id: state\.activeClientFormId \};\s+renderClientEditor\(\)/);
 });
 
 test("operations row expansion is navigation-only and does not save the workspace", () => {
   assert.match(demo, /function bindDirectRowActions\(\)/);
   assert.match(demo, /state\.expandedClientId = state\.expandedClientId === clientId \? "" : clientId;\s+state\.selectedClientId = clientId;\s+commitWorkspaceNavigation\("replace"\)/);
+});
+
+test("tax claim generation can update the non-blocking database status", () => {
+  assert.match(demo, /function setDatabaseStatus\(status\)/);
+  assert.match(demo, /function openMonthlyTaxClaim\(client\)/);
+  assert.match(demo, /generateClaim\(client\);\s+saveMonthlyProgress\(\);\s+window\.open/);
 });
