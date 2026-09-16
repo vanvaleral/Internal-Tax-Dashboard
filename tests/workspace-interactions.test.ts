@@ -25,8 +25,27 @@ test("operations row expansion is navigation-only and does not save the workspac
   assert.match(demo, /state\.expandedClientId = state\.expandedClientId === clientId \? "" : clientId;\s+state\.selectedClientId = clientId;\s+commitWorkspaceNavigation\("replace"\)/);
 });
 
+test("Operations starts its batched save well below one second", () => {
+  assert.match(demo, /operationalSaveTimers\[scope\] = window\.setTimeout\([\s\S]*?}, 150\);/);
+});
+
 test("tax claim generation can update the non-blocking database status", () => {
   assert.match(demo, /function setDatabaseStatus\(status\)/);
   assert.match(demo, /function openMonthlyTaxClaim\(client\)/);
   assert.match(demo, /generateClaim\(client\);\s+saveMonthlyProgress\(\);\s+window\.open/);
+});
+
+test("monthly Edit Mode supports selection and explicit permanent deletion", () => {
+  assert.match(demo, /data-toggle-monthly-edit="yes">Edit Mode/);
+  assert.match(demo, /data-select-all-monthly-rows="yes"/);
+  assert.match(demo, /data-select-monthly-row=/);
+  assert.match(demo, /method: "DELETE"/);
+  assert.match(demo, /This action cannot be undone and the rows will not be moved to Recently Deleted/);
+});
+
+test("delete actions share the custom SVG trash icon", () => {
+  assert.match(demo, /function deleteIcon\(\)/);
+  assert.match(demo, /class="delete-icon"/);
+  assert.doesNotMatch(demo, /&#128465;/);
+  assert.match(demo, /data-delete-monthly-rows="yes"[\s\S]*?\$\{deleteIcon\(\)\}Delete/);
 });

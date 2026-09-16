@@ -9,6 +9,9 @@ test("My Work uses a per-task save queue and avoids stale full-record replacemen
   assert.match(demo, /const myWorkSaveQueues = new WeakMap\(\)/);
   assert.match(demo, /rapid create \+ edit sequence into POST then PATCH/);
   assert.doesNotMatch(demo, /Object\.assign\(task, result\.task\)/);
+  assert.doesNotMatch(demo, /if \(creating\) saveMyWorkTaskToDatabase\(task\)/);
+  assert.match(demo, /if \(task\.pendingSync\) saveMyWorkTaskToDatabase\(task\)/);
+  assert.match(demo, /typeof task\.pendingFavorite === "boolean"/);
 });
 
 test("inline case edits are debounced and keep the table in place", async () => {
@@ -16,6 +19,7 @@ test("inline case edits are debounced and keep the table in place", async () => 
   assert.match(demo, /const inlineCaseSaveQueues = new WeakMap\(\)/);
   assert.match(demo, /window\.setTimeout\(\(\) => \{/);
   assert.match(demo, /saveCaseToDatabase\(record, \{ showLoading: false \}\)/);
+  assert.match(demo, /}, 250\);/);
 });
 
 test("the client and case lists use windowed table rendering", async () => {
@@ -36,6 +40,14 @@ test("Client Growth uses Client Master and includes active clients without a pre
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /const growthClients = clientMasterClients/);
   assert.match(demo, /year === currentYear\s+\? growthClients\.filter\(\(client\) => client\.clientStatus !== "Inactive"\)/);
+});
+
+test("Profile client scope uses Client Master and permanent PIC profile IDs", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /const assignedClients = clientMasterClients\.filter/);
+  assert.match(demo, /client\.taxPicProfileId \|\| ""/);
+  assert.match(demo, /client\.accountingPicProfileId \|\| ""/);
+  assert.match(demo, /PIC TAX & PIC ACC/);
 });
 
 test("Monthly Compliance saves only changed periods and preserves the active queue during client refresh", async () => {
@@ -66,6 +78,12 @@ test("sub-menu navigation uses the complete renderer without triggering an autos
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{\s*rerender\(\);\s*persistDemoState\(\);/);
   assert.doesNotMatch(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{[\s\S]{0,240}saveMonthlyProgress\(/);
+});
+
+test("non-Operations UI changes never enqueue an Operations workspace save", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /if \(state\.currentView === "matrix-view" && state\.operationsMode === "monthly"/);
+  assert.match(demo, /if \(state\.currentView === "matrix-view" && state\.operationsMode === "annual"/);
 });
 
 test("allocation uses virtual rows and does not build the hidden mobile layout on desktop", async () => {

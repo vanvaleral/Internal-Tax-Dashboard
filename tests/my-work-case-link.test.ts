@@ -16,6 +16,13 @@ test("daily tasks persist an authorized optional Case link", () => {
   assert.match(route, /update\.case_id = await accessibleCaseId/);
 });
 
+test("My Work mutations avoid redundant relation refetches", () => {
+  assert.match(route, /const TASK_MUTATION_SELECT =/);
+  assert.match(route, /select\(TASK_MUTATION_SELECT\)\.eq\("id", id\)/);
+  assert.doesNotMatch(route, /const \{ data: finalTask \}/);
+  assert.doesNotMatch(route, /const \{ data: complete \}/);
+});
+
 test("My Work presents Case linking instead of repeat controls", () => {
   assert.match(demo, /data-my-work-case-select="\$\{selected\.id\}"/);
   assert.match(demo, /target\.matches\("\[data-my-work-case-select\]"\)/);

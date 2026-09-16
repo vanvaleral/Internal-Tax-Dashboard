@@ -26,3 +26,11 @@ test("monthly generation is server-side, target-PIC scoped, and preserves snapsh
   assert.deepEqual(scopedWorkspace("monthly_compliance", { July: [{ databaseId: "A", taxPicSnapshotProfileId: "staff-a" }] }, new Set(), "supervisor", true).July.length, 1);
   assert.match(route, /\.eq\("version", current\.version\)/);
 });
+
+test("generated monthly rows use a permanent, ownership-checked delete endpoint", () => {
+  assert.match(route, /export async function DELETE\(request: Request\)/);
+  assert.match(route, /removable\.some\(\(row\) => !canAccessMonthlyRow\(row, actor\.profile\.id/);
+  assert.match(route, /You may permanently delete only rows assigned to you/);
+  assert.match(route, /action: `permanent_delete:/);
+  assert.match(route, /version !== current\.version/);
+});

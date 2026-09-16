@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
-import { mergeWorkspace, scopedWorkspace } from "@/lib/workspace-security";
+import { canAccessMonthlyRow, clientIdentifier, mergeWorkspace, scopedWorkspace } from "@/lib/workspace-security";
 
 const scopes = new Set(["monthly_compliance", "annual_accounting", "annual_tax"]);
 
@@ -203,4 +203,37 @@ export async function PUT(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await actor.admin.from("operational_workspace_audit").insert({ scope, version: nextVersion, actor_profile_id: actor.profile.id, action: "updated" });
   return NextResponse.json({ data: serialize(data) });
+}
+
+export async function DELETE(request: Request) {
+  const actor = await currentActor();
+  if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const body = await request.json().catch(() => ({}));
+  const period = String(body.period || "").trim();
+  const version = Number(body.version || 0);
+  const rowIds = new Set(Array.isArray(body.rowIds) ? body.rowIds.map((value: unknown) => String(value)) : []);
+  if (!period || !rowIds.size) return NextResponse.json({ error: "Select at least one generated client row." }, { status: 400 });
+
+  const { data: current, error: currentError } = await actor.admin.from("operational_workspace_state").select("payload, version").eq("scope", "monthly_compliance").maybeSingle();
+  if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
+  if (!current || version !== current.version) return NextResponse.json({ error: "The active queue changed in another session. Reload it and select the rows again.", code: "VERSION_CONFLICT" }, { status: 409 });
+  const payload = current.payload && typeof current.payload === "object" && !Array.isArray(current.payload) ? current.payload as Record<string, unknown> : {};
+  const rows = Array.isArray(payload[period]) ? payload[period] as Record<string, any>[] : [];
+  const removable = rows.filter((row) => rowIds.has(clientIdentifier(row)) || rowIds.has(String(row.id || "")));
+  if (!removable.length) return NextResponse.json({ error: "The selected generated rows were not found." }, { status: 404 });
+  if (!isLeadership(actor.profile.role) && removable.some((row) => !canAccessMonthlyRow(row, actor.profile.id, new Set()))) {
+    return NextResponse.json({ error: "You may permanently delete only rows assigned to you." }, { status: 403 });
+  }
+
+  const removedKeys = new Set(removable.flatMap((row) => [clientIdentifier(row), String(row.id || "")]).filter(Boolean));
+  const nextPayload = { ...payload, [period]: rows.filter((row) => !removedKeys.has(clientIdentifier(row)) && !removedKeys.has(String(row.id || ""))) };
+  const nextVersion = current.version + 1;
+  const { data, error } = await actor.admin.from("operational_workspace_state")
+    .update({ payload: nextPayload, version: nextVersion, updated_by_profile_id: actor.profile.id, updated_at: new Date().toISOString() })
+    .eq("scope", "monthly_compliance").eq("version", current.version)
+    .select("scope, payload, version, updated_at").maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Another session updated the queue first. Reload it and select the rows again.", code: "VERSION_CONFLICT" }, { status: 409 });
+  await actor.admin.from("operational_workspace_audit").insert({ scope: "monthly_compliance", version: nextVersion, actor_profile_id: actor.profile.id, action: `permanent_delete:${period}:${removable.length}` });
+  return NextResponse.json({ data: { ...data, payload: scopedWorkspace("monthly_compliance", data.payload, new Set(), actor.profile.id, isLeadership(actor.profile.role)) }, deleted: removable.length });
 }

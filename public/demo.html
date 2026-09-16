@@ -1627,6 +1627,10 @@
       color: white;
     }
 
+    .solid-btn.danger { background: #b42318; }
+    .delete-icon { width:16px; height:16px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .solid-btn .delete-icon { margin-right:6px; vertical-align:-3px; }
+
     .settings-btn { display:grid; width:30px; height:30px; padding:0; place-items:center; font-size:17px; }
     .appearance-settings-backdrop { position:fixed; z-index:90; inset:0; background:rgba(12, 20, 32, .24); }
     .appearance-settings { position:fixed; z-index:91; top:74px; right:24px; width:min(330px, calc(100vw - 32px)); padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--panel-solid); box-shadow:0 20px 48px rgba(0,0,0,.2); }
@@ -4410,6 +4414,8 @@
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       monthlyGenerationPreview: null,
+      monthlyEditMode: false,
+      monthlyDeleteSelection: [],
       sorts: {
         monthly: { key: "name", dir: "asc" },
         annualAccounting: { key: "name", dir: "asc" },
@@ -4492,7 +4498,7 @@
           }
         });
         operationalSaveQueues[scope] = nextSave;
-      }, 700);
+      }, 150);
     }
 
     function currency(amount) {
@@ -5055,6 +5061,38 @@
       state.monthlyGenerationPreview = null;
       commitWorkspaceNavigation("push");
       return result;
+    }
+
+    function monthlyRowKey(row) {
+      return String(row.databaseId || row.clientId || row.id || "");
+    }
+
+    function canDeleteMonthlyRow(row) {
+      if (hasLeadershipAccess()) return true;
+      const profileId = String(bootstrapProfile.profile?.id || "");
+      return [row.taxPicSnapshotProfileId, row.accountingPicSnapshotProfileId, row.taxPicProfileId, row.accountingPicProfileId].filter(Boolean).includes(profileId);
+    }
+
+    async function permanentlyDeleteMonthlyRows() {
+      const period = state.activeMonthlyPeriod;
+      const selected = [...new Set(state.monthlyDeleteSelection)];
+      if (!period || !selected.length) return;
+      const response = await appFetch("/api/operations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ period, rowIds: selected, version: operationalVersions.monthly_compliance || 0 })
+      }, "");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Generated rows could not be deleted.");
+      operationalVersions.monthly_compliance = result.data.version;
+      operationalBases.monthly_compliance = structuredClone(result.data.payload || {});
+      state.monthlyProgress = structuredClone(result.data.payload || {});
+      clients = structuredClone(state.monthlyProgress[period] || []);
+      state.monthlyDeleteSelection = [];
+      state.monthlyEditMode = false;
+      state.expandedClientId = "";
+      clearSyncFailure("Monthly row deletion");
+      commitWorkspaceNavigation("replace");
     }
 
     function compareText(a, b) {
@@ -5746,6 +5784,10 @@
       return `<svg class="my-work-action-icon" viewBox="0 0 24 24" aria-hidden="true">${icons[type] || ""}</svg>`;
     }
 
+    function deleteIcon() {
+      return `<svg class="delete-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15"></path><path d="M9 7V4.8h6V7"></path><path d="m7 7 .7 12h8.6L17 7"></path><path d="M10 10.5v5M14 10.5v5"></path></svg>`;
+    }
+
     function blendHex(hex, target, amount) {
       const source = String(hex || "#2563eb").replace("#", "");
       const rgb = [0, 2, 4].map((index) => parseInt(source.slice(index, index + 2), 16));
@@ -6280,7 +6322,7 @@
                         <td><select class="field" data-staff-team="${staff.id}"><option value="Tax Team" ${staff.team_division === "Tax Team" ? "selected" : ""}>Tax Team</option><option value="Accounting Team" ${staff.team_division === "Accounting Team" ? "selected" : ""}>Accounting Team</option></select></td>
                         <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner"].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select></td>
                         <td><span class="pill ${staff.auth_user_id ? "accent" : "neutral"}">${staff.auth_user_id ? "Registered" : "Pending"}</span></td>
-                        <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${staff.directory_active === false ? `<button class="ghost-btn restore-icon-btn" data-restore-staff="${staff.id}">Restore</button>` : `<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">&#128465;</button>`}</div></td>
+                        <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${staff.directory_active === false ? `<button class="ghost-btn restore-icon-btn" data-restore-staff="${staff.id}">Restore</button>` : `<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">${deleteIcon()}</button>`}</div></td>
                       </tr>
                     `).join("") || `<tr><td colspan="7"><div class="empty-state">Loading staff directory...</div></td></tr>`}
                   </tbody>
@@ -7071,6 +7113,9 @@
 
     function renderMatrix() {
       const list = visibleClients();
+      const deletableMonthlyRows = list.filter(canDeleteMonthlyRow);
+      const selectedMonthlyRows = new Set(state.monthlyDeleteSelection);
+      const allDeletableMonthlyRowsSelected = deletableMonthlyRows.length > 0 && deletableMonthlyRows.every((row) => selectedMonthlyRows.has(monthlyRowKey(row)));
       const annualAccountingList = visibleAnnualAccountingRows();
       const annualTaxList = visibleAnnualTaxRows();
       const root = document.getElementById("matrix-view");
@@ -7181,7 +7226,7 @@
                   </label>
                 </div>
                 <div class="toolbar-right">
-                  <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
+                  ${state.monthlyEditMode ? `<span class="pill ${selectedMonthlyRows.size ? "warning" : "neutral"}">${selectedMonthlyRows.size} selected</span><button class="solid-btn danger" data-delete-monthly-rows="yes" ${selectedMonthlyRows.size ? "" : "disabled"}>${deleteIcon()}Delete</button><button class="ghost-btn" data-toggle-monthly-edit="yes">Cancel</button>` : `<button class="ghost-btn" data-toggle-monthly-edit="yes">Edit Mode</button>`}
                 </div>
               </div>
 
@@ -7212,6 +7257,7 @@
               <div class="table-wrap desktop-only">
                 <table class="operations-matrix">
                   <colgroup>
+                    ${state.monthlyEditMode ? `<col style="width:38px" />` : ``}
                     <col class="client-col" />
                     <col class="pic-col" />
                     <col class="acc-col" />
@@ -7227,6 +7273,7 @@
                   </colgroup>
                   <thead>
                     <tr>
+                      ${state.monthlyEditMode ? `<th class="center-cell"><input type="checkbox" data-select-all-monthly-rows="yes" aria-label="Select all generated rows" ${allDeletableMonthlyRowsSelected ? "checked" : ""} /></th>` : ``}
                       <th>${sortHeader("monthly", "name", "Client Name")}</th>
                       <th>${sortHeader("monthly", "taxPic", "Tax PIC")}</th>
                       <th>${sortHeader("monthly", "accPic", "ACC PIC")}</th>
@@ -7249,6 +7296,7 @@
 
                       return `
                         <tr class="main-row" data-row-toggle="${row.id}">
+                          ${state.monthlyEditMode ? `<td class="center-cell"><input type="checkbox" data-select-monthly-row="${escapeAttr(monthlyRowKey(row))}" aria-label="Select ${escapeAttr(displayClientName(row))}" ${selectedMonthlyRows.has(monthlyRowKey(row)) ? "checked" : ""} ${canDeleteMonthlyRow(row) ? "" : "disabled"} /></td>` : ``}
                           <td class="client-cell">
                             <button class="client-link" data-open-client="${row.id}">${displayClientName(row)}</button>
                             <div class="client-meta">${row.month} ${row.year} / ${row.claimStatus}</div>
@@ -7269,7 +7317,7 @@
                         </tr>
                         ${rowExpanded ? `
                           <tr class="expanded-row">
-                            <td colspan="12">
+                            <td colspan="${state.monthlyEditMode ? 13 : 12}">
                               <div class="detail-card compact-detail-card">
                                 <div class="section-title">
                                   <div>
@@ -7335,7 +7383,7 @@
                           </tr>
                         ` : ``}
                       `;
-                    }).join("") || `<tr><td colspan="12"><div class="empty-state">No clients match the current scope.</div></td></tr>`}
+                    }).join("") || `<tr><td colspan="${state.monthlyEditMode ? 13 : 12}"><div class="empty-state">No clients match the current scope.</div></td></tr>`}
                   </tbody>
                 </table>
               </div>
@@ -7802,7 +7850,7 @@
       const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
       const root = document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
-      const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">&#128465;</button>`;
+      const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">${deleteIcon()}</button>`;
       const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${item.id.startsWith("case-") ? `<div class="empty-state">Save this Himbauan first, then add progress updates.</div>` : expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed linked tasks yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress</div><div class="case-progress-list">${expandedProgress.progressEntries.map((entry) => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName)} · ${entry.createdAt ? new Date(entry.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${item.id}">Add</button></div></div></div>` : `<div class="subline">Loading progress...</div>`}</td></tr>` : "";
       const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
       const himbauanRows = caseWindow.rows.map((item, index) => {
@@ -8012,7 +8060,19 @@
       const root = document.getElementById("profile-view");
       if (!root) return;
       const profileClientQuery = state.profileClientSearch.trim().toLowerCase();
-      const assignedClients = clients.filter((client) => (client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
+      const currentProfileId = String(bootstrapProfile.profile?.id || "");
+      const currentPicName = normalizedEntityName(state.selectedPic);
+      const assignmentRole = (client) => {
+        const taxMatch = Boolean(currentProfileId && String(client.taxPicProfileId || "") === currentProfileId)
+          || (!client.taxPicProfileId && normalizedEntityName(client.taxPic) === currentPicName);
+        const accountingMatch = Boolean(currentProfileId && String(client.accountingPicProfileId || "") === currentProfileId)
+          || (!client.accountingPicProfileId && normalizedEntityName(client.accountingPic) === currentPicName);
+        if (taxMatch && accountingMatch) return "PIC TAX & PIC ACC";
+        if (taxMatch) return "PIC TAX";
+        if (accountingMatch) return "PIC ACC";
+        return "";
+      };
+      const assignedClients = clientMasterClients.filter((client) => assignmentRole(client) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
       root.innerHTML = safeHtml(`
         <div class="workspace-frame">
           <section class="panel">
@@ -8040,9 +8100,9 @@
             </div>
             <div ${state.profileTab === "clients" ? "" : "hidden"}><div class="toolbar compact-toolbar" style="margin-top:16px;"><input id="profile-client-search" class="filter-input" type="search" value="${escapeAttr(state.profileClientSearch)}" placeholder="Search my clients..." /></div>
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
-              ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${client.taxPic === state.selectedPic ? "PIC TAX" : "PIC ACC"}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
+              ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
-            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Announcement History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete announcement" title="Delete from my history">&#128465;</button></div></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
+            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Announcement History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete announcement" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
         </div>`);
     }
@@ -8680,7 +8740,7 @@
           console.warn("[cases] inline save failed", error);
         });
         inlineCaseSaveQueues.set(record, nextSave);
-      }, 750);
+      }, 250);
       inlineCaseSaveTimers.set(record, timer);
     }
 
@@ -8699,8 +8759,10 @@
     }
 
     function myWorkPayload(task) {
-      return { ...myWorkValues(task), id: task.id?.startsWith("task-") ? "" : task.id, version: task.version,
-        clientRequestId: task.clientRequestId, favorite: Boolean(task.favorite), addAssignees: task.pendingAssignees || [] };
+      const payload = { ...myWorkValues(task), id: task.id?.startsWith("task-") ? "" : task.id, version: task.version,
+        clientRequestId: task.clientRequestId, addAssignees: task.pendingAssignees || [] };
+      if (typeof task.pendingFavorite === "boolean") payload.favorite = task.pendingFavorite;
+      return payload;
     }
 
     async function loadSharedMyWork(background = false) {
@@ -8734,6 +8796,7 @@
     function saveMyWorkTaskToDatabase(task, extra = {}) {
       task.clientRequestId ||= crypto.randomUUID();
       task.pendingAssignees = [...new Set([...(task.pendingAssignees || []), ...(extra.addAssignees || [])])];
+      if (typeof extra.favorite === "boolean") task.pendingFavorite = extra.favorite;
       task.pendingSync = true;
       task.syncRevision = Number(task.syncRevision || 0) + 1;
       const revision = task.syncRevision;
@@ -8794,11 +8857,12 @@
           task.version = result.task.version;
           task.serverBase = myWorkValues(result.task);
           task.pendingAssignees = task.pendingAssignees.filter(name => !assigneesSent.includes(name));
-          task.pendingSync = creating || revision !== task.syncRevision || task.pendingAssignees.length > 0;
+          if (typeof payload.favorite === "boolean" && task.pendingFavorite === payload.favorite) delete task.pendingFavorite;
+          task.pendingSync = revision !== task.syncRevision || task.pendingAssignees.length > 0 || typeof task.pendingFavorite === "boolean";
           clearSyncFailure(`Task ${task.title || "untitled"}`);
           persistDemoState();
           if (state.currentView === "my-work-view" && !activeEditorSnapshot()) rerender();
-          if (creating) saveMyWorkTaskToDatabase(task);
+          if (task.pendingSync) saveMyWorkTaskToDatabase(task);
         } catch (error) {
           task.pendingSync = true;
           markSyncFailure(`Task ${task.title || "untitled"}`, error);
@@ -9491,8 +9555,8 @@
     }
 
     function commitUi(mode = "push") {
-      if (state.operationsMode === "monthly" && state.activeMonthlyPeriod) saveMonthlyProgress();
-      if (state.operationsMode === "annual") queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
+      if (state.currentView === "matrix-view" && state.operationsMode === "monthly" && state.activeMonthlyPeriod) saveMonthlyProgress();
+      if (state.currentView === "matrix-view" && state.operationsMode === "annual") queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
       rerender();
       persistDemoState();
       syncBrowserHistory(mode);
@@ -9626,6 +9690,8 @@
       const generateMonthlyPeriodTrigger = target.closest("[data-generate-monthly-period]");
       const confirmMonthlyGenerationTrigger = target.closest("[data-confirm-monthly-generation]");
       const cancelMonthlyGenerationTrigger = target.closest("[data-cancel-monthly-generation]");
+      const toggleMonthlyEditTrigger = target.closest("[data-toggle-monthly-edit]");
+      const deleteMonthlyRowsTrigger = target.closest("[data-delete-monthly-rows]");
       const annualTeamTrigger = target.closest("[data-annual-team]");
       const casesTabTrigger = target.closest("[data-cases-tab]");
       const managementTabTrigger = target.closest("[data-management-tab]");
@@ -9889,6 +9955,27 @@
           confirmMonthlyGenerationTrigger.removeAttribute("disabled");
           markSyncFailure("Monthly generation", error);
           window.alert(error instanceof Error ? error.message : "Monthly period could not be generated.");
+        }
+        return;
+      }
+
+      if (toggleMonthlyEditTrigger) {
+        state.monthlyEditMode = !state.monthlyEditMode;
+        state.monthlyDeleteSelection = [];
+        state.expandedClientId = "";
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+
+      if (deleteMonthlyRowsTrigger) {
+        const count = state.monthlyDeleteSelection.length;
+        if (!count || !window.confirm(`Permanently delete ${count} generated client row(s) from ${state.activeMonthlyPeriod}?\n\nThis action cannot be undone and the rows will not be moved to Recently Deleted.`)) return;
+        deleteMonthlyRowsTrigger.setAttribute("disabled", "disabled");
+        try { await permanentlyDeleteMonthlyRows(); }
+        catch (error) {
+          deleteMonthlyRowsTrigger.removeAttribute("disabled");
+          markSyncFailure("Monthly row deletion", error);
+          window.alert(error instanceof Error ? error.message : "Generated rows could not be deleted.");
         }
         return;
       }
@@ -10586,6 +10673,7 @@
       const rowToggleElement = target.closest("[data-row-toggle]");
       if (
         rowToggleElement &&
+        !target.closest("button, input, select, textarea, a") &&
         !openObligationTrigger &&
         !cycleDataTrigger &&
         !openClientTrigger &&
@@ -11047,6 +11135,22 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof HTMLInputElement && target.matches("[data-select-all-monthly-rows]")) {
+        state.monthlyDeleteSelection = target.checked ? visibleClients().filter(canDeleteMonthlyRow).map(monthlyRowKey) : [];
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.matches("[data-select-monthly-row]")) {
+        const rowKey = target.getAttribute("data-select-monthly-row");
+        const selected = new Set(state.monthlyDeleteSelection);
+        if (target.checked) selected.add(rowKey);
+        else selected.delete(rowKey);
+        state.monthlyDeleteSelection = [...selected];
+        commitWorkspaceNavigation("replace");
+        return;
+      }
 
       if (target instanceof HTMLSelectElement && target.matches("[data-my-work-case-select]")) {
         const task = state.myWork.find((item) => item.id === target.getAttribute("data-my-work-case-select"));

@@ -70,6 +70,7 @@ function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; f
 }
 
 const TASK_SELECT = "*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), completed_by_profile:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))";
+const TASK_MUTATION_SELECT = "id, title, notes, steps, reminder_at, due_date, repeat_rule, repeat_custom_date, repeat_parent_id, case_id, is_completed, completed_at, completed_by_profile_id, created_at, updated_at, created_by_profile_id, my_work_task_assignees(staff_profile_id)";
 
 async function pagedQuery(build: (from: number, to: number) => any, pageSize = 500) {
   const rows: any[] = [];
@@ -231,8 +232,10 @@ export async function POST(request: Request) {
       console.error("[my-work] assignment notification could not be created", error);
     }
   });
-  const { data: complete } = await admin.from("my_work_tasks").select(TASK_SELECT).eq("id", data.id).single();
-  return NextResponse.json({ task: taskResponse(complete as TaskRow), replayed }, { status: 201 });
+  const responseTask = taskResponse(data as TaskRow);
+  responseTask.creatorName = displayName(current.profile);
+  if (additional.length) responseTask.assignees = [...new Set([...responseTask.assignees, ...additional.map(displayName)])];
+  return NextResponse.json({ task: responseTask, replayed }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
@@ -243,7 +246,7 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Task id is required." }, { status: 400 });
-  const { data: task, error: taskError } = await admin.from("my_work_tasks").select(TASK_SELECT).eq("id", id).maybeSingle();
+  const { data: task, error: taskError } = await admin.from("my_work_tasks").select(TASK_MUTATION_SELECT).eq("id", id).maybeSingle();
   if (taskError || !task) return NextResponse.json({ error: taskError?.message || "Task was not found." }, { status: 404 });
   const visible = isLeadership(current.profile.role) || task.created_by_profile_id === current.profile.id || (task.my_work_task_assignees || []).some((assignee: { staff_profile_id: string }) => assignee.staff_profile_id === current.profile.id);
   if (!visible) return NextResponse.json({ error: "You do not have access to this task." }, { status: 403 });
@@ -274,7 +277,7 @@ export async function PATCH(request: Request) {
   }
   let updated = task as TaskRow;
   if (Object.keys(update).length) {
-    const { data, error } = await admin.from("my_work_tasks").update(update).eq("id", id).eq("updated_at", body.version).select(TASK_SELECT).maybeSingle();
+    const { data, error } = await admin.from("my_work_tasks").update(update).eq("id", id).eq("updated_at", body.version).select(TASK_MUTATION_SELECT).maybeSingle();
     if (!error && !data) return NextResponse.json({ error: "Another session saved this task first.", code: "VERSION_CONFLICT" }, { status: 409 });
     if (error || !data) return NextResponse.json({ error: error?.message || "Task could not be updated." }, { status: 500 });
     updated = data as TaskRow;
@@ -295,16 +298,21 @@ export async function PATCH(request: Request) {
       }
     }
   }
+  let savedPreference: { favorite: boolean; favorited_at: string | null } | null = null;
   if (typeof body.favorite === "boolean") {
-    const { error } = await admin.from("my_work_task_preferences").upsert({ task_id: id, staff_profile_id: current.profile.id, favorite: body.favorite, favorited_at: body.favorite ? new Date().toISOString() : null });
+    const favoritedAt = body.favorite ? new Date().toISOString() : null;
+    const { error } = await admin.from("my_work_task_preferences").upsert({ task_id: id, staff_profile_id: current.profile.id, favorite: body.favorite, favorited_at: favoritedAt });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    savedPreference = { favorite: body.favorite, favorited_at: favoritedAt };
   }
+  let addedAssigneeNames: string[] = [];
   if (Array.isArray(body.addAssignees) && body.addAssignees.length) {
     const currentIds = new Set((task.my_work_task_assignees || []).map((assignee: { staff_profile_id: string }) => assignee.staff_profile_id));
     const staff = (await staffByNames(admin, body.addAssignees)).filter((person) => person.id !== task.created_by_profile_id && !currentIds.has(person.id));
     if (staff.length) {
       const { error } = await admin.from("my_work_task_assignees").insert(staff.map((person) => ({ task_id: id, staff_profile_id: person.id })));
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      addedAssigneeNames = staff.map(displayName);
       after(async () => {
         try {
           await createOperationalAnnouncement({
@@ -323,7 +331,7 @@ export async function PATCH(request: Request) {
     }
   }
   if (body.done === true && !task.is_completed) await createFollowUpTask(admin, updated);
-  const { data: finalTask } = await admin.from("my_work_tasks").select(TASK_SELECT).eq("id", id).single();
-  const { data: preference } = await admin.from("my_work_task_preferences").select("favorite, favorited_at").eq("task_id", id).eq("staff_profile_id", current.profile.id).maybeSingle();
-  return NextResponse.json({ task: taskResponse(finalTask as TaskRow, preference) });
+  const responseTask = taskResponse(updated, savedPreference);
+  if (addedAssigneeNames.length) responseTask.assignees = [...new Set([...responseTask.assignees, ...addedAssigneeNames])];
+  return NextResponse.json({ task: responseTask });
 }
