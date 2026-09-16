@@ -180,6 +180,7 @@
     };
     if (themes[selectedTheme]) Object.entries(themes[selectedTheme]).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
     const draftKey = `lmats-tax-claim-editor-${selectedTheme || "original"}-v1`;
+    const claimId = new URLSearchParams(location.search).get("claimId");
     const parseAmount = value => Number(String(value || "").replace(/[^0-9]/g, "")) || 0;
     const formatNumber = value => new Intl.NumberFormat("id-ID", { maximumFractionDigits:0 }).format(parseAmount(value));
     const formatRupiah = value => new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(parseAmount(value));
@@ -191,9 +192,11 @@
     document.addEventListener("blur", event => { if (event.target.matches(".tax-amount")) event.target.value = formatNumber(event.target.value); }, true);
     document.addEventListener("click", event => { if (event.target.classList.contains("remove-row") && rows().length > 1) { event.target.closest("tr").remove(); refreshTotal(); } });
     document.getElementById("logo-upload").addEventListener("change", event => { const file = event.target.files[0]; if (file) { const logo = document.getElementById("claim-logo"); logo.src = URL.createObjectURL(file); logo.classList.add("custom-logo"); } });
-    document.getElementById("save-draft").addEventListener("click", () => { const data = Object.fromEntries([...document.querySelectorAll("[data-draft]")].map(input => [input.dataset.draft, input.value])); data.rows = rows().map(row => [...row.querySelectorAll("input")].map(input => input.value)); localStorage.setItem(draftKey, JSON.stringify(data)); alert("Draft saved in this browser."); });
+    const readDraft = () => { const data = Object.fromEntries([...document.querySelectorAll("[data-draft]")].map(input => [input.dataset.draft, input.value])); data.rows = rows().map(row => [...row.querySelectorAll("input")].map(input => input.value)); return data; };
+    function applyDraft(draft) { if (!draft) return; document.querySelectorAll("[data-draft]").forEach(input => { if (draft[input.dataset.draft] !== undefined) input.value = draft[input.dataset.draft]; }); if (Array.isArray(draft.rows) && draft.rows.length) { document.getElementById("claim-rows").innerHTML = ""; draft.rows.forEach(values => { newRow(); const inputs = rows().at(-1).querySelectorAll("input"); values.forEach((value, index) => { if (inputs[index]) inputs[index].value = value; }); }); } document.querySelectorAll(".tax-amount").forEach(input => input.value = formatNumber(input.value)); refreshTotal(); }
+    document.getElementById("save-draft").addEventListener("click", async () => { const data = readDraft(); localStorage.setItem(draftKey, JSON.stringify(data)); if (!claimId) { alert("Draft saved in this browser."); return; } const response = await fetch("/api/monthly-claims", { method:"PATCH", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ id:claimId, draft:data }) }); if (!response.ok) { alert("Draft saved in this browser, but server backup failed."); return; } alert("Draft saved to the shared tax claim record."); });
     document.getElementById("reset-draft").addEventListener("click", () => { localStorage.removeItem(draftKey); location.reload(); });
-    const draft = JSON.parse(localStorage.getItem(draftKey) || "null"); if (draft) { document.querySelectorAll("[data-draft]").forEach(input => { if (draft[input.dataset.draft] !== undefined) input.value = draft[input.dataset.draft]; }); if (Array.isArray(draft.rows) && draft.rows.length) { document.getElementById("claim-rows").innerHTML = ""; draft.rows.forEach(values => { newRow(); const inputs = rows().at(-1).querySelectorAll("input"); values.forEach((value, index) => { if (inputs[index]) inputs[index].value = value; }); }); } } document.querySelectorAll(".tax-amount").forEach(input => input.value = formatNumber(input.value)); refreshTotal();
+    const localDraft = JSON.parse(localStorage.getItem(draftKey) || "null"); applyDraft(localDraft); if (claimId) fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { headers:{ Accept:"application/json" } }).then(response => response.ok ? response.json() : null).then(result => { if (result?.data?.draft) applyDraft(result.data.draft); }).catch(() => {});
   </script>
 </body>
 </html>

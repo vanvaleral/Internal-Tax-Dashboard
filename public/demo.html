@@ -4895,6 +4895,46 @@
       });
     }
 
+    async function generateMonthlyPeriod(value) {
+      const previewResponse = await appFetch("/api/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ action: "preview-monthly-period", period: value })
+      }, "");
+      const preview = await previewResponse.json().catch(() => ({}));
+      if (!previewResponse.ok) throw new Error(preview.error || "Monthly period could not be checked.");
+      if (!preview.assigned) {
+        window.alert("No active clients are currently assigned to you as Tax PIC. Update PIC Allocation before generating this month.");
+        return null;
+      }
+      if (!preview.clients?.length) {
+        window.alert(`${preview.period} has already been generated for all ${preview.assigned} of your assigned clients.`);
+        return null;
+      }
+      const names = preview.clients.slice(0, 4).map((client) => client.name).join(", ");
+      const more = preview.clients.length > 4 ? ` and ${preview.clients.length - 4} more` : "";
+      const confirmed = window.confirm(`Generate ${preview.period} for ${preview.clients.length} client(s) assigned to you as Tax PIC?\n\nThis locks the current Tax PIC and ACC PIC into the monthly record. Check Allocation first if the PIC list is not final.\n\n${names}${more}`);
+      if (!confirmed) return null;
+      const response = await appFetch("/api/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ action: "generate-monthly-period", period: value })
+      }, "");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Monthly period could not be generated.");
+      operationalVersions.monthly_compliance = result.data?.version || operationalVersions.monthly_compliance || 0;
+      const rows = result.data?.payload?.[result.period] || [];
+      state.monthlyProgress[result.period] = structuredClone(rows);
+      state.activeMonthlyPeriod = result.period;
+      state.filters.period = result.period;
+      clients = structuredClone(rows);
+      state.operationsMode = "monthly";
+      state.operationsTab = "active";
+      state.expandedClientId = "";
+      commitWorkspaceNavigation("push");
+      return result;
+    }
+
     function compareText(a, b) {
       return String(a || "").localeCompare(String(b || ""), "id", { sensitivity: "base" });
     }
@@ -7105,7 +7145,7 @@
                                   <div>
                                     <h3 style="font-size:15px;">${displayClientName(row)}</h3>
                                   </div>
-                                  <button class="ghost-btn" data-row-toggle="${row.id}">Collapse</button>
+                                  <div class="inline-controls"><button class="tiny-btn" data-generate-claim="yes" data-client-id="${row.id}">Create Tax Claim</button><button class="ghost-btn" data-row-toggle="${row.id}">Collapse</button></div>
                                 </div>
                                 <div class="ledger-sheet">
                                   ${activeKeys.length ? `
@@ -9076,6 +9116,23 @@
       client.lastUpdated = "2026-05-20 12:10";
     }
 
+    async function openMonthlyTaxClaim(client) {
+      if (!state.activeMonthlyPeriod || !client?.databaseId) {
+        window.alert("Generate and open a monthly period before creating a tax claim.");
+        return;
+      }
+      const response = await appFetch("/api/monthly-claims", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ period: state.activeMonthlyPeriod, clientId: client.databaseId })
+      }, "");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.data?.id) throw new Error(result.error || "Tax claim could not be created.");
+      generateClaim(client);
+      saveMonthlyProgress();
+      window.open(`/tax-claim-template.html?theme=slate&claimId=${encodeURIComponent(result.data.id)}`, "_blank");
+    }
+
     function historySnapshot() {
       return {
         currentView: state.currentView,
@@ -9504,18 +9561,12 @@
           window.alert("Choose the tax month first.");
           return;
         }
-        const [year, monthNumber] = value.split("-").map(Number);
-        const month = new Date(year, monthNumber - 1, 1).toLocaleString("en-US", { month: "long" });
-        const period = periodKey(month, year);
-        if (!state.monthlyProgress[period]) {
-          saveMonthlyProgress();
-          state.monthlyProgress[period] = createMonthlyPeriodRows(month, year);
+        try {
+          await generateMonthlyPeriod(value);
+        } catch (error) {
+          markSyncFailure("Monthly generation", error);
+          window.alert(error instanceof Error ? error.message : "Monthly period could not be generated.");
         }
-        openMonthlyPeriod(period);
-        state.operationsMode = "monthly";
-        state.operationsTab = "active";
-        state.expandedClientId = "";
-        commitUi("push");
         return;
       }
 
@@ -10321,8 +10372,12 @@
 
       if (target.matches("[data-generate-claim]")) {
         const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
-        generateClaim(client);
-        commitUi("push");
+        try {
+          await openMonthlyTaxClaim(client);
+          commitWorkspaceNavigation("push");
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Tax claim could not be created.");
+        }
         return;
       }
 
