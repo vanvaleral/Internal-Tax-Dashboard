@@ -17,8 +17,8 @@ test("daily tasks persist an authorized optional Case link", () => {
 });
 
 test("My Work presents Case linking instead of repeat controls", () => {
-  assert.match(demo, /data-open-my-work-menu="case"/);
-  assert.match(demo, /data-save-my-work-case="yes"/);
+  assert.match(demo, /data-my-work-case-select="\$\{selected\.id\}"/);
+  assert.match(demo, /target\.matches\("\[data-my-work-case-select\]"\)/);
   assert.match(demo, /caseId: task\.caseId \|\| ""/);
   assert.doesNotMatch(demo, /data-open-my-work-menu="repeat"/);
 });
@@ -31,6 +31,7 @@ test("Himbauan progress combines scoped completed tasks with an attributed direc
   assert.match(casesRoute, /body\.action === "add-progress"/);
   assert.match(casesRoute, /You are not assigned to this case/);
   assert.match(demo, /data-toggle-himbauan-progress/);
+  assert.match(demo, /class="case-progress-inline"/);
   assert.match(demo, /data-add-himbauan-progress/);
   assert.match(demo, /Completed My Work/);
 });

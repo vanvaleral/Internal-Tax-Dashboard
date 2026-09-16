@@ -143,7 +143,7 @@ export async function POST(request: Request) {
       taxPic: targetProfile.display_name || targetProfile.full_name,
       assigned: (assignedClients || []).length,
       alreadyGenerated: (assignedClients || []).length - candidates.length,
-      clients: candidates.map((client) => ({ id: client.id, code: client.client_code, name: client.legal_name }))
+      clients: candidates.map((client) => ({ id: client.id, code: client.client_code, name: client.legal_name, taxPic: client.tax_pic_name, accountingPic: client.accounting_pic_name }))
     });
   }
 

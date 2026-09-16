@@ -2746,6 +2746,16 @@
       margin-top: 12px;
     }
 
+    .case-main-row { cursor: pointer; }
+    .case-main-row:hover td { background: color-mix(in srgb, var(--accent-soft) 45%, white); }
+    .case-progress-inline td { padding: 6px 10px 10px; background: color-mix(in srgb, var(--accent-soft) 24%, white); }
+    .case-progress-inline .case-progress-grid { margin-top: 0; }
+    .case-progress-inline .case-progress-list { max-height: 150px; }
+    .case-progress-inline .list-item { padding: 7px 9px; min-height: 0; }
+    .generation-preview-table { max-height: min(52vh, 480px); overflow: auto; margin-top: 14px; }
+    .generation-preview-table table { min-width: 620px; }
+    .generation-preview-table th, .generation-preview-table td { padding: 7px 9px; font-size: 12px; }
+
     @media (max-width: 720px) {
       .case-progress-grid { grid-template-columns: 1fr; }
     }
@@ -4397,6 +4407,7 @@
       caseProgressById: {},
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
+      monthlyGenerationPreview: null,
       sorts: {
         monthly: { key: "name", dir: "asc" },
         annualAccounting: { key: "name", dir: "asc" },
@@ -4606,7 +4617,7 @@
     }
 
     function clientFormTarget() {
-      return clients.find((client) => client.id === state.activeClientFormId) || clients[0] || createBlankClient();
+      return clientMasterClients.find((client) => client.id === state.activeClientFormId) || clients.find((client) => client.id === state.activeClientFormId) || clientMasterClients[0] || clients[0] || createBlankClient();
     }
 
     function parseBooleanCell(value) {
@@ -5015,14 +5026,18 @@
         window.alert(`${preview.period} has already been generated for all ${preview.assigned} client(s) assigned to ${preview.taxPic || "the selected Tax PIC"}.`);
         return null;
       }
-      const names = preview.clients.slice(0, 4).map((client) => client.name).join(", ");
-      const more = preview.clients.length > 4 ? ` and ${preview.clients.length - 4} more` : "";
-      const confirmed = window.confirm(`Generate ${preview.period} for ${preview.clients.length} client(s) assigned to ${preview.taxPic || "the selected Tax PIC"}?\n\nThis locks the current Tax PIC and ACC PIC into the monthly record. Check Allocation first if the PIC list is not final.\n\n${names}${more}`);
-      if (!confirmed) return null;
+      state.monthlyGenerationPreview = { ...preview, value, targetProfileId };
+      commitWorkspaceNavigation("replace");
+      return preview;
+    }
+
+    async function confirmMonthlyGeneration() {
+      const preview = state.monthlyGenerationPreview;
+      if (!preview) return null;
       const response = await appFetch("/api/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ action: "generate-monthly-period", period: value, targetProfileId })
+        body: JSON.stringify({ action: "generate-monthly-period", period: preview.value, targetProfileId: preview.targetProfileId })
       }, "");
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Monthly period could not be generated.");
@@ -5035,6 +5050,7 @@
       state.operationsMode = "monthly";
       state.operationsTab = "active";
       state.expandedClientId = "";
+      state.monthlyGenerationPreview = null;
       commitWorkspaceNavigation("push");
       return result;
     }
@@ -6601,7 +6617,8 @@
       const portfolio = clientPortfolioSnapshot();
       const monthlyFees = feeModel(activeSample.serviceFee, true, true);
       const annualFees = feeModel(activeSample.annualFee || annualFeeFromMonthly(activeSample.serviceFee), true, false);
-      const contractClients = clients.filter((client) => {
+      const managedClients = clientMasterClients;
+      const contractClients = managedClients.filter((client) => {
         const health = contractHealth(client);
         return state.contractFilter === "all"
           || (state.contractFilter === "renewal" && health.label === "Expiring soon")
@@ -6610,7 +6627,7 @@
       });
       const clientSearch = state.clientSearch.trim().toLowerCase();
       const viewingInactiveClients = state.clientManagementTab === "inactive";
-      const activeClientRows = [...clients].filter((client) => {
+      const activeClientRows = [...managedClients].filter((client) => {
         const matchesStatus = viewingInactiveClients ? client.clientStatus === "Inactive" : client.clientStatus !== "Inactive";
         return matchesStatus && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
       }).sort((left, right) => {
@@ -7764,6 +7781,7 @@
             </section>
           ` : ``}
         </div>
+        ${state.monthlyGenerationPreview ? `<div class="client-editor-backdrop" role="presentation"><section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Monthly generation preview"><div class="client-editor-head"><div><div class="eyebrow">Monthly Compliance</div><h3>Generate ${escapeHtml(state.monthlyGenerationPreview.period)}</h3><p class="subline">Review ${state.monthlyGenerationPreview.clients.length} client(s) assigned to ${escapeHtml(state.monthlyGenerationPreview.taxPic || "the selected Tax PIC")}. PIC assignments are preserved as a historical snapshot.</p></div><button class="ghost-btn" data-cancel-monthly-generation="yes">Close</button></div><div class="generation-preview-table"><table><thead><tr><th>No.</th><th>Client</th><th>Tax PIC</th><th>ACC PIC</th></tr></thead><tbody>${state.monthlyGenerationPreview.clients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(client.name || "Untitled client")}</strong></td><td>${escapeHtml(client.taxPic || state.monthlyGenerationPreview.taxPic || "-")}</td><td>${escapeHtml(client.accountingPic || client.accPic || "-")}</td></tr>`).join("")}</tbody></table></div><div class="client-editor-actions"><button class="ghost-btn" data-cancel-monthly-generation="yes">Cancel</button><button class="solid-btn" data-confirm-monthly-generation="yes">Generate ${state.monthlyGenerationPreview.clients.length} clients</button></div></section></div>` : ""}
       `);
     }
 
@@ -7780,10 +7798,11 @@
       const root = document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">&#128465;</button>`;
-      const caseActionButtons = (item) => `<div class="inline-controls"><button class="tiny-btn" data-toggle-himbauan-progress="${item.id}">${item.id === state.expandedHimbauanId ? "Close" : "Progress"}</button>${deleteCaseButton(item)}</div>`;
+      const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${item.id.startsWith("case-") ? `<div class="empty-state">Save this Himbauan first, then add progress updates.</div>` : expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed linked tasks yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress</div><div class="case-progress-list">${expandedProgress.progressEntries.map((entry) => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName)} · ${entry.createdAt ? new Date(entry.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${item.id}">Add</button></div></div></div>` : `<div class="subline">Loading progress...</div>`}</td></tr>` : "";
+      const caseActionButtons = (item) => `<div class="inline-controls"><span class="pill neutral">${item.id === state.expandedHimbauanId ? "Close" : "Progress"}</span>${deleteCaseButton(item)}</div>`;
       const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>`;
+        return `<tr class="case-main-row" data-keyboard-row="case" data-toggle-himbauan-progress="${item.id}" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`;
       }).join("") || `<tr><td colspan="13"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
       const pemeriksaanRows = caseWindow.rows.map((item, index) => {
         return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${deleteCaseButton(item)}</td></tr>`;
@@ -7811,12 +7830,8 @@
               ${virtualSpacer(13, caseWindow.top)}${category === "Himbauan" ? himbauanRows : pemeriksaanRows}${virtualSpacer(13, caseWindow.bottom)}
             </tbody></table></div>
           </section>
-          ${expandedHimbauan ? `<section class="panel">
-            <div class="section-title"><div><div class="eyebrow">Himbauan Progress</div><h3>${escapeHtml(expandedHimbauan.clientName || "Untitled Himbauan")}</h3><p>Completed My Work tasks and direct PIC updates are retained here.</p></div><button class="ghost-btn" data-toggle-himbauan-progress="${expandedHimbauan.id}">Collapse</button></div>
-            ${expandedHimbauan.id.startsWith("case-") ? `<div class="empty-state">Save the Himbauan with a Wajib Pajak first, then add progress updates.</div>` : `${expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · created by ${escapeHtml(task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed My Work tasks are linked to this Himbauan yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress Log</div><div class="case-progress-list">${expandedProgress.progressEntries.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.entry)}</strong><div class="subline">${escapeHtml(item.creatorName)} · ${item.createdAt ? new Date(item.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${expandedHimbauan.id}">Add</button></div></div></div>` : `<div class="subline">Loading linked work and PIC progress...</div>`}`}
-          </section>` : ""}
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Recently Deleted Cases</h3><p>Restore is available for three days after deletion.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No deleted cases available for restoration.</div>`}</div></section>` : ""}
-          <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
+          <datalist id="case-client-options">${clientMasterClients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
     }
@@ -8043,7 +8058,7 @@
       const availableCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
-      const timeDialog = state.myWorkMenu && selected ? `
+      const timeDialog = state.myWorkMenu && state.myWorkMenu !== "case" && selected ? `
         <div class="my-work-time-dialog-backdrop" data-close-my-work-menu="yes">
           <section class="my-work-time-dialog" role="dialog" aria-modal="true" aria-label="${state.myWorkMenu === "case" ? "Link to Case" : `Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}`}">
             ${state.myWorkMenu === "case" ? `
@@ -8084,7 +8099,7 @@
                 </div>
                 <button class="my-work-action-card" data-open-my-work-menu="reminder">${myWorkActionIcon("reminder")}<span>${selected.reminder ? `Remind: ${escapeHtml(selected.reminder.replace("T", " "))}` : "Remind me"}</span></button>
                 <button class="my-work-action-card" data-open-my-work-menu="due">${myWorkActionIcon("due")}<span>${selected.dueDate ? `Due: ${escapeHtml(selected.dueDate)}` : "Add due date"}</span></button>
-                <button class="my-work-action-card" data-open-my-work-menu="case">${myWorkActionIcon("case")}<span>${linkedCase ? `Case: ${escapeHtml(linkedCase.clientName || linkedCase.subject || "Linked Case")}` : "Link to Case"}</span></button>
+                <label class="my-work-action-card">${myWorkActionIcon("case")}<span class="my-work-assignment"><span>${linkedCase ? "Linked Case" : "Link to Case"}</span><select class="field" data-my-work-case-select="${selected.id}" aria-label="Link task to Case"><option value="">No linked Case</option>${availableCases.map((item) => `<option value="${item.id}" ${item.id === selected.caseId ? "selected" : ""}>${escapeHtml(`${item.caseCategory || item.caseType} - ${item.clientName || "Untitled Case"}${item.letterNumber ? ` (${item.letterNumber})` : ""}`)}</option>`).join("")}</select></span></label>
                 <div class="my-work-action-card"><label class="my-work-assignment">${myWorkActionIcon("assign")}<span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
                 <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
@@ -9045,7 +9060,7 @@
         return;
       }
       const isProposal = editor.kind === "proposal";
-      const record = isProposal ? proposals.find((item) => item.id === editor.id) : clients.find((item) => item.id === editor.id);
+      const record = isProposal ? proposals.find((item) => item.id === editor.id) : clientMasterClients.find((item) => item.id === editor.id) || clients.find((item) => item.id === editor.id);
       if (!record) {
         state.clientEditor = null;
         root.innerHTML = safeHtml("");
@@ -9237,6 +9252,18 @@
     }
 
     function bindDirectRowActions() {
+      document.querySelectorAll("tr.main-row[data-row-toggle], button[data-row-toggle]").forEach((control) => {
+        control.onclick = (event) => {
+          if (control.matches("tr") && event.target.closest("button, input, select, textarea, a")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const clientId = control.getAttribute("data-row-toggle");
+          state.expandedClientId = state.expandedClientId === clientId ? "" : clientId;
+          state.selectedClientId = clientId;
+          commitWorkspaceNavigation("replace");
+        };
+      });
+
       document.querySelectorAll("[data-annual-team]").forEach((button) => {
         button.onclick = (event) => {
           event.preventDefault();
@@ -9582,6 +9609,8 @@
       const operationsModeTrigger = target.closest("[data-operations-mode]");
       const operationsTabTrigger = target.closest("[data-operations-tab]");
       const generateMonthlyPeriodTrigger = target.closest("[data-generate-monthly-period]");
+      const confirmMonthlyGenerationTrigger = target.closest("[data-confirm-monthly-generation]");
+      const cancelMonthlyGenerationTrigger = target.closest("[data-cancel-monthly-generation]");
       const annualTeamTrigger = target.closest("[data-annual-team]");
       const casesTabTrigger = target.closest("[data-cases-tab]");
       const managementTabTrigger = target.closest("[data-management-tab]");
@@ -9832,6 +9861,23 @@
         return;
       }
 
+      if (cancelMonthlyGenerationTrigger) {
+        state.monthlyGenerationPreview = null;
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+
+      if (confirmMonthlyGenerationTrigger) {
+        confirmMonthlyGenerationTrigger.setAttribute("disabled", "disabled");
+        try { await confirmMonthlyGeneration(); }
+        catch (error) {
+          confirmMonthlyGenerationTrigger.removeAttribute("disabled");
+          markSyncFailure("Monthly generation", error);
+          window.alert(error instanceof Error ? error.message : "Monthly period could not be generated.");
+        }
+        return;
+      }
+
       if (operationsTabTrigger) {
         state.operationsTab = operationsTabTrigger.getAttribute("data-operations-tab");
         commitWorkspaceNavigation("push");
@@ -9862,7 +9908,7 @@
         return;
       }
 
-      if (toggleHimbauanProgressTrigger) {
+      if (toggleHimbauanProgressTrigger && !target.closest("input, textarea, select, button")) {
         const caseId = toggleHimbauanProgressTrigger.getAttribute("data-toggle-himbauan-progress");
         if (!caseId) return;
         if (state.expandedHimbauanId === caseId) {
@@ -10218,7 +10264,8 @@
           return;
         }
         const newClient = createBlankClient(code);
-        clients.unshift(newClient);
+        clientMasterClients.unshift(newClient);
+        if (!state.activeMonthlyPeriod) clients.unshift(newClient);
         state.activeClientFormId = newClient.id;
         state.selectedClientId = newClient.id;
         state.clientEditor = { kind: "client", id: newClient.id };
@@ -10532,7 +10579,7 @@
         const clientId = rowToggleElement.getAttribute("data-row-toggle");
         state.expandedClientId = state.expandedClientId === clientId ? "" : clientId;
         state.selectedClientId = clientId;
-        commitUi("push");
+        commitWorkspaceNavigation("replace");
         return;
       }
 
@@ -10756,7 +10803,7 @@
       }
 
       if (toggleClientStatusTrigger) {
-        const client = clients.find((item) => item.id === toggleClientStatusTrigger.getAttribute("data-toggle-client-status"));
+        const client = clientMasterClients.find((item) => item.id === toggleClientStatusTrigger.getAttribute("data-toggle-client-status")) || clients.find((item) => item.id === toggleClientStatusTrigger.getAttribute("data-toggle-client-status"));
         if (!client) return;
         const previousStatus = client.clientStatus;
         const previousInactivatedAt = client.inactivatedAt || "";
@@ -10985,6 +11032,15 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof HTMLSelectElement && target.matches("[data-my-work-case-select]")) {
+        const task = state.myWork.find((item) => item.id === target.getAttribute("data-my-work-case-select"));
+        if (!task || task.caseId === target.value) return;
+        task.caseId = target.value;
+        commitUi("replace");
+        saveMyWorkTaskToDatabase(task, { caseId: task.caseId });
+        return;
+      }
 
       if (target instanceof HTMLInputElement && target.id === "appearance-my-work-background") {
         const file = target.files?.[0];
