@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
+import { redactFees } from "@/lib/workspace-security";
+import { parseAmount } from "@/public/claim-values";
 
 const labels: Record<string, string> = { pph21: "PPh Pasal 21", unifikasi: "PPh Unifikasi", pph25: "PPh Pasal 25", phrpb1: "PB1", ppn: "PPN" };
 
@@ -24,7 +26,9 @@ export async function POST(request: Request) {
   const { data: existing, error: existingError } = await actor.admin.from("monthly_tax_claims").select("id").eq("period_key", period).eq("client_id", clientId).maybeSingle();
   if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
   if (existing) return NextResponse.json({ data: existing, existing: true });
-  const obligationRows = Object.entries(row.obligations || {}).filter(([, item]: any) => item?.status !== "na").map(([key, item]: any) => [labels[key] || key, period, Number(item?.payableAmount || 0)]);
+  let obligationRows;
+  try { obligationRows = Object.entries(row.obligations || {}).filter(([, item]: any) => item?.status !== "na").map(([key, item]: any) => [labels[key] || key, period, parseAmount(item?.payableAmount || 0)]); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid claim amount." }, { status: 400 }); }
   const clientName = `${row.businessForm && row.businessForm !== "Individual" ? `${row.businessForm} ` : ""}${row.name || ""}`.trim();
   const draft = { title: "KLAIM PAJAK", client: clientName, "client-note": "Ringkasan kewajiban pajak yang perlu dipersiapkan untuk masa pajak berikut.", period, rows: obligationRows, issued: `Denpasar, ${new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}`, signatory: actor.profile.display_name || actor.profile.full_name, role: "Tax Consultant" };
   const { data, error: insertError } = await actor.admin.from("monthly_tax_claims").insert({ period_key: period, client_id: clientId, tax_pic_profile_id: row.taxPicSnapshotProfileId || row.taxPicProfileId, accounting_pic_profile_id: row.accountingPicSnapshotProfileId || row.accountingPicProfileId || null, created_by_profile_id: actor.profile.id, source_snapshot: row, draft }).select("id").single();
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
   if (!id) return NextResponse.json({ error: "Claim ID is required." }, { status: 400 });
   const { data, error } = await actor.admin.from("monthly_tax_claims").select("*").eq("id", id).maybeSingle();
   if (error || !data || !canAccess(actor, data)) return NextResponse.json({ error: "Tax claim was not found." }, { status: 404 });
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: isLeadership(actor.profile.role) ? data : redactFees(data) });
 }
 
 export async function PATCH(request: Request) {
@@ -49,7 +53,17 @@ export async function PATCH(request: Request) {
   const id = String(body.id || "");
   const { data: claim, error } = await actor.admin.from("monthly_tax_claims").select("*").eq("id", id).maybeSingle();
   if (error || !claim || !canAccess(actor, claim)) return NextResponse.json({ error: "Tax claim was not found." }, { status: 404 });
-  const { data, error: updateError } = await actor.admin.from("monthly_tax_claims").update({ draft: body.draft || {} }).eq("id", id).select("id, updated_at").single();
+  if (!body.draft || !Array.isArray(body.draft.rows) || body.draft.rows.length < 1 || body.draft.rows.length > 100) return NextResponse.json({ error: "A claim must contain 1-100 payment rows." }, { status: 400 });
+  let draft;
+  try {
+    draft = { ...body.draft, rows: body.draft.rows.map((row: unknown[]) => {
+      if (!Array.isArray(row) || row.length !== 3) throw new Error("Each claim row needs a tax type, period, and amount.");
+      return [String(row[0]).slice(0, 250), String(row[1]).slice(0, 100), parseAmount(row[2])];
+    }) };
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid claim amount." }, { status: 400 }); }
+  if (body.version !== claim.updated_at) return NextResponse.json({ error: "This claim changed in another session. Reload before saving.", code: "VERSION_CONFLICT" }, { status: 409 });
+  const { data, error: updateError } = await actor.admin.from("monthly_tax_claims").update({ draft }).eq("id", id).eq("updated_at", body.version).select("id, updated_at").maybeSingle();
+  if (!updateError && !data) return NextResponse.json({ error: "Another session saved this claim first.", code: "VERSION_CONFLICT" }, { status: 409 });
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   return NextResponse.json({ data });
 }

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-browser-vendor.cjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -15,18 +16,26 @@
     "@supabase/supabase-js": "^2.49.8",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dompurify": "^3.4.15",
     "lucide-react": "^0.511.0",
-    "next": "^15.3.2",
+    "next": "^15.5.25",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.28"
+    }
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^22.15.21",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.3",
+    "jsdom": "^30.0.1",
+    "postcss": "^8.5.28",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3"
   }

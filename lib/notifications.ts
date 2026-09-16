@@ -18,21 +18,8 @@ export type OperationalAnnouncementInput = {
   sourceId?: string;
 };
 
-async function retryDatabaseOperation<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
-  let latestError: unknown;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      latestError = error;
-      if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
-    }
-  }
-  throw latestError instanceof Error ? latestError : new Error("Notification delivery could not be completed.");
-}
-
 async function recipientsForAudience(admin: AdminClient, audience: Audience) {
-  let query = admin.from("staff_profiles").select("id");
+  let query = admin.from("staff_profiles").select("id").eq("directory_active", true);
   if (audience === "tax") query = query.eq("team_division", "Tax Team");
   if (audience === "accounting") query = query.eq("team_division", "Accounting Team");
   const { data, error } = await query;
@@ -50,70 +37,38 @@ export async function createOperationalAnnouncement(input: OperationalAnnounceme
 
   const audience: Audience = input.audience === "tax" || input.audience === "accounting" ? input.audience : "all";
   const eventKey = String(input.eventKey || "").trim() || null;
-  let announcementId = "";
-  let created = false;
-
-  await retryDatabaseOperation(async () => {
-    const { data, error } = await admin
-      .from("announcements")
-      .insert({
-        title: input.title.trim(),
-        message: input.message.trim(),
-        audience,
-        sender_profile_id: input.senderProfileId,
-        event_key: eventKey,
-        source_type: input.sourceType || null,
-        source_id: input.sourceId || null
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (!error && data?.id) {
-      announcementId = data.id;
-      created = true;
-      return;
-    }
-
-    // A timed-out retry may reach an event already stored by the prior request.
-    if (eventKey && error?.code === "23505") {
-      const { data: existing, error: lookupError } = await admin
-        .from("announcements")
-        .select("id")
-        .eq("sender_profile_id", input.senderProfileId)
-        .eq("event_key", eventKey)
-        .maybeSingle();
-      if (lookupError || !existing?.id) throw new Error(lookupError?.message || "Could not recover the notification event.");
-      announcementId = existing.id;
-      return;
-    }
-    throw new Error(error?.message || "Could not create announcement.");
-  });
-
-  const recipientIds = uniqueProfileIds(input.recipientProfileIds || []);
-  const resolvedRecipients = recipientIds.length ? recipientIds : await retryDatabaseOperation(() => recipientsForAudience(admin, audience));
-  if (!resolvedRecipients.length) throw new Error("No active notification recipients were found.");
-
-  await retryDatabaseOperation(async () => {
-    const rows = resolvedRecipients.map((staffProfileId) => ({ announcement_id: announcementId, staff_profile_id: staffProfileId }));
-    const { error } = await admin.from("announcement_recipients").upsert(rows, { onConflict: "announcement_id,staff_profile_id", ignoreDuplicates: true });
+  const requestedIds = uniqueProfileIds(input.recipientProfileIds || []);
+  let resolvedRecipients = requestedIds.length ? requestedIds : await recipientsForAudience(admin, audience);
+  if (requestedIds.length) {
+    const { data, error } = await admin.from("staff_profiles").select("id").in("id", requestedIds).eq("directory_active", true);
     if (error) throw new Error(error.message);
+    resolvedRecipients = uniqueProfileIds((data || []).map((profile) => profile.id));
+  }
+  if (!resolvedRecipients.length) throw new Error("No active notification recipients were found.");
+  const { data: queued, error: outboxError } = await admin.rpc("enqueue_operational_announcement", {
+    p_title: input.title.trim(), p_message: input.message.trim(), p_audience: audience,
+    p_sender_profile_id: input.senderProfileId, p_event_key: eventKey || "",
+    p_source_type: input.sourceType || "", p_source_id: input.sourceId || "",
+    p_recipient_profile_ids: resolvedRecipients
   });
+  if (outboxError || !queued?.id) throw new Error(outboxError?.message || "Announcement could not be queued.");
+  const announcementId = String(queued.id);
 
-  // Telemetry is useful, but a legacy database without the new table must not
-  // turn a successfully delivered inbox item into a failed user action.
-  await admin.from("notification_delivery_log").upsert(
-    resolvedRecipients.map((staffProfileId) => ({
-      announcement_id: announcementId,
-      staff_profile_id: staffProfileId,
-      channel: "in_app",
-      status: "delivered",
-      attempts: 1,
-      delivered_at: new Date().toISOString()
-    })),
-    { onConflict: "announcement_id,staff_profile_id,channel", ignoreDuplicates: true }
+  // One immediate idempotent attempt keeps the inbox responsive. Any failure
+  // remains durable in the outbox and is retried by the maintenance worker.
+  const { error: immediateError } = await admin.from("announcement_recipients").upsert(
+    resolvedRecipients.map((staffProfileId) => ({ announcement_id: announcementId, staff_profile_id: staffProfileId })),
+    { onConflict: "announcement_id,staff_profile_id", ignoreDuplicates: true }
   );
+  if (!immediateError) {
+    await admin.from("notification_delivery_log").update({ status: "delivered", delivered_at: new Date().toISOString(), completed_at: new Date().toISOString(), last_error: null })
+      .eq("announcement_id", announcementId).in("staff_profile_id", resolvedRecipients).eq("channel", "in_app");
+  } else {
+    await admin.from("notification_delivery_log").update({ status: "failed", last_error: immediateError.message })
+      .eq("announcement_id", announcementId).in("staff_profile_id", resolvedRecipients).eq("channel", "in_app");
+  }
 
-  return { id: announcementId, created, recipientCount: resolvedRecipients.length };
+  return { id: announcementId, created: Boolean(queued.created), recipientCount: Number(queued.recipientCount || resolvedRecipients.length), queued: Boolean(immediateError) };
 }
 
 /** Compatibility bridge while older client/case records still store PIC names. */

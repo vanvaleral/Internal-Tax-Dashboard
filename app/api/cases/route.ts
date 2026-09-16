@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const [{ data: taskRows, error: taskError }, { data: progressRows, error: progressError }] = await Promise.all([
       actor.admin
         .from("my_work_tasks")
-        .select("id, title, completed_at, created_at, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name)")
+        .select("id, title, completed_at, created_at, creator:staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), completer:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name)")
         .eq("case_id", progressFor)
         .eq("is_completed", true)
         .order("completed_at", { ascending: false }),
@@ -67,7 +67,8 @@ export async function GET(request: NextRequest) {
         title: task.title,
         completedAt: task.completed_at,
         createdAt: task.created_at,
-        creatorName: task.staff_profiles?.display_name || task.staff_profiles?.full_name || "Unknown"
+        creatorName: task.creator?.display_name || task.creator?.full_name || "Unknown",
+        completedByName: task.completer?.display_name || task.completer?.full_name || task.creator?.display_name || task.creator?.full_name || "Unknown"
       })),
       progressEntries: (progressRows || []).map((entry: any) => ({
         id: entry.id,

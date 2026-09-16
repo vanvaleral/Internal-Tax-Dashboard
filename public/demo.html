@@ -3542,7 +3542,28 @@
     <div class="app-loading-card"><div class="app-loading-spinner"></div><strong id="app-loading-message">Updating workspace...</strong></div>
   </div>
 
+  <script src="vendor/purify.min.js"></script>
+  <script src="workspace-sync.js"></script>
   <script>
+    (async () => {
+    function safeHtml(markup) {
+      return DOMPurify.sanitize(markup, { USE_PROFILES: { html: true, svg: true }, FORBID_TAGS: ["style", "iframe", "object", "embed"], ALLOW_DATA_ATTR: true });
+    }
+    // Resolve identity before reading any private cache or binding save handlers.
+    let bootstrapProfile;
+    if (location.protocol === "file:") {
+      bootstrapProfile = { user: { id: "offline-preview" }, profile: { role: "staff" } };
+    } else {
+      try {
+        const response = await fetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error("Active staff access is required.");
+        bootstrapProfile = await response.json();
+        if (!bootstrapProfile.user?.id || !bootstrapProfile.profile) throw new Error("Staff profile is unavailable.");
+      } catch {
+        document.body.textContent = "Unable to verify your account. Please sign in again or reload when connected.";
+        return;
+      }
+    }
     const OBLIGATIONS = ["pph21", "unifikasi", "pph25", "phrpb1", "ppn"];
 
     const OBLIGATION_LABELS = {
@@ -3653,8 +3674,11 @@
     const CASE_TYPES = ["SP2DK", "Pemeriksaan", "Keberatan", "Banding", "Restitusi", "NPWP Registration", "PKP Registration", "Tax Consultation"];
     const CASE_STAGES = ["Waiting Client Docs", "Document Review", "Submission Prep", "Ongoing Review", "Closed"];
     let ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
-    const DEMO_STORAGE_KEY = "tax-practice-demo-v1";
-    const FAME_ANNOUNCEMENT_STORAGE_KEY = "tax-practice-wall-of-fame-seen-v1";
+    const DEMO_STORAGE_KEY = `tax-practice-v2:${bootstrapProfile.user.id}`;
+    const FAME_ANNOUNCEMENT_STORAGE_KEY = `tax-practice-wall-of-fame-seen-v2:${bootstrapProfile.user.id}`;
+    // Never adopt an unowned legacy cache into the currently signed-in account.
+    window.localStorage.removeItem("tax-practice-demo-v1");
+    window.localStorage.removeItem("tax-practice-wall-of-fame-seen-v1");
     const RECOGNITION_PRESENTATION_BY_PIC = {
       Ivan: "viking",
       Cemari: "shieldmaiden",
@@ -4298,6 +4322,7 @@
       clientEditor: null,
       importPreview: null,
       duplicateReview: null,
+      duplicateRecoveries: [],
       contractFilter: persistedDemoState?.ui?.contractFilter || "all",
       managementTab: persistedDemoState?.ui?.managementTab || "overview",
       performance: {
@@ -4305,7 +4330,9 @@
         ratePerPoint: Number(persistedDemoState?.ui?.performance?.ratePerPoint || 10000),
         winnerBonus: Number(persistedDemoState?.ui?.performance?.winnerBonus || 250000),
         adjustments: Array.isArray(persistedDemoState?.ui?.performance?.adjustments) ? persistedDemoState.ui.performance.adjustments : [],
-        publishedMonths: Array.isArray(persistedDemoState?.ui?.performance?.publishedMonths) ? persistedDemoState.ui.performance.publishedMonths : []
+        publishedMonths: Array.isArray(persistedDemoState?.ui?.performance?.publishedMonths) ? persistedDemoState.ui.performance.publishedMonths : [],
+        ledger: [],
+        ledgerLoaded: false
       },
       announcements: Array.isArray(persistedDemoState?.ui?.announcements) ? persistedDemoState.ui.announcements : [
         {
@@ -4381,11 +4408,18 @@
     if (!["active", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
+    state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
+    state.selectedPic = bootstrapProfile.profile.display_name || bootstrapProfile.profile.full_name || state.selectedPic;
+    state.username = bootstrapProfile.profile.username || "";
+    state.teamDivision = bootstrapProfile.profile.team_division || state.teamDivision;
+    state.myWork.forEach(task => { task.saving = false; });
     applyAppearance();
     if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) {
       clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
     }
     const operationalVersions = {};
+    const operationalBases = {};
+    const operationalFailed = persistedDemoState?.ui?.operationalFailed || {};
     const operationalSaveTimers = {};
     const operationalSaveQueues = {};
     const operationalPendingPayloads = {};
@@ -4398,24 +4432,49 @@
     }
 
     function queueWorkspaceSave(scope, payload = workspacePayload(scope)) {
+      const base = operationalBases[scope];
+      const comparableBase = scope === "monthly_compliance" ? Object.fromEntries(Object.keys(payload || {}).map(period => [period, base?.[period]])) : base;
+      if (!operationalFailed[scope] && WorkspaceSync.equal(payload, comparableBase)) return;
       if (scope === "monthly_compliance") operationalPendingPayloads[scope] = { ...(operationalPendingPayloads[scope] || {}), ...structuredClone(payload) };
       else operationalPendingPayloads[scope] = structuredClone(payload);
       window.clearTimeout(operationalSaveTimers[scope]);
       setDatabaseStatus("updating");
       operationalSaveTimers[scope] = window.setTimeout(() => {
-        const payloadToSave = operationalPendingPayloads[scope];
+        const failed = operationalFailed[scope];
+        const payloadToSave = scope === "monthly_compliance" ? { ...(failed?.payload || {}), ...operationalPendingPayloads[scope] } : operationalPendingPayloads[scope];
+        const baseline = structuredClone(failed?.baseline || operationalBases[scope] || (scope === "monthly_compliance" ? {} : []));
+        const baseVersion = failed?.version ?? operationalVersions[scope] ?? 0;
         operationalPendingPayloads[scope] = scope === "monthly_compliance" ? {} : null;
         const previousSave = operationalSaveQueues[scope] || Promise.resolve();
         const nextSave = previousSave.catch(() => {}).then(async () => {
           try {
-            const response = await appFetch("/api/operations", { method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ scope, payload: payloadToSave, version: operationalVersions[scope] || 0 }) }, "");
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(result.error || "Workspace change could not be saved.");
+            const fullLocal = scope === "monthly_compliance" ? { ...baseline, ...payloadToSave } : payloadToSave;
+            let version = baseVersion;
+            let merged = fullLocal;
+            let result;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const response = await appFetch("/api/operations", { method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ scope, payload: merged, version }) }, "");
+              result = await response.json().catch(() => ({}));
+              if (response.ok) break;
+              if (result.code !== "VERSION_CONFLICT" || attempt === 2) throw new Error(result.error || "Workspace change could not be saved.");
+              const latestResponse = await appFetch(`/api/operations?scope=${scope}`, { cache: "no-store" });
+              const latest = (await latestResponse.json()).data?.find(row => row.scope === scope);
+              if (!latestResponse.ok || !latest) throw new Error("Could not load the latest workspace for reconciliation.");
+              const reconciliation = WorkspaceSync.reconcile(baseline, fullLocal, latest.payload);
+              if (reconciliation.conflicts.length) throw new Error(`Conflicting fields: ${reconciliation.conflicts.join(", ")}. Local edits are retained. Use Database status to review.`);
+              merged = reconciliation.value;
+              version = latest.version;
+            }
             operationalVersions[scope] = result.data.version;
+            operationalBases[scope] = structuredClone(result.data.payload);
+            delete operationalFailed[scope];
             clearSyncFailure(`${scope} workspace`);
+            persistDemoState();
             setDatabaseStatus("connected");
           } catch (error) {
+            operationalFailed[scope] = { payload: payloadToSave, baseline, version: baseVersion };
             markSyncFailure(`${scope} workspace`, error);
+            persistDemoState();
             setDatabaseStatus("failed");
           }
         });
@@ -4742,6 +4801,24 @@
     }
 
     function performanceLeaderboard() {
+      if (state.performance.ledgerLoaded) {
+        const expectedPeriod = (() => {
+          const parsed = new Date(`1 ${state.performance.period}`);
+          return Number.isNaN(parsed.getTime()) ? state.performance.period : `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+        })();
+        const byStaff = new Map();
+        state.performance.ledger.filter((entry) => entry.period_key === expectedPeriod).forEach((entry) => {
+          const name = entry.staff?.display_name || entry.staff?.full_name || "Unknown staff";
+          if (!byStaff.has(name)) byStaff.set(name, { pic: name, monthly: 0, annualAccounting: 0, annualTax: 0, cases: 0, adjustments: 0, sources: [] });
+          const row = byStaff.get(name);
+          const bucket = entry.source_type === "case_linked_task" ? "cases" : entry.source_type === "manual_adjustment" ? "adjustments" : entry.source_type === "monthly_compliance" ? "monthly" : entry.source_type === "annual_accounting" ? "annualAccounting" : "annualTax";
+          const points = Number(entry.points || 0);
+          row[bucket] += points;
+          row.sources.push({ bucket, points, source: entry.source_key, status: entry.status });
+        });
+        return [...byStaff.values()].map((row) => ({ ...row, total: row.monthly + row.annualAccounting + row.annualTax + row.cases + row.adjustments }))
+          .sort((left, right) => right.total - left.total || compareText(left.pic, right.pic));
+      }
       const rules = performanceRules();
       const byPic = new Map(ALL_PICS.map((pic) => [pic, {
         pic,
@@ -5684,11 +5761,11 @@
       const root = document.getElementById("appearance-settings-root");
       if (!root) return;
       if (!state.appearanceSettingsOpen) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const presets = ["#2563eb", "#0f766e", "#c2410c", "#be185d", "#6d28d9"];
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="appearance-settings-backdrop" data-close-appearance-settings="yes"></div>
         <section class="appearance-settings" role="dialog" aria-modal="true" aria-label="Appearance settings">
           <div class="appearance-settings-head"><div><div class="eyebrow">Personal settings</div><strong>Appearance</strong></div><button class="ghost-btn" data-close-appearance-settings="yes">Close</button></div>
@@ -5698,7 +5775,7 @@
           <div class="appearance-swatches">${presets.map((color) => `<button class="appearance-swatch ${state.appearance.accent.toLowerCase() === color ? "active" : ""}" style="--swatch:${color}" data-set-accent="${color}" aria-label="Use ${color} accent"></button>`).join("")}</div>
           <label class="appearance-custom"><span>Custom color</span><input id="appearance-custom-color" type="color" value="${escapeAttr(state.appearance.accent)}" /></label>
           <div class="appearance-background"><div class="eyebrow">My Work background</div><button class="appearance-upload" data-select-my-work-background="yes">Upload image</button><div class="subline">${state.appearance.myWorkBackground ? "Image applied" : "PNG, JPG, or WebP up to 1.5 MB"}</div>${state.appearance.myWorkBackground ? `<button class="ghost-btn" data-clear-my-work-background="yes">Remove background image</button>` : ""}</div>
-        </section>`;
+        </section>`);
     }
 
     function formatRupiahInput(value) {
@@ -5853,7 +5930,7 @@
       if (!root) return;
       const snapshot = state.fameAnnouncement;
       if (!snapshot) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const presentation = snapshot.winnerPresentation || recognitionPresentationForPic(snapshot.winnerPic);
@@ -5865,7 +5942,7 @@
         const colors = isFeminine ? ["#ffd0e9", "#f9cf70", "#b6dcff"] : ["#f9cf70", "#b6dcff", "#ffffff"];
         return `<span class="fame-confetti" aria-hidden="true" style="left:${left}%; --confetti-delay:${delay}s; --confetti-drift:${drift}px; --confetti-color:${colors[index % colors.length]};"></span>`;
       }).join("");
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="fame-announcement-root" role="presentation">
           <section class="fame-announcement ${isFeminine ? "feminine" : ""}" role="dialog" aria-modal="true" aria-labelledby="fame-announcement-title">
             ${confetti}
@@ -5881,7 +5958,7 @@
             </div>
           </section>
         </div>
-      `;
+      `);
     }
 
     function queueLatestFameAnnouncement() {
@@ -5939,11 +6016,11 @@
       }
       if (!root) return;
       if (!state.announcementInboxOpen) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const items = visibleAnnouncements().filter((item) => !item.readAt);
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <section class="announcement-inbox" role="dialog" aria-label="Announcement inbox">
           <div class="announcement-inbox-head"><div><div class="eyebrow">My Inbox</div><strong>Announcements</strong></div><div class="inline-controls"><button class="ghost-btn" data-open-announcement-history="yes">History</button><button class="ghost-btn" data-close-announcement-inbox="yes">Close</button></div></div>
           <div class="announcement-list">
@@ -5957,14 +6034,14 @@
             }).join("") || `<div class="empty-state">No announcements for you yet.</div>`}
           </div>
         </section>
-      `;
+      `);
     }
 
     function renderAnnouncementView() {
       const root = document.getElementById("announcement-view");
       if (!root) return;
       const items = visibleAnnouncements();
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-notifications">
           <section class="panel">
             <div class="section-title"><div><h2>Notifications</h2><p>Announcements and assignment updates for your account.</p></div><span class="pill accent">${unreadAnnouncementCount()} unread</span></div>
@@ -5980,7 +6057,7 @@
             </div>
           </section>
         </div>
-      `;
+      `);
     }
 
     async function markAnnouncementRead(id) {
@@ -6067,7 +6144,7 @@
       const regionalCounts = regions.map((region) => ({ region, count: clients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region && client.clientStatus !== "Inactive").length }));
       const root = document.getElementById("dashboard-view");
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-management">
           <section class="panel">
             <div class="toolbar">
@@ -6297,7 +6374,7 @@
             </section>
           ` : ``}
         </div>
-      `;
+      `);
     }
 
     function renderAllocation(rootOverride = null) {
@@ -6310,7 +6387,7 @@
         return (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) || (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic);
       }).length;
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-management">
           <section class="compact-grid-4">
             <div class="metric"><div class="eyebrow">Visible Clients</div><strong>${rows.length}</strong><div class="sub">Rows in current allocation scope.</div></div>
@@ -6438,7 +6515,7 @@
             </div>
           </section>
         </div>
-      `;
+      `);
     }
 
     function selectedClient() {
@@ -6545,7 +6622,7 @@
       const proposalQuery = state.proposalSearch.trim().toLowerCase();
       const proposalRows = proposals.filter((proposal) => !proposalQuery || [displayClientName(proposal), proposal.proposedPic, proposal.proposedAccPic, proposal.status, proposal.notes].join(" ").toLowerCase().includes(proposalQuery));
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-clients">
           <section class="panel">
             <div class="toolbar">
@@ -6967,7 +7044,7 @@
           ` : ``}
           <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" title="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</button>
         </div>
-      `;
+      `);
     }
 
     function renderMatrix() {
@@ -7023,7 +7100,7 @@
         };
       }).filter((row) => row.total > 0);
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-operations">
           <section class="panel">
             <div class="toolbar">
@@ -7687,7 +7764,7 @@
             </section>
           ` : ``}
         </div>
-      `;
+      `);
     }
 
     function renderCases() {
@@ -7712,7 +7789,7 @@
         return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${deleteCaseButton(item)}</td></tr>`;
       }).join("") || `<tr><td colspan="13"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-cases">
           <section class="panel">
             <div class="toolbar">
@@ -7736,12 +7813,12 @@
           </section>
           ${expandedHimbauan ? `<section class="panel">
             <div class="section-title"><div><div class="eyebrow">Himbauan Progress</div><h3>${escapeHtml(expandedHimbauan.clientName || "Untitled Himbauan")}</h3><p>Completed My Work tasks and direct PIC updates are retained here.</p></div><button class="ghost-btn" data-toggle-himbauan-progress="${expandedHimbauan.id}">Collapse</button></div>
-            ${expandedHimbauan.id.startsWith("case-") ? `<div class="empty-state">Save the Himbauan with a Wajib Pajak first, then add progress updates.</div>` : `${expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed My Work tasks are linked to this Himbauan yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress Log</div><div class="case-progress-list">${expandedProgress.progressEntries.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.entry)}</strong><div class="subline">${escapeHtml(item.creatorName)} · ${item.createdAt ? new Date(item.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${expandedHimbauan.id}">Add</button></div></div></div>` : `<div class="subline">Loading linked work and PIC progress...</div>`}`}
+            ${expandedHimbauan.id.startsWith("case-") ? `<div class="empty-state">Save the Himbauan with a Wajib Pajak first, then add progress updates.</div>` : `${expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · created by ${escapeHtml(task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed My Work tasks are linked to this Himbauan yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress Log</div><div class="case-progress-list">${expandedProgress.progressEntries.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.entry)}</strong><div class="subline">${escapeHtml(item.creatorName)} · ${item.createdAt ? new Date(item.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${expandedHimbauan.id}">Add</button></div></div></div>` : `<div class="subline">Loading linked work and PIC progress...</div>`}`}
           </section>` : ""}
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Recently Deleted Cases</h3><p>Restore is available for three days after deletion.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No deleted cases available for restoration.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
-      `;
+      `);
     }
 
     function renderClientView() {
@@ -7749,14 +7826,14 @@
       const root = document.getElementById("client-view");
       const totalPayable = OBLIGATIONS.reduce((sum, key) => sum + (client.obligations[key].payableAmount || 0), 0);
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-client">
           <section class="panel">
             <div class="section-title">
               <div>
                 <div class="eyebrow">Client Operational Overview</div>
-                <h3 style="margin-top:6px;">${client.name}</h3>
-                <p>${client.notes}</p>
+                <h3 style="margin-top:6px;">${escapeHtml(client.name)}</h3>
+                <p>${escapeHtml(client.notes || "")}</p>
               </div>
               <div class="chips">
                 <span class="badge neutral">${client.clientCode}</span>
@@ -7877,7 +7954,7 @@
           </div>
         </section>
         </div>
-      `;
+      `);
     }
 
     function triggerPointsBurst(widget, pointsTotal, gained) {
@@ -7916,7 +7993,7 @@
       if (!root) return;
       const profileClientQuery = state.profileClientSearch.trim().toLowerCase();
       const assignedClients = clients.filter((client) => (client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame">
           <section class="panel">
             <div class="section-title"><div><div class="eyebrow">My Profile</div><h2>Profile & Client Scope</h2><p>Update the display name used for PIC assignments and review your assigned clients.</p></div></div>
@@ -7947,7 +8024,7 @@
             </tbody></table></div></div>
             <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Announcement History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete announcement" title="Delete from my history">&#128465;</button></div></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
-        </div>`;
+        </div>`);
     }
 
     function renderMyWork() {
@@ -7984,7 +8061,7 @@
             `}
           </section>
         </div>` : "";
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="workspace-frame my-work-shell">
           <section class="my-work-panel">
             <div class="my-work-list">
@@ -8011,11 +8088,12 @@
                 <div class="my-work-action-card"><label class="my-work-assignment">${myWorkActionIcon("assign")}<span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
                 <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
-                <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>` : `<div class="empty-state">Select a task to open details.</div>`}
+                <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>
+                ${selected.pendingSync ? `<div class="my-work-card" role="status">${selected.saving ? "Saving..." : "Changes not saved"} ${!selected.saving ? `<button class="ghost-btn" data-retry-task="${escapeAttr(selected.id)}">${selected.syncConflict ? "Review conflict" : "Retry"}</button>` : ""}</div>` : `<div class="subline" role="status">Saved</div>`}` : `<div class="empty-state">Select a task to open details.</div>`}
               ${selected ? `<div class="my-work-meta">Created by ${escapeHtml(selected.creatorName || state.selectedPic)} · ${selected.createdAtText ? new Date(selected.createdAtText).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : new Date(selected.createdAt || Date.now()).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>` : ""}
             </aside>` : ""}
           </section>
-        </div>${timeDialog}`;
+        </div>${timeDialog}`);
       if (state.addingMyWorkStepId === selected?.id) requestAnimationFrame(() => document.getElementById("my-work-step")?.focus());
       const titleInput = document.getElementById("my-work-title-detail");
       if (titleInput) { titleInput.style.height = "auto"; titleInput.style.height = `${titleInput.scrollHeight}px`; }
@@ -8061,21 +8139,21 @@
       if (!root) return;
       const record = noteTargetRecord(state.notesPopupTarget);
       if (!record) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const anchor = state.notesAnchor || { left: 16, top: 16 };
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="notes-popover" role="dialog" aria-label="General note popover" style="left:${anchor.left}px; top:${anchor.top}px;">
           <div class="notes-popup-head">
             <div>
               <div class="eyebrow">General Note</div>
-              <strong>${record.title}</strong>
+              <strong>${escapeHtml(record.title)}</strong>
             </div>
             <button class="ghost-btn" data-close-notes="yes">Close</button>
           </div>
           <div class="notes-mini-card">
-            <textarea id="popup-client-notes" class="inline-textarea" placeholder="Type general note here">${record.notes || ""}</textarea>
+            <textarea id="popup-client-notes" class="inline-textarea" placeholder="Type general note here">${escapeHtml(record.notes || "")}</textarea>
           </div>
           ${["annualAccounting", "annualTax"].includes(record.kind) ? `
             <div class="notes-log-list">
@@ -8092,7 +8170,7 @@
             <button class="solid-btn notes-save-btn" data-save-notes="${state.notesPopupTarget}">Save</button>
           </div>
         </div>
-      `;
+      `);
     }
 
     let appLoadingRequests = 0;
@@ -8171,7 +8249,9 @@
         if (window.location.protocol === "file:") {
           return new Response(JSON.stringify({ error: "Offline demo mode" }), { status: 503, headers: { "Content-Type": "application/json" } });
         }
-        return await fetch(url, options);
+        const headers = new Headers(options?.headers || {});
+        headers.set("X-Workspace-User", bootstrapProfile.user.id);
+        return await fetch(url, { ...options, headers });
       } finally {
         if (isDatabaseUpdate) {
           appLoadingRequests = Math.max(0, appLoadingRequests - 1);
@@ -8315,7 +8395,9 @@
         if (!response.ok) return;
         const result = await response.json();
         for (const row of result.data || []) {
+          if (operationalFailed[row.scope] || operationalPendingPayloads[row.scope] && Object.keys(operationalPendingPayloads[row.scope]).length) continue;
           operationalVersions[row.scope] = row.version;
+          operationalBases[row.scope] = structuredClone(row.payload);
           if (row.scope === "monthly_compliance" && row.payload && typeof row.payload === "object") {
             state.monthlyProgress = { ...state.monthlyProgress, ...row.payload, ...(operationalPendingPayloads.monthly_compliance || {}) };
           }
@@ -8572,9 +8654,8 @@
       inlineCaseSaveTimers.set(record, timer);
     }
 
-    function myWorkPayload(task, extra = {}) {
+    function myWorkValues(task) {
       return {
-        id: task.id?.startsWith("task-") ? "" : task.id,
         title: task.title,
         note: task.note || "",
         steps: task.steps || [],
@@ -8583,8 +8664,13 @@
         caseId: task.caseId || "",
         repeatRule: task.repeatRule || "none",
         repeatCustomDate: task.repeatCustomDate || "",
-        ...extra
+        done: Boolean(task.done)
       };
+    }
+
+    function myWorkPayload(task) {
+      return { ...myWorkValues(task), id: task.id?.startsWith("task-") ? "" : task.id, version: task.version,
+        clientRequestId: task.clientRequestId, favorite: Boolean(task.favorite), addAssignees: task.pendingAssignees || [] };
     }
 
     async function loadSharedMyWork(background = false) {
@@ -8600,13 +8686,13 @@
         const pendingById = new Map(pendingTasks.map((task) => [task.id, task]));
         state.myWork = [
           ...pendingTasks.filter((task) => !sharedIds.has(task.id)),
-          ...tasks.map((task) => pendingById.get(task.id) || task)
+          ...tasks.map((task) => pendingById.get(task.id) || { ...task, serverBase: myWorkValues(task) })
         ];
         myWorkLoadedFromDatabase = true;
         if (!state.myWork.some((task) => task.id === state.selectedMyWorkId)) state.selectedMyWorkId = state.myWork[0]?.id || "";
         renderAfterSharedDataUpdate(["my-work-view"]);
         pendingTasks.forEach((task) => {
-          if (!sharedIds.has(task.id)) saveMyWorkTaskToDatabase(task);
+          if (!task.saving && !task.syncConflict) saveMyWorkTaskToDatabase(task);
         });
       } catch (error) {
         console.warn("[my-work] shared load failed", error);
@@ -8616,22 +8702,48 @@
     const myWorkSaveQueues = new WeakMap();
 
     function saveMyWorkTaskToDatabase(task, extra = {}) {
+      task.clientRequestId ||= crypto.randomUUID();
+      task.pendingAssignees = [...new Set([...(task.pendingAssignees || []), ...(extra.addAssignees || [])])];
+      task.pendingSync = true;
       task.syncRevision = Number(task.syncRevision || 0) + 1;
       const revision = task.syncRevision;
+      persistDemoState();
       const previousSave = myWorkSaveQueues.get(task) || Promise.resolve();
       const nextSave = previousSave.catch(() => {}).then(async () => {
         const creating = task.id?.startsWith("task-");
         const previousId = task.id;
+        if (task.syncConflict) return;
+        task.saving = true;
         try {
           // Build the payload after the previous save completes. This turns a
           // rapid create + edit sequence into POST then PATCH, never two POSTs.
-          const response = await appFetch("/api/my-work", {
-            method: creating ? "POST" : "PATCH",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify(creating ? { ...myWorkPayload(task), assignees: task.assignees || [] } : myWorkPayload(task, extra))
-          }, "");
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(result.error || "My Work could not be saved.");
+          const sent = structuredClone(myWorkValues(task));
+          if (creating) task.creationBase ||= structuredClone(sent);
+          const assigneesSent = [...task.pendingAssignees];
+          let payload = myWorkPayload(task);
+          let result;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const response = await appFetch("/api/my-work", {
+              method: creating ? "POST" : "PATCH",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify(creating ? { ...payload, assignees: task.assignees || [] } : payload)
+            }, "");
+            result = await response.json().catch(() => ({}));
+            if (response.ok) break;
+            if (result.code !== "VERSION_CONFLICT" || attempt === 2) throw new Error(result.error || "My Work could not be saved.");
+            let latest = result.task;
+            if (!latest) {
+              const reload = await appFetch("/api/my-work", { cache: "no-store" });
+              latest = (await reload.json()).tasks?.find(row => row.id === task.id);
+            }
+            if (!latest) throw new Error("The latest task is unavailable. Local changes are retained.");
+            const merge = WorkspaceSync.reconcile(task.serverBase, sent, myWorkValues(latest));
+            if (merge.conflicts.length) {
+              task.syncConflict = { latest, fields: merge.conflicts };
+              throw new Error(`Conflicting task fields: ${merge.conflicts.join(", ")}. Click Review in the task drawer.`);
+            }
+            payload = { ...payload, ...merge.value, version: latest.version };
+          }
           if (result.task?.id && creating) {
             task.id = result.task.id;
             task.createdAt = result.task.createdAt || task.createdAt;
@@ -8642,16 +8754,29 @@
           }
           // Do not replace task fields from an old response; a newer edit may
           // already be present locally and will be saved by the queued request.
-          delete task.pendingSync;
+          const currentValues = myWorkValues(task);
+          const restored = WorkspaceSync.reconcile(result.replayed ? task.creationBase : sent, currentValues, myWorkValues(result.task));
+          if (restored.conflicts.length) {
+            task.syncConflict = { latest: result.task, fields: restored.conflicts };
+            throw new Error("Newer shared edits overlap your pending changes. Review the task conflict.");
+          }
+          Object.assign(task, restored.value);
+          task.version = result.task.version;
+          task.serverBase = myWorkValues(result.task);
+          task.pendingAssignees = task.pendingAssignees.filter(name => !assigneesSent.includes(name));
+          task.pendingSync = creating || revision !== task.syncRevision || task.pendingAssignees.length > 0;
           clearSyncFailure(`Task ${task.title || "untitled"}`);
           persistDemoState();
           if (state.currentView === "my-work-view" && !activeEditorSnapshot()) rerender();
-          if (!creating && task.done) loadSharedMyWork(true);
+          if (creating) saveMyWorkTaskToDatabase(task);
         } catch (error) {
           task.pendingSync = true;
           markSyncFailure(`Task ${task.title || "untitled"}`, error);
           persistDemoState();
           console.warn("[my-work] save failed", error);
+        } finally {
+          task.saving = false;
+          persistDemoState();
         }
       });
       myWorkSaveQueues.set(task, nextSave);
@@ -8670,6 +8795,21 @@
         renderAnnouncementInbox();
       } catch (error) {
         console.warn("[announcements] shared load failed", error);
+      }
+    }
+
+    async function loadPerformanceLedger(background = false) {
+      try {
+        const response = await appFetch("/api/performance", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading performance ledger...");
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Performance ledger could not be loaded.");
+        state.performance.ledger = Array.isArray(result.data) ? result.data : [];
+        state.performance.publishedMonths = (result.publications || []).map((item) => ({ ...item.snapshot, periodKey: item.period_key, publishedAt: item.published_at }));
+        state.performance.ledgerLoaded = true;
+        if (!background || ["management-view", "dashboard-view"].includes(state.currentView)) commitUi("replace");
+      } catch (error) {
+        state.performance.ledgerLoaded = false;
+        console.warn("[performance] authoritative ledger unavailable; provisional preview retained", error);
       }
     }
 
@@ -8823,7 +8963,7 @@
       if (!root) return;
       const popup = state.annualActionPopup;
       if (!popup) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
 
@@ -8831,7 +8971,7 @@
       const taxRow = popup.kind === "annualTax" ? annualTaxRows.find((item) => item.id === popup.id) : null;
       const row = accountingRow || taxRow;
       if (!row) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
 
@@ -8842,7 +8982,7 @@
       const reportDate = accountingRow ? (accountingRow.lapor && accountingRow.lapor !== "-" ? parseDisplayDateToIso(accountingRow.lapor) || "" : "") : (taxRow.laporDate || "");
       const reportCode = accountingRow ? (accountingRow.ntpe === "-" ? "" : accountingRow.ntpe || "") : (taxRow.ntpe === "-" ? "" : taxRow.ntpe || "");
 
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="action-popover" role="dialog" aria-label="${isPayment ? "Payment entry" : "Report entry"}" style="left:${popup.anchor.left}px; top:${popup.anchor.top}px;">
           <div class="action-popover-head">
             <div>
@@ -8893,7 +9033,7 @@
             <button class="solid-btn" data-save-annual-popup="${popup.kind}|${popup.id}|${popup.action}">Save</button>
           </div>
         </div>
-      `;
+      `);
     }
 
     function renderClientEditor() {
@@ -8901,14 +9041,14 @@
       if (!root) return;
       const editor = state.clientEditor;
       if (!editor) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const isProposal = editor.kind === "proposal";
       const record = isProposal ? proposals.find((item) => item.id === editor.id) : clients.find((item) => item.id === editor.id);
       if (!record) {
         state.clientEditor = null;
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const taxPic = isProposal ? record.proposedPic : record.taxPic;
@@ -8917,7 +9057,7 @@
       const selectedObligations = isProposal ? record.obligations : OBLIGATIONS.filter((key) => record.obligations[key].status !== "na");
       const title = isProposal ? "Proposal / Quotation" : "Client Setup";
       const saveAttribute = isProposal ? `data-save-proposal="${record.id}"` : "data-save-client=\"yes\"";
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal" role="dialog" aria-modal="true" aria-label="${title}">
             <div class="client-editor-head"><div><div class="eyebrow">${isProposal ? "Prospective client" : "Client master"}</div><h3>${title}</h3></div><button class="ghost-btn" data-close-client-editor="yes">Close</button></div>
@@ -8940,7 +9080,7 @@
             </div>
             <div class="client-editor-actions"><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
           </section>
-        </div>`;
+        </div>`);
     }
 
     // The legacy side form remains in the page for backwards-compatible UI,
@@ -8954,13 +9094,13 @@
       if (!root) return;
       const preview = state.importPreview;
       if (!preview) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
       const summary = preview.summary || {};
       const validationByRow = new Map((preview.validation || []).map((item) => [item.row, item]));
       const invalid = Number(summary.invalid || 0);
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client import preview">
             <div class="client-editor-head"><div><div class="eyebrow">Client Master Import</div><h3>Review changes before importing</h3><p class="subline">${escapeHtml(preview.fileName || "Selected file")}. Existing client codes will update matching records only after confirmation.</p></div><button class="ghost-btn" data-close-import-preview="yes">Close</button></div>
@@ -8974,24 +9114,26 @@
             <div class="import-preview-table"><table><thead><tr><th>Row</th><th>Client Code</th><th>Client</th><th>PIC Tax / ACC</th><th>Result</th></tr></thead><tbody>${preview.clients.map((client, index) => { const validation = validationByRow.get(index + 2); const errors = validation?.errors || []; return `<tr class="${errors.length ? "import-preview-error-row" : ""}"><td>${index + 2}</td><td>${escapeHtml(client.clientCode || "-")}</td><td>${escapeHtml(displayClientName(client) || client.name || "-")}</td><td>${escapeHtml(client.taxPic || "-")} / ${escapeHtml(client.accountingPic || "-")}</td><td>${errors.length ? `<span class="import-preview-error">! ${escapeHtml(errors.join(" "))}</span>` : `<span class="pill accent">Ready</span>`}</td></tr>`; }).join("")}</tbody></table></div>
             <div class="client-editor-actions"><button class="ghost-btn" data-close-import-preview="yes">Cancel</button><button class="solid-btn" data-confirm-client-import="yes" ${invalid ? "disabled" : ""}>Confirm Import</button></div>
           </section>
-        </div>`;
+        </div>`);
     }
 
     function renderClientDuplicateReview() {
       const root = document.getElementById("client-duplicate-review-root");
       if (!root) return;
       const groups = state.duplicateReview;
+      const recoveries = state.duplicateRecoveries || [];
       if (!Array.isArray(groups)) {
-        root.innerHTML = "";
+        root.innerHTML = safeHtml("");
         return;
       }
-      root.innerHTML = `
+      root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client duplicate review">
             <div class="client-editor-head"><div><div class="eyebrow">Client Master Cleanup</div><h3>Review possible duplicates</h3><p class="subline">Keep one canonical client. Duplicate records are removed from Client Master and retained in a three-day recovery backup.</p></div><button class="ghost-btn" data-close-client-duplicates="yes">Close</button></div>
-            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Choose the record to retain automatically, or select only specific groups in the compact table.</span><div class="inline-controls"><button class="ghost-btn" data-auto-resolve-client-duplicates="oldest">Auto clean: keep oldest</button><button class="ghost-btn" data-auto-resolve-client-duplicates="newest">Auto clean: keep newest</button><button class="solid-btn" data-resolve-selected-duplicates="yes">Delete Selected</button></div></div><div class="import-preview-table duplicate-review-table"><table><thead><tr><th>Group</th><th>Match</th><th>Keep</th><th>Code</th><th>Client</th><th>NPWP</th><th>Status</th><th>Action</th></tr></thead><tbody>${groups.map((group, index) => group.clients.map((client, clientIndex) => `<tr class="${clientIndex === 0 ? "duplicate-group-start" : ""}"><td>${clientIndex === 0 ? `<input type="checkbox" aria-label="Select duplicate group ${index + 1}" data-duplicate-group-select="${index}" /> #${index + 1}` : ""}</td><td>${clientIndex === 0 ? escapeHtml(group.reason) : ""}</td><td><input type="radio" aria-label="Keep ${escapeAttr(client.name)}" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /></td><td><strong>${escapeHtml(client.clientCode)}</strong></td><td title="${escapeAttr(client.name)}">${escapeHtml(client.name)}</td><td>${escapeHtml(client.npwp || "-")}</td><td>${escapeHtml(client.status)}</td><td>${clientIndex === 0 ? `<button class="danger-icon-btn" data-resolve-client-duplicate="${index}" title="Keep selected record and delete ${group.clients.length - 1} duplicate(s)">&#128465;</button>` : ""}</td></tr>`).join("")).join("")}</tbody></table></div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
+            ${groups.length ? `<div class="client-editor-actions" style="margin-top:0; margin-bottom:14px;"><span class="subline">Choose the canonical record. Linked cases, claims, and activity are moved to it transactionally before duplicate copies are removed.</span><div class="inline-controls"><button class="ghost-btn" data-auto-resolve-client-duplicates="oldest">Merge all: keep oldest</button><button class="ghost-btn" data-auto-resolve-client-duplicates="newest">Merge all: keep newest</button><button class="solid-btn" data-resolve-selected-duplicates="yes">Merge Selected</button></div></div><div class="import-preview-table duplicate-review-table"><table><thead><tr><th>Group</th><th>Match</th><th>Keep</th><th>Code</th><th>Client</th><th>NPWP</th><th>Status</th><th>Linked</th><th>Action</th></tr></thead><tbody>${groups.map((group, index) => group.clients.map((client, clientIndex) => `<tr class="${clientIndex === 0 ? "duplicate-group-start" : ""}"><td>${clientIndex === 0 ? `<input type="checkbox" aria-label="Select duplicate group ${index + 1}" data-duplicate-group-select="${index}" /> #${index + 1}` : ""}</td><td>${clientIndex === 0 ? escapeHtml(group.reason) : ""}</td><td><input type="radio" aria-label="Keep ${escapeAttr(client.name)}" name="duplicate-keep-${index}" value="${client.id}" ${clientIndex === 0 ? "checked" : ""} /></td><td><strong>${escapeHtml(client.clientCode)}</strong></td><td title="${escapeAttr(client.name)}">${escapeHtml(client.name)}</td><td>${escapeHtml(client.npwp || "-")}</td><td>${escapeHtml(client.status)}</td><td>${Number(client.dependencies?.cases || 0)} cases · ${Number(client.dependencies?.claims || 0)} claims · ${Number(client.dependencies?.activities || 0)} logs</td><td>${clientIndex === 0 ? `<button class="danger-icon-btn" data-resolve-client-duplicate="${index}" title="Keep selected record and merge ${group.clients.length - 1} duplicate(s)">&#8649;</button>` : ""}</td></tr>`).join("")).join("")}</tbody></table></div>` : `<div class="empty-state">No possible duplicate client records were found.</div>`}
+            ${recoveries.length ? `<div class="section-title" style="margin-top:16px"><div><h4>Recent merges</h4><p>Restore is available for three days.</p></div></div><div class="detail-list">${recoveries.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientCode)} · ${escapeHtml(item.name)}</strong><div class="subline">Merged ${new Date(item.deletedAt).toLocaleString("id-ID")}</div></div><button class="ghost-btn" data-restore-client-duplicate="${item.originalClientId}">Restore</button></div>`).join("")}</div>` : ""}
           </section>
-        </div>`;
+        </div>`);
     }
 
     function showNoteHoverPreview(triggerElement, text) {
@@ -9004,12 +9146,12 @@
       const width = 240;
       const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right + 10));
       const top = Math.max(12, Math.min(window.innerHeight - 120, rect.top - 6));
-      root.innerHTML = `<div class="note-hover-preview" style="left:${left}px; top:${top}px;">${escapeAttr(text)}</div>`;
+      root.innerHTML = safeHtml(`<div class="note-hover-preview" style="left:${left}px; top:${top}px;">${escapeAttr(text)}</div>`);
     }
 
     function hideNoteHoverPreview() {
       const root = document.getElementById("notes-hover-root");
-      if (root) root.innerHTML = "";
+      if (root) root.innerHTML = safeHtml("");
     }
 
     function openNotesPopover(targetId, triggerElement) {
@@ -9084,6 +9226,7 @@
               monthlyProgress: state.monthlyProgress,
               activeMonthlyPeriod: state.activeMonthlyPeriod,
               syncIssues: state.syncIssues,
+              operationalFailed,
               sorts: state.sorts
             }
           })
@@ -9405,9 +9548,29 @@
     document.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      const retryTask = target.closest("[data-retry-task]");
+      if (retryTask) {
+        const task = state.myWork.find(item => item.id === retryTask.getAttribute("data-retry-task"));
+        if (!task) return;
+        if (task.syncConflict) {
+          const { latest, fields } = task.syncConflict;
+          const keepLocal = window.confirm(`These fields changed in another session: ${fields.join(", ")}.\n\nOK: keep your values for these fields and retry against the latest version.\nCancel: leave everything unchanged for review.`);
+          if (!keepLocal) return;
+          const merged = WorkspaceSync.reconcile(task.serverBase, myWorkValues(task), myWorkValues(latest));
+          Object.assign(task, merged.value);
+          task.serverBase = myWorkValues(latest);
+          task.version = latest.version;
+          delete task.syncConflict;
+        }
+        saveMyWorkTaskToDatabase(task);
+        return;
+      }
       if (target.closest("#database-status-chip")) {
         if (state.syncIssues.length) {
-          window.alert(`Perubahan yang perlu diperiksa:\n\n${state.syncIssues.map((issue) => `• ${issue.scope}: ${issue.message}`).join("\n")}`);
+          if (window.confirm(`Changes needing attention:\n\n${state.syncIssues.map(issue => `${issue.scope}: ${issue.message}`).join("\n")}\n\nRetry pending changes? Conflicting fields will not be overwritten.`)) {
+            for (const [scope, failed] of Object.entries(operationalFailed)) queueWorkspaceSave(scope, failed.payload);
+            state.myWork.filter(task => task.pendingSync && !task.saving && !task.syncConflict).forEach(task => saveMyWorkTaskToDatabase(task));
+          }
         } else {
           window.alert(appLoadingRequests ? "Perubahan sedang disimpan di background. Anda tetap dapat melanjutkan pekerjaan." : "Database tersinkronisasi. Tidak ada perubahan yang gagal disimpan.");
         }
@@ -9435,6 +9598,7 @@
       const reviewClientDuplicatesTrigger = target.closest("[data-review-client-duplicates]");
       const closeClientDuplicatesTrigger = target.closest("[data-close-client-duplicates]");
       const resolveClientDuplicateTrigger = target.closest("[data-resolve-client-duplicate]");
+      const restoreClientDuplicateTrigger = target.closest("[data-restore-client-duplicate]");
       const resolveSelectedDuplicatesTrigger = target.closest("[data-resolve-selected-duplicates]");
       const autoResolveClientDuplicatesTrigger = target.closest("[data-auto-resolve-client-duplicates]");
       const closeImportPreviewTrigger = target.closest("[data-close-import-preview]");
@@ -9514,6 +9678,9 @@
         try {
           const response = await appFetch("/api/auth/logout", { method: "POST" }, "Signing out...");
           if (!response.ok) throw new Error("Unable to sign out.");
+          window.localStorage.removeItem(DEMO_STORAGE_KEY);
+          window.localStorage.removeItem(FAME_ANNOUNCEMENT_STORAGE_KEY);
+          for (const key of Object.keys(localStorage)) if (key.startsWith(`lmats-claim-v2:${bootstrapProfile.user.id}:`)) localStorage.removeItem(key);
           window.top.location.assign("/login");
         } catch (error) {
           console.error("[auth] sign out failed", error);
@@ -9898,14 +10065,17 @@
         const points = Number(window.prompt("Points to add or subtract:", "0") || 0);
         if (!Number.isFinite(points) || points === 0) return;
         const reason = window.prompt("Reason for supervisor adjustment:", "") || "Supervisor adjustment";
-        state.performance.adjustments.unshift({
-          id: `adjustment-${Date.now()}`,
-          pic,
-          points,
-          reason,
-          createdAt: new Date().toISOString()
-        });
-        commitUi("push");
+        const staff = staffDirectory.find((person) => [person.display_name, person.full_name].some((name) => String(name || "").toLowerCase() === pic.toLowerCase()));
+        if (!staff?.id) { window.alert("PIC profile is not available in the staff directory."); return; }
+        const parsedPeriod = new Date(`1 ${state.performance.period}`);
+        const periodKey = Number.isNaN(parsedPeriod.getTime()) ? "" : `${parsedPeriod.getFullYear()}-${String(parsedPeriod.getMonth() + 1).padStart(2, "0")}`;
+        try {
+          const response = await appFetch("/api/performance", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ staffProfileId: staff.id, periodKey, sourceType: "manual_adjustment", sourceKey: `manual:${crypto.randomUUID()}`, eventType: "adjustment", points, reason }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Adjustment could not be saved.");
+          await loadPerformanceLedger(true);
+          commitUi("push");
+        } catch (error) { window.alert(error instanceof Error ? error.message : "Adjustment could not be saved."); }
         return;
       }
 
@@ -9932,15 +10102,17 @@
           incentive,
           publishedAt: new Date().toISOString()
         };
-        const existingIndex = state.performance.publishedMonths.findIndex((item) => item.period === snapshot.period);
-        if (existingIndex >= 0) state.performance.publishedMonths.splice(existingIndex, 1, snapshot);
-        else state.performance.publishedMonths.unshift(snapshot);
         try {
+          const parsedPeriod = new Date(`1 ${snapshot.period}`);
+          const publicationResponse = await appFetch("/api/performance", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ periodKey: `${parsedPeriod.getFullYear()}-${String(parsedPeriod.getMonth() + 1).padStart(2, "0")}`, snapshot }) }, "");
+          const publicationResult = await publicationResponse.json().catch(() => ({}));
+          if (!publicationResponse.ok) throw new Error(publicationResult.error || "Performance result could not be published.");
           await publishAnnouncement({
             title: `Employee of the Month: ${snapshot.winnerPic}`,
             message: `${snapshot.winnerPic} earned ${snapshot.winnerPoints} points in ${snapshot.period}. Congratulations to this month's Wall of Fame winner.`,
             audience: "all"
           });
+          await loadPerformanceLedger(true);
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Recognition announcement could not be published.");
           return;
@@ -10082,6 +10254,7 @@
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || "Duplicate client review could not be loaded.");
           state.duplicateReview = result.groups || [];
+          state.duplicateRecoveries = result.recoveries || [];
           rerender();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Duplicate client review could not be loaded.");
@@ -10091,7 +10264,25 @@
 
       if (closeClientDuplicatesTrigger) {
         state.duplicateReview = null;
+        state.duplicateRecoveries = [];
         rerender();
+        return;
+      }
+
+      if (restoreClientDuplicateTrigger) {
+        const originalClientId = restoreClientDuplicateTrigger.getAttribute("data-restore-client-duplicate");
+        if (!originalClientId || !window.confirm("Restore this merged client and its preserved links?")) return;
+        try {
+          const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ action: "restore", originalClientId }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Merged client could not be restored.");
+          await loadSharedClients();
+          const refreshed = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
+          const refreshedResult = await refreshed.json().catch(() => ({}));
+          state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
+          state.duplicateRecoveries = refreshed.ok ? refreshedResult.recoveries || [] : [];
+          rerender();
+        } catch (error) { window.alert(error instanceof Error ? error.message : "Merged client could not be restored."); }
         return;
       }
 
@@ -10102,7 +10293,7 @@
         const canonicalId = selected instanceof HTMLInputElement ? selected.value : "";
         if (!group || !canonicalId) return;
         const duplicateIds = group.clients.map((client) => client.id).filter((id) => id && id !== canonicalId);
-        if (!duplicateIds.length || !window.confirm("Delete the selected duplicate record(s)? A recovery backup is retained for three days.")) return;
+        if (!duplicateIds.length || !window.confirm("Merge the selected duplicate record(s) into the canonical client? Linked work will be preserved and recovery is available for three days.")) return;
         try {
           const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ canonicalId, duplicateIds }) }, "");
           const result = await response.json().catch(() => ({}));
@@ -10111,8 +10302,9 @@
           const refreshed = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
           const refreshedResult = await refreshed.json().catch(() => ({}));
           state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
+          state.duplicateRecoveries = refreshed.ok ? refreshedResult.recoveries || [] : [];
           rerender();
-          window.alert(`Deleted ${result.deleted || 0} duplicate record(s).`);
+          window.alert(`Merged ${result.deleted || 0} duplicate record(s).`);
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Duplicate records could not be resolved.");
         }
@@ -10133,7 +10325,7 @@
           const canonicalId = selected instanceof HTMLInputElement ? selected.value : "";
           return group && canonicalId ? { canonicalId, duplicateIds: group.clients.map((client) => client.id).filter((id) => id && id !== canonicalId) } : null;
         }).filter((action) => action?.duplicateIds.length);
-        if (!actions.length || !window.confirm(`Delete duplicate copies from ${actions.length} selected group(s)? A recovery backup is retained for three days.`)) return;
+        if (!actions.length || !window.confirm(`Merge duplicate copies from ${actions.length} selected group(s)? Linked work will be preserved.`)) return;
         try {
           const response = await appFetch("/api/clients/duplicates", { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ action: "resolve-batch", actions }) }, "");
           const result = await response.json().catch(() => ({}));
@@ -10142,6 +10334,7 @@
           const refreshed = await appFetch("/api/clients/duplicates", { cache: "no-store", headers: { Accept: "application/json" } }, "");
           const refreshedResult = await refreshed.json().catch(() => ({}));
           state.duplicateReview = refreshed.ok ? refreshedResult.groups || [] : null;
+          state.duplicateRecoveries = refreshed.ok ? refreshedResult.recoveries || [] : [];
           rerender();
           window.alert(`Deleted duplicate records from ${actions.length} group(s).`);
         } catch (error) {
@@ -11403,11 +11596,13 @@
       loadSharedOperationalWorkspaces(true);
       loadSharedMyWork(true);
       loadSharedAnnouncements(true);
+      loadPerformanceLedger(true);
       refreshDatabaseStatus(true);
     });
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       loadSharedAnnouncements(true);
+      loadPerformanceLedger(true);
     }, 120000);
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
@@ -11424,6 +11619,7 @@
       queueLatestFameAnnouncement();
     }, 280);
     syncBrowserHistory("replace");
+    })().catch(error => { console.error("Workspace initialization failed", error); document.body.textContent = "Workspace could not be initialized. Please reload."; });
   </script>
 </body>
 </html>

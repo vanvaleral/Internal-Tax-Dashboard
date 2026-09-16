@@ -33,10 +33,11 @@ export async function currentActor(): Promise<CurrentActor | { error: string; st
   if (!admin) return { error: "Server database access is not configured.", status: 503 };
   const { data: profile, error } = await admin
     .from("staff_profiles")
-    .select("id, full_name, display_name, username, team_division, role")
+    .select("id, full_name, display_name, username, team_division, role, directory_active")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (error || !profile) return { error: error?.message || "Staff profile was not found.", status: 403 };
+  if (profile.directory_active !== true) return { error: "Your staff access has been deactivated.", status: 403 };
 
   return { userId: user.id, profile: { ...profile, role: String(profile.role || "staff").toLowerCase() as StaffRole }, admin };
 }

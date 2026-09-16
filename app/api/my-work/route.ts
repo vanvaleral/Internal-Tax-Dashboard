@@ -16,9 +16,12 @@ type TaskRow = {
   case_id: string | null;
   is_completed: boolean;
   completed_at: string | null;
+  completed_by_profile_id: string | null;
   created_at: string;
+  updated_at: string;
   created_by_profile_id: string;
   staff_profiles?: { display_name?: string | null; full_name?: string | null } | null;
+  completed_by_profile?: { display_name?: string | null; full_name?: string | null } | null;
   my_work_task_assignees?: Array<{ staff_profile_id: string; staff_profiles?: { display_name?: string | null; full_name?: string | null } | null }>;
 };
 
@@ -27,8 +30,9 @@ async function currentProfile() {
   if (!supabase) return { error: "Database is not configured.", status: 503 as const };
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Authentication is required.", status: 401 as const };
-  const { data: profile, error } = await supabase.from("staff_profiles").select("id, full_name, display_name, role").eq("auth_user_id", user.id).maybeSingle();
+  const { data: profile, error } = await supabase.from("staff_profiles").select("id, full_name, display_name, role, directory_active").eq("auth_user_id", user.id).maybeSingle();
   if (error || !profile) return { error: "Staff profile was not found.", status: 403 as const };
+  if (profile.directory_active !== true) return { error: "Your staff access has been deactivated.", status: 403 as const };
   return { supabase, user, profile };
 }
 
@@ -43,6 +47,7 @@ function isLeadership(role: string | null | undefined) {
 function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; favorited_at?: string | null } | null) {
   return {
     id: task.id,
+    version: task.updated_at,
     title: task.title,
     note: task.notes || "",
     steps: Array.isArray(task.steps) ? task.steps : [],
@@ -57,10 +62,42 @@ function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; f
     createdAt: new Date(task.created_at).getTime(),
     createdAtText: task.created_at,
     creatorName: displayName(task.staff_profiles || {}),
+    completedByName: task.completed_by_profile_id ? displayName(task.completed_by_profile || {}) : "",
     assignees: (task.my_work_task_assignees || []).map((assignee) => displayName(assignee.staff_profiles || {})),
     favorite: Boolean(preference?.favorite),
     favoritedAt: preference?.favorited_at ? new Date(preference.favorited_at).getTime() : 0
   };
+}
+
+const TASK_SELECT = "*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), completed_by_profile:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))";
+
+async function pagedQuery(build: (from: number, to: number) => any, pageSize = 500) {
+  const rows: any[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await build(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    rows.push(...(data || []));
+    if ((data || []).length < pageSize) return rows;
+  }
+}
+
+async function visibleTasks(admin: NonNullable<ReturnType<typeof createAdminClient>>, profile: { id: string; role?: string | null }) {
+  if (isLeadership(profile.role)) {
+    return pagedQuery((from, to) => admin.from("my_work_tasks").select(TASK_SELECT).order("created_at", { ascending: false }).range(from, to));
+  }
+  const assigned = await pagedQuery((from, to) => admin.from("my_work_task_assignees").select("task_id").eq("staff_profile_id", profile.id).range(from, to));
+  const assignedIds = [...new Set(assigned.map((row) => row.task_id))];
+  const own = await pagedQuery((from, to) => admin.from("my_work_tasks").select(TASK_SELECT).eq("created_by_profile_id", profile.id).order("created_at", { ascending: false }).range(from, to));
+  const ownIds = new Set(own.map((task) => task.id));
+  const additional: any[] = [];
+  for (let index = 0; index < assignedIds.length; index += 200) {
+    const ids = assignedIds.slice(index, index + 200).filter((id) => !ownIds.has(id));
+    if (!ids.length) continue;
+    const { data, error } = await admin.from("my_work_tasks").select(TASK_SELECT).in("id", ids);
+    if (error) throw new Error(error.message);
+    additional.push(...(data || []));
+  }
+  return [...own, ...additional].sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)));
 }
 
 async function accessibleCaseId(admin: NonNullable<ReturnType<typeof createAdminClient>>, profileId: string, role: string | null | undefined, caseId: unknown) {
@@ -124,12 +161,9 @@ export async function GET() {
   if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ error: "Task service is not configured." }, { status: 503 });
-  const { data, error } = await admin
-    .from("my_work_tasks")
-    .select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))")
-    .order("created_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const visible = (data || []).filter((task: TaskRow) => isLeadership(current.profile.role) || task.created_by_profile_id === current.profile.id || (task.my_work_task_assignees || []).some((assignee) => assignee.staff_profile_id === current.profile.id));
+  let visible: TaskRow[];
+  try { visible = await visibleTasks(admin, current.profile) as TaskRow[]; }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Tasks could not be loaded." }, { status: 500 }); }
   const ids = visible.map((task: TaskRow) => task.id);
   const { data: preferences } = ids.length ? await admin.from("my_work_task_preferences").select("task_id, favorite, favorited_at").eq("staff_profile_id", current.profile.id).in("task_id", ids) : { data: [] };
   const preferenceByTask = new Map((preferences || []).map((item) => [item.task_id, item]));
@@ -143,6 +177,8 @@ export async function POST(request: Request) {
   if (!admin) return NextResponse.json({ error: "Task service is not configured." }, { status: 503 });
   const body = await request.json();
   const title = String(body.title || "").trim();
+  const requestId = String(body.clientRequestId || "").trim();
+  if (!/^[a-zA-Z0-9-]{8,100}$/.test(requestId)) return NextResponse.json({ error: "A stable task creation ID is required. Reload your workspace." }, { status: 400 });
   if (!title) return NextResponse.json({ error: "Task title is required." }, { status: 400 });
   const repeatRule = ["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule) ? body.repeatRule : "none";
   let caseId: string | null;
@@ -151,7 +187,9 @@ export async function POST(request: Request) {
   } catch (caseError) {
     return NextResponse.json({ error: caseError instanceof Error ? caseError.message : "Case could not be linked." }, { status: 403 });
   }
-  const { data, error } = await admin.from("my_work_tasks").insert({
+  let replayed = false;
+  let { data, error } = await admin.from("my_work_tasks").insert({
+    client_request_id: requestId,
     title,
     notes: String(body.note || ""),
     steps: Array.isArray(body.steps) ? body.steps : [],
@@ -160,12 +198,24 @@ export async function POST(request: Request) {
     repeat_rule: repeatRule,
     repeat_custom_date: repeatRule === "custom" ? body.repeatCustomDate || null : null,
     case_id: caseId,
+    is_completed: Boolean(body.done),
+    completed_at: body.done ? new Date().toISOString() : null,
+    completed_by_profile_id: body.done ? current.profile.id : null,
     created_by_profile_id: current.profile.id
-  }).select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").single();
+  }).select(TASK_SELECT).single();
+  if (error?.code === "23505") {
+    replayed = true;
+    const existing = await admin.from("my_work_tasks").select(TASK_SELECT).eq("created_by_profile_id", current.profile.id).eq("client_request_id", requestId).maybeSingle();
+    data = existing.data;
+    error = existing.error;
+  }
   if (error || !data) return NextResponse.json({ error: error?.message || "Task could not be created." }, { status: 500 });
   const assignees = await staffByNames(admin, Array.isArray(body.assignees) ? body.assignees : []);
   const additional = assignees.filter((staff) => staff.id !== current.profile.id);
-  if (additional.length) await admin.from("my_work_task_assignees").insert(additional.map((staff) => ({ task_id: data.id, staff_profile_id: staff.id })));
+  if (additional.length) {
+    const { error: assignmentError } = await admin.from("my_work_task_assignees").upsert(additional.map((staff) => ({ task_id: data.id, staff_profile_id: staff.id })), { onConflict: "task_id,staff_profile_id", ignoreDuplicates: true });
+    if (assignmentError) return NextResponse.json({ error: assignmentError.message }, { status: 500 });
+  }
   if (additional.length) after(async () => {
     try {
       await createOperationalAnnouncement({
@@ -181,8 +231,8 @@ export async function POST(request: Request) {
       console.error("[my-work] assignment notification could not be created", error);
     }
   });
-  const { data: complete } = await admin.from("my_work_tasks").select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").eq("id", data.id).single();
-  return NextResponse.json({ task: taskResponse(complete as TaskRow) }, { status: 201 });
+  const { data: complete } = await admin.from("my_work_tasks").select(TASK_SELECT).eq("id", data.id).single();
+  return NextResponse.json({ task: taskResponse(complete as TaskRow), replayed }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
@@ -193,15 +243,12 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Task id is required." }, { status: 400 });
-  const { data: task, error: taskError } = await admin.from("my_work_tasks").select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").eq("id", id).maybeSingle();
+  const { data: task, error: taskError } = await admin.from("my_work_tasks").select(TASK_SELECT).eq("id", id).maybeSingle();
   if (taskError || !task) return NextResponse.json({ error: taskError?.message || "Task was not found." }, { status: 404 });
   const visible = isLeadership(current.profile.role) || task.created_by_profile_id === current.profile.id || (task.my_work_task_assignees || []).some((assignee: { staff_profile_id: string }) => assignee.staff_profile_id === current.profile.id);
   if (!visible) return NextResponse.json({ error: "You do not have access to this task." }, { status: 403 });
 
-  if (typeof body.favorite === "boolean") {
-    const { error } = await admin.from("my_work_task_preferences").upsert({ task_id: id, staff_profile_id: current.profile.id, favorite: body.favorite, favorited_at: body.favorite ? new Date().toISOString() : null });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (body.version !== task.updated_at) return NextResponse.json({ error: "This task changed in another session. Your edits are retained for reconciliation.", code: "VERSION_CONFLICT", task: taskResponse(task as TaskRow) }, { status: 409 });
 
   const update: Record<string, unknown> = {};
   if (typeof body.title === "string" && body.title.trim()) update.title = body.title.trim();
@@ -213,7 +260,7 @@ export async function PATCH(request: Request) {
     update.repeat_rule = body.repeatRule;
     update.repeat_custom_date = body.repeatRule === "custom" ? body.repeatCustomDate || null : null;
   }
-  if (typeof body.caseId === "string") {
+  if (typeof body.caseId === "string" && (body.caseId || null) !== task.case_id) {
     try {
       update.case_id = await accessibleCaseId(admin, current.profile.id, current.profile.role, body.caseId);
     } catch (caseError) {
@@ -222,13 +269,35 @@ export async function PATCH(request: Request) {
   }
   if (typeof body.done === "boolean") {
     update.is_completed = body.done;
-    update.completed_at = body.done ? new Date().toISOString() : null;
+    update.completed_at = body.done ? task.completed_at || new Date().toISOString() : null;
+    update.completed_by_profile_id = body.done ? task.completed_by_profile_id || current.profile.id : null;
   }
   let updated = task as TaskRow;
   if (Object.keys(update).length) {
-    const { data, error } = await admin.from("my_work_tasks").update(update).eq("id", id).select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").single();
+    const { data, error } = await admin.from("my_work_tasks").update(update).eq("id", id).eq("updated_at", body.version).select(TASK_SELECT).maybeSingle();
+    if (!error && !data) return NextResponse.json({ error: "Another session saved this task first.", code: "VERSION_CONFLICT" }, { status: 409 });
     if (error || !data) return NextResponse.json({ error: error?.message || "Task could not be updated." }, { status: 500 });
     updated = data as TaskRow;
+  }
+  if (typeof body.done === "boolean" && body.done !== task.is_completed) {
+    const { count } = await admin.from("my_work_task_completion_events").select("id", { count: "exact", head: true }).eq("task_id", id).eq("event_type", "completed");
+    const cycle = body.done ? Number(count || 0) + 1 : Math.max(1, Number(count || 0));
+    const eventType = body.done ? "completed" : "reopened";
+    const { error: eventError } = await admin.from("my_work_task_completion_events").insert({ task_id: id, actor_profile_id: current.profile.id, event_type: eventType, completion_cycle: cycle });
+    if (eventError && eventError.code !== "23505") return NextResponse.json({ error: eventError.message }, { status: 500 });
+    if (task.case_id) {
+      const sourceKey = `my-work:${id}:cycle:${cycle}`;
+      if (body.done) {
+        await admin.from("performance_point_ledger").upsert({ staff_profile_id: current.profile.id, period_key: new Date().toISOString().slice(0, 7), source_type: "case_linked_task", source_key: sourceKey, event_type: "completed", points: 1, status: "pending", metadata: { task_id: id, case_id: task.case_id, completion_cycle: cycle } }, { onConflict: "source_key,event_type", ignoreDuplicates: true });
+      } else {
+        const { data: earned } = await admin.from("performance_point_ledger").select("id, staff_profile_id, period_key, points").eq("source_key", sourceKey).eq("event_type", "completed").maybeSingle();
+        if (earned) await admin.from("performance_point_ledger").upsert({ staff_profile_id: earned.staff_profile_id, period_key: earned.period_key, source_type: "case_linked_task", source_key: sourceKey, event_type: "reopened", points: -Number(earned.points), status: "pending", reversed_by_entry_id: earned.id, metadata: { task_id: id, case_id: task.case_id, completion_cycle: cycle, reopened_by: current.profile.id } }, { onConflict: "source_key,event_type", ignoreDuplicates: true });
+      }
+    }
+  }
+  if (typeof body.favorite === "boolean") {
+    const { error } = await admin.from("my_work_task_preferences").upsert({ task_id: id, staff_profile_id: current.profile.id, favorite: body.favorite, favorited_at: body.favorite ? new Date().toISOString() : null });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (Array.isArray(body.addAssignees) && body.addAssignees.length) {
     const currentIds = new Set((task.my_work_task_assignees || []).map((assignee: { staff_profile_id: string }) => assignee.staff_profile_id));
@@ -254,7 +323,7 @@ export async function PATCH(request: Request) {
     }
   }
   if (body.done === true && !task.is_completed) await createFollowUpTask(admin, updated);
-  const { data: finalTask } = await admin.from("my_work_tasks").select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").eq("id", id).single();
+  const { data: finalTask } = await admin.from("my_work_tasks").select(TASK_SELECT).eq("id", id).single();
   const { data: preference } = await admin.from("my_work_task_preferences").select("favorite, favorited_at").eq("task_id", id).eq("staff_profile_id", current.profile.id).maybeSingle();
   return NextResponse.json({ task: taskResponse(finalTask as TaskRow, preference) });
 }

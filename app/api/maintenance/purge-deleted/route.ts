@@ -9,12 +9,7 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ error: "Server database access is not configured." }, { status: 503 });
   const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-  const [cases, announcements, clientDuplicates] = await Promise.all([
-    admin.from("tax_cases").delete().lt("deleted_at", cutoff),
-    admin.from("announcement_recipient_trash").delete().lt("deleted_at", cutoff),
-    admin.from("client_master_duplicate_trash").delete().lt("deleted_at", cutoff)
-  ]);
-  const error = cases.error || announcements.error || clientDuplicates.error;
+  const { error } = await admin.rpc("purge_deleted_items");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, purgedBefore: cutoff });
 }

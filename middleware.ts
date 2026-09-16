@@ -9,6 +9,8 @@ type CookieMutation = {
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
+  // The handler authenticates this exact scheduler route with CRON_SECRET.
+  if (["/api/maintenance/purge-deleted", "/api/maintenance/deliver-notifications"].includes(request.nextUrl.pathname)) return response;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -39,7 +41,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=auth-unavailable", request.url));
   }
   if (!user && !publicPath && !pathname.startsWith("/_next/") && !pathname.startsWith("/api/health/")) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (user && !publicPath && !pathname.startsWith("/_next/")) {
+    const workspaceUser = request.headers.get("x-workspace-user");
+    if (workspaceUser && workspaceUser !== user.id) return NextResponse.json({ error: "The signed-in account changed. Reload before continuing." }, { status: 409 });
+    const { data: profile, error } = await supabase.from("staff_profiles").select("directory_active").eq("auth_user_id", user.id).maybeSingle();
+    if (error || profile?.directory_active !== true) {
+      return pathname.startsWith("/api/")
+        ? NextResponse.json({ error: "Active staff access is required." }, { status: 403 })
+        : NextResponse.redirect(new URL("/login?error=staff-access-disabled", request.url));
+    }
   }
 
   return response;

@@ -7,8 +7,9 @@ async function currentProfile() {
   if (!supabase) return { error: "Database is not configured.", status: 503 as const };
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Authentication is required.", status: 401 as const };
-  const { data: profile, error } = await supabase.from("staff_profiles").select("id, full_name, display_name, team_division, role").eq("auth_user_id", user.id).maybeSingle();
+  const { data: profile, error } = await supabase.from("staff_profiles").select("id, full_name, display_name, team_division, role, directory_active").eq("auth_user_id", user.id).maybeSingle();
   if (error || !profile) return { error: "Staff profile was not found.", status: 403 as const };
+  if (profile.directory_active !== true) return { error: "Your staff access has been deactivated.", status: 403 as const };
   return { user, profile, supabase };
 }
 
@@ -80,8 +81,10 @@ export async function PATCH(request: Request) {
   const { announcementId, action } = await request.json();
   if (!announcementId) return NextResponse.json({ error: "Announcement id is required." }, { status: 400 });
   if (action === "restore") {
-    const { error } = await current.supabase.from("announcement_recipient_trash").delete().eq("announcement_id", announcementId).eq("staff_profile_id", current.profile.id);
+    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await current.supabase.from("announcement_recipient_trash").delete().eq("announcement_id", announcementId).eq("staff_profile_id", current.profile.id).gte("deleted_at", cutoff).select("announcement_id").maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "This announcement's recovery period has expired or it was already restored." }, { status: 410 });
     return NextResponse.json({ ok: true });
   }
   const { error } = await current.supabase.from("announcement_recipients").update({ read_at: new Date().toISOString() }).eq("announcement_id", announcementId).eq("staff_profile_id", current.profile.id);

@@ -8,6 +8,8 @@
     :root { --navy:#003b78; --blue:#0068b7; --teal:#00a9ee; --mint:#e8f7fd; --pale:#edf6fc; --ink:#12314c; --muted:#60798e; --line:#d4e4ef; --paper:#fff; --canvas:#edf4f8; --hero-end:#002d62; }
     * { box-sizing:border-box; }
     body { margin:0; background:radial-gradient(circle at 12% 4%, rgba(0,169,238,.15), transparent 32%), var(--canvas); color:var(--ink); font-family:"Aptos Display", "Segoe UI", sans-serif; }
+    body[data-claim-ready="false"] .page { visibility:hidden; }
+    @media print { body[data-claim-valid="false"] .page { display:none; } }
     button, input, textarea { font:inherit; }
     .editor-bar { position:sticky; z-index:3; top:0; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; padding:14px max(18px, calc((100vw - 1120px)/2)); background:rgba(238,242,247,.9); backdrop-filter:blur(12px); border-bottom:1px solid rgba(148,163,184,.25); }
     .editor-bar strong { font-size:14px; letter-spacing:.02em; }
@@ -152,7 +154,8 @@
       <label class="file-label">Replace logo mark<input id="logo-upload" type="file" accept="image/*" /></label>
       <button id="save-draft">Save draft</button>
       <button id="reset-draft">Reset</button>
-      <button class="primary" onclick="window.print()">Print / Save PDF</button>
+      <button id="print-claim" class="primary" disabled>Print / Save PDF</button>
+      <span id="claim-status" role="status">Loading claim...</span>
     </div>
   </header>
   <main class="page" id="claim-page">
@@ -170,6 +173,7 @@
       <div class="legal"><span>LMATS Consulting | Jl. Astasura No. 18, Peguyangan Kanging, Denpasar Utara, Bali</span><span>www.lmatsconsulting.com</span></div>
     </section>
   </main>
+  <script src="claim-values.js"></script>
   <script>
     const selectedTheme = new URLSearchParams(location.search).get("theme");
     if (new URLSearchParams(location.search).get("header") === "prism") document.documentElement.classList.add("header-prism");
@@ -179,24 +183,90 @@
       slate: { "--navy":"#005a9c", "--blue":"#007bc3", "--teal":"#00b7f1", "--mint":"#e5f8fd", "--pale":"#eef8fc", "--ink":"#17354b", "--muted":"#607d91", "--line":"#d5e7f0", "--canvas":"#edf7fa", "--hero-end":"#003d79" }
     };
     if (themes[selectedTheme]) Object.entries(themes[selectedTheme]).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
-    const draftKey = `lmats-tax-claim-editor-${selectedTheme || "original"}-v1`;
+    let draftKey;
+    let claimVersion;
+    let workspaceUser;
+    let claimReady = false;
+    const status = message => { document.getElementById("claim-status").textContent = message; };
+    document.body.dataset.claimReady = "false";
+    document.querySelectorAll("input, textarea, button").forEach(control => { control.disabled = true; });
     const claimId = new URLSearchParams(location.search).get("claimId");
-    const parseAmount = value => Number(String(value || "").replace(/[^0-9]/g, "")) || 0;
-    const formatNumber = value => new Intl.NumberFormat("id-ID", { maximumFractionDigits:0 }).format(parseAmount(value));
-    const formatRupiah = value => new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(parseAmount(value));
+    const parseAmount = ClaimValues.parseAmount;
+    const formatNumber = value => new Intl.NumberFormat("id-ID", { maximumFractionDigits:2 }).format(parseAmount(value));
+    const formatRupiah = value => new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:2 }).format(parseAmount(value));
     const rows = () => [...document.querySelectorAll("#claim-rows tr")];
-    function refreshTotal() { const total = rows().reduce((sum, row) => sum + parseAmount(row.querySelector(".tax-amount")?.value), 0); document.getElementById("table-total").textContent = formatRupiah(total); document.getElementById("hero-total").value = formatRupiah(total); rows().forEach((row, index) => row.querySelector(".row-number").textContent = index + 1); }
+    function refreshTotal() {
+      let cents = 0, valid = true;
+      rows().forEach((row, index) => {
+        row.querySelector(".row-number").textContent = index + 1;
+        const input = row.querySelector(".tax-amount");
+        try { cents += Math.round(parseAmount(input.value) * 100); input.setCustomValidity(""); }
+        catch (error) { valid = false; input.setCustomValidity(error.message); }
+      });
+      valid = valid && Number.isSafeInteger(cents);
+      document.body.dataset.claimValid = String(valid);
+      document.getElementById("table-total").textContent = valid ? formatRupiah(cents / 100) : "Check payment amounts";
+      document.getElementById("hero-total").value = valid ? formatRupiah(cents / 100) : "";
+      document.getElementById("print-claim").disabled = !claimReady || !valid;
+      document.getElementById("save-draft").disabled = !claimReady || !valid;
+      if (!valid) status("Invalid amount. Use Indonesian formatting, for example 1.234,56.");
+      return valid;
+    }
     function newRow() { const row = document.createElement("tr"); row.innerHTML = '<td class="row-number"></td><td><input value="Jenis pajak" /></td><td><input value="Masa pajak" /></td><td><input class="tax-amount num" inputmode="numeric" value="0" /></td><td><button class="remove-row" title="Remove row">x</button></td>'; document.getElementById("claim-rows").append(row); refreshTotal(); }
     document.getElementById("add-row").addEventListener("click", newRow);
     document.addEventListener("input", event => { if (event.target.matches(".tax-amount")) refreshTotal(); });
-    document.addEventListener("blur", event => { if (event.target.matches(".tax-amount")) event.target.value = formatNumber(event.target.value); }, true);
+    document.addEventListener("blur", event => { if (event.target.matches(".tax-amount")) { try { event.target.value = formatNumber(event.target.value); } catch { event.target.reportValidity(); } } }, true);
     document.addEventListener("click", event => { if (event.target.classList.contains("remove-row") && rows().length > 1) { event.target.closest("tr").remove(); refreshTotal(); } });
     document.getElementById("logo-upload").addEventListener("change", event => { const file = event.target.files[0]; if (file) { const logo = document.getElementById("claim-logo"); logo.src = URL.createObjectURL(file); logo.classList.add("custom-logo"); } });
     const readDraft = () => { const data = Object.fromEntries([...document.querySelectorAll("[data-draft]")].map(input => [input.dataset.draft, input.value])); data.rows = rows().map(row => [...row.querySelectorAll("input")].map(input => input.value)); return data; };
     function applyDraft(draft) { if (!draft) return; document.querySelectorAll("[data-draft]").forEach(input => { if (draft[input.dataset.draft] !== undefined) input.value = draft[input.dataset.draft]; }); if (Array.isArray(draft.rows) && draft.rows.length) { document.getElementById("claim-rows").innerHTML = ""; draft.rows.forEach(values => { newRow(); const inputs = rows().at(-1).querySelectorAll("input"); values.forEach((value, index) => { if (inputs[index]) inputs[index].value = value; }); }); } document.querySelectorAll(".tax-amount").forEach(input => input.value = formatNumber(input.value)); refreshTotal(); }
-    document.getElementById("save-draft").addEventListener("click", async () => { const data = readDraft(); localStorage.setItem(draftKey, JSON.stringify(data)); if (!claimId) { alert("Draft saved in this browser."); return; } const response = await fetch("/api/monthly-claims", { method:"PATCH", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ id:claimId, draft:data }) }); if (!response.ok) { alert("Draft saved in this browser, but server backup failed."); return; } alert("Draft saved to the shared tax claim record."); });
-    document.getElementById("reset-draft").addEventListener("click", () => { localStorage.removeItem(draftKey); location.reload(); });
-    const localDraft = JSON.parse(localStorage.getItem(draftKey) || "null"); applyDraft(localDraft); if (claimId) fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { headers:{ Accept:"application/json" } }).then(response => response.ok ? response.json() : null).then(result => { if (result?.data?.draft) applyDraft(result.data.draft); }).catch(() => {});
+    const templateDefaults = readDraft();
+    function resetAndApply(draft) { applyDraft(templateDefaults); applyDraft(draft); }
+    document.getElementById("save-draft").addEventListener("click", async () => {
+      if (!claimReady || !refreshTotal()) return;
+      const data = readDraft();
+      localStorage.setItem(draftKey, JSON.stringify({ draft:data, version:claimVersion, user:workspaceUser, claimId }));
+      if (!claimId) { status("Draft saved on this device."); return; }
+      document.getElementById("save-draft").disabled = true;
+      try {
+        const response = await fetch("/api/monthly-claims", { method:"PATCH", headers:{ "Content-Type":"application/json", Accept:"application/json", "X-Workspace-User":workspaceUser }, body:JSON.stringify({ id:claimId, draft:data, version:claimVersion }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Server save failed. The draft is retained on this device.");
+        claimVersion = result.data.updated_at;
+        localStorage.removeItem(draftKey);
+        status("Saved to database.");
+      } catch (error) { status(error.message); }
+      finally { refreshTotal(); }
+    });
+    document.getElementById("reset-draft").addEventListener("click", () => { if (confirm("Discard this device's draft and reload the saved claim?")) { localStorage.removeItem(draftKey); location.reload(); } });
+    document.getElementById("print-claim").addEventListener("click", () => { if (claimReady && refreshTotal()) window.print(); });
+    (async () => {
+      try {
+        if (location.protocol === "file:" && !claimId) workspaceUser = "offline-preview";
+        else {
+          const identity = await fetch("/api/profile", { cache:"no-store" });
+          const account = await identity.json();
+          if (!identity.ok || !account.user?.id || !account.profile) throw new Error("Please sign in before opening a claim.");
+          workspaceUser = account.user.id;
+        }
+        draftKey = `lmats-claim-v2:${workspaceUser}:${claimId || "standalone"}`;
+        if (claimId) {
+          const response = await fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { cache:"no-store", headers:{ Accept:"application/json", "X-Workspace-User":workspaceUser } });
+          const result = await response.json();
+          if (!response.ok || !result.data?.draft) throw new Error(result.error || "This claim could not be loaded. Reload to retry.");
+          claimVersion = result.data.updated_at;
+          resetAndApply(result.data.draft);
+        }
+        let recovery;
+        try { recovery = JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { /* Ignore an invalid local draft. */ }
+        if (recovery?.user === workspaceUser && recovery.claimId === claimId && recovery.version === claimVersion && confirm("Restore the unsaved draft for this claim on this device?")) resetAndApply(recovery.draft);
+        claimReady = true;
+        document.body.dataset.claimReady = "true";
+        document.querySelectorAll("input, textarea, button").forEach(control => { control.disabled = false; });
+        status("Ready.");
+        refreshTotal();
+      } catch (error) { status(error.message); }
+    })();
   </script>
 </body>
 </html>
