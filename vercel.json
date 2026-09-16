@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/maintenance/deliver-notifications",
-      "schedule": "*/5 * * * *"
+      "schedule": "37 2 * * *"
     }
   ]
 }
