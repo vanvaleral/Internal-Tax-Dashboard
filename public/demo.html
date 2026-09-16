@@ -2725,6 +2725,31 @@
       font-size: 12px;
     }
 
+    .case-progress-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .case-progress-list {
+      display: grid;
+      gap: 7px;
+      max-height: 240px;
+      overflow: auto;
+    }
+
+    .case-progress-entry {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 720px) {
+      .case-progress-grid { grid-template-columns: 1fr; }
+    }
+
     .detail-stat {
       padding: 10px;
       border-radius: 14px;
@@ -4341,6 +4366,8 @@
       deletedCases: [],
       deletedAnnouncements: [],
       caseTrashOpen: false,
+      expandedHimbauanId: "",
+      caseProgressById: {},
       monthlyProgress: persistedDemoState?.ui?.monthlyProgress || {},
       activeMonthlyPeriod: persistedDemoState?.ui?.activeMonthlyPeriod || "",
       sorts: {
@@ -4417,10 +4444,10 @@
       const maps = {
         operations: {
           monthly: {
-            active: ["Operations / Monthly Compliance / Active Queue", "Operations Workspace", "Focused recurring monthly compliance workspace with dense scanning, inline row expansion, and minimal eye travel."],
-            history: ["Operations / Monthly Compliance / Completed History", "Operations Workspace", "Completed recurring rows stay searchable here while remaining hidden from the active queue by default."],
-            claim: ["Operations / Monthly Compliance / Claim Status", "Operations Workspace", "Claim and payment coordination stays visible without turning the recurring workspace into a giant dashboard."],
-            archive: ["Operations / Monthly Compliance / Reporting Archive", "Operations Workspace", "Archive-ready reporting visibility for completed monthly work and receipt traceability."]
+            active: ["Operations / Monthly Compliance / Active Queue", "Operations Workspace", "Monitor current monthly obligations and record each client's progress."],
+            history: ["Operations / Monthly Compliance / Completed History", "Operations Workspace", "Search completed monthly obligations by client and tax period."],
+            claim: ["Operations / Monthly Compliance / Claim Status", "Operations Workspace", "Track tax claims, payment preparation, and payment status."],
+            archive: ["Operations / Monthly Compliance / Reporting Archive", "Operations Workspace", "Keep submitted filings, receipt references, and supporting records."]
           },
           annual: {
             accounting: ["Operations / Annual Compliance / Accounting Team", "Operations Workspace", "Annual financial statement control sheet for the accounting team, kept separate from monthly tax compliance."],
@@ -4895,30 +4922,30 @@
       });
     }
 
-    async function generateMonthlyPeriod(value) {
+    async function generateMonthlyPeriod(value, targetProfileId = "") {
       const previewResponse = await appFetch("/api/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ action: "preview-monthly-period", period: value })
+        body: JSON.stringify({ action: "preview-monthly-period", period: value, targetProfileId })
       }, "");
       const preview = await previewResponse.json().catch(() => ({}));
       if (!previewResponse.ok) throw new Error(preview.error || "Monthly period could not be checked.");
       if (!preview.assigned) {
-        window.alert("No active clients are currently assigned to you as Tax PIC. Update PIC Allocation before generating this month.");
+        window.alert(`No active clients are currently assigned to ${preview.taxPic || "the selected Tax PIC"}. Update PIC Allocation before generating this month.`);
         return null;
       }
       if (!preview.clients?.length) {
-        window.alert(`${preview.period} has already been generated for all ${preview.assigned} of your assigned clients.`);
+        window.alert(`${preview.period} has already been generated for all ${preview.assigned} client(s) assigned to ${preview.taxPic || "the selected Tax PIC"}.`);
         return null;
       }
       const names = preview.clients.slice(0, 4).map((client) => client.name).join(", ");
       const more = preview.clients.length > 4 ? ` and ${preview.clients.length - 4} more` : "";
-      const confirmed = window.confirm(`Generate ${preview.period} for ${preview.clients.length} client(s) assigned to you as Tax PIC?\n\nThis locks the current Tax PIC and ACC PIC into the monthly record. Check Allocation first if the PIC list is not final.\n\n${names}${more}`);
+      const confirmed = window.confirm(`Generate ${preview.period} for ${preview.clients.length} client(s) assigned to ${preview.taxPic || "the selected Tax PIC"}?\n\nThis locks the current Tax PIC and ACC PIC into the monthly record. Check Allocation first if the PIC list is not final.\n\n${names}${more}`);
       if (!confirmed) return null;
       const response = await appFetch("/api/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ action: "generate-monthly-period", period: value })
+        body: JSON.stringify({ action: "generate-monthly-period", period: value, targetProfileId })
       }, "");
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Monthly period could not be generated.");
@@ -5618,7 +5645,8 @@
         reminder: '<circle cx="12" cy="12" r="7"></circle><path d="M12 8v4l3 2"></path><path d="M5 4 3 6"></path><path d="m19 4 2 2"></path>',
         due: '<rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M8 3v4M16 3v4M4 10h16"></path>',
         repeat: '<path d="M17 3l4 4-4 4"></path><path d="M3 11V9a2 2 0 0 1 2-2h16"></path><path d="m7 21-4-4 4-4"></path><path d="M21 13v2a2 2 0 0 1-2 2H3"></path>',
-        assign: '<circle cx="9" cy="8" r="3"></circle><path d="M3.5 20a5.5 5.5 0 0 1 11 0"></path><path d="M19 8v6M16 11h6"></path>'
+        assign: '<circle cx="9" cy="8" r="3"></circle><path d="M3.5 20a5.5 5.5 0 0 1 11 0"></path><path d="M19 8v6M16 11h6"></path>',
+        case: '<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H10l2 2h5.5A2.5 2.5 0 0 1 20 9.5v8A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"></path><path d="M8 13h8"></path>'
       };
       return `<svg class="my-work-action-icon" viewBox="0 0 24 24" aria-hidden="true">${icons[type] || ""}</svg>`;
     }
@@ -6947,6 +6975,9 @@
       const annualAccountingList = visibleAnnualAccountingRows();
       const annualTaxList = visibleAnnualTaxRows();
       const root = document.getElementById("matrix-view");
+      const taxPicOptions = staffDirectory.filter((person) => person.team_division === "Tax Team" && person.directory_active !== false);
+      const currentTaxPic = taxPicOptions.find((person) => (person.display_name || person.full_name) === state.selectedPic);
+      const generationTargetId = state.monthlyGenerationTargetId || currentTaxPic?.id || "";
       const completedHiddenCount = allVisibleClientsIncludingCompleted().filter((item) => isClientCompleted(item)).length;
       const promptedClient = state.completionPromptClientId
         ? clients.find((item) => item.id === state.completionPromptClientId)
@@ -7017,7 +7048,7 @@
                   <button class="${state.annualTeam === "tax" ? "solid-btn" : "ghost-btn"}" data-annual-team="tax">Tax Team</button>
                 `}
               </div>
-              ${state.operationsMode === "monthly" ? `<div class="toolbar-right"><label class="subline">Period <input id="generate-monthly-period" class="field" type="month" value="${new Date().toISOString().slice(0, 7)}" /></label><button class="solid-btn" data-generate-monthly-period="yes">Generate Month</button></div>` : ``}
+              ${state.operationsMode === "monthly" ? `<div class="toolbar-right">${hasLeadershipAccess() ? `<label class="subline">Tax PIC <select id="generate-monthly-tax-pic" class="field">${taxPicOptions.map((person) => `<option value="${person.id}" ${person.id === generationTargetId ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select></label>` : ``}<label class="subline">Period <input id="generate-monthly-period" class="field" type="month" value="${new Date().toISOString().slice(0, 7)}" /></label><button class="solid-btn" data-generate-monthly-period="yes">Generate Month</button></div>` : ``}
             </div>
           </section>
 
@@ -7026,7 +7057,7 @@
               <div class="section-title">
                 <div>
                   <h3>Active Queue</h3>
-                  <p>Recurring compliance matrix for repetitive monthly work only. Main rows stay dense and inline expansion handles updates below the row.</p>
+                  <p>Review current client obligations and update progress directly in the control sheet.</p>
                 </div>
               </div>
 
@@ -7520,7 +7551,7 @@
               <div class="section-title">
                 <div>
                   <h3>Completed History</h3>
-                  <p>Completed compliance disappears from the active queue but stays searchable here by client, month, and year.</p>
+                  <p>Completed monthly obligations are retained by client and tax period.</p>
                 </div>
               </div>
               <div class="toolbar">
@@ -7555,7 +7586,7 @@
               <div class="section-title">
                 <div>
                   <h3>Claim Status</h3>
-                  <p>Separate claim/payment visibility without mixing it into the main recurring edit surface.</p>
+                  <p>Monitor prepared tax claims, payment status, and outstanding amounts.</p>
                 </div>
               </div>
               <div class="table-wrap desktop-only">
@@ -7610,7 +7641,7 @@
               <div class="section-title">
                 <div>
                   <h3>Reporting Archive</h3>
-                  <p>Archive-oriented visibility for submitted work, receipt traceability, and Drive routing.</p>
+                  <p>Retain submitted filings, receipt references, and supporting records.</p>
                 </div>
               </div>
               <div class="table-wrap desktop-only">
@@ -7667,12 +7698,15 @@
       const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
       const caseList = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes].join(" ").toLowerCase().includes(caseQuery)));
       const caseWindow = windowedRows(caseList, "cases", 44);
+      const expandedHimbauan = category === "Himbauan" ? caseList.find((item) => item.id === state.expandedHimbauanId) : null;
+      const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
       const root = document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">&#128465;</button>`;
+      const caseActionButtons = (item) => `<div class="inline-controls"><button class="tiny-btn" data-toggle-himbauan-progress="${item.id}">${item.id === state.expandedHimbauanId ? "Close" : "Progress"}</button>${deleteCaseButton(item)}</div>`;
       const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${deleteCaseButton(item)}</td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>`;
       }).join("") || `<tr><td colspan="13"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
       const pemeriksaanRows = caseWindow.rows.map((item, index) => {
         return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${deleteCaseButton(item)}</td></tr>`;
@@ -7700,6 +7734,10 @@
               ${virtualSpacer(13, caseWindow.top)}${category === "Himbauan" ? himbauanRows : pemeriksaanRows}${virtualSpacer(13, caseWindow.bottom)}
             </tbody></table></div>
           </section>
+          ${expandedHimbauan ? `<section class="panel">
+            <div class="section-title"><div><div class="eyebrow">Himbauan Progress</div><h3>${escapeHtml(expandedHimbauan.clientName || "Untitled Himbauan")}</h3><p>Completed My Work tasks and direct PIC updates are retained here.</p></div><button class="ghost-btn" data-toggle-himbauan-progress="${expandedHimbauan.id}">Collapse</button></div>
+            ${expandedHimbauan.id.startsWith("case-") ? `<div class="empty-state">Save the Himbauan with a Wajib Pajak first, then add progress updates.</div>` : `${expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed My Work tasks are linked to this Himbauan yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress Log</div><div class="case-progress-list">${expandedProgress.progressEntries.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.entry)}</strong><div class="subline">${escapeHtml(item.creatorName)} · ${item.createdAt ? new Date(item.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${expandedHimbauan.id}">Add</button></div></div></div>` : `<div class="subline">Loading linked work and PIC progress...</div>`}`}
+          </section>` : ""}
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Recently Deleted Cases</h3><p>Restore is available for three days after deletion.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No deleted cases available for restoration.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
@@ -7924,15 +7962,26 @@
       const showMyWorkDetail = Boolean(selected && (!isMobileMyWork || state.myWorkDetailOpen));
       const shouldAnimateDrawer = Boolean(showMyWorkDetail && state.myWorkDrawerTaskId !== selected.id);
       state.myWorkDrawerTaskId = showMyWorkDetail ? selected.id : "";
+      const linkedCase = taxCases.find((item) => item.id === selected?.caseId);
+      const availableCases = hasLeadershipAccess()
+        ? taxCases
+        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
       const timeDialog = state.myWorkMenu && selected ? `
         <div class="my-work-time-dialog-backdrop" data-close-my-work-menu="yes">
-          <section class="my-work-time-dialog" role="dialog" aria-modal="true" aria-label="Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}">
-            <h3>${state.myWorkMenu === "due" ? "Add due date" : state.myWorkMenu === "repeat" ? "Repeat task" : "Remind me"}</h3>
-            ${state.myWorkMenu === "reminder" ? `<button data-set-my-work-time="later">Later today <span>20:00</span></button><button data-set-my-work-time="tomorrow">Tomorrow <span>09:00</span></button>` : ``}
-            ${state.myWorkMenu === "repeat" ? `<button data-set-my-work-repeat="daily">Daily</button><button data-set-my-work-repeat="weekly">Weekly</button><button data-set-my-work-repeat="monthly">Monthly</button><button data-set-my-work-repeat="annually">Annually</button>` : ``}
-            <label class="eyebrow" style="display:block; margin:16px 0 6px;">${state.myWorkMenu === "repeat" ? "Custom date" : "Pick a date & time"}</label>
-            <input id="my-work-picker" class="field" type="${state.myWorkMenu === "repeat" ? "datetime-local" : "datetime-local"}" />
-            <div class="inline-controls" style="margin-top:12px;"><button class="solid-btn" data-save-my-work-time="yes">Set ${state.myWorkMenu === "repeat" ? "custom repeat" : state.myWorkMenu === "due" ? "due date" : "reminder"}</button><button class="ghost-btn" data-close-my-work-menu="yes">Cancel</button></div>
+          <section class="my-work-time-dialog" role="dialog" aria-modal="true" aria-label="${state.myWorkMenu === "case" ? "Link to Case" : `Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}`}">
+            ${state.myWorkMenu === "case" ? `
+              <h3>Link to Case</h3>
+              <p class="subline">Connect this daily task to a Case in your assigned scope. This link is retained for future point attribution.</p>
+              <label class="eyebrow" style="display:block; margin:16px 0 6px;">Case</label>
+              <select id="my-work-case-picker" class="field"><option value="">No linked Case</option>${availableCases.map((item) => `<option value="${item.id}" ${item.id === selected.caseId ? "selected" : ""}>${escapeHtml(`${item.caseCategory || item.caseType} - ${item.clientName || "Untitled Case"}${item.letterNumber ? ` (${item.letterNumber})` : ""}`)}</option>`).join("")}</select>
+              <div class="inline-controls" style="margin-top:12px;"><button class="solid-btn" data-save-my-work-case="yes">Save Case link</button><button class="ghost-btn" data-close-my-work-menu="yes">Cancel</button></div>
+            ` : `
+              <h3>${state.myWorkMenu === "due" ? "Add due date" : "Remind me"}</h3>
+              ${state.myWorkMenu === "reminder" ? `<button data-set-my-work-time="later">Later today <span>20:00</span></button><button data-set-my-work-time="tomorrow">Tomorrow <span>09:00</span></button>` : ``}
+              <label class="eyebrow" style="display:block; margin:16px 0 6px;">Pick a date & time</label>
+              <input id="my-work-picker" class="field" type="datetime-local" />
+              <div class="inline-controls" style="margin-top:12px;"><button class="solid-btn" data-save-my-work-time="yes">Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}</button><button class="ghost-btn" data-close-my-work-menu="yes">Cancel</button></div>
+            `}
           </section>
         </div>` : "";
       root.innerHTML = `
@@ -7958,7 +8007,7 @@
                 </div>
                 <button class="my-work-action-card" data-open-my-work-menu="reminder">${myWorkActionIcon("reminder")}<span>${selected.reminder ? `Remind: ${escapeHtml(selected.reminder.replace("T", " "))}` : "Remind me"}</span></button>
                 <button class="my-work-action-card" data-open-my-work-menu="due">${myWorkActionIcon("due")}<span>${selected.dueDate ? `Due: ${escapeHtml(selected.dueDate)}` : "Add due date"}</span></button>
-                <button class="my-work-action-card" data-open-my-work-menu="repeat">${myWorkActionIcon("repeat")}<span>${selected.repeatRule && selected.repeatRule !== "none" ? `Repeat: ${selected.repeatRule}` : "Repeat"}</span></button>
+                <button class="my-work-action-card" data-open-my-work-menu="case">${myWorkActionIcon("case")}<span>${linkedCase ? `Case: ${escapeHtml(linkedCase.clientName || linkedCase.subject || "Linked Case")}` : "Link to Case"}</span></button>
                 <div class="my-work-action-card"><label class="my-work-assignment">${myWorkActionIcon("assign")}<span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
                 <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
@@ -8131,6 +8180,15 @@
       }
     }
 
+    function canonicalStaffName(value, profileId = "") {
+      const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const byId = staffDirectory.find((person) => person.id === profileId);
+      if (byId) return byId.display_name || byId.full_name || value;
+      const byName = staffDirectory.find((person) => [person.display_name, person.full_name]
+        .some((name) => String(name || "").trim().toLowerCase().replace(/\s+/g, " ") === normalized));
+      return byName ? (byName.display_name || byName.full_name || value) : value;
+    }
+
     function databaseClientToDemo(row) {
       const code = String(row.client_code || "");
       const client = createClientFromRow({
@@ -8141,10 +8199,10 @@
         industry: row.industry,
         address: row.address,
         clientStatus: row.status,
-        taxPic: row.tax_pic_name,
-        accountingPic: row.accounting_pic_name,
-        partner: row.partner_name,
-        supervisor: row.supervisor_name,
+        taxPic: canonicalStaffName(row.tax_pic_name, row.tax_pic_profile_id),
+        accountingPic: canonicalStaffName(row.accounting_pic_name, row.accounting_pic_profile_id),
+        partner: canonicalStaffName(row.partner_name, row.partner_profile_id),
+        supervisor: canonicalStaffName(row.supervisor_name, row.supervisor_profile_id),
         servicePackage: row.service_package,
         engagementStart: row.engagement_start,
         engagementEnd: row.engagement_end,
@@ -8162,6 +8220,8 @@
       });
       client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
       client.databaseId = row.id;
+      client.taxPicProfileId = row.tax_pic_profile_id || "";
+      client.accountingPicProfileId = row.accounting_pic_profile_id || "";
       client.sourceSystem = row.source_system;
       client.proposalStatus = row.proposal_status || "";
       return client;
@@ -8314,6 +8374,37 @@
       } catch (error) {
         markSyncFailure("Deleted cases", error);
       }
+    }
+
+    async function loadCaseProgress(caseId) {
+      if (!caseId || caseId.startsWith("case-")) return;
+      try {
+        const response = await appFetch(`/api/cases?progressFor=${encodeURIComponent(caseId)}`, { cache: "no-store", headers: { Accept: "application/json" } }, "", { trackUpdate: false });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Case progress could not be loaded.");
+        state.caseProgressById[caseId] = {
+          completedTasks: Array.isArray(result.completedTasks) ? result.completedTasks : [],
+          progressEntries: Array.isArray(result.progressEntries) ? result.progressEntries : []
+        };
+        if (state.currentView === "cases-view" && state.expandedHimbauanId === caseId) renderCases();
+      } catch (error) {
+        markSyncFailure("Case progress", error);
+      }
+    }
+
+    async function addHimbauanProgress(caseId, entry) {
+      const response = await appFetch("/api/cases", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ id: caseId, action: "add-progress", entry })
+      }, "", { trackUpdate: false });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Case progress could not be saved.");
+      const progress = state.caseProgressById[caseId] || { completedTasks: [], progressEntries: [] };
+      progress.progressEntries.unshift(result.progressEntry);
+      state.caseProgressById[caseId] = progress;
+      clearSyncFailure("Case progress");
+      if (state.currentView === "cases-view") renderCases();
     }
 
     async function deleteCaseFromDatabase(record) {
@@ -8489,6 +8580,7 @@
         steps: task.steps || [],
         reminder: task.reminder || "",
         dueDate: task.dueDate || "",
+        caseId: task.caseId || "",
         repeatRule: task.repeatRule || "none",
         repeatCustomDate: task.repeatCustomDate || "",
         ...extra
@@ -9372,6 +9464,8 @@
       const deleteCaseTrigger = target.closest("[data-delete-case]");
       const restoreCaseTrigger = target.closest("[data-restore-case]");
       const toggleCaseTrashTrigger = target.closest("[data-toggle-case-trash]");
+      const toggleHimbauanProgressTrigger = target.closest("[data-toggle-himbauan-progress]");
+      const addHimbauanProgressTrigger = target.closest("[data-add-himbauan-progress]");
       const saveProfileTrigger = target.closest("[data-save-profile]");
       const changePasswordTrigger = target.closest("[data-change-password]");
       const addCaseStepTrigger = target.closest("[data-add-case-step]");
@@ -9409,8 +9503,8 @@
       const starMyWorkTrigger = target.closest("[data-toggle-my-work-star]");
       const openMyWorkMenuTrigger = target.closest("[data-open-my-work-menu]");
       const setMyWorkTimeTrigger = target.closest("[data-set-my-work-time]");
-      const setMyWorkRepeatTrigger = target.closest("[data-set-my-work-repeat]");
       const saveMyWorkTimeTrigger = target.closest("[data-save-my-work-time]");
+      const saveMyWorkCaseTrigger = target.closest("[data-save-my-work-case]");
       const closeMyWorkMenuTrigger = target.closest("[data-close-my-work-menu]");
       const closeMyWorkDetailTrigger = target.closest("[data-close-my-work-detail]");
       const completeMyWorkStepTrigger = target.closest("[data-my-work-step-done]");
@@ -9444,8 +9538,8 @@
       if (closeMyWorkMenuTrigger && (target === closeMyWorkMenuTrigger || closeMyWorkMenuTrigger.tagName === "BUTTON")) { state.myWorkMenu = ""; commitUi("replace"); return; }
       if (closeMyWorkDetailTrigger) { state.myWorkDetailOpen = false; state.myWorkMenu = ""; state.addingMyWorkStepId = ""; commitUi("replace"); return; }
       if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (state.myWorkMenu === "due") task.dueDate = date.toISOString().slice(0, 10); else task.reminder = date.toISOString().slice(0, 16); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
-      if (setMyWorkRepeatTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) task.repeatRule = setMyWorkRepeatTrigger.getAttribute("data-set-my-work-repeat"); state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
-      if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else if (state.myWorkMenu === "repeat") { task.repeatRule = "custom"; task.repeatCustomDate = value; } else task.reminder = value; } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else task.reminder = value; } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (saveMyWorkCaseTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) task.caseId = document.getElementById("my-work-case-picker")?.value || ""; state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { caseId: task.caseId }); return; }
       if (selectMyWorkTrigger) { state.selectedMyWorkId = selectMyWorkTrigger.getAttribute("data-select-my-work"); state.myWorkDetailOpen = true; state.addingMyWorkStepId = ""; commitUi("replace"); return; }
       if (startMyWorkStepTrigger) { state.addingMyWorkStepId = startMyWorkStepTrigger.getAttribute("data-start-my-work-step"); commitUi("replace"); return; }
       if (completeMyWorkStepTrigger) { const [taskId, stepIndex] = completeMyWorkStepTrigger.getAttribute("data-my-work-step-done").split(":"); const task = state.myWork.find((item) => item.id === taskId); const step = task?.steps?.[Number(stepIndex)]; if (step) step.done = completeMyWorkStepTrigger.checked; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
@@ -9557,12 +9651,13 @@
 
       if (generateMonthlyPeriodTrigger) {
         const value = document.getElementById("generate-monthly-period")?.value;
+        const targetProfileId = document.getElementById("generate-monthly-tax-pic")?.value || "";
         if (!value) {
           window.alert("Choose the tax month first.");
           return;
         }
         try {
-          await generateMonthlyPeriod(value);
+          await generateMonthlyPeriod(value, targetProfileId);
         } catch (error) {
           markSyncFailure("Monthly generation", error);
           window.alert(error instanceof Error ? error.message : "Monthly period could not be generated.");
@@ -9597,6 +9692,36 @@
         state.caseTrashOpen = !state.caseTrashOpen;
         if (state.caseTrashOpen) await loadDeletedCases(true);
         else renderCases();
+        return;
+      }
+
+      if (toggleHimbauanProgressTrigger) {
+        const caseId = toggleHimbauanProgressTrigger.getAttribute("data-toggle-himbauan-progress");
+        if (!caseId) return;
+        if (state.expandedHimbauanId === caseId) {
+          state.expandedHimbauanId = "";
+          renderCases();
+          return;
+        }
+        state.expandedHimbauanId = caseId;
+        renderCases();
+        await loadCaseProgress(caseId);
+        return;
+      }
+
+      if (addHimbauanProgressTrigger) {
+        const caseId = addHimbauanProgressTrigger.getAttribute("data-add-himbauan-progress");
+        const entry = document.getElementById("himbauan-progress-entry")?.value.trim();
+        if (!caseId || !entry) {
+          window.alert("Enter a completed progress update first.");
+          return;
+        }
+        try {
+          await addHimbauanProgress(caseId, entry);
+        } catch (error) {
+          markSyncFailure("Case progress", error);
+          window.alert(error instanceof Error ? error.message : "Case progress could not be saved.");
+        }
         return;
       }
 

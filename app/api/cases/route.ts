@@ -36,6 +36,47 @@ async function recipients(admin: any, payload: any) {
 export async function GET(request: NextRequest) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const progressFor = String(request.nextUrl.searchParams.get("progressFor") || "").trim();
+  if (progressFor) {
+    const { data: taxCase, error: caseError } = await actor.admin
+      .from("tax_cases")
+      .select("id, tax_pic_profile_id, accounting_pic_profile_id")
+      .eq("id", progressFor)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (caseError || !taxCase || !canAccess(actor, taxCase)) {
+      return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
+    }
+    const [{ data: taskRows, error: taskError }, { data: progressRows, error: progressError }] = await Promise.all([
+      actor.admin
+        .from("my_work_tasks")
+        .select("id, title, completed_at, created_at, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name)")
+        .eq("case_id", progressFor)
+        .eq("is_completed", true)
+        .order("completed_at", { ascending: false }),
+      actor.admin
+        .from("tax_case_progress_entries")
+        .select("id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
+        .eq("case_id", progressFor)
+        .order("created_at", { ascending: false })
+    ]);
+    if (taskError || progressError) return NextResponse.json({ error: taskError?.message || progressError?.message || "Case progress could not be loaded." }, { status: 500 });
+    return NextResponse.json({
+      completedTasks: (taskRows || []).map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        completedAt: task.completed_at,
+        createdAt: task.created_at,
+        creatorName: task.staff_profiles?.display_name || task.staff_profiles?.full_name || "Unknown"
+      })),
+      progressEntries: (progressRows || []).map((entry: any) => ({
+        id: entry.id,
+        entry: entry.entry,
+        createdAt: entry.created_at,
+        creatorName: entry.staff_profiles?.display_name || entry.staff_profiles?.full_name || "Unknown"
+      }))
+    });
+  }
   const includeDeleted = request.nextUrl.searchParams.get("deleted") === "1";
   let query = actor.admin.from("tax_cases").select("*").order("updated_at", { ascending: false });
   if (includeDeleted) {
@@ -75,6 +116,33 @@ export async function PATCH(request: Request) {
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Case id is required." }, { status: 400 });
   try {
+    if (body.action === "add-progress") {
+      const entry = String(body.entry || "").trim();
+      if (!entry) return NextResponse.json({ error: "Enter a progress update first." }, { status: 400 });
+      if (entry.length > 1000) return NextResponse.json({ error: "Keep a progress update within 1,000 characters." }, { status: 400 });
+      const { data: taxCase, error: caseError } = await actor.admin
+        .from("tax_cases")
+        .select("id, tax_pic_profile_id, accounting_pic_profile_id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (caseError || !taxCase || !canAccess(actor, taxCase)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
+      const { data, error } = await actor.admin
+        .from("tax_case_progress_entries")
+        .insert({ case_id: id, entry, created_by_profile_id: actor.profile.id })
+        .select("id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
+        .single();
+      if (error || !data) return NextResponse.json({ error: error?.message || "Case progress could not be saved." }, { status: 500 });
+      const author = Array.isArray(data.staff_profiles) ? data.staff_profiles[0] : data.staff_profiles;
+      return NextResponse.json({
+        progressEntry: {
+          id: data.id,
+          entry: data.entry,
+          createdAt: data.created_at,
+          creatorName: author?.display_name || author?.full_name || "Unknown"
+        }
+      });
+    }
     if (body.action === "restore") {
       let query = actor.admin.from("tax_cases").select("tax_pic_profile_id, accounting_pic_profile_id, deleted_by_profile_id").eq("id", id).not("deleted_at", "is", null);
       if (!isLeadership(actor.profile.role)) query = query.eq("deleted_by_profile_id", actor.profile.id);

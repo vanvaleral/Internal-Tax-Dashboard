@@ -11,9 +11,12 @@ test("monthly workspace updates merge PIC-scoped period payloads instead of repl
   assert.match(route, /scope !== "monthly_compliance"/);
 });
 
-test("monthly generation is server-side, PIC-scoped, and preserves snapshot ownership", () => {
+test("monthly generation is server-side, target-PIC scoped, and preserves snapshot ownership", () => {
   assert.match(route, /"preview-monthly-period", "generate-monthly-period"/);
-  assert.match(route, /\.eq\("tax_pic_profile_id", actor\.profile\.id\)/);
+  assert.match(route, /const targetProfileId = requestedProfileId \|\| actor\.profile\.id/);
+  assert.match(route, /Only leadership can generate a month for another Tax PIC/);
+  assert.match(route, /targetProfile\.team_division !== "Tax Team"/);
+  assert.match(route, /\.eq\("tax_pic_profile_id", targetProfileId\)/);
   assert.match(route, /taxPicSnapshotProfileId: client\.tax_pic_profile_id/);
   assert.match(route, /accountingPicSnapshotProfileId: client\.accounting_pic_profile_id/);
   assert.match(route, /filterMonthlyPayload\(row\.payload, actor\.profile\.id, allowed\)/);

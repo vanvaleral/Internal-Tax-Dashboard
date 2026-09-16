@@ -154,11 +154,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A valid monthly period is required." }, { status: 400 });
   }
 
+  // A normal Tax PIC may generate only their own workload. Leadership can
+  // deliberately choose an active Tax Team member when generating on behalf
+  // of the team, while the snapshot continues to record who performed it.
+  const requestedProfileId = String(body.targetProfileId || "").trim();
+  const generatingForAnotherPic = Boolean(requestedProfileId && requestedProfileId !== actor.profile.id);
+  if (generatingForAnotherPic && !isLeadership(actor.profile.role)) {
+    return NextResponse.json({ error: "Only leadership can generate a month for another Tax PIC." }, { status: 403 });
+  }
+  const targetProfileId = requestedProfileId || actor.profile.id;
+  const { data: targetProfile, error: targetError } = await actor.admin
+    .from("staff_profiles")
+    .select("id, full_name, display_name, team_division, directory_active")
+    .eq("id", targetProfileId)
+    .maybeSingle();
+  if (targetError || !targetProfile) return NextResponse.json({ error: targetError?.message || "Selected Tax PIC was not found." }, { status: 400 });
+  if (targetProfile.directory_active === false || targetProfile.team_division !== "Tax Team") {
+    return NextResponse.json({ error: "Choose an active Tax Team PIC before generating a month." }, { status: 400 });
+  }
+
   const { data: assignedClients, error: clientsError } = await actor.admin
     .from("client_master")
     .select("id, client_code, legal_name, company_form, npwp, industry, address, status, tax_pic_name, accounting_pic_name, partner_name, supervisor_name, tax_pic_profile_id, accounting_pic_profile_id, service_package, engagement_start, engagement_end, contract_started_at, tax_office_region, notes, monthly_fee, annual_fee, has_pph21, has_unifikasi, has_pph25_pp55, has_pb1, has_ppn")
     .eq("status", "Active")
-    .eq("tax_pic_profile_id", actor.profile.id)
+    .eq("tax_pic_profile_id", targetProfileId)
     .order("legal_name");
   if (clientsError) return NextResponse.json({ error: clientsError.message }, { status: 500 });
 
@@ -178,6 +197,7 @@ export async function POST(request: Request) {
   if (body.action === "preview-monthly-period") {
     return NextResponse.json({
       period: period.key,
+      taxPic: targetProfile.display_name || targetProfile.full_name,
       assigned: (assignedClients || []).length,
       alreadyGenerated: (assignedClients || []).length - candidates.length,
       clients: candidates.map((client) => ({ id: client.id, code: client.client_code, name: client.legal_name }))
@@ -205,6 +225,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     data: { ...saved, payload: filterMonthlyPayload(saved.payload, actor.profile.id, legacyAllowed) },
     period: period.key,
+    taxPic: targetProfile.display_name || targetProfile.full_name,
     created: createdRows.length,
     alreadyGenerated: (assignedClients || []).length - createdRows.length
   });

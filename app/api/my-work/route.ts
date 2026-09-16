@@ -13,6 +13,7 @@ type TaskRow = {
   repeat_rule: string;
   repeat_custom_date: string | null;
   repeat_parent_id: string | null;
+  case_id: string | null;
   is_completed: boolean;
   completed_at: string | null;
   created_at: string;
@@ -50,6 +51,7 @@ function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; f
     repeatRule: task.repeat_rule || "none",
     repeatCustomDate: task.repeat_custom_date ? task.repeat_custom_date.slice(0, 16) : "",
     repeatParentId: task.repeat_parent_id || "",
+    caseId: task.case_id || "",
     done: Boolean(task.is_completed),
     completedAt: task.completed_at ? new Date(task.completed_at).getTime() : 0,
     createdAt: new Date(task.created_at).getTime(),
@@ -59,6 +61,20 @@ function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; f
     favorite: Boolean(preference?.favorite),
     favoritedAt: preference?.favorited_at ? new Date(preference.favorited_at).getTime() : 0
   };
+}
+
+async function accessibleCaseId(admin: NonNullable<ReturnType<typeof createAdminClient>>, profileId: string, role: string | null | undefined, caseId: unknown) {
+  const id = String(caseId || "").trim();
+  if (!id) return null;
+  const { data, error } = await admin
+    .from("tax_cases")
+    .select("id, tax_pic_profile_id, accounting_pic_profile_id, deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data || data.deleted_at || (!isLeadership(role) && data.tax_pic_profile_id !== profileId && data.accounting_pic_profile_id !== profileId)) {
+    throw new Error("The selected Case is unavailable in your assigned scope.");
+  }
+  return data.id;
 }
 
 async function staffByNames(admin: NonNullable<ReturnType<typeof createAdminClient>>, names: string[]) {
@@ -95,6 +111,7 @@ async function createFollowUpTask(admin: NonNullable<ReturnType<typeof createAdm
     repeat_rule: isCustom ? "none" : task.repeat_rule,
     repeat_custom_date: isCustom ? null : task.repeat_custom_date,
     repeat_parent_id: task.id,
+    case_id: task.case_id,
     created_by_profile_id: task.created_by_profile_id
   }).select("id").single();
   if (error || !created) throw new Error(error?.message || "Could not create recurring task.");
@@ -128,6 +145,12 @@ export async function POST(request: Request) {
   const title = String(body.title || "").trim();
   if (!title) return NextResponse.json({ error: "Task title is required." }, { status: 400 });
   const repeatRule = ["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule) ? body.repeatRule : "none";
+  let caseId: string | null;
+  try {
+    caseId = await accessibleCaseId(admin, current.profile.id, current.profile.role, body.caseId);
+  } catch (caseError) {
+    return NextResponse.json({ error: caseError instanceof Error ? caseError.message : "Case could not be linked." }, { status: 403 });
+  }
   const { data, error } = await admin.from("my_work_tasks").insert({
     title,
     notes: String(body.note || ""),
@@ -136,6 +159,7 @@ export async function POST(request: Request) {
     due_date: body.dueDate || null,
     repeat_rule: repeatRule,
     repeat_custom_date: repeatRule === "custom" ? body.repeatCustomDate || null : null,
+    case_id: caseId,
     created_by_profile_id: current.profile.id
   }).select("*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))").single();
   if (error || !data) return NextResponse.json({ error: error?.message || "Task could not be created." }, { status: 500 });
@@ -188,6 +212,13 @@ export async function PATCH(request: Request) {
   if (["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule)) {
     update.repeat_rule = body.repeatRule;
     update.repeat_custom_date = body.repeatRule === "custom" ? body.repeatCustomDate || null : null;
+  }
+  if (typeof body.caseId === "string") {
+    try {
+      update.case_id = await accessibleCaseId(admin, current.profile.id, current.profile.role, body.caseId);
+    } catch (caseError) {
+      return NextResponse.json({ error: caseError instanceof Error ? caseError.message : "Case could not be linked." }, { status: 403 });
+    }
   }
   if (typeof body.done === "boolean") {
     update.is_completed = body.done;
