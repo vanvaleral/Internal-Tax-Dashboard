@@ -29,6 +29,11 @@ test("tax claims refresh payable rows and load with one authenticated request", 
   assert.match(monthlyClaimsRoute, /existing\.draft[\s\S]*rows: obligationRows/);
   assert.match(monthlyClaimsRoute, /viewerId: actor\.profile\.id/);
   assert.doesNotMatch(claimTemplate, /fetch\("\/api\/profile"/);
+  assert.match(monthlyClaimsRoute, /Promise\.all\(\[/);
+  assert.match(monthlyClaimsRoute, /select\("id, draft, updated_at"\)/);
+  assert.match(claimTemplate, /monthly-tax-claim-bootstrap/);
+  assert.match(claimTemplate, /if \(!result\) \{/);
+  assert.match(claimTemplate, /window\.name = ""/);
 });
 
 test("My Work mutations avoid redundant relation refetches", () => {

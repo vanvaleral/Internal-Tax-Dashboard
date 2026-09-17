@@ -9487,6 +9487,7 @@
         if (!response.ok || !result.data?.id) throw new Error(result.error || "Tax claim could not be created.");
         generateClaim(client);
         saveMonthlyProgress();
+        claimWindow.name = JSON.stringify({ type: "monthly-tax-claim-bootstrap", claimId: result.data.id, data: result.data, viewerId: result.viewerId });
         claimWindow.location.replace(`/tax-claim-template.html?theme=slate&claimId=${encodeURIComponent(result.data.id)}`);
       } catch (error) {
         claimWindow.close();

@@ -191,6 +191,12 @@
     document.body.dataset.claimReady = "false";
     document.querySelectorAll("input, textarea, button").forEach(control => { control.disabled = true; });
     const claimId = new URLSearchParams(location.search).get("claimId");
+    let claimBootstrap = null;
+    try {
+      const candidate = JSON.parse(window.name || "null");
+      if (candidate?.type === "monthly-tax-claim-bootstrap" && candidate.claimId === claimId && candidate.data?.draft) claimBootstrap = candidate;
+    } catch { /* Direct opens and legacy window names use the normal GET fallback. */ }
+    window.name = "";
     const parseAmount = ClaimValues.parseAmount;
     const formatNumber = value => new Intl.NumberFormat("id-ID", { maximumFractionDigits:2 }).format(parseAmount(value));
     const formatRupiah = value => new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:2 }).format(parseAmount(value));
@@ -244,9 +250,12 @@
       try {
         workspaceUser = location.protocol === "file:" ? "offline-preview" : "standalone";
         if (claimId) {
-          const response = await fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { cache:"no-store", headers:{ Accept:"application/json" } });
-          const result = await response.json();
-          if (!response.ok || !result.data?.draft) throw new Error(result.error || "This claim could not be loaded. Reload to retry.");
+          let result = claimBootstrap;
+          if (!result) {
+            const response = await fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { cache:"no-store", headers:{ Accept:"application/json" } });
+            result = await response.json();
+            if (!response.ok || !result.data?.draft) throw new Error(result.error || "This claim could not be loaded. Reload to retry.");
+          }
           workspaceUser = result.viewerId || "authorized-user";
           claimVersion = result.data.updated_at;
           resetAndApply(result.data.draft);
