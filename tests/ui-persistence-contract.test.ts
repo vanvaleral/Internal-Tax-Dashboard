@@ -76,12 +76,13 @@ test("Profile client scope uses Client Master and permanent PIC profile IDs", as
   assert.match(demo, /PIC TAX & PIC ACC/);
 });
 
-test("Monthly Compliance saves only changed periods and preserves the active queue during client refresh", async () => {
+test("Monthly Compliance saves changed fields per client and preserves the active queue during client refresh", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /\[state\.activeMonthlyPeriod\]: state\.monthlyProgress\[state\.activeMonthlyPeriod\]/);
-  assert.match(demo, /operationalPendingPayloads\[scope\] = \{ \.\.\.\(operationalPendingPayloads\[scope\] \|\| \{\}\), \.\.\.structuredClone\(payload\) \}/);
+  assert.match(demo, /const monthlyRowSaveQueues = new Map\(\)/);
+  assert.match(demo, /method: "PATCH"/);
+  assert.match(demo, /JSON\.stringify\(\{ period, rowId, changes \}\)/);
   assert.match(demo, /state\.activeMonthlyPeriod && state\.monthlyProgress\[state\.activeMonthlyPeriod\]/);
-  assert.match(demo, /\.\.\.\(operationalPendingPayloads\.monthly_compliance \|\| \{\}\)/);
+  assert.doesNotMatch(demo, /function saveMonthlyProgress\(\) \{[\s\S]{0,260}queueWorkspaceSave\("monthly_compliance"/);
 });
 
 test("client master load surfaces failed syncs and does not retain sample records for an empty database response", async () => {
@@ -108,7 +109,7 @@ test("sub-menu navigation uses the complete renderer without triggering an autos
 
 test("non-Operations UI changes never enqueue an Operations workspace save", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /if \(state\.currentView === "matrix-view" && state\.operationsMode === "monthly"/);
+  assert.doesNotMatch(demo, /if \(state\.currentView === "matrix-view" && state\.operationsMode === "monthly"/);
   assert.match(demo, /if \(state\.currentView === "matrix-view" && state\.operationsMode === "annual"/);
 });
 

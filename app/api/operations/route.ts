@@ -205,6 +205,53 @@ export async function PUT(request: Request) {
   return NextResponse.json({ data: serialize(data) });
 }
 
+const monthlyRowFields = new Set(["dataState", "followUpCount", "lastUpdated", "notes", "claimStatus", "paymentStatus"]);
+const monthlyObligationFields = new Set(["status", "payableAmount", "paidDate", "paidDateDraft", "receiptNumber", "taxBreakdown", "requestedAt", "reported", "quickNotes", "revisionRequired"]);
+
+export async function PATCH(request: Request) {
+  const actor = await currentActor();
+  if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const body = await request.json().catch(() => ({}));
+  const period = String(body.period || "").trim();
+  const rowId = String(body.rowId || "").trim();
+  const changes = body.changes && typeof body.changes === "object" && !Array.isArray(body.changes) ? body.changes as Record<string, any> : null;
+  if (!period || !rowId || !changes) return NextResponse.json({ error: "A period, client row, and changes are required." }, { status: 400 });
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data: current, error: readError } = await actor.admin.from("operational_workspace_state").select("payload, version").eq("scope", "monthly_compliance").maybeSingle();
+    if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+    const payload = current?.payload && typeof current.payload === "object" && !Array.isArray(current.payload) ? structuredClone(current.payload) as Record<string, any> : {};
+    const rows = Array.isArray(payload[period]) ? payload[period] as Record<string, any>[] : [];
+    const index = rows.findIndex((row) => clientIdentifier(row) === rowId || String(row.id || "") === rowId);
+    if (index < 0) return NextResponse.json({ error: "The monthly client row was not found." }, { status: 404 });
+    if (!isLeadership(actor.profile.role) && !canAccessMonthlyRow(rows[index], actor.profile.id, new Set())) return NextResponse.json({ error: "You are not assigned to this monthly client row." }, { status: 403 });
+
+    const nextRow = structuredClone(rows[index]);
+    for (const [field, value] of Object.entries(changes)) {
+      if (field === "obligations" && value && typeof value === "object" && !Array.isArray(value)) {
+        for (const [key, obligationChanges] of Object.entries(value as Record<string, any>)) {
+          if (!nextRow.obligations?.[key] || !obligationChanges || typeof obligationChanges !== "object") continue;
+          for (const [obligationField, obligationValue] of Object.entries(obligationChanges)) {
+            if (monthlyObligationFields.has(obligationField)) nextRow.obligations[key][obligationField] = obligationValue;
+          }
+        }
+      } else if (monthlyRowFields.has(field)) nextRow[field] = value;
+    }
+    rows[index] = nextRow;
+    payload[period] = rows;
+    const nextVersion = (current?.version || 0) + 1;
+    const { data, error } = await actor.admin.from("operational_workspace_state")
+      .update({ payload, version: nextVersion, updated_by_profile_id: actor.profile.id, updated_at: new Date().toISOString() })
+      .eq("scope", "monthly_compliance").eq("version", current?.version || 0)
+      .select("version").maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) continue;
+    await actor.admin.from("operational_workspace_audit").insert({ scope: "monthly_compliance", version: nextVersion, actor_profile_id: actor.profile.id, action: `patched_row:${period}:${rowId}` });
+    return NextResponse.json({ data: { row: nextRow, version: data.version } });
+  }
+  return NextResponse.json({ error: "The row is busy. Please retry the edit.", code: "RETRY_REQUIRED" }, { status: 409 });
+}
+
 export async function DELETE(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });

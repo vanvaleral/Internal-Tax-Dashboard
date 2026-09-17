@@ -5,7 +5,7 @@ import * as security from "../lib/workspace-security.ts";
 
 function fixture(role = "staff") {
   const profile = { id: role === "staff" ? "a" : "supervisor", role, full_name: "Synthetic User" };
-  const a = { databaseId: "A", name: "Client A", taxPicSnapshotProfileId: "a", serviceFee: 100, notes: "" };
+  const a = { databaseId: "A", name: "Client A", taxPicSnapshotProfileId: "a", serviceFee: 100, notes: "", dataState: "missing", obligations: { pph21: { status: "awaiting", receiptNumber: "" } } };
   const b = { databaseId: "B", name: "Client B", taxPicSnapshotProfileId: "b", serviceFee: 999 };
   const db = mockDatabase({
     operational_workspace_state: [{ scope: "annual_tax", version: 1, payload: [a, b] }, { scope: "monthly_compliance", version: 1, payload: { "August 2026": [a, b] } }],
@@ -55,6 +55,21 @@ test("F03 original PIC can save historical periods after client reassignment", a
   assert.equal(saved.status, 200);
   assert.equal(db.tables.operational_workspace_state[1].payload["August 2026"].length, 2);
   assert.equal(saved.body.data.payload["August 2026"][0].notes, "historical correction");
+});
+
+test("monthly row PATCH saves only the edited fields and preserves other clients", async () => {
+  const { route, db } = fixture();
+  const response = await route.PATCH(request({
+    period: "August 2026",
+    rowId: "A",
+    changes: { dataState: "received", obligations: { pph21: { receiptNumber: "NTPN-123" } } }
+  }));
+  assert.equal(response.status, 200);
+  const rows = db.tables.operational_workspace_state[1].payload["August 2026"];
+  assert.equal(rows[0].dataState, "received");
+  assert.equal(rows[0].obligations.pph21.receiptNumber, "NTPN-123");
+  assert.equal(rows[0].serviceFee, 100);
+  assert.equal(rows[1].name, "Client B");
 });
 
 test("F08 supervisor generating another PIC's month receives the generated queue", async () => {

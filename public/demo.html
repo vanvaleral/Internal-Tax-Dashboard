@@ -4454,9 +4454,15 @@
     const operationalVersions = {};
     const operationalBases = {};
     const operationalFailed = persistedDemoState?.ui?.operationalFailed || {};
+    // Monthly rows now save field-by-field. Discard obsolete whole-workspace
+    // conflicts so an old browser session cannot revive the legacy prompt.
+    delete operationalFailed.monthly_compliance;
+    state.syncIssues = state.syncIssues.filter((issue) => issue.scope !== "monthly_compliance workspace");
     const operationalSaveTimers = {};
     const operationalSaveQueues = {};
     const operationalPendingPayloads = {};
+    const monthlyRowSaveQueues = new Map();
+    const monthlyPatchFailures = new Map();
     let clientMasterClients = structuredClone(clients);
 
     function workspacePayload(scope) {
@@ -4998,7 +5004,50 @@
     function saveMonthlyProgress() {
       if (!state.activeMonthlyPeriod) return;
       state.monthlyProgress[state.activeMonthlyPeriod] = structuredClone(clients);
-      queueWorkspaceSave("monthly_compliance", { [state.activeMonthlyPeriod]: state.monthlyProgress[state.activeMonthlyPeriod] });
+    }
+
+    function currentWorkspaceTimestamp() {
+      return new Date().toLocaleString("sv-SE").replace("T", " ").slice(0, 16);
+    }
+
+    function saveMonthlyClientPatch(client, changes) {
+      if (!state.activeMonthlyPeriod || !client) return Promise.resolve();
+      const period = state.activeMonthlyPeriod;
+      const rowId = monthlyRowKey(client);
+      if (!rowId) return Promise.resolve();
+      const failureKey = `${period}:${rowId}`;
+      const issueScope = `Monthly Compliance - ${displayClientName(client)}`;
+      const previousSave = monthlyRowSaveQueues.get(failureKey) || Promise.resolve();
+      const nextSave = previousSave.catch(() => {}).then(async () => {
+        setDatabaseStatus("updating");
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const response = await appFetch("/api/operations", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ period, rowId, changes })
+            }, "");
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || "Monthly change could not be saved.");
+            operationalVersions.monthly_compliance = result.data.version;
+            monthlyPatchFailures.delete(failureKey);
+            clearSyncFailure(issueScope);
+            setDatabaseStatus("connected");
+            return;
+          } catch (error) {
+            lastError = error;
+            if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+          }
+        }
+        monthlyPatchFailures.set(failureKey, { client, changes });
+        markSyncFailure(issueScope, lastError);
+        setDatabaseStatus("failed");
+      });
+      monthlyRowSaveQueues.set(failureKey, nextSave);
+      return nextSave.finally(() => {
+        if (monthlyRowSaveQueues.get(failureKey) === nextSave) monthlyRowSaveQueues.delete(failureKey);
+      });
     }
 
     function openMonthlyPeriod(period) {
@@ -5922,12 +5971,20 @@
       if (fieldKey === "detail") {
         obligation.taxBreakdown = String(rawValue || "").trim();
       }
-      client.lastUpdated = "2026-05-21 11:05";
+      client.lastUpdated = currentWorkspaceTimestamp();
       if (isClientCompleted(client)) {
         state.completionPromptClientId = client.id;
       }
       if (shouldCommit) {
         commitUi("replace");
+        const obligationChanges = fieldKey === "payable"
+          ? { payableAmount: obligation.payableAmount }
+          : fieldKey === "date"
+            ? { paidDateDraft: obligation.paidDateDraft, paidDate: obligation.paidDate }
+            : fieldKey === "ntpn"
+              ? { receiptNumber: obligation.receiptNumber }
+              : { taxBreakdown: obligation.taxBreakdown };
+        saveMonthlyClientPatch(client, { lastUpdated: client.lastUpdated, obligations: { [obligationKey]: obligationChanges } });
       }
     }
 
@@ -9424,8 +9481,9 @@
           if (next === "requesting") {
             client.followUpCount += 1;
           }
-          client.lastUpdated = "2026-05-21 10:05";
+          client.lastUpdated = currentWorkspaceTimestamp();
           commitUi("push");
+          saveMonthlyClientPatch(client, { dataState: client.dataState, followUpCount: client.followUpCount, lastUpdated: client.lastUpdated });
         };
       });
     }
@@ -9505,6 +9563,7 @@
         if (!response.ok || !result.data?.id) throw new Error(result.error || "Tax claim could not be created.");
         generateClaim(client);
         saveMonthlyProgress();
+        saveMonthlyClientPatch(client, { claimStatus: client.claimStatus, paymentStatus: client.paymentStatus, lastUpdated: client.lastUpdated });
         claimWindow.name = JSON.stringify({ type: "monthly-tax-claim-bootstrap", claimId: result.data.id, data: result.data, viewerId: result.viewerId });
         claimWindow.location.replace(`/tax-claim-template.html?theme=slate&claimId=${encodeURIComponent(result.data.id)}`);
       } catch (error) {
@@ -9594,7 +9653,6 @@
     }
 
     function commitUi(mode = "push") {
-      if (state.currentView === "matrix-view" && state.operationsMode === "monthly" && state.activeMonthlyPeriod) saveMonthlyProgress();
       if (state.currentView === "matrix-view" && state.operationsMode === "annual") queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
       rerender();
       persistDemoState();
@@ -9714,6 +9772,7 @@
         if (state.syncIssues.length) {
           if (window.confirm(`Changes needing attention:\n\n${state.syncIssues.map(issue => `${issue.scope}: ${issue.message}`).join("\n")}\n\nRetry pending changes? Conflicting fields will not be overwritten.`)) {
             for (const [scope, failed] of Object.entries(operationalFailed)) queueWorkspaceSave(scope, failed.payload);
+            for (const failed of monthlyPatchFailures.values()) saveMonthlyClientPatch(failed.client, failed.changes);
             state.myWork.filter(task => task.pendingSync && !task.saving && !task.syncConflict).forEach(task => saveMyWorkTaskToDatabase(task));
           }
         } else {
@@ -10750,8 +10809,9 @@
         if (next === "requesting") {
           client.followUpCount += 1;
         }
-        client.lastUpdated = "2026-05-21 10:05";
+        client.lastUpdated = currentWorkspaceTimestamp();
         commitUi("push");
+        saveMonthlyClientPatch(client, { dataState: client.dataState, followUpCount: client.followUpCount, lastUpdated: client.lastUpdated });
         return;
       }
 
@@ -10763,7 +10823,8 @@
         if (record.kind === "client") {
           const client = clients.find((item) => item.id === record.id);
           if (client) {
-            client.lastUpdated = "2026-05-21 10:25";
+            client.lastUpdated = currentWorkspaceTimestamp();
+            saveMonthlyClientPatch(client, { notes: client.notes, lastUpdated: client.lastUpdated });
           }
         }
         const popover = document.querySelector(".notes-popover");
@@ -10786,8 +10847,9 @@
         const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
         const direction = target.getAttribute("data-followup-change");
         client.followUpCount = direction === "up" ? client.followUpCount + 1 : Math.max(0, client.followUpCount - 1);
-        client.lastUpdated = "2026-05-20 12:15";
+        client.lastUpdated = currentWorkspaceTimestamp();
         commitUi("push");
+        saveMonthlyClientPatch(client, { followUpCount: client.followUpCount, lastUpdated: client.lastUpdated });
         return;
       }
 
@@ -10795,12 +10857,13 @@
         const [clientId, obligationKey] = target.getAttribute("data-request-data").split("|");
         const client = clients.find((item) => item.id === clientId);
         if (!client) return;
-        client.obligations[obligationKey].requestedAt = "2026-05-21";
+        client.obligations[obligationKey].requestedAt = new Date().toISOString().slice(0, 10);
         client.followUpCount += 1;
         state.selectedClientId = clientId;
         state.selectedObligationKey = obligationKey;
-        client.lastUpdated = "2026-05-21 09:10";
+        client.lastUpdated = currentWorkspaceTimestamp();
         commitUi("push");
+        saveMonthlyClientPatch(client, { followUpCount: client.followUpCount, lastUpdated: client.lastUpdated, obligations: { [obligationKey]: { requestedAt: client.obligations[obligationKey].requestedAt } } });
         return;
       }
 
@@ -10812,11 +10875,12 @@
         obligation.payableAmount = Number(document.getElementById("detail-payable").value || 0);
         obligation.quickNotes = document.getElementById("detail-notes").value.trim();
         obligation.revisionRequired = obligation.status === "revision" || obligation.status === "temporary";
-        client.lastUpdated = "2026-05-20 12:20";
+        client.lastUpdated = currentWorkspaceTimestamp();
         if (isClientCompleted(client)) {
           state.completionPromptClientId = client.id;
         }
         commitUi("push");
+        saveMonthlyClientPatch(client, { lastUpdated: client.lastUpdated, obligations: { [state.selectedObligationKey]: { status: obligation.status, receiptNumber: obligation.receiptNumber, payableAmount: obligation.payableAmount, quickNotes: obligation.quickNotes, revisionRequired: obligation.revisionRequired } } });
         return;
       }
 
@@ -11417,11 +11481,12 @@
         const client = clients.find((item) => item.id === clientId);
         if (!client) return;
         client.obligations[obligationKey].reported = target.checked;
-        client.lastUpdated = "2026-05-21 09:20";
+        client.lastUpdated = currentWorkspaceTimestamp();
         if (isClientCompleted(client)) {
           state.completionPromptClientId = client.id;
         }
         commitUi("push");
+        saveMonthlyClientPatch(client, { lastUpdated: client.lastUpdated, obligations: { [obligationKey]: { reported: client.obligations[obligationKey].reported } } });
         return;
       }
 
