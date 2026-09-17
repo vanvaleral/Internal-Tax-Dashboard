@@ -25,8 +25,32 @@ test("operations row expansion is navigation-only and does not save the workspac
   assert.match(demo, /state\.expandedClientId = state\.expandedClientId === clientId \? "" : clientId;\s+state\.selectedClientId = clientId;\s+commitWorkspaceNavigation\("replace"\)/);
 });
 
+test("Monthly Compliance uses an accessible custom collapse icon with matched action height", () => {
+  assert.match(demo, /\.monthly-detail-action \{ height:28px; \}/);
+  assert.match(demo, /class="tiny-btn monthly-detail-action" data-generate-claim/);
+  assert.match(demo, /class="tiny-btn monthly-detail-action monthly-collapse-btn"[\s\S]*?aria-label="Collapse client details"/);
+  assert.match(demo, /class="monthly-collapse-icon"/);
+  assert.doesNotMatch(demo, /data-row-toggle="\$\{row\.id\}">Collapse<\/button>/);
+});
+
 test("Operations starts its batched save well below one second", () => {
   assert.match(demo, /operationalSaveTimers\[scope\] = window\.setTimeout\([\s\S]*?}, 150\);/);
+});
+
+test("Operations reads the latest baseline only after the previous queued save finishes", () => {
+  assert.match(demo, /previousSave\.catch\(\(\) => \{\}\)\.then\(async \(\) => \{\s+const failed = operationalFailed\[scope\];[\s\S]*?const baseline = structuredClone/);
+  assert.match(demo, /const baseVersion = failed\?\.version \?\? operationalVersions\[scope\] \?\? 0/);
+});
+
+test("Monthly completion depends on received data, NTPN, and reported obligations without billing upload", () => {
+  assert.match(demo, /if \(item\.reported && item\.receiptNumber\) return "completed"/);
+  assert.match(demo, /return clientDataState\(client\) === "received" && obligationsDone/);
+  assert.doesNotMatch(demo, /Billing PDF not uploaded/);
+  assert.doesNotMatch(demo, /data-simulate-billing/);
+});
+
+test("sidebar uses LMATS Consulting Tax Dashboard branding", () => {
+  assert.match(demo, /<div class="eyebrow">LMATS Consulting<\/div>\s+<h1>Tax Dashboard<\/h1>/);
 });
 
 test("tax claim generation can update the non-blocking database status", () => {

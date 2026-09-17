@@ -2415,6 +2415,10 @@
       margin-bottom: 8px;
     }
 
+    .monthly-detail-action { height:28px; }
+    .monthly-collapse-btn { display:grid; width:30px; padding:0; place-items:center; }
+    .monthly-collapse-icon { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
     .compact-detail-card .ledger-sheet {
       margin-top: 6px;
       padding-top: 8px;
@@ -2614,6 +2618,15 @@
     .client-action-icon.client-deactivate:hover:not(:disabled) { background: #fff0f0; color: #a61b1b; }
     .client-action-icon.client-reactivate { color: #087443; }
     .client-action-icon.client-reactivate:hover:not(:disabled) { background: #e8f7ef; color: #056034; }
+    .client-expand-icon { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; transition:transform 160ms ease; }
+    .client-action-icon[aria-expanded="true"] .client-expand-icon { transform:rotate(180deg); }
+    .client-obligation-quick-row > td { padding:0 10px 10px; background:color-mix(in srgb, var(--accent-soft) 28%, var(--panel-solid)); }
+    .client-obligation-quick-panel { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); }
+    .client-obligation-quick-panel .eyebrow { margin-right:4px; }
+    .client-obligation-quick-option { display:inline-flex; gap:6px; align-items:center; min-height:30px; padding:5px 9px; border:1px solid var(--line); border-radius:9px; background:var(--neutral-soft); color:var(--muted); font-size:11px; font-weight:700; }
+    .client-obligation-quick-option.active { border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); background:var(--accent-soft); color:var(--accent-strong); }
+    .client-list-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .client-list-filters .filter-select { min-width:150px; }
 
     .danger-icon-btn {
       width: 28px;
@@ -3470,8 +3483,8 @@
   <div class="shell">
     <aside class="sidebar">
       <div>
-        <div class="eyebrow">Tax Ops</div>
-        <h1>Tax Practice</h1>
+        <div class="eyebrow">LMATS Consulting</div>
+        <h1>Tax Dashboard</h1>
       </div>
 
       <div class="nav">
@@ -3953,7 +3966,7 @@
         obligations: {
           pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
           unifikasi: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Awaiting payment base support.", payableAmount: 2250000, taxBreakdown: "Routine withholding", billingCode: "", kapkjs: "", expirationDate: "" },
-          pph25: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "No billing PDF yet.", payableAmount: 4100000, taxBreakdown: "Installment estimate", billingCode: "", kapkjs: "", expirationDate: "" },
+          pph25: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 4100000, taxBreakdown: "Installment estimate", billingCode: "", kapkjs: "", expirationDate: "" },
           phrpb1: {
             status: "revision",
             receiptNumber: "",
@@ -4326,6 +4339,7 @@
       teamDivision: persistedDemoState?.ui?.teamDivision || "Tax Team",
       selectedClientId: persistedDemoState?.ui?.selectedClientId || "client-001",
       activeClientFormId: persistedDemoState?.ui?.activeClientFormId || "client-001",
+      expandedClientMasterId: persistedDemoState?.ui?.expandedClientMasterId || "",
       selectedObligationKey: persistedDemoState?.ui?.selectedObligationKey || "pph21",
       expandedClientId: persistedDemoState?.ui?.expandedClientId || "",
       operationsMode: persistedDemoState?.ui?.operationsMode || "monthly",
@@ -4353,7 +4367,7 @@
       announcements: Array.isArray(persistedDemoState?.ui?.announcements) ? persistedDemoState.ui.announcements : [
         {
           id: "announcement-welcome",
-          title: "Welcome to Tax Practice",
+          title: "Welcome to Tax Dashboard",
           message: "Use this inbox for firm announcements, briefing reminders, and recognition updates.",
           audience: "all",
           sender: "Management",
@@ -4391,6 +4405,7 @@
         ...(persistedDemoState?.ui?.filters || {})
       },
       clientSearch: persistedDemoState?.ui?.clientSearch || "",
+      clientPicFilter: persistedDemoState?.ui?.clientPicFilter || "all",
       profileClientSearch: persistedDemoState?.ui?.profileClientSearch || "",
       proposalSearch: persistedDemoState?.ui?.proposalSearch || "",
       caseSearch: persistedDemoState?.ui?.caseSearch || "",
@@ -4459,13 +4474,14 @@
       window.clearTimeout(operationalSaveTimers[scope]);
       setDatabaseStatus("updating");
       operationalSaveTimers[scope] = window.setTimeout(() => {
-        const failed = operationalFailed[scope];
-        const payloadToSave = scope === "monthly_compliance" ? { ...(failed?.payload || {}), ...operationalPendingPayloads[scope] } : operationalPendingPayloads[scope];
-        const baseline = structuredClone(failed?.baseline || operationalBases[scope] || (scope === "monthly_compliance" ? {} : []));
-        const baseVersion = failed?.version ?? operationalVersions[scope] ?? 0;
+        const pendingPayload = operationalPendingPayloads[scope];
         operationalPendingPayloads[scope] = scope === "monthly_compliance" ? {} : null;
         const previousSave = operationalSaveQueues[scope] || Promise.resolve();
         const nextSave = previousSave.catch(() => {}).then(async () => {
+          const failed = operationalFailed[scope];
+          const payloadToSave = scope === "monthly_compliance" ? { ...(failed?.payload || {}), ...pendingPayload } : (pendingPayload ?? failed?.payload);
+          const baseline = structuredClone(failed?.baseline || operationalBases[scope] || (scope === "monthly_compliance" ? {} : []));
+          const baseVersion = failed?.version ?? operationalVersions[scope] ?? 0;
           try {
             const fullLocal = scope === "monthly_compliance" ? { ...baseline, ...payloadToSave } : payloadToSave;
             let version = baseVersion;
@@ -4611,7 +4627,7 @@
 
     function obligationLedgerState(item) {
       if (!item || item.status === "na") return "na";
-      if (item.reported) return "completed";
+      if (item.reported && item.receiptNumber) return "completed";
       if (item.receiptNumber) return "validated";
       if (item.paidDate) return "paid";
       if (Number(item.payableAmount || 0) > 0) return "calculated";
@@ -5691,16 +5707,12 @@
       if (values.some((item) => item === "paid")) reasons.push("Awaiting NTPN");
       if (values.some((item) => item === "validated")) reasons.push("Awaiting report");
       if (client.followUpCount > 3) reasons.push("High follow-up burden");
-      if (client.claimStatus === "Draft" || client.claimStatus === "Billing Ready") reasons.push("Claim workflow not advanced");
-      if (!client.billingUploaded) reasons.push("Billing PDF not uploaded");
       return reasons;
     }
 
     function isClientCompleted(client) {
       const obligationsDone = Object.values(client.obligations).every((item) => ["completed", "na"].includes(obligationLedgerState(item)));
-      const claimDone = ["Tax Paid", "Reported"].includes(client.claimStatus);
-      const paymentDone = ["Waiting Reporting Finalization", "Reported"].includes(client.paymentStatus);
-      return obligationsDone && claimDone && paymentDone;
+      return clientDataState(client) === "received" && obligationsDone;
     }
 
     function noteTargetRecord(targetId) {
@@ -5944,7 +5956,7 @@
         revisions: allObligations.filter((item) => item.status === "revision").length,
         temporary: allObligations.filter((item) => item.status === "temporary").length,
         followUpRisk: list.filter((client) => client.followUpCount > 3).length,
-        billingGaps: list.filter((client) => !client.billingUploaded).length
+        completed: list.filter(isClientCompleted).length
       };
     }
 
@@ -6268,7 +6280,7 @@
                         <strong>${client.name}</strong>
                         <div class="meta">${client.claimStatus} / ${client.paymentStatus}</div>
                       </div>
-                      <span class="pill ${client.billingUploaded ? "accent" : "warning"}">${client.followUpCount} FU</span>
+                      <span class="pill ${client.followUpCount > 3 ? "warning" : "neutral"}">${client.followUpCount} FU</span>
                     </div>
                   `).join("") || `<div class="empty-state">No visible bottlenecks in the current scope.</div>`}
                 </div>
@@ -6673,9 +6685,12 @@
       });
       const clientSearch = state.clientSearch.trim().toLowerCase();
       const viewingInactiveClients = state.clientManagementTab === "inactive";
+      const picFilterOptions = [...new Set(managedClients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
+      if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
       const activeClientRows = [...managedClients].filter((client) => {
         const matchesStatus = viewingInactiveClients ? client.clientStatus === "Inactive" : client.clientStatus !== "Inactive";
-        return matchesStatus && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
+        const matchesPic = state.clientPicFilter === "all" || client.taxPic === state.clientPicFilter || client.accountingPic === state.clientPicFilter;
+        return matchesStatus && matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
       }).sort((left, right) => {
         const leftIdentity = splitBusinessName(left);
         const rightIdentity = splitBusinessName(right);
@@ -6710,7 +6725,7 @@
                   <h3>${viewingInactiveClients ? "Inactive Clients" : "Active Clients"}</h3>
                   <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : "Client master overview. Select a client to review or update its operational profile."}</p>
                 </div>
-                <input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." />
+                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /></div>
               </div>
               <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43">
                 <table class="client-table">
@@ -6743,8 +6758,9 @@
                   <tbody>
                     ${virtualSpacer(10, activeClientWindow.top)}${activeClientWindow.rows.map((client) => {
                       const identity = splitBusinessName(client);
+                      const clientExpanded = state.expandedClientMasterId === client.id;
                       return `
-                      <tr data-keyboard-row="client" tabindex="0">
+                      <tr data-keyboard-row="client" data-client-master-toggle="${client.id}" tabindex="0" aria-expanded="${clientExpanded}">
                         <td>${identity.form || "Individual"}</td>
                         <td class="client-name-cell" title="${client.name}">
                           <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
@@ -6756,8 +6772,9 @@
                         <td>${client.clientStatus}</td>
                         <td>${currency(client.serviceFee)}</td>
                         <td>${currency(client.annualFee)}</td>
-                        <td class="client-action-cell"><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"} ${escapeAttr(identity.name)}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
+                        <td class="client-action-cell"><button class="client-action-icon" data-client-master-toggle="${client.id}" aria-expanded="${clientExpanded}" aria-label="${clientExpanded ? "Collapse" : "Expand"} ${escapeAttr(identity.name)}" title="${clientExpanded ? "Collapse obligations" : "Quick-edit obligations"}"><svg class="client-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg></button><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"} ${escapeAttr(identity.name)}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
+                      ${clientExpanded ? `<tr class="client-obligation-quick-row"><td colspan="10"><div class="client-obligation-quick-panel"><span class="eyebrow">Monthly obligations</span>${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_LABELS[key]}</label>`; }).join("")}${hasLeadershipAccess() ? `<span class="subline">Changes save automatically.</span>` : `<span class="subline">Leadership access is required to modify Client Master.</span>`}</div></td></tr>` : ""}
                     `;
                     }).join("")}${virtualSpacer(10, activeClientWindow.bottom)}
                   </tbody>
@@ -6767,8 +6784,9 @@
                 <div class="list-grid">
                   ${activeClientRows.map((client) => {
                     const identity = splitBusinessName(client);
+                    const clientExpanded = state.expandedClientMasterId === client.id;
                     return `
-                    <div class="mobile-card client-mobile-card"><div class="client-mobile-row"><div class="client-mobile-name"><button class="client-link" data-open-client="${client.id}">${identity.name}</button></div><div class="client-mobile-pic">Tax PIC: <strong>${client.taxPic || "-"}</strong></div><div class="client-mobile-pic">ACC PIC: <strong>${client.accountingPic || "-"}</strong></div><div class="client-mobile-actions"><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit client" title="Edit client">&#9998;</button></div></div></div>
+                    <div class="mobile-card client-mobile-card"><div class="client-mobile-row" data-client-master-toggle="${client.id}"><div class="client-mobile-name"><button class="client-link" data-open-client="${client.id}">${identity.name}</button></div><div class="client-mobile-pic">Tax PIC: <strong>${client.taxPic || "-"}</strong></div><div class="client-mobile-pic">ACC PIC: <strong>${client.accountingPic || "-"}</strong></div><div class="client-mobile-actions"><button class="client-action-icon" data-client-master-toggle="${client.id}" aria-expanded="${clientExpanded}" aria-label="${clientExpanded ? "Collapse" : "Expand"} obligations"><svg class="client-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg></button><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit client" title="Edit client">&#9998;</button></div></div>${clientExpanded ? `<div class="client-obligation-quick-panel">${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_SHORT_LABELS[key]}</label>`; }).join("")}</div>` : ""}</div>
               `;
                   }).join("")}
                 </div>
@@ -7322,7 +7340,7 @@
                                   <div>
                                     <h3 style="font-size:15px;">${displayClientName(row)}</h3>
                                   </div>
-                                  <div class="inline-controls"><button class="tiny-btn" data-generate-claim="yes" data-client-id="${row.id}">Create Tax Claim</button><button class="ghost-btn" data-row-toggle="${row.id}">Collapse</button></div>
+                                  <div class="inline-controls"><button class="tiny-btn monthly-detail-action" data-generate-claim="yes" data-client-id="${row.id}">Create Tax Claim</button><button class="tiny-btn monthly-detail-action monthly-collapse-btn" data-row-toggle="${row.id}" aria-label="Collapse client details" title="Collapse client details"><svg class="monthly-collapse-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"></path><path d="M7 18h10"></path></svg></button></div>
                                 </div>
                                 <div class="ledger-sheet">
                                   ${activeKeys.length ? `
@@ -7421,7 +7439,6 @@
                               <div class="mobile-compact-actions">
                                 <button class="tiny-btn" data-followup-change="down" data-client-id="${row.id}">- FU</button>
                                 <button class="tiny-btn" data-followup-change="up" data-client-id="${row.id}">+ FU</button>
-                                <button class="tiny-btn" data-simulate-billing="yes" data-client-id="${row.id}">Billing</button>
                                 <button class="tiny-btn" data-generate-claim="yes" data-client-id="${row.id}">Claim</button>
                                 <button class="solid-btn" data-open-client="${row.id}">Full View</button>
                               </div>
@@ -7744,7 +7761,6 @@
                       <th>Tax PIC</th>
                       <th>Claim Status</th>
                       <th>Payment Status</th>
-                      <th>Billing</th>
                       <th>Total Payable</th>
                       <th>Quick Access</th>
                     </tr>
@@ -7757,7 +7773,6 @@
                         <td>${client.taxPic}</td>
                         <td>${client.claimStatus}</td>
                         <td>${client.paymentStatus}</td>
-                        <td>${client.billingUploaded ? "Uploaded" : "Pending"}</td>
                         <td>${currency(OBLIGATIONS.reduce((sum, key) => sum + (client.obligations[key].payableAmount || 0), 0))}</td>
                         <td><button class="tiny-btn" data-open-client="${client.id}">Open Client</button></td>
                       </tr>
@@ -7772,7 +7787,7 @@
                       <div>
                         <strong>${displayClientName(client)}</strong>
                         <div class="meta">${client.month} ${client.year} / ${client.taxPic}</div>
-                        <div class="meta">${client.claimStatus} / ${client.paymentStatus} / ${client.billingUploaded ? "Billing uploaded" : "Billing pending"}</div>
+                        <div class="meta">${client.claimStatus} / ${client.paymentStatus}</div>
                       </div>
                       <button class="tiny-btn" data-open-client="${client.id}">Open</button>
                     </div>
@@ -8001,7 +8016,6 @@
             <div class="timeline-list">
               <div class="timeline-item"><div class="date-line">${client.lastUpdated}</div><strong>Last row update</strong><div class="meta">${client.notes}</div></div>
               <div class="timeline-item"><div class="date-line">${client.month} ${client.year}</div><strong>Claim status: ${client.claimStatus}</strong><div class="meta">${client.paymentStatus}</div></div>
-              <div class="timeline-item"><div class="date-line">Billing extraction</div><strong>${client.billingUploaded ? "Billing PDF uploaded" : "Billing PDF not uploaded"}</strong><div class="meta">${client.npwp || "-"} / ${client.drivePath}Billing</div></div>
               <div class="timeline-item"><div class="date-line">Google Drive</div><strong>Folder created</strong><div class="meta">${client.drivePath}</div></div>
             </div>
           </div>
@@ -9300,6 +9314,7 @@
               username: state.username,
               selectedClientId: state.selectedClientId,
               activeClientFormId: state.activeClientFormId,
+              expandedClientMasterId: state.expandedClientMasterId,
               selectedObligationKey: state.selectedObligationKey,
               expandedClientId: state.expandedClientId,
               operationsMode: state.operationsMode,
@@ -9322,6 +9337,7 @@
               filters: state.filters,
               historyFilters: state.historyFilters,
               clientSearch: state.clientSearch,
+              clientPicFilter: state.clientPicFilter,
               profileClientSearch: state.profileClientSearch,
               proposalSearch: state.proposalSearch,
               caseSearch: state.caseSearch,
@@ -9342,6 +9358,18 @@
     }
 
     function bindDirectRowActions() {
+      document.querySelectorAll("[data-client-master-toggle]").forEach((control) => {
+        control.onclick = (event) => {
+          if (!control.matches("button") && event.target.closest("button, input, select, textarea, a")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const clientId = control.getAttribute("data-client-master-toggle");
+          state.expandedClientMasterId = state.expandedClientMasterId === clientId ? "" : clientId;
+          state.selectedClientId = clientId;
+          commitWorkspaceNavigation("replace");
+        };
+      });
+
       document.querySelectorAll("tr.main-row[data-row-toggle], button[data-row-toggle]").forEach((control) => {
         control.onclick = (event) => {
           if (control.matches("tr") && event.target.closest("button, input, select, textarea, a")) return;
@@ -9450,16 +9478,6 @@
       applyViewVisibility(viewId);
       renderShellChrome();
       if (viewId === "my-work-view") loadSharedMyWork(true);
-    }
-
-    function simulateBillingImport(client) {
-      const obligation = client.obligations[state.selectedObligationKey] || client.obligations.pph21;
-      obligation.billingCode = obligation.billingCode || "AUTO-" + Math.floor(Math.random() * 900000 + 100000);
-      obligation.kapkjs = obligation.kapkjs || "411211 / 100";
-      obligation.expirationDate = obligation.expirationDate || "2026-05-28";
-      client.billingUploaded = true;
-      client.claimStatus = client.claimStatus === "Draft" ? "Billing Ready" : client.claimStatus;
-      client.lastUpdated = "2026-05-20 12:05";
     }
 
     function generateClaim(client) {
@@ -10852,13 +10870,6 @@
         return;
       }
 
-      if (target.matches("[data-simulate-billing]")) {
-        const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
-        simulateBillingImport(client);
-        commitUi("push");
-        return;
-      }
-
       if (target.matches("[data-generate-claim]")) {
         const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();
         try {
@@ -11156,6 +11167,35 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof HTMLSelectElement && target.id === "active-client-pic-filter") {
+        state.clientPicFilter = target.value || "all";
+        state.tableViewport["active-clients"] = 0;
+        state.virtualScrollTop = { ...(state.virtualScrollTop || {}), "active-clients": 0 };
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.matches("[data-client-obligation]")) {
+        const [clientId, obligationKey] = target.getAttribute("data-client-obligation").split("|");
+        const client = clientMasterClients.find((item) => item.id === clientId);
+        if (!client || !OBLIGATIONS.includes(obligationKey) || !hasLeadershipAccess()) return;
+        const previous = structuredClone(client.obligations[obligationKey]);
+        client.obligations[obligationKey].status = target.checked
+          ? (client.obligations[obligationKey].status === "na" ? "awaiting" : client.obligations[obligationKey].status)
+          : "na";
+        target.closest(".client-obligation-quick-option")?.classList.toggle("active", target.checked);
+        persistDemoState();
+        saveClientToDatabase(client, { showLoading: false }).then(() => {
+          clearSyncFailure(`Client ${client.name || client.clientCode}`);
+        }).catch((error) => {
+          client.obligations[obligationKey] = previous;
+          target.checked = previous.status !== "na";
+          target.closest(".client-obligation-quick-option")?.classList.toggle("active", target.checked);
+          window.alert(error instanceof Error ? error.message : "Client obligation could not be saved.");
+        });
+        return;
+      }
 
       if (target instanceof HTMLInputElement && target.matches("[data-select-all-monthly-rows]")) {
         state.monthlyDeleteSelection = target.checked ? visibleClients().filter(canDeleteMonthlyRow).map(monthlyRowKey) : [];

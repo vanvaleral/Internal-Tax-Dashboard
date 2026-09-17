@@ -44,6 +44,17 @@ test("the client and case lists use windowed table rendering", async () => {
   assert.match(demo, /data-virtual-table="cases"/);
 });
 
+test("Clients provides PIC filtering and an autosaving obligation quick panel", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /clientPicFilter: persistedDemoState\?\.ui\?\.clientPicFilter \|\| "all"/);
+  assert.match(demo, /id="active-client-pic-filter"/);
+  assert.match(demo, /client\.taxPic === state\.clientPicFilter \|\| client\.accountingPic === state\.clientPicFilter/);
+  assert.match(demo, /data-client-master-toggle=/);
+  assert.match(demo, /data-client-obligation=/);
+  assert.match(demo, /saveClientToDatabase\(client, \{ showLoading: false \}\)/);
+  assert.match(demo, /!hasLeadershipAccess\(\)/);
+});
+
 test("Client Growth normalizes KPP labels before calculating regional distribution", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function normalizeTaxOfficeRegion\(value\)/);
