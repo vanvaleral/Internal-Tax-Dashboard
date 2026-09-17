@@ -5843,8 +5843,7 @@
       if (!digits) return "";
       const number = Number(digits);
       return new Intl.NumberFormat("id-ID", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
+        maximumFractionDigits: 0
       }).format(number);
     }
 
@@ -7352,7 +7351,7 @@
                                         <tr>
                                           <td class="ledger-name-col">Tax Payable</td>
                                           ${activeKeys.map((key) => `
-                                            <td><input id="ob-${row.id}-${key}-payable" class="ledger-cell-input" type="text" inputmode="numeric" value="${formatRupiahInput(row.obligations[key].payableAmount)}" placeholder="0,00" /></td>
+                                            <td><input id="ob-${row.id}-${key}-payable" class="ledger-cell-input" type="text" inputmode="numeric" value="${formatRupiahInput(row.obligations[key].payableAmount)}" placeholder="0" /></td>
                                           `).join("")}
                                         </tr>
                                         <tr>
@@ -8413,8 +8412,15 @@
       return form && form !== "Individual" ? `${form} ${cleanName}`.trim() : cleanName;
     }
 
+    function findCaseClient({ databaseId = "", clientId = "", clientName = "" } = {}) {
+      const availableClients = [...clientMasterClients, ...clients];
+      return availableClients.find((client) => databaseId && client.databaseId === databaseId)
+        || availableClients.find((client) => clientId && client.id === clientId)
+        || availableClients.find((client) => clientName && normalizedEntityName(client.name) === normalizedEntityName(clientName));
+    }
+
     function databaseCaseToDemo(row) {
-      const linkedClient = clients.find((client) => client.databaseId === row.client_id);
+      const linkedClient = findCaseClient({ databaseId: row.client_id, clientName: row.client_name });
       return {
         id: row.id,
         clientId: linkedClient?.id || "",
@@ -8613,10 +8619,15 @@
     }
 
     async function saveCaseToDatabase(record, { showLoading = true, acceptServerDerivedFields = true } = {}) {
+      const linkedClient = findCaseClient({
+        databaseId: record.databaseClientId,
+        clientId: record.clientId,
+        clientName: record.clientName
+      });
       const payload = {
         id: record.id.includes("case-") ? "" : record.id,
         case: {
-          clientId: record.databaseClientId || clients.find((client) => client.id === record.clientId)?.databaseId || null,
+          clientId: record.databaseClientId || linkedClient?.databaseId || null,
           clientName: record.clientName,
           caseType: record.caseType,
           caseCategory: record.caseCategory,
@@ -8680,7 +8691,7 @@
     }
 
     function syncInlineCaseOwnership(record) {
-      const linkedClient = clients.find((client) => normalizedEntityName(client.name) === normalizedEntityName(record.clientName));
+      const linkedClient = findCaseClient({ clientName: record.clientName });
       record.clientId = linkedClient?.id || "";
       record.databaseClientId = linkedClient?.databaseId || "";
       record.taxPic = linkedClient?.taxPic || "";
@@ -9462,16 +9473,25 @@
         window.alert("Generate and open a monthly period before creating a tax claim.");
         return;
       }
-      const response = await appFetch("/api/monthly-claims", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ period: state.activeMonthlyPeriod, clientId: client.databaseId })
-      }, "");
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.data?.id) throw new Error(result.error || "Tax claim could not be created.");
-      generateClaim(client);
-      saveMonthlyProgress();
-      window.open(`/tax-claim-template.html?theme=slate&claimId=${encodeURIComponent(result.data.id)}`, "_blank");
+      const claimWindow = window.open("", "_blank");
+      if (!claimWindow) throw new Error("Allow popups to open the tax claim editor.");
+      claimWindow.document.write(`<!doctype html><title>Preparing Tax Claim</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#edf7fa;color:#17354b;font:600 15px Georgia,serif}.card{padding:24px 30px;border:1px solid #d5e7f0;border-radius:14px;background:white;box-shadow:0 16px 40px rgba(0,61,121,.12)}</style><div class="card">Preparing tax claim...</div>`);
+      claimWindow.document.close();
+      try {
+        const response = await appFetch("/api/monthly-claims", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ period: state.activeMonthlyPeriod, clientId: client.databaseId, obligations: client.obligations })
+        }, "");
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.data?.id) throw new Error(result.error || "Tax claim could not be created.");
+        generateClaim(client);
+        saveMonthlyProgress();
+        claimWindow.location.replace(`/tax-claim-template.html?theme=slate&claimId=${encodeURIComponent(result.data.id)}`);
+      } catch (error) {
+        claimWindow.close();
+        throw error;
+      }
     }
 
     function historySnapshot() {

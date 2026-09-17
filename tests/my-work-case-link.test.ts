@@ -7,6 +7,8 @@ const migration = readFileSync(new URL("../supabase/migrations/202609160001_my_w
 const progressMigration = readFileSync(new URL("../supabase/migrations/202609160002_tax_case_progress_entries.sql", import.meta.url), "utf8");
 const demo = readFileSync(new URL("../public/demo.html", import.meta.url), "utf8");
 const casesRoute = readFileSync(new URL("../app/api/cases/route.ts", import.meta.url), "utf8");
+const monthlyClaimsRoute = readFileSync(new URL("../app/api/monthly-claims/route.ts", import.meta.url), "utf8");
+const claimTemplate = readFileSync(new URL("../public/tax-claim-template.html", import.meta.url), "utf8");
 
 test("daily tasks persist an authorized optional Case link", () => {
   assert.match(migration, /add column if not exists case_id uuid references public\.tax_cases/);
@@ -14,6 +16,19 @@ test("daily tasks persist an authorized optional Case link", () => {
   assert.match(route, /The selected Case is unavailable in your assigned scope/);
   assert.match(route, /case_id: caseId/);
   assert.match(route, /update\.case_id = await accessibleCaseId/);
+});
+
+test("existing cases retain their Client Master link when an edit omits clientId", () => {
+  assert.match(casesRoute, /payloadFor\(actor: any, input: Record<string, unknown>, fallbackClientId = ""\)/);
+  assert.match(casesRoute, /select\("client_id, tax_pic_profile_id, accounting_pic_profile_id"\)/);
+  assert.match(casesRoute, /payloadFor\(actor, body\.case \|\| body, existing\.client_id \|\| ""\)/);
+});
+
+test("tax claims refresh payable rows and load with one authenticated request", () => {
+  assert.match(monthlyClaimsRoute, /submitted\?\.payableAmount \?\? item\?\.payableAmount/);
+  assert.match(monthlyClaimsRoute, /existing\.draft[\s\S]*rows: obligationRows/);
+  assert.match(monthlyClaimsRoute, /viewerId: actor\.profile\.id/);
+  assert.doesNotMatch(claimTemplate, /fetch\("\/api\/profile"/);
 });
 
 test("My Work mutations avoid redundant relation refetches", () => {

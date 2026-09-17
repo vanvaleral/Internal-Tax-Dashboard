@@ -32,7 +32,13 @@ test("Operations starts its batched save well below one second", () => {
 test("tax claim generation can update the non-blocking database status", () => {
   assert.match(demo, /function setDatabaseStatus\(status\)/);
   assert.match(demo, /function openMonthlyTaxClaim\(client\)/);
-  assert.match(demo, /generateClaim\(client\);\s+saveMonthlyProgress\(\);\s+window\.open/);
+  assert.match(demo, /generateClaim\(client\);\s+saveMonthlyProgress\(\);\s+claimWindow\.location\.replace/);
+});
+
+test("tax claim opens immediately and submits the latest payable values", () => {
+  assert.match(demo, /const claimWindow = window\.open\("", "_blank"\)/);
+  assert.match(demo, /obligations: client\.obligations/);
+  assert.match(demo, /claimWindow\.location\.replace\(`/);
 });
 
 test("monthly Edit Mode supports selection and explicit permanent deletion", () => {

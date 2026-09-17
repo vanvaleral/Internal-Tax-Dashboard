@@ -7,8 +7,8 @@ function canAccess(actor: any, client: any) {
   return isLeadership(actor.profile.role) || [client.tax_pic_profile_id, client.accounting_pic_profile_id].includes(actor.profile.id);
 }
 
-async function payloadFor(actor: any, input: Record<string, unknown>) {
-  const clientId = String(input.clientId || "");
+async function payloadFor(actor: any, input: Record<string, unknown>, fallbackClientId = "") {
+  const clientId = String(input.clientId || fallbackClientId || "");
   if (!clientId) throw new Error("Choose a client before saving a case.");
   const { data: client, error } = await actor.admin.from("client_master").select("id, legal_name, tax_pic_name, accounting_pic_name, tax_pic_profile_id, accounting_pic_profile_id").eq("id", clientId).maybeSingle();
   if (error || !client) throw new Error(error?.message || "Client was not found.");
@@ -153,9 +153,9 @@ export async function PATCH(request: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ data });
     }
-    const payload = await payloadFor(actor, body.case || body);
-    const { data: existing } = await actor.admin.from("tax_cases").select("tax_pic_profile_id, accounting_pic_profile_id").eq("id", id).maybeSingle();
+    const { data: existing } = await actor.admin.from("tax_cases").select("client_id, tax_pic_profile_id, accounting_pic_profile_id").eq("id", id).maybeSingle();
     if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
+    const payload = await payloadFor(actor, body.case || body, existing.client_id || "");
     const { created_by: _createdBy, ...update } = payload;
     const { data, error } = await actor.admin.from("tax_cases").update(update).eq("id", id).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

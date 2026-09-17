@@ -23,12 +23,26 @@ export async function POST(request: Request) {
   const row = rows.find((item: Record<string, unknown>) => String(item.databaseId || item.clientId || "") === clientId);
   if (!row) return NextResponse.json({ error: "The generated client snapshot was not found." }, { status: 404 });
   if (!isLeadership(actor.profile.role) && String(row.taxPicSnapshotProfileId || row.taxPicProfileId || "") !== actor.profile.id) return NextResponse.json({ error: "Only the Tax PIC can create this tax claim." }, { status: 403 });
-  const { data: existing, error: existingError } = await actor.admin.from("monthly_tax_claims").select("id").eq("period_key", period).eq("client_id", clientId).maybeSingle();
+  const { data: existing, error: existingError } = await actor.admin.from("monthly_tax_claims").select("id, draft, updated_at").eq("period_key", period).eq("client_id", clientId).maybeSingle();
   if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
-  if (existing) return NextResponse.json({ data: existing, existing: true });
+  const submittedObligations = body.obligations && typeof body.obligations === "object" ? body.obligations : {};
   let obligationRows;
-  try { obligationRows = Object.entries(row.obligations || {}).filter(([, item]: any) => item?.status !== "na").map(([key, item]: any) => [labels[key] || key, period, parseAmount(item?.payableAmount || 0)]); }
+  try {
+    obligationRows = Object.entries(row.obligations || {})
+      .filter(([, item]: any) => item?.status !== "na")
+      .map(([key, item]: any) => {
+        const submitted = (submittedObligations as Record<string, any>)[key];
+        return [labels[key] || key, period, parseAmount(submitted?.payableAmount ?? item?.payableAmount ?? 0)];
+      });
+  }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid claim amount." }, { status: 400 }); }
+  if (existing) {
+    const draft = { ...(existing.draft && typeof existing.draft === "object" ? existing.draft : {}), rows: obligationRows };
+    const { data: refreshed, error: refreshError } = await actor.admin.from("monthly_tax_claims").update({ draft }).eq("id", existing.id).eq("updated_at", existing.updated_at).select("id").maybeSingle();
+    if (refreshError) return NextResponse.json({ error: refreshError.message }, { status: 500 });
+    if (!refreshed) return NextResponse.json({ error: "This claim changed while payable values were being refreshed. Open it again to retry.", code: "VERSION_CONFLICT" }, { status: 409 });
+    return NextResponse.json({ data: refreshed, existing: true, refreshed: true });
+  }
   const clientName = `${row.businessForm && row.businessForm !== "Individual" ? `${row.businessForm} ` : ""}${row.name || ""}`.trim();
   const draft = { title: "KLAIM PAJAK", client: clientName, "client-note": "Ringkasan kewajiban pajak yang perlu dipersiapkan untuk masa pajak berikut.", period, rows: obligationRows, issued: `Denpasar, ${new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}`, signatory: actor.profile.display_name || actor.profile.full_name, role: "Tax Consultant" };
   const { data, error: insertError } = await actor.admin.from("monthly_tax_claims").insert({ period_key: period, client_id: clientId, tax_pic_profile_id: row.taxPicSnapshotProfileId || row.taxPicProfileId, accounting_pic_profile_id: row.accountingPicSnapshotProfileId || row.accountingPicProfileId || null, created_by_profile_id: actor.profile.id, source_snapshot: row, draft }).select("id").single();
@@ -43,7 +57,7 @@ export async function GET(request: Request) {
   if (!id) return NextResponse.json({ error: "Claim ID is required." }, { status: 400 });
   const { data, error } = await actor.admin.from("monthly_tax_claims").select("*").eq("id", id).maybeSingle();
   if (error || !data || !canAccess(actor, data)) return NextResponse.json({ error: "Tax claim was not found." }, { status: 404 });
-  return NextResponse.json({ data: isLeadership(actor.profile.role) ? data : redactFees(data) });
+  return NextResponse.json({ data: isLeadership(actor.profile.role) ? data : redactFees(data), viewerId: actor.profile.id });
 }
 
 export async function PATCH(request: Request) {

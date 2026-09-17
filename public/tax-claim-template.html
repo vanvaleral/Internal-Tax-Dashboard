@@ -242,21 +242,16 @@
     document.getElementById("print-claim").addEventListener("click", () => { if (claimReady && refreshTotal()) window.print(); });
     (async () => {
       try {
-        if (location.protocol === "file:" && !claimId) workspaceUser = "offline-preview";
-        else {
-          const identity = await fetch("/api/profile", { cache:"no-store" });
-          const account = await identity.json();
-          if (!identity.ok || !account.user?.id || !account.profile) throw new Error("Please sign in before opening a claim.");
-          workspaceUser = account.user.id;
-        }
-        draftKey = `lmats-claim-v2:${workspaceUser}:${claimId || "standalone"}`;
+        workspaceUser = location.protocol === "file:" ? "offline-preview" : "standalone";
         if (claimId) {
-          const response = await fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { cache:"no-store", headers:{ Accept:"application/json", "X-Workspace-User":workspaceUser } });
+          const response = await fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { cache:"no-store", headers:{ Accept:"application/json" } });
           const result = await response.json();
           if (!response.ok || !result.data?.draft) throw new Error(result.error || "This claim could not be loaded. Reload to retry.");
+          workspaceUser = result.viewerId || "authorized-user";
           claimVersion = result.data.updated_at;
           resetAndApply(result.data.draft);
         }
+        draftKey = `lmats-claim-v2:${workspaceUser}:${claimId || "standalone"}`;
         let recovery;
         try { recovery = JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { /* Ignore an invalid local draft. */ }
         if (recovery?.user === workspaceUser && recovery.claimId === claimId && recovery.version === claimVersion && confirm("Restore the unsaved draft for this claim on this device?")) resetAndApply(recovery.draft);

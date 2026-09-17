@@ -22,6 +22,21 @@ test("inline case edits are debounced and keep the table in place", async () => 
   assert.match(demo, /}, 250\);/);
 });
 
+test("case autosave resolves ownership from Client Master instead of an Operations snapshot", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /function findCaseClient\([\s\S]*?\.\.\.clientMasterClients, \.\.\.clients/);
+  assert.match(demo, /clientId: record\.databaseClientId \|\| linkedClient\?\.databaseId \|\| null/);
+  assert.match(demo, /const linkedClient = findCaseClient\(\{ clientName: record\.clientName \}\)/);
+});
+
+test("Monthly Compliance payable input does not append decimal zeroes while typing", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  const formatter = demo.match(/function formatRupiahInput\(value\) \{[\s\S]*?\n    \}/)?.[0] || "";
+  assert.match(formatter, /maximumFractionDigits: 0/);
+  assert.doesNotMatch(formatter, /minimumFractionDigits/);
+  assert.match(demo, /payableAmount\)\}" placeholder="0"/);
+});
+
 test("the client and case lists use windowed table rendering", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function windowedRows\(rows, tableId, rowHeight\)/);
