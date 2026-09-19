@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notificationEventKey, uniqueProfileIds } from "@/lib/operational-rules";
+import webpush from "web-push";
 
 export { notificationEventKey, uniqueProfileIds } from "@/lib/operational-rules";
 
@@ -66,6 +67,36 @@ export async function createOperationalAnnouncement(input: OperationalAnnounceme
   } else {
     await admin.from("notification_delivery_log").update({ status: "failed", last_error: immediateError.message })
       .eq("announcement_id", announcementId).in("staff_profile_id", resolvedRecipients).eq("channel", "in_app");
+  }
+
+  // Queue Web Push only for users who enabled it on at least one device.
+  // Failure here must never prevent the durable in-app announcement.
+  const { data: pushSubscriptions } = await admin.from("web_push_subscriptions").select("id, staff_profile_id, endpoint, p256dh, auth").in("staff_profile_id", resolvedRecipients);
+  const pushRecipientIds = uniqueProfileIds((pushSubscriptions || []).map((row) => row.staff_profile_id));
+  if (pushRecipientIds.length) {
+    await admin.from("notification_delivery_log").upsert(
+      pushRecipientIds.map((staffProfileId) => ({ announcement_id: announcementId, staff_profile_id: staffProfileId, channel: "web_push", status: "queued", attempts: 1, next_attempt_at: new Date().toISOString() })),
+      { onConflict: "announcement_id,staff_profile_id,channel", ignoreDuplicates: true }
+    );
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY;
+    if (publicKey && privateKey) {
+      webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:admin@lmatsconsulting.com", publicKey, privateKey);
+      await Promise.all(pushRecipientIds.map(async (staffProfileId) => {
+        const subscriptions = (pushSubscriptions || []).filter((row) => row.staff_profile_id === staffProfileId);
+        const results = await Promise.allSettled(subscriptions.map((subscription) => webpush.sendNotification({
+          endpoint: subscription.endpoint,
+          keys: { p256dh: subscription.p256dh, auth: subscription.auth }
+        }, JSON.stringify({ title: input.title, body: "Open the dashboard to read this announcement.", tag: `announcement-${announcementId}`, url: "/demo.html?view=announcement-view" }))));
+        const expiredIds = results.flatMap((result, index) => result.status === "rejected" && [404, 410].includes(Number((result.reason as any)?.statusCode)) ? [subscriptions[index].id] : []);
+        if (expiredIds.length) await admin.from("web_push_subscriptions").delete().in("id", expiredIds);
+        const delivered = results.some((result) => result.status === "fulfilled");
+        await admin.from("notification_delivery_log").update(delivered
+          ? { status: "delivered", delivered_at: new Date().toISOString(), completed_at: new Date().toISOString(), last_error: null }
+          : { status: "failed", last_error: "All immediate browser push deliveries failed.", next_attempt_at: new Date(Date.now() + 120_000).toISOString() })
+          .eq("announcement_id", announcementId).eq("staff_profile_id", staffProfileId).eq("channel", "web_push");
+      }));
+    }
   }
 
   return { id: announcementId, created: Boolean(queued.created), recipientCount: Number(queued.recipientCount || resolvedRecipients.length), queued: Boolean(immediateError) };

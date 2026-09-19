@@ -37,6 +37,21 @@ test("Monthly Compliance payable input does not append decimal zeroes while typi
   assert.match(demo, /payableAmount\)\}" placeholder="0"/);
 });
 
+test("Monthly Compliance inputs accept database UUID row identifiers", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /\^ob-\(\.\+\)-\(pph21\|unifikasi\|pph25\|phrpb1\|ppn\)-\(payable\|date\|ntpn\|detail\)\$/);
+  assert.doesNotMatch(demo, /\^ob-\(client-\\d\+\)-\(pph21\|unifikasi\|pph25\|phrpb1\|ppn\)-\(payable\|date\|ntpn\|detail\)\$/);
+  assert.match(demo, /if \(fieldKey === "ntpn"\) \{\s*updateLedgerField\(clientId, obligationKey, fieldKey, target\.value, false\);/);
+});
+
+test("Settings exposes per-device Web Push controls", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /navigator\.serviceWorker\.register\("\/push-sw\.js"/);
+  assert.match(demo, /Notification\.requestPermission\(\)/);
+  assert.match(demo, /data-toggle-push-notifications="yes"/);
+  assert.match(demo, /\/api\/push-subscriptions/);
+});
+
 test("the client and case lists use windowed table rendering", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function windowedRows\(rows, tableId, rowHeight\)/);

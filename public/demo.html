@@ -4439,6 +4439,10 @@
       }
     };
 
+    if (new URLSearchParams(window.location.search).get("view") === "announcement-view") {
+      state.currentView = "announcement-view";
+    }
+
     if (!["active", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
@@ -5878,6 +5882,79 @@
       root.style.setProperty("--my-work-image", state.appearance.myWorkBackground ? `url("${state.appearance.myWorkBackground.replace(/"/g, "")}")` : "none");
     }
 
+    const pushNotificationState = {
+      supported: "serviceWorker" in navigator && "PushManager" in window && "Notification" in window,
+      configured: false,
+      enabled: false,
+      loading: false,
+      message: ""
+    };
+
+    function urlBase64ToUint8Array(value) {
+      const padding = "=".repeat((4 - value.length % 4) % 4);
+      const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+      return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+    }
+
+    async function loadPushNotificationState() {
+      if (!pushNotificationState.supported) {
+        pushNotificationState.message = "Push notifications are not supported by this browser.";
+        renderAppearanceSettings();
+        return;
+      }
+      pushNotificationState.loading = true;
+      renderAppearanceSettings();
+      try {
+        const response = await appFetch("/api/push-subscriptions", { cache: "no-store", headers: { Accept: "application/json" } }, "", { trackUpdate: false });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Push settings could not be loaded.");
+        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+        const subscription = await registration.pushManager.getSubscription();
+        pushNotificationState.configured = Boolean(result.configured && result.publicKey);
+        pushNotificationState.enabled = Boolean(result.enabled && subscription);
+        pushNotificationState.publicKey = result.publicKey || "";
+        pushNotificationState.message = pushNotificationState.configured ? "Receive announcements even when the dashboard is closed." : "VAPID keys must be configured on the server.";
+      } catch (error) {
+        pushNotificationState.message = error instanceof Error ? error.message : "Push settings could not be loaded.";
+      } finally {
+        pushNotificationState.loading = false;
+        renderAppearanceSettings();
+      }
+    }
+
+    async function togglePushNotifications() {
+      if (!pushNotificationState.supported || !pushNotificationState.configured || pushNotificationState.loading) return;
+      pushNotificationState.loading = true;
+      renderAppearanceSettings();
+      try {
+        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+        const existing = await registration.pushManager.getSubscription();
+        if (pushNotificationState.enabled) {
+          const endpoint = existing?.endpoint || "";
+          const response = await appFetch("/api/push-subscriptions", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Push notifications could not be disabled.");
+          if (existing) await existing.unsubscribe();
+          pushNotificationState.enabled = false;
+          pushNotificationState.message = "Push notifications are off on this device.";
+        } else {
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") throw new Error("Notification permission was not granted in this browser.");
+          const subscription = existing || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(pushNotificationState.publicKey) });
+          const response = await appFetch("/api/push-subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: subscription.toJSON() }) }, "");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Push notifications could not be enabled.");
+          pushNotificationState.enabled = true;
+          pushNotificationState.message = "Push notifications are active on this device.";
+        }
+      } catch (error) {
+        pushNotificationState.message = error instanceof Error ? error.message : "Push notification setting could not be updated.";
+      } finally {
+        pushNotificationState.loading = false;
+        renderAppearanceSettings();
+      }
+    }
+
     function renderAppearanceSettings() {
       const root = document.getElementById("appearance-settings-root");
       if (!root) return;
@@ -5896,6 +5973,7 @@
           <div class="appearance-swatches">${presets.map((color) => `<button class="appearance-swatch ${state.appearance.accent.toLowerCase() === color ? "active" : ""}" style="--swatch:${color}" data-set-accent="${color}" aria-label="Use ${color} accent"></button>`).join("")}</div>
           <label class="appearance-custom"><span>Custom color</span><input id="appearance-custom-color" type="color" value="${escapeAttr(state.appearance.accent)}" /></label>
           <div class="appearance-background"><div class="eyebrow">My Work background</div><button class="appearance-upload" data-select-my-work-background="yes">Upload image</button><div class="subline">${state.appearance.myWorkBackground ? "Image applied" : "PNG, JPG, or WebP up to 1.5 MB"}</div>${state.appearance.myWorkBackground ? `<button class="ghost-btn" data-clear-my-work-background="yes">Remove background image</button>` : ""}</div>
+          <div class="appearance-background"><div class="eyebrow">Notifications</div><div class="section-title"><div><strong>Browser push</strong><div class="subline">${escapeHtml(pushNotificationState.message || "Checking notification availability...")}</div></div><button class="${pushNotificationState.enabled ? "solid-btn" : "ghost-btn"}" data-toggle-push-notifications="yes" ${!pushNotificationState.supported || !pushNotificationState.configured || pushNotificationState.loading ? "disabled" : ""}>${pushNotificationState.loading ? "Checking..." : pushNotificationState.enabled ? "On" : "Off"}</button></div></div>
         </section>`);
     }
 
@@ -9867,6 +9945,7 @@
       const accentTrigger = target.closest("[data-set-accent]");
       const clearMyWorkBackgroundTrigger = target.closest("[data-clear-my-work-background]");
       const selectMyWorkBackgroundTrigger = target.closest("[data-select-my-work-background]");
+      const togglePushNotificationsTrigger = target.closest("[data-toggle-push-notifications]");
       const profileTabTrigger = target.closest("[data-profile-tab]");
       const addMyWorkTrigger = target.closest("[data-add-my-work]");
       const completeMyWorkTrigger = target.closest("[data-my-work-done]");
@@ -9898,12 +9977,13 @@
         return;
       }
 
-      if (openAppearanceSettingsTrigger) { state.appearanceSettingsOpen = true; renderAppearanceSettings(); return; }
+      if (openAppearanceSettingsTrigger) { state.appearanceSettingsOpen = true; renderAppearanceSettings(); loadPushNotificationState(); return; }
       if (closeAppearanceSettingsTrigger && (target === closeAppearanceSettingsTrigger || closeAppearanceSettingsTrigger.tagName === "BUTTON")) { state.appearanceSettingsOpen = false; renderAppearanceSettings(); return; }
       if (themeTrigger) { state.appearance.theme = themeTrigger.getAttribute("data-set-theme") === "dark" ? "dark" : "light"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
       if (accentTrigger) { state.appearance.accent = accentTrigger.getAttribute("data-set-accent") || "#2563eb"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
       if (selectMyWorkBackgroundTrigger) { document.getElementById("appearance-my-work-background")?.click(); return; }
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
+      if (togglePushNotificationsTrigger) { await togglePushNotifications(); return; }
 
       if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitWorkspaceNavigation("replace"); return; }
       if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
@@ -11390,7 +11470,7 @@
         }
 
         if (dateTarget.startsWith("ob-")) {
-          const match = dateTarget.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
+        const match = dateTarget.match(/^ob-(.+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
           if (!match) return;
           const [, clientId, obligationKey] = match;
           updateLedgerField(clientId, obligationKey, "date", display, true);
@@ -11644,7 +11724,7 @@
       }
 
       if (target.id.startsWith("ob-")) {
-        const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
+        const match = target.id.match(/^ob-(.+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
         if (!match) return;
         const [, clientId, obligationKey, fieldKey] = match;
         if (fieldKey === "payable") {
@@ -11684,7 +11764,7 @@
       }
 
       if (!target.id.startsWith("ob-")) return;
-      const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
+      const match = target.id.match(/^ob-(.+)-(pph21|unifikasi|pph25|phrpb1|ppn)-(payable|date|ntpn|detail)$/);
       if (!match) return;
       const [, clientId, obligationKey, fieldKey] = match;
       if (fieldKey === "payable") {
@@ -11775,7 +11855,7 @@
       if (!dateTarget || !state.dateDragArmed || !state.dateDragValue) return;
       if (target.id === state.dateDragSourceId) return;
       state.dateDragActive = true;
-      const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
+      const match = target.id.match(/^ob-(.+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
       if (!match) return;
       const [, clientId, obligationKey] = match;
       target.value = state.dateDragValue;
@@ -11787,7 +11867,7 @@
       if (!target || !state.dateDragValue || !state.dateDragActive) return;
       const dateTarget = target.closest("[data-ledger-date]");
       if (!dateTarget || target.id === state.dateDragSourceId) return;
-      const match = target.id.match(/^ob-(client-\d+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
+      const match = target.id.match(/^ob-(.+)-(pph21|unifikasi|pph25|phrpb1|ppn)-date$/);
       if (!match) return;
       const [, clientId, obligationKey] = match;
       target.value = state.dateDragValue;
