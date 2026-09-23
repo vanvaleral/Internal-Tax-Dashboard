@@ -67,6 +67,8 @@ test("tax claim opens immediately and submits the latest payable values", () => 
 });
 
 test("monthly Edit Mode supports selection and explicit permanent deletion", () => {
+  assert.match(demo, /operations-matrix \$\{state\.monthlyEditMode \? "is-editing" : ""\}/);
+  assert.match(demo, /operations-matrix\.is-editing thead th:nth-child\(2\)[\s\S]{0,180}left: 38px/);
   assert.match(demo, /data-toggle-monthly-edit="yes">Edit Mode/);
   assert.match(demo, /data-select-all-monthly-rows="yes"/);
   assert.match(demo, /data-select-monthly-row=/);

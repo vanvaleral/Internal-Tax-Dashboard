@@ -159,10 +159,44 @@ test("mobile workspace keeps the header, cases controls, and client list compact
 test("mobile My Work opens details only after selecting a task", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /myWorkDetailOpen: false/);
-  assert.match(demo, /const showMyWorkDetail = Boolean\(selected && \(!isMobileMyWork \|\| state\.myWorkDetailOpen\)\)/);
+  assert.match(demo, /const showMyWorkDetail = Boolean\(selected && state\.myWorkDetailOpen\)/);
   assert.match(demo, /data-close-my-work-detail="yes"/);
   assert.match(demo, /state\.myWorkDetailOpen = true/);
   assert.match(demo, /topbar-actions \.ghost-btn\.inbox-trigger \{\s*display: none;/);
+});
+
+test("My Work separates current completions from a compact monthly archive browser", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /data-my-work-tab="current"/);
+  assert.match(demo, /data-my-work-tab="archived"/);
+  assert.match(demo, /data-toggle-my-work-completed="yes"/);
+  assert.match(demo, /data-open-my-work-archive-period=/);
+  assert.match(demo, /data-close-my-work-archive-period=/);
+  assert.match(demo, /id="my-work-archive-year"/);
+  assert.match(demo, /id="my-work-archive-search"/);
+  assert.match(demo, /data-export-my-work-archive=/);
+  assert.match(demo, /const selectedArchiveGroup = archiveGroups\.find/);
+  assert.match(demo, /Number\(task\.completedAt \|\| 0\) < archiveThreshold\.getTime\(\)/);
+  assert.match(demo, /date\.toLocaleDateString\("id-ID", \{ month: "long", year: "numeric" \}\)/);
+});
+
+test("My Work demo mode previews every task section without touching shared data", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /pageParams\.get\("demo"\) === "my-work"/);
+  assert.match(demo, /makeTask\("demo-active-1"/);
+  assert.match(demo, /makeTask\("demo-completed-1"/);
+  assert.match(demo, /makeTask\("demo-archive-1"/);
+  assert.match(demo, /Preview data · not saved/);
+  assert.match(demo, /async function loadSharedMyWork\(background = false\) \{\s*if \(myWorkDemoMode\) return;/);
+  assert.match(demo, /function saveMyWorkTaskToDatabase\(task, extra = \{\}\) \{\s*if \(myWorkDemoMode\) return;/);
+  assert.match(demo, /myWork: myWorkDemoMode \? \[\] : state\.myWork/);
+});
+
+test("My Work returns to a full-width list when moving from mobile to desktop", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /\.my-work-panel\.has-detail \{ grid-template-columns:/);
+  assert.match(demo, /myWorkMobileViewport\.addEventListener\("change"/);
+  assert.match(demo, /if \(event\.matches \|\| state\.currentView !== "my-work-view"\) return;\s*state\.myWorkDetailOpen = false;/);
 });
 
 test("announcement inbox can be toggled without leaving the current workspace", async () => {

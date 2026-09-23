@@ -239,7 +239,8 @@
     }
 
     .my-work-shell { max-width: none; padding: 0; }
-    .my-work-panel { min-height: calc(100vh - 100px); display:grid; grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); overflow:hidden; border-radius:20px; }
+    .my-work-panel { min-height: calc(100vh - 100px); display:grid; grid-template-columns:minmax(0, 1fr); overflow:hidden; border-radius:20px; }
+    .my-work-panel.has-detail { grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); }
     .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, var(--my-work-overlay-start), var(--my-work-overlay-end)), var(--my-work-image); background-position:center; background-size:cover; }
     .my-work-list h2 { font-size:28px; color:#fff; }
     .my-work-row { width:100%; display:grid; grid-template-columns:24px 1fr 24px; gap:12px; align-items:start; margin:3px 0; padding:12px; text-align:left; border-radius:4px; background:rgba(255,255,255,.70); color:#1f2732; backdrop-filter:blur(8px); }
@@ -252,6 +253,26 @@
     .circle-check { appearance:none; width:19px; height:19px; margin:2px 0 0; border:2px solid #6b7280; border-radius:50%; background:#fff; }
     .circle-check:checked { border-color:var(--accent); background:radial-gradient(circle,var(--accent) 45%,#fff 48%); }
     .my-work-task-list { flex:1; min-height:0; margin-top:24px; overflow:auto; }
+    .my-work-tabs { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:16px; padding:4px; border-radius:10px; background:rgba(22,35,69,.28); }
+    .my-work-tab { min-height:34px; border-radius:7px; color:rgba(255,255,255,.78); background:transparent; font-weight:700; }
+    .my-work-tab.active { color:#172033; background:rgba(255,255,255,.9); }
+    .my-work-section-toggle { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:36px; margin:8px 0 4px; padding:7px 10px; border-radius:7px; color:#fff; background:rgba(20,31,61,.42); text-align:left; font-weight:700; }
+    .my-work-section-toggle:hover { background:rgba(20,31,61,.58); box-shadow:none; transform:none; }
+    .my-work-section-count { display:inline-grid; min-width:24px; height:22px; place-items:center; padding:0 7px; border-radius:999px; color:#26324a; background:rgba(255,255,255,.82); font-size:11px; }
+    .my-work-archive-toolbar { display:grid; grid-template-columns:minmax(0,1fr) 132px; gap:8px; margin-bottom:10px; }
+    .my-work-archive-toolbar .field { min-height:36px; padding:7px 10px; border-color:rgba(255,255,255,.34); background:rgba(255,255,255,.84); }
+    .my-work-archive-months { display:grid; gap:7px; }
+    .my-work-archive-month { display:grid; grid-template-columns:minmax(0,1fr) auto 18px; gap:10px; align-items:center; width:100%; min-height:46px; padding:8px 11px; border:1px solid rgba(255,255,255,.2); border-radius:9px; color:#fff; background:rgba(20,31,61,.42); text-align:left; }
+    .my-work-archive-month:hover { background:rgba(20,31,61,.58); box-shadow:none; transform:none; }
+    .my-work-archive-month strong { color:#fff; text-transform:capitalize; }
+    .my-work-archive-month small { display:block; margin-top:2px; color:rgba(255,255,255,.68); }
+    .my-work-archive-detail-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; padding:8px 0; color:#fff; }
+    .my-work-archive-detail-head strong { display:block; color:#fff; text-transform:capitalize; }
+    .my-work-archive-actions { display:flex; gap:6px; }
+    .my-work-archive-actions button { min-height:32px; padding:6px 9px; border-radius:7px; color:#fff; background:rgba(20,31,61,.48); }
+    .my-work-archive-actions button:hover { background:rgba(20,31,61,.66); box-shadow:none; transform:none; }
+    .my-work-archive-detail .my-work-archive-toolbar { grid-template-columns:1fr; }
+    .my-work-empty { padding:22px 12px; color:rgba(255,255,255,.82); text-align:center; }
     .my-work-composer { display:flex; flex:0 0 auto; gap:10px; margin-top:12px; padding:12px; background:rgba(232,237,255,.65); border-radius:5px; backdrop-filter:blur(8px); }
     .my-work-composer input { flex:1; border:0; background:transparent; outline:0; }
     .my-work-detail { display:flex; flex-direction:column; padding:28px 22px; background:#fff; }
@@ -1810,6 +1831,18 @@
     .operations-matrix tbody > tr.main-row > td:nth-child(2) { left: 232px; }
     .operations-matrix thead th:nth-child(3),
     .operations-matrix tbody > tr.main-row > td:nth-child(3) { left: 324px; }
+
+    .operations-matrix.is-editing thead th:nth-child(2),
+    .operations-matrix.is-editing tbody > tr.main-row > td:nth-child(2) { left: 38px; }
+    .operations-matrix.is-editing thead th:nth-child(3),
+    .operations-matrix.is-editing tbody > tr.main-row > td:nth-child(3) { left: 270px; }
+    .operations-matrix.is-editing thead th:nth-child(4),
+    .operations-matrix.is-editing tbody > tr.main-row > td:nth-child(4) {
+      position: sticky;
+      left: 362px;
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.985);
+    }
 
     .operations-matrix thead th:nth-child(1),
     .operations-matrix thead th:nth-child(2),
@@ -4325,8 +4358,38 @@
       if (!proposal.industry) proposal.industry = "";
     });
 
+    const pageParams = new URLSearchParams(window.location.search);
+    const myWorkDemoMode = pageParams.get("demo") === "my-work";
+
+    function createMyWorkDemoTasks() {
+      const profileName = bootstrapProfile.profile.display_name || bootstrapProfile.profile.full_name || "Bagus";
+      const atMonthOffset = (offset, day, hour = 10) => {
+        const date = new Date();
+        date.setMonth(date.getMonth() + offset, day);
+        date.setHours(hour, 0, 0, 0);
+        return date;
+      };
+      const makeTask = (id, title, options = {}) => {
+        const created = options.created || atMonthOffset(0, 2, 9);
+        const completed = options.completed || null;
+        return { id, title, note: options.note || "", steps: options.steps || [], reminder: "", dueDate: options.dueDate || "", caseId: "", done: Boolean(completed), completedAt: completed?.getTime() || 0, createdAt: created.getTime(), createdAtText: created.toISOString(), creatorName: profileName, completedByName: completed ? profileName : "", assignees: options.assignees || [], repeatRule: "none", favorite: Boolean(options.favorite), favoritedAt: options.favorite ? Date.now() : 0, version: created.toISOString() };
+      };
+      return [
+        makeTask("demo-active-1", "Review monthly VAT reconciliation", { favorite: true, dueDate: atMonthOffset(0, 26).toISOString().slice(0, 10), steps: [{ title: "Check sales ledger", done: true }, { title: "Match VAT invoices", done: false }, { title: "Prepare final calculation", done: false }] }),
+        makeTask("demo-active-2", "Prepare response for PT North Hills Bali", { steps: [{ title: "Collect supporting documents", done: true }, { title: "Draft response letter", done: false }] }),
+        makeTask("demo-active-3", "Follow up withholding tax documents", { assignees: ["Ita"], steps: [{ title: "Send client reminder", done: false }] }),
+        makeTask("demo-completed-1", "Submit PPh 21 monthly return", { completed: atMonthOffset(0, 8, 14), steps: [{ title: "Validate payroll", done: true }, { title: "Submit return", done: true }] }),
+        makeTask("demo-completed-2", "Update tax payment tracker", { completed: atMonthOffset(0, 5, 16) }),
+        makeTask("demo-completed-3", "Send tax claim to client", { completed: atMonthOffset(0, 3, 11) }),
+        makeTask("demo-archive-1", "Finalize VAT working paper", { created: atMonthOffset(-1, 4), completed: atMonthOffset(-1, 24, 15), steps: [{ title: "Reconcile input VAT", done: true }, { title: "Archive evidence", done: true }] }),
+        makeTask("demo-archive-2", "Submit monthly tax package", { created: atMonthOffset(-1, 2), completed: atMonthOffset(-1, 20, 13) }),
+        makeTask("demo-archive-3", "Review client withholding slips", { created: atMonthOffset(-2, 5), completed: atMonthOffset(-2, 25, 10) }),
+        makeTask("demo-archive-4", "Complete prior-period reconciliation", { created: atMonthOffset(-2, 3), completed: atMonthOffset(-2, 18, 17) })
+      ];
+    }
+
     const state = {
-      currentView: persistedDemoState?.ui?.currentView || "matrix-view",
+      currentView: myWorkDemoMode ? "my-work-view" : persistedDemoState?.ui?.currentView || "matrix-view",
       role: "staff",
       appearance: {
         theme: persistedDemoState?.ui?.appearance?.theme === "dark" ? "dark" : "light",
@@ -4410,9 +4473,14 @@
       proposalSearch: persistedDemoState?.ui?.proposalSearch || "",
       caseSearch: persistedDemoState?.ui?.caseSearch || "",
       profileTab: persistedDemoState?.ui?.profileTab || "profile",
-      myWork: Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
-      selectedMyWorkId: persistedDemoState?.ui?.selectedMyWorkId || "",
+      myWork: myWorkDemoMode ? createMyWorkDemoTasks() : Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
+      selectedMyWorkId: myWorkDemoMode ? "" : persistedDemoState?.ui?.selectedMyWorkId || "",
       myWorkDetailOpen: false,
+      myWorkTab: persistedDemoState?.ui?.myWorkTab === "archived" ? "archived" : "current",
+      myWorkCompletedOpen: persistedDemoState?.ui?.myWorkCompletedOpen !== false,
+      myWorkArchivePeriod: persistedDemoState?.ui?.myWorkArchivePeriod || "",
+      myWorkArchiveYear: persistedDemoState?.ui?.myWorkArchiveYear || "all",
+      myWorkArchiveQuery: "",
       myWorkMenu: "",
       addingMyWorkStepId: "",
       newMyWorkTaskId: "",
@@ -4439,7 +4507,7 @@
       }
     };
 
-    if (new URLSearchParams(window.location.search).get("view") === "announcement-view") {
+    if (pageParams.get("view") === "announcement-view") {
       state.currentView = "announcement-view";
     }
 
@@ -7407,7 +7475,7 @@
               ` : ``}
 
               <div class="table-wrap desktop-only">
-                <table class="operations-matrix">
+                <table class="operations-matrix ${state.monthlyEditMode ? "is-editing" : ""}">
                   <colgroup>
                     ${state.monthlyEditMode ? `<col style="width:38px" />` : ``}
                     <col class="client-col" />
@@ -8255,22 +8323,82 @@
         </div>`);
     }
 
+    function exportMyWorkArchivePeriod(period) {
+      const tasks = state.myWork
+        .filter((task) => {
+          if (!task.done || !task.completedAt) return false;
+          const completed = new Date(task.completedAt);
+          return `${completed.getFullYear()}-${String(completed.getMonth() + 1).padStart(2, "0")}` === period;
+        })
+        .sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0));
+      if (!tasks.length) return;
+      const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+      const rows = [
+        ["Task", "Completed At", "Created By", "Assigned To", "Linked Case", "Completed Steps", "Total Steps"],
+        ...tasks.map((task) => {
+          const linked = taxCases.find((item) => item.id === task.caseId);
+          return [
+            task.title,
+            new Date(task.completedAt).toLocaleString("id-ID"),
+            task.creatorName || "",
+            Array.isArray(task.assignees) ? task.assignees.join(", ") : "",
+            linked ? `${linked.caseCategory || linked.caseType || "Case"} - ${linked.clientName || ""}` : "",
+            task.steps?.filter((step) => step.done).length || 0,
+            task.steps?.length || 0
+          ];
+        })
+      ];
+      const blob = new Blob(["\ufeff", rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `my-work-archive-${period}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    }
+
     function renderMyWork() {
       const root = document.getElementById("my-work-view");
-      const tasks = [...state.myWork].sort((a, b) => {
-        if (Boolean(a.done) !== Boolean(b.done)) return a.done ? 1 : -1;
-        if (a.done) return Number(b.completedAt || 0) - Number(a.completedAt || 0);
-        return Number(Boolean(b.favorite)) - Number(Boolean(a.favorite)) || Number(b.favoritedAt || 0) - Number(a.favoritedAt || 0);
-      });
+      const archiveThreshold = new Date();
+      archiveThreshold.setDate(1);
+      archiveThreshold.setHours(0, 0, 0, 0);
+      const activeTasks = state.myWork.filter((task) => !task.done).sort((a, b) => Number(Boolean(b.favorite)) - Number(Boolean(a.favorite)) || Number(b.favoritedAt || 0) - Number(a.favoritedAt || 0));
+      const completedTasks = state.myWork.filter((task) => task.done && Number(task.completedAt || 0) >= archiveThreshold.getTime()).sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0));
+      const archivedTasks = state.myWork.filter((task) => task.done && Number(task.completedAt || 0) > 0 && Number(task.completedAt || 0) < archiveThreshold.getTime()).sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0));
+      const archiveGroups = archivedTasks.reduce((groups, task) => {
+        const date = new Date(task.completedAt);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        const existing = groups.find((group) => group.key === key);
+        if (existing) existing.tasks.push(task);
+        else groups.push({ key, label: date.toLocaleDateString("id-ID", { month: "long", year: "numeric" }), tasks: [task] });
+        return groups;
+      }, []);
       const selected = state.myWork.find((task) => task.id === state.selectedMyWorkId);
-      const isMobileMyWork = window.matchMedia("(max-width: 900px)").matches;
-      const showMyWorkDetail = Boolean(selected && (!isMobileMyWork || state.myWorkDetailOpen));
+      const showMyWorkDetail = Boolean(selected && state.myWorkDetailOpen);
       const shouldAnimateDrawer = Boolean(showMyWorkDetail && state.myWorkDrawerTaskId !== selected.id);
       state.myWorkDrawerTaskId = showMyWorkDetail ? selected.id : "";
       const linkedCase = taxCases.find((item) => item.id === selected?.caseId);
       const availableCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
+      const taskRow = (task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" role="button" tabindex="0"><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" ${task.done ? "checked" : ""} /><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps${task.done && task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}</div></div><button class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`;
+      const currentTaskMarkup = `${activeTasks.map(taskRow).join("") || `<div class="my-work-empty">No active tasks.</div>`}<button class="my-work-section-toggle" data-toggle-my-work-completed="yes"><span>${state.myWorkCompletedOpen ? "⌄" : "›"} Completed</span><span class="my-work-section-count">${completedTasks.length}</span></button>${state.myWorkCompletedOpen ? completedTasks.map(taskRow).join("") || `<div class="my-work-empty">No tasks completed this month.</div>` : ""}`;
+      const archiveYears = [...new Set(archiveGroups.map((group) => group.key.slice(0, 4)))];
+      if (state.myWorkArchiveYear !== "all" && !archiveYears.includes(state.myWorkArchiveYear)) state.myWorkArchiveYear = "all";
+      const archiveQuery = state.myWorkArchiveQuery.trim().toLocaleLowerCase("id-ID");
+      const selectedArchiveGroup = archiveGroups.find((group) => group.key === state.myWorkArchivePeriod);
+      const matchingArchiveTasks = selectedArchiveGroup
+        ? selectedArchiveGroup.tasks.filter((task) => !archiveQuery || task.title.toLocaleLowerCase("id-ID").includes(archiveQuery))
+        : [];
+      const visibleArchiveGroups = archiveGroups.filter((group) => {
+        if (state.myWorkArchiveYear !== "all" && !group.key.startsWith(`${state.myWorkArchiveYear}-`)) return false;
+        return !archiveQuery || group.tasks.some((task) => task.title.toLocaleLowerCase("id-ID").includes(archiveQuery));
+      });
+      const archiveToolbar = `<div class="my-work-archive-toolbar"><input id="my-work-archive-search" class="field" type="search" value="${escapeAttr(state.myWorkArchiveQuery)}" placeholder="Search archived tasks..." />${selectedArchiveGroup ? "" : `<select id="my-work-archive-year" class="field" aria-label="Filter archive year"><option value="all">All years</option>${archiveYears.map((year) => `<option value="${year}" ${state.myWorkArchiveYear === year ? "selected" : ""}>${year}</option>`).join("")}</select>`}</div>`;
+      const archivedTaskMarkup = selectedArchiveGroup
+        ? `<section class="my-work-archive-detail"><div class="my-work-archive-detail-head"><div><strong>${escapeHtml(selectedArchiveGroup.label)}</strong><small>${selectedArchiveGroup.tasks.length} completed task${selectedArchiveGroup.tasks.length === 1 ? "" : "s"}</small></div><div class="my-work-archive-actions"><button data-close-my-work-archive-period="yes" aria-label="Back to archive months">&#8592; Back</button><button data-export-my-work-archive="${selectedArchiveGroup.key}">Export CSV</button></div></div>${archiveToolbar}${matchingArchiveTasks.map(taskRow).join("") || `<div class="my-work-empty">No archived tasks match this search.</div>`}</section>`
+        : `${archiveToolbar}<div class="my-work-archive-months">${visibleArchiveGroups.map((group) => `<button class="my-work-archive-month" data-open-my-work-archive-period="${group.key}"><span><strong>${escapeHtml(group.label)}</strong><small>Open this month's completed tasks</small></span><span class="my-work-section-count">${group.tasks.length}</span><span aria-hidden="true">&#8250;</span></button>`).join("") || `<div class="my-work-empty">${archiveGroups.length ? "No archive months match these filters." : "Completed tasks from previous months will appear here automatically."}</div>`}</div>`;
       const timeDialog = state.myWorkMenu && state.myWorkMenu !== "case" && selected ? `
         <div class="my-work-time-dialog-backdrop" data-close-my-work-menu="yes">
           <section class="my-work-time-dialog" role="dialog" aria-modal="true" aria-label="${state.myWorkMenu === "case" ? "Link to Case" : `Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}`}">
@@ -8291,13 +8419,15 @@
         </div>` : "";
       root.innerHTML = safeHtml(`
         <div class="workspace-frame my-work-shell">
-          <section class="my-work-panel">
+          <section class="my-work-panel ${showMyWorkDetail ? "has-detail" : ""}">
             <div class="my-work-list">
               <div class="eyebrow" style="color:#dce5ff">MY WORK</div><h2>Progress ${escapeHtml(state.selectedPic)}</h2>
+              ${myWorkDemoMode ? `<div class="pill accent" style="align-self:flex-start; margin-top:8px;">Preview data · not saved</div>` : ""}
+              <div class="my-work-tabs"><button class="my-work-tab ${state.myWorkTab === "current" ? "active" : ""}" data-my-work-tab="current">Current</button><button class="my-work-tab ${state.myWorkTab === "archived" ? "active" : ""}" data-my-work-tab="archived">Archived <span class="my-work-section-count">${archivedTasks.length}</span></button></div>
               <div class="my-work-task-list">
-                ${tasks.map((task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" role="button" tabindex="0"><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" ${task.done ? "checked" : ""} /><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps</div></div><button class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`).join("")}
+                ${state.myWorkTab === "archived" ? archivedTaskMarkup : currentTaskMarkup}
               </div>
-              <div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>
+              ${state.myWorkTab === "current" ? `<div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>` : ""}
             </div>
             ${showMyWorkDetail ? `<aside class="my-work-detail ${shouldAnimateDrawer ? "is-opening" : ""}">
               <button class="my-work-detail-back" data-close-my-work-detail="yes" aria-label="Back to task list">&#8592; Back to tasks</button>
@@ -8926,6 +9056,7 @@
     }
 
     async function loadSharedMyWork(background = false) {
+      if (myWorkDemoMode) return;
       try {
         const response = await appFetch("/api/my-work", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading My Work...");
         if (!response.ok) return;
@@ -8954,6 +9085,7 @@
     const myWorkSaveQueues = new WeakMap();
 
     function saveMyWorkTaskToDatabase(task, extra = {}) {
+      if (myWorkDemoMode) return;
       task.clientRequestId ||= crypto.randomUUID();
       task.pendingAssignees = [...new Set([...(task.pendingAssignees || []), ...(extra.addAssignees || [])])];
       if (typeof extra.favorite === "boolean") task.pendingFavorite = extra.favorite;
@@ -9477,8 +9609,12 @@
               proposalSearch: state.proposalSearch,
               caseSearch: state.caseSearch,
               profileTab: state.profileTab,
-              myWork: state.myWork,
+              myWork: myWorkDemoMode ? [] : state.myWork,
               selectedMyWorkId: state.selectedMyWorkId,
+              myWorkTab: state.myWorkTab,
+              myWorkCompletedOpen: state.myWorkCompletedOpen,
+              myWorkArchivePeriod: state.myWorkArchivePeriod,
+              myWorkArchiveYear: state.myWorkArchiveYear,
               monthlyProgress: state.monthlyProgress,
               activeMonthlyPeriod: state.activeMonthlyPeriod,
               syncIssues: state.syncIssues,
@@ -9609,6 +9745,7 @@
       if (viewId === "client-management-view" && window.matchMedia("(max-width: 900px)").matches) {
         state.clientManagementTab = "active";
       }
+      if (viewId === "my-work-view" && state.currentView !== "my-work-view") state.myWorkDetailOpen = false;
       state.currentView = viewId;
       renderActiveView();
       applyViewVisibility(viewId);
@@ -9950,6 +10087,11 @@
       const addMyWorkTrigger = target.closest("[data-add-my-work]");
       const completeMyWorkTrigger = target.closest("[data-my-work-done]");
       const selectMyWorkTrigger = target.closest("[data-select-my-work]");
+      const myWorkTabTrigger = target.closest("[data-my-work-tab]");
+      const toggleMyWorkCompletedTrigger = target.closest("[data-toggle-my-work-completed]");
+      const openMyWorkArchivePeriodTrigger = target.closest("[data-open-my-work-archive-period]");
+      const closeMyWorkArchivePeriodTrigger = target.closest("[data-close-my-work-archive-period]");
+      const exportMyWorkArchiveTrigger = target.closest("[data-export-my-work-archive]");
       const startMyWorkStepTrigger = target.closest("[data-start-my-work-step]");
       const starMyWorkTrigger = target.closest("[data-toggle-my-work-star]");
       const openMyWorkMenuTrigger = target.closest("[data-open-my-work-menu]");
@@ -9992,6 +10134,11 @@
       if (openMyWorkMenuTrigger) { state.myWorkMenu = openMyWorkMenuTrigger.getAttribute("data-open-my-work-menu"); commitUi("replace"); return; }
       if (closeMyWorkMenuTrigger && (target === closeMyWorkMenuTrigger || closeMyWorkMenuTrigger.tagName === "BUTTON")) { state.myWorkMenu = ""; commitUi("replace"); return; }
       if (closeMyWorkDetailTrigger) { state.myWorkDetailOpen = false; state.myWorkMenu = ""; state.addingMyWorkStepId = ""; commitUi("replace"); return; }
+      if (myWorkTabTrigger) { state.myWorkTab = myWorkTabTrigger.getAttribute("data-my-work-tab") === "archived" ? "archived" : "current"; state.myWorkDetailOpen = false; state.myWorkMenu = ""; commitUi("replace"); return; }
+      if (toggleMyWorkCompletedTrigger) { state.myWorkCompletedOpen = !state.myWorkCompletedOpen; commitUi("replace"); return; }
+      if (openMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = openMyWorkArchivePeriodTrigger.getAttribute("data-open-my-work-archive-period") || ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitUi("replace"); return; }
+      if (closeMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitUi("replace"); return; }
+      if (exportMyWorkArchiveTrigger) { exportMyWorkArchivePeriod(exportMyWorkArchiveTrigger.getAttribute("data-export-my-work-archive")); return; }
       if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (state.myWorkMenu === "due") task.dueDate = date.toISOString().slice(0, 10); else task.reminder = date.toISOString().slice(0, 16); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
       if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else task.reminder = value; } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
       if (saveMyWorkCaseTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) task.caseId = document.getElementById("my-work-case-picker")?.value || ""; state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { caseId: task.caseId }); return; }
@@ -11285,6 +11432,17 @@
 
     document.addEventListener("input", (event) => {
       const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (target?.id === "my-work-archive-search") {
+        state.myWorkArchiveQuery = target.value;
+        const cursor = target.selectionStart;
+        renderMyWork();
+        requestAnimationFrame(() => {
+          const replacement = document.getElementById("my-work-archive-search");
+          replacement?.focus();
+          if (replacement instanceof HTMLInputElement && cursor !== null) replacement.setSelectionRange(cursor, cursor);
+        });
+        return;
+      }
       if (target && SEARCH_STATE_BY_INPUT[target.id]) scheduleAutoSearch(target);
       if (!target || !target.matches('[data-case-field="clientName"]')) return;
       const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
@@ -11311,6 +11469,12 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof HTMLSelectElement && target.id === "my-work-archive-year") {
+        state.myWorkArchiveYear = target.value || "all";
+        commitUi("replace");
+        return;
+      }
 
       if (target instanceof HTMLSelectElement && target.id === "active-client-pic-filter") {
         state.clientPicFilter = target.value || "all";
@@ -11995,6 +12159,15 @@
       loadSharedCases(true);
       loadSharedMyWork(true);
       loadSharedAnnouncements(true);
+    });
+    const myWorkMobileViewport = window.matchMedia("(max-width: 900px)");
+    myWorkMobileViewport.addEventListener("change", (event) => {
+      if (event.matches || state.currentView !== "my-work-view") return;
+      state.myWorkDetailOpen = false;
+      state.myWorkMenu = "";
+      state.addingMyWorkStepId = "";
+      renderMyWork();
+      persistDemoState();
     });
     window.setTimeout(() => {
       queueLatestFameAnnouncement();
