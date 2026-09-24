@@ -275,9 +275,12 @@
     .my-work-empty { padding:22px 12px; color:rgba(255,255,255,.82); text-align:center; }
     .my-work-composer { display:flex; flex:0 0 auto; gap:10px; margin-top:12px; padding:12px; background:rgba(232,237,255,.65); border-radius:5px; backdrop-filter:blur(8px); }
     .my-work-composer input { flex:1; border:0; background:transparent; outline:0; }
-    .my-work-detail { display:flex; flex-direction:column; padding:28px 22px; background:#fff; }
+    .my-work-detail { position:relative; display:flex; flex-direction:column; padding:52px 22px 28px; background:#fff; }
     .my-work-detail.is-opening { animation:drawerIn 260ms ease both; }
     .my-work-detail-back { display:none; }
+    .my-work-detail-close { position:absolute; top:12px; right:14px; display:grid; width:32px; height:32px; place-items:center; padding:0; border-radius:9px; color:var(--muted); background:transparent; }
+    .my-work-detail-close svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
+    .my-work-detail-close:hover { color:var(--ink); background:var(--neutral-soft); box-shadow:none; transform:none; }
     .my-work-detail h3 { font-size:22px; line-height:1.25; margin:10px 0 18px; }
     .my-work-title-input { width:calc(100% - 35px); min-height:35px; padding:4px 0 6px; border:0; border-bottom:1px solid transparent; color:#1f2732; background:transparent; font:700 22px/1.25 var(--font-body); outline:0; overflow:hidden; resize:none; vertical-align:top; }
     .my-work-title-input:focus { border-bottom-color:var(--accent); }
@@ -4442,6 +4445,8 @@
       fameAnnouncement: null,
       annualActionPopup: null,
       allocationQuery: persistedDemoState?.ui?.allocationQuery || "",
+      allocationAccFilter: persistedDemoState?.ui?.allocationAccFilter || "all",
+      allocationTaxFilter: persistedDemoState?.ui?.allocationTaxFilter || "all",
       allocationShowChangedOnly: typeof persistedDemoState?.ui?.allocationShowChangedOnly === "boolean" ? persistedDemoState.ui.allocationShowChangedOnly : false,
       allocationDrafts: persistedDemoState?.ui?.allocationDrafts || {},
       allocationLastReport: persistedDemoState?.ui?.allocationLastReport || [],
@@ -5653,17 +5658,24 @@
           const draft = state.allocationDrafts[client.id] || {};
           const changed = (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) || (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic);
           if (state.allocationShowChangedOnly && !changed) return false;
+          if (state.allocationAccFilter !== "all" && client.accountingPic !== state.allocationAccFilter) return false;
+          if (state.allocationTaxFilter !== "all" && client.taxPic !== state.allocationTaxFilter) return false;
           if (!query) return true;
           return [
             client.clientCode,
             client.name,
+            client.businessForm,
             client.taxPic,
             client.accountingPic,
             draft.nextAccPic || "",
             draft.nextTaxPic || ""
           ].join(" ").toLowerCase().includes(query);
         })
-        .sort((left, right) => compareText(normalizedEntityName(left.name), normalizedEntityName(right.name)));
+        .sort((left, right) => {
+          const leftIdentity = splitBusinessName(left);
+          const rightIdentity = splitBusinessName(right);
+          return compareText(leftIdentity.form, rightIdentity.form) || compareText(leftIdentity.name, rightIdentity.name);
+        });
     }
 
     function printAllocationReport() {
@@ -6368,7 +6380,9 @@
       const stats = supervisorStats(list);
       const attention = mostProblematicClients(list);
       const billingQueue = billingReadyClients(list);
-      const activeCount = clients.length;
+      const activePortfolioClients = clientMasterClients.filter((client) => client.clientStatus !== "Inactive");
+      const activeCount = activePortfolioClients.length;
+      const activeMonthlyFeeBase = activePortfolioClients.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
       const proposalCount = proposals.filter((item) => !["Won", "Lost"].includes(item.status)).length;
       const completedCount = allVisibleClientsIncludingCompleted().filter((client) => isClientCompleted(client)).length;
       const leaderboard = performanceLeaderboard();
@@ -6380,11 +6394,11 @@
       const accountingTeamPoints = leaderboard.filter((row) => ACC_PICS.includes(row.pic)).reduce((sum, row) => sum + row.total, 0);
       const workloadByPic = ALL_PICS.map((pic) => ({
         pic,
-        activeRows: clients.filter((client) => client.taxPic === pic || client.accountingPic === pic).length,
+        activeRows: activePortfolioClients.filter((client) => client.taxPic === pic || client.accountingPic === pic).length,
         openCases: taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic).length
       }));
       const teamPerformance = ALL_PICS.map((pic) => {
-        const assignedClients = clients.filter((client) => client.taxPic === pic || client.accountingPic === pic);
+        const assignedClients = activePortfolioClients.filter((client) => client.taxPic === pic || client.accountingPic === pic);
         const assignedCases = taxCases.filter((item) => item.taxPic === pic || item.accountingPic === pic);
         const monthlyCompleted = Object.values(state.monthlyProgress).flat().filter((client) => (client.taxPic === pic || client.accountingPic === pic) && isClientCompleted(client)).length;
         const annualAccountingDone = annualAccountingRows.filter((row) => row.accountingPic === pic && String(row.progress || "").toLowerCase().includes("done")).length;
@@ -6439,7 +6453,7 @@
 
           ${state.managementTab === "overview" ? `
             <section class="compact-grid-4">
-              <div class="metric"><div class="eyebrow">Active Client Portfolio</div><strong>${activeCount}</strong><div class="sub">${currency(clients.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0))} monthly fee base.</div></div>
+              <div class="metric"><div class="eyebrow">Active Client Portfolio</div><strong>${activeCount}</strong><div class="sub">${currency(activeMonthlyFeeBase)} monthly fee base.</div></div>
               <div class="metric"><div class="eyebrow">Open Cases</div><strong>${taxCases.filter((item) => item.stage !== "Closed").length}</strong><div class="sub">${taxCases.filter((item) => item.stage === "Closed" || item.completionDate).length} cases completed.</div></div>
               <div class="metric"><div class="eyebrow">Operational Risk</div><strong>${stats.revisions + stats.followUpRisk}</strong><div class="sub">Revisions and high follow-up clients.</div></div>
               <div class="metric"><div class="eyebrow">Team Points</div><strong>${teamPerformance.reduce((sum, row) => sum + row.points, 0)}</strong><div class="sub">${teamPerformance.length} active PIC profiles.</div></div>
@@ -6657,6 +6671,8 @@
     function renderAllocation(rootOverride = null) {
       const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
+      const allocationAccOptions = [...new Set([...ACC_PICS, ...clients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
+      const allocationTaxOptions = [...new Set([...TAX_PICS, ...clients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
       const allocationWindow = windowedRows(rows, "allocation-clients", 48);
       const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
       const pendingChanges = rows.filter((client) => {
@@ -6676,6 +6692,8 @@
           <section class="panel">
             <div class="toolbar compact-toolbar">
               <div class="toolbar-left">
+                <select id="allocation-acc-filter" class="filter-select" aria-label="Filter by ACC PIC"><option value="all">All ACC PIC</option>${allocationAccOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationAccFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
+                <select id="allocation-tax-filter" class="filter-select" aria-label="Filter by Tax PIC"><option value="all">All Tax PIC</option>${allocationTaxOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationTaxFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <input id="allocation-query" class="filter-input" type="text" placeholder="Search client, code, current PIC, next PIC" value="${state.allocationQuery}" />
               </div>
               <div class="toolbar-right">
@@ -6690,7 +6708,8 @@
                 <thead>
                   <tr>
                     <th>Code</th>
-                    <th>Client</th>
+                    <th>Form</th>
+                    <th>Client Name</th>
                     <th>Current ACC PIC</th>
                     <th>Next ACC PIC</th>
                     <th>Current TAX PIC</th>
@@ -6699,22 +6718,24 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${virtualSpacer(7, allocationWindow.top)}${allocationWindow.rows.map((client) => {
+                  ${virtualSpacer(8, allocationWindow.top)}${allocationWindow.rows.map((client) => {
                     const draft = state.allocationDrafts[client.id] || {};
                     const nextAcc = draft.nextAccPic || client.accountingPic;
                     const nextTax = draft.nextTaxPic || client.taxPic;
                     const changed = nextAcc !== client.accountingPic || nextTax !== client.taxPic;
+                    const identity = splitBusinessName(client);
                     return `
                       <tr>
-                        <td>${client.clientCode}</td>
-                        <td>${client.name}</td>
-                        <td>${client.accountingPic}</td>
+                        <td>${escapeHtml(client.clientCode)}</td>
+                        <td>${escapeHtml(identity.form || "Individual")}</td>
+                        <td>${escapeHtml(identity.name)}</td>
+                        <td>${escapeHtml(client.accountingPic)}</td>
                         <td>
                           <select class="inline-select" data-allocation-acc="${client.id}">
                             ${optionsMarkup(ACC_PICS, nextAcc)}
                           </select>
                         </td>
-                        <td>${client.taxPic}</td>
+                        <td>${escapeHtml(client.taxPic)}</td>
                         <td>
                           <select class="inline-select" data-allocation-tax="${client.id}">
                             ${optionsMarkup(TAX_PICS, nextTax)}
@@ -6723,7 +6744,7 @@
                         <td><span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending Update" : "Unchanged"}</span></td>
                       </tr>
                     `;
-                  }).join("") || `<tr><td colspan="7"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(7, allocationWindow.bottom)}
+                  }).join("") || `<tr><td colspan="8"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(8, allocationWindow.bottom)}
                 </tbody>
               </table>
             </div>` : ""}
@@ -6735,12 +6756,13 @@
                   const nextAcc = draft.nextAccPic || client.accountingPic;
                   const nextTax = draft.nextTaxPic || client.taxPic;
                   const changed = nextAcc !== client.accountingPic || nextTax !== client.taxPic;
+                  const identity = splitBusinessName(client);
                   return `
                     <div class="mobile-card">
                       <div class="mobile-card-header">
                         <div>
-                          <div class="mobile-card-title">${client.name}</div>
-                          <div class="subline">${client.clientCode}</div>
+                          <div class="mobile-card-title">${escapeHtml(identity.name)}</div>
+                          <div class="subline">${escapeHtml(identity.form || "Individual")} · ${escapeHtml(client.clientCode)}</div>
                         </div>
                         <span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending" : "Stable"}</span>
                       </div>
@@ -8430,6 +8452,7 @@
               ${state.myWorkTab === "current" ? `<div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>` : ""}
             </div>
             ${showMyWorkDetail ? `<aside class="my-work-detail ${shouldAnimateDrawer ? "is-opening" : ""}">
+              <button class="my-work-detail-close" data-close-my-work-detail="yes" aria-label="Close task details" title="Close task details"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
               <button class="my-work-detail-back" data-close-my-work-detail="yes" aria-label="Back to task list">&#8592; Back to tasks</button>
               ${selected ? `
                 <div class="my-work-card">
@@ -9596,6 +9619,8 @@
               performance: state.performance,
               announcements: state.announcements,
               allocationQuery: state.allocationQuery,
+              allocationAccFilter: state.allocationAccFilter,
+              allocationTaxFilter: state.allocationTaxFilter,
               allocationShowChangedOnly: state.allocationShowChangedOnly,
               allocationDrafts: state.allocationDrafts,
               allocationLastReport: state.allocationLastReport,
@@ -9811,6 +9836,8 @@
         performance: JSON.parse(JSON.stringify(state.performance)),
         announcements: JSON.parse(JSON.stringify(state.announcements)),
         allocationQuery: state.allocationQuery,
+        allocationAccFilter: state.allocationAccFilter,
+        allocationTaxFilter: state.allocationTaxFilter,
         allocationShowChangedOnly: state.allocationShowChangedOnly,
         allocationDrafts: JSON.parse(JSON.stringify(state.allocationDrafts)),
         allocationLastReport: JSON.parse(JSON.stringify(state.allocationLastReport)),
@@ -11469,6 +11496,15 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof HTMLSelectElement && ["allocation-acc-filter", "allocation-tax-filter"].includes(target.id)) {
+        if (target.id === "allocation-acc-filter") state.allocationAccFilter = target.value || "all";
+        if (target.id === "allocation-tax-filter") state.allocationTaxFilter = target.value || "all";
+        state.tableViewport["allocation-clients"] = 0;
+        state.virtualScrollTop = { ...(state.virtualScrollTop || {}), "allocation-clients": 0 };
+        commitUi("replace");
+        return;
+      }
 
       if (target instanceof HTMLSelectElement && target.id === "my-work-archive-year") {
         state.myWorkArchiveYear = target.value || "all";

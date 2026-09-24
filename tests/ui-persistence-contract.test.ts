@@ -83,6 +83,15 @@ test("Client Growth uses Client Master and includes active clients without a pre
   assert.match(demo, /year === currentYear\s+\? growthClients\.filter\(\(client\) => client\.clientStatus !== "Inactive"\)/);
 });
 
+test("KPI Overview counts only active Client Master records", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /const activePortfolioClients = clientMasterClients\.filter\(\(client\) => client\.clientStatus !== "Inactive"\)/);
+  assert.match(demo, /const activeCount = activePortfolioClients\.length/);
+  assert.match(demo, /const activeMonthlyFeeBase = activePortfolioClients\.reduce/);
+  assert.match(demo, /const assignedClients = activePortfolioClients\.filter/);
+  assert.doesNotMatch(demo, /const activeCount = clients\.length/);
+});
+
 test("Profile client scope uses Client Master and permanent PIC profile IDs", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /const assignedClients = clientMasterClients\.filter/);
@@ -136,6 +145,24 @@ test("allocation uses virtual rows and does not build the hidden mobile layout o
   assert.match(demo, /\["client-management-view", "allocation-view"\]\.includes\(state\.currentView\)/);
 });
 
+test("Allocation combines ACC PIC and Tax PIC dropdown filters", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /id="allocation-acc-filter"/);
+  assert.match(demo, /id="allocation-tax-filter"/);
+  assert.match(demo, /state\.allocationAccFilter !== "all" && client\.accountingPic !== state\.allocationAccFilter/);
+  assert.match(demo, /state\.allocationTaxFilter !== "all" && client\.taxPic !== state\.allocationTaxFilter/);
+  assert.match(demo, /allocationAccFilter: state\.allocationAccFilter/);
+  assert.match(demo, /allocationTaxFilter: state\.allocationTaxFilter/);
+});
+
+test("Allocation separates company form from the client name", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /<th>Form<\/th>\s*<th>Client Name<\/th>/);
+  assert.match(demo, /escapeHtml\(identity\.form \|\| "Individual"\)/);
+  assert.match(demo, /virtualSpacer\(8, allocationWindow\.top\)/);
+  assert.match(demo, /compareText\(leftIdentity\.form, rightIdentity\.form\)/);
+});
+
 test("mobile navigation is limited to operational companion workspaces", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /const MOBILE_WORKSPACE_VIEWS = new Set\(\["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view", "announcement-view"\]\)/);
@@ -161,6 +188,8 @@ test("mobile My Work opens details only after selecting a task", async () => {
   assert.match(demo, /myWorkDetailOpen: false/);
   assert.match(demo, /const showMyWorkDetail = Boolean\(selected && state\.myWorkDetailOpen\)/);
   assert.match(demo, /data-close-my-work-detail="yes"/);
+  assert.match(demo, /class="my-work-detail-close" data-close-my-work-detail="yes"/);
+  assert.match(demo, /\.my-work-detail-close \{ position:absolute; top:12px; right:14px;/);
   assert.match(demo, /state\.myWorkDetailOpen = true/);
   assert.match(demo, /topbar-actions \.ghost-btn\.inbox-trigger \{\s*display: none;/);
 });
