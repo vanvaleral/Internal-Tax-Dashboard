@@ -140,7 +140,7 @@ test("client master load surfaces failed syncs and does not retain sample record
 test("database connection status uses the verified profile before background schema checks", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /Secure staff session verified\. Workspace data is loading in the background\./);
-  assert.match(demo, /renderDatabaseSyncStatus\(\);\s+refreshDatabaseStatus\(true\);/);
+  assert.match(demo, /scheduleBackgroundLoad\(\(\) => refreshDatabaseStatus\(true\)\)/);
   assert.doesNotMatch(demo, /loadPerformanceLedger\(true\);\s+refreshDatabaseStatus\(true\);/);
 });
 
@@ -150,8 +150,8 @@ test("production startup never renders demo records before shared data arrives",
   assert.match(demo, /let clients = IS_OFFLINE_DEMO \? restoreCollection\("clients", DEFAULT_CLIENTS\) : \[\]/);
   assert.match(demo, /let taxCases = IS_OFFLINE_DEMO \? restoreCollection\("taxCases", DEFAULT_TAX_CASES\) : \[\]/);
   assert.match(demo, /Loading secure workspace\.\.\./);
-  assert.match(demo, /await Promise\.all\(\[\s*loadCurrentProfile\(true\),\s*loadSharedClients\(true\),\s*loadSharedCases\(true\),\s*loadSharedOperationalWorkspaces\(true\),\s*loadSharedMyWork\(true\),\s*loadSharedAnnouncements\(true\)/);
-  assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load"\)/);
+  assert.match(demo, /await Promise\.all\(\[\s*loadStaffDirectory\(true\),\s*loadSharedClients\(true\),\s*loadSharedCases\(true\),\s*loadSharedOperationalWorkspaces\(true\),\s*loadSharedMyWork\(true\),\s*loadSharedAnnouncements\(true\)/);
+  assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load", "is-entering"\)/);
 });
 
 test("client master is not restored from browser storage after a shared-data save fails", async () => {

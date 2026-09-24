@@ -1,0 +1,54 @@
+.app-loading-overlay.initial-load {
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #083757 0%, #071a2d 48%, #040c17 100%);
+  color: #effaff;
+  perspective: 650px;
+}
+.initial-load::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: repeating-radial-gradient(ellipse at center, transparent 0 75px, #00aef019 76px 77px, transparent 78px 150px);
+  animation: orbit-depth 5s linear infinite;
+  pointer-events: none;
+}
+.initial-load .app-loading-card {
+  position: relative;
+  background: transparent;
+  box-shadow: none;
+  width: min(90vw, 400px);
+  padding: 40px 20px;
+}
+.initial-load .app-loading-spinner { display: none; }
+.startup-orbit { display: none; }
+.initial-load .startup-orbit {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 28px;
+}
+.startup-orbit img { width: 94px; height: 94px; filter: drop-shadow(0 0 24px #00aeef66); animation: orbit-float 3s ease-in-out infinite; }
+.startup-orbit::before, .startup-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid #54d4ff45;
+  border-top: 3px solid #68deff;
+  border-radius: 50%;
+  animation: orbit-spin 2.4s linear infinite;
+}
+.startup-orbit::after { inset: 12px; border-top-color: #ffffff; animation-direction: reverse; animation-duration: 3.6s; }
+.initial-load #app-loading-message { display: block; font-size: 15px; letter-spacing: .02em; }
+.initial-load .startup-caption { display: block; margin-top: 10px; color: #86afc7; font-size: 12px; letter-spacing: .12em; }
+.startup-caption { display: none; }
+.app-loading-overlay.initial-load.is-entering { animation: orbit-enter 480ms ease-in forwards; pointer-events: none; }
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+@keyframes orbit-float { 50% { transform: translateY(-5px); } }
+@keyframes orbit-depth { to { transform: scale(1.25); } }
+@keyframes orbit-enter { to { transform: scale(3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .initial-load::before, .startup-orbit img, .startup-orbit::before, .startup-orbit::after { animation: none; }
+  .app-loading-overlay.initial-load.is-entering { animation: none; opacity: 0; }
+}

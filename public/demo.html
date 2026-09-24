@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tax Dashboard</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <style>
     :root {
       --canvas: #f2f0ea;
@@ -3615,12 +3616,28 @@
     <div class="app-loading-card"><div class="app-loading-spinner"></div><strong id="app-loading-message">Updating workspace...</strong></div>
   </div>
 
+  <link rel="stylesheet" href="startup-orbit.css" />
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
     const startupOverlay = document.getElementById("app-loading-overlay");
+    const startupCard = startupOverlay?.querySelector(".app-loading-card");
+    if (startupCard) {
+      const orbit = document.createElement("div");
+      orbit.className = "startup-orbit";
+      orbit.setAttribute("aria-hidden", "true");
+      const logo = document.createElement("img");
+      logo.src = "favicon.svg";
+      logo.alt = "";
+      orbit.append(logo);
+      startupCard.prepend(orbit);
+      const caption = document.createElement("span");
+      caption.className = "startup-caption";
+      caption.textContent = "LMATS CONSULTING / TAX DASHBOARD";
+      startupCard.append(caption);
+    }
     if (!IS_OFFLINE_DEMO && startupOverlay) {
       startupOverlay.classList.add("visible", "initial-load");
       const startupMessage = document.getElementById("app-loading-message");
@@ -8632,7 +8649,7 @@
       const overlay = document.getElementById("app-loading-overlay");
       // Global blocking overlays interrupt data entry. Keep the element hidden
       // and use the database chip as a lightweight background-sync indicator.
-      if (overlay) overlay.classList.remove("visible");
+      if (overlay && !overlay.classList.contains("initial-load")) overlay.classList.remove("visible");
       if (visible) {
         const chip = document.getElementById("database-status-chip");
         if (chip && !databaseStatusBeforeUpdate) {
@@ -12290,24 +12307,36 @@
       databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Secure staff session verified. Workspace data is loading in the background." };
     }
     renderDatabaseSyncStatus();
-    refreshDatabaseStatus(true);
     if (IS_OFFLINE_DEMO) {
       renderDatabaseSyncStatus();
     } else {
       // Never expose sample records while shared records are loading. Reveal
       // the workspace once each user-facing data source has answered.
       await Promise.all([
-        loadCurrentProfile(true),
+        loadStaffDirectory(true),
         loadSharedClients(true),
         loadSharedCases(true),
         loadSharedOperationalWorkspaces(true),
         loadSharedMyWork(true),
         loadSharedAnnouncements(true)
       ]);
-      startupOverlay?.classList.remove("visible", "initial-load");
+      // Data is ready: unlock immediately while the portal fades out.
+      const finishStartup = () => {
+        startupOverlay?.classList.remove("visible", "initial-load", "is-entering");
+      };
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        finishStartup();
+      } else {
+        startupOverlay?.classList.add("is-entering");
+        startupOverlay?.addEventListener("animationend", (event) => {
+          if (event.target === startupOverlay) finishStartup();
+        });
+        window.setTimeout(finishStartup, 550);
+      }
       startupOverlay?.setAttribute("aria-busy", "false");
     }
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
+    scheduleBackgroundLoad(() => refreshDatabaseStatus(true));
     scheduleBackgroundLoad(() => loadPerformanceLedger(true));
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
