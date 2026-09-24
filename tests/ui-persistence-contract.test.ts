@@ -61,6 +61,10 @@ test("the client and case lists use windowed table rendering", async () => {
   assert.match(demo, /function restoreVirtualTableScrollPositions\(\)/);
   assert.match(demo, /Math\.min\(Number\(state\.virtualScrollTop\[tableId\] \|\| 0\), maximum\)/);
   assert.match(demo, /"client-management-view", "allocation-view", "cases-view"/);
+  assert.match(demo, /overflow-anchor: none/);
+  assert.match(demo, /window\.setTimeout\(\(\) => \{/);
+  assert.match(demo, /const retainedScrollTop = wrap\.scrollTop/);
+  assert.match(demo, /wrap\.scrollTop = retainedScrollTop/);
 });
 
 test("Clients provides PIC filtering and an autosaving obligation quick panel", async () => {
