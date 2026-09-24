@@ -124,6 +124,23 @@ test("client master load surfaces failed syncs and does not retain sample record
   assert.doesNotMatch(demo, /const rows = Array\.isArray\(result\.data\) \? result\.data : \[\];\s*if \(!rows\.length\) return;/);
 });
 
+test("database connection status uses the verified profile before background schema checks", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /Secure staff session verified\. Workspace data is loading in the background\./);
+  assert.match(demo, /renderDatabaseSyncStatus\(\);\s+refreshDatabaseStatus\(true\);/);
+  assert.doesNotMatch(demo, /loadPerformanceLedger\(true\);\s+refreshDatabaseStatus\(true\);/);
+});
+
+test("production startup never renders demo records before shared data arrives", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /const IS_OFFLINE_DEMO = window\.location\.protocol === "file:"/);
+  assert.match(demo, /let clients = IS_OFFLINE_DEMO \? restoreCollection\("clients", DEFAULT_CLIENTS\) : \[\]/);
+  assert.match(demo, /let taxCases = IS_OFFLINE_DEMO \? restoreCollection\("taxCases", DEFAULT_TAX_CASES\) : \[\]/);
+  assert.match(demo, /Loading secure workspace\.\.\./);
+  assert.match(demo, /await Promise\.all\(\[\s*loadCurrentProfile\(true\),\s*loadSharedClients\(true\),\s*loadSharedCases\(true\),\s*loadSharedOperationalWorkspaces\(true\),\s*loadSharedMyWork\(true\),\s*loadSharedAnnouncements\(true\)/);
+  assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load"\)/);
+});
+
 test("client master is not restored from browser storage after a shared-data save fails", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /if \(\["clients", "proposals"\]\.includes\(key\)\) return deepClone\(fallback\);/);
@@ -243,6 +260,21 @@ test("My Work returns to a full-width list when moving from mobile to desktop", 
   assert.match(demo, /\.my-work-panel\.has-detail \{ grid-template-columns:/);
   assert.match(demo, /myWorkMobileViewport\.addEventListener\("change"/);
   assert.match(demo, /if \(event\.matches \|\| state\.currentView !== "my-work-view"\) return;\s*state\.myWorkDetailOpen = false;/);
+});
+
+test("desktop workspaces keep a stable width when tall menus add scrolling", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /html \{\s*scrollbar-gutter: stable;/);
+  assert.match(demo, /\.my-work-panel \{ min-height: calc\(100dvh - 132px\)/);
+  assert.match(demo, /\.main > \.panel,\s*\.main > \.view \{\s*width: 100%;\s*max-width: var\(--workspace-width\);/);
+});
+
+test("all workspace menus use one canvas background without green or yellow page gradients", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /body \{[\s\S]*?background: var\(--canvas\);/);
+  assert.doesNotMatch(demo, /radial-gradient\(circle at top left, rgba\(15, 118, 110/);
+  assert.doesNotMatch(demo, /radial-gradient\(circle at top right, rgba\(183, 106, 10/);
+  assert.match(demo, /<title>Tax Dashboard<\/title>/);
 });
 
 test("announcement inbox can be toggled without leaving the current workspace", async () => {

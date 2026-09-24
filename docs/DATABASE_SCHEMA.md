@@ -232,3 +232,7 @@ Recommended later tables:
 ## Proposal and Contract Pipeline
 
 Proposal, contract, and active-client stages retain one `client_master` row so conversion does not duplicate the client identity. The `status` progression is `Proposal` -> `Contract` -> `Active`; contract legal fields remain nullable while the record is a proposal and are validated by the application before activation. Migration `202609240001_proposal_contract_workflow.sql` adds the legal-party, notary, deed, and signing fields without rewriting existing client records.
+
+## PIC Allocation History
+
+Yearly PIC reassignment is stored in the immutable `client_pic_allocation_history` ledger. Allocation changes must use `apply_client_pic_allocation_batch`, which updates Client Master, writes the yearly before/after assignment, and adds Client Master activity in one transaction. The function is executable only by the service role; the API separately enforces leadership access and resolves PIC names to permanent staff profile IDs.

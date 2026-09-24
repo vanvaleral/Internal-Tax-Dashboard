@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tax Operations & Claim Control Center Demo</title>
+  <title>Tax Dashboard</title>
   <style>
     :root {
       --canvas: #f2f0ea;
@@ -40,11 +40,15 @@
       --line: #344154;
       --neutral-soft: #273447;
       --shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
-      background: radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 22%, transparent), transparent 28%), var(--canvas);
+      background: var(--canvas);
     }
 
     * {
       box-sizing: border-box;
+    }
+
+    html {
+      scrollbar-gutter: stable;
     }
 
     body {
@@ -52,10 +56,7 @@
       min-height: 100vh;
       font-family: "Segoe UI", Arial, sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.1), transparent 28%),
-        radial-gradient(circle at top right, rgba(183, 106, 10, 0.08), transparent 22%),
-        var(--canvas);
+      background: var(--canvas);
     }
 
     button,
@@ -102,6 +103,12 @@
     .app-loading-overlay.visible {
       opacity: 1;
       pointer-events: auto;
+    }
+
+    .app-loading-overlay.initial-load {
+      background: var(--canvas);
+      backdrop-filter: none;
+      transition: none;
     }
 
     .app-loading-card {
@@ -239,7 +246,7 @@
     }
 
     .my-work-shell { max-width: none; padding: 0; }
-    .my-work-panel { min-height: calc(100vh - 100px); display:grid; grid-template-columns:minmax(0, 1fr); overflow:hidden; border-radius:20px; }
+    .my-work-panel { min-height: calc(100dvh - 132px); display:grid; grid-template-columns:minmax(0, 1fr); overflow:hidden; border-radius:20px; }
     .my-work-panel.has-detail { grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); }
     .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, var(--my-work-overlay-start), var(--my-work-overlay-end)), var(--my-work-image); background-position:center; background-size:cover; }
     .my-work-list h2 { font-size:28px; color:#fff; }
@@ -3612,6 +3619,13 @@
   <script src="workspace-sync.js"></script>
   <script>
     (async () => {
+    const IS_OFFLINE_DEMO = window.location.protocol === "file:";
+    const startupOverlay = document.getElementById("app-loading-overlay");
+    if (!IS_OFFLINE_DEMO && startupOverlay) {
+      startupOverlay.classList.add("visible", "initial-load");
+      const startupMessage = document.getElementById("app-loading-message");
+      if (startupMessage) startupMessage.textContent = "Loading secure workspace...";
+    }
     function safeHtml(markup) {
       return DOMPurify.sanitize(markup, { USE_PROFILES: { html: true, svg: true }, FORBID_TAGS: ["style", "iframe", "object", "embed"], ALLOW_DATA_ATTR: true });
     }
@@ -4304,13 +4318,13 @@
       }
     ];
 
-    let clients = restoreCollection("clients", DEFAULT_CLIENTS);
+    let clients = IS_OFFLINE_DEMO ? restoreCollection("clients", DEFAULT_CLIENTS) : [];
     let clientsLoadedFromDatabase = false;
     let myWorkLoadedFromDatabase = false;
-    let proposals = restoreCollection("proposals", DEFAULT_PROPOSALS);
-    let taxCases = restoreCollection("taxCases", DEFAULT_TAX_CASES);
-    const annualAccountingRows = restoreCollection("annualAccountingRows", DEFAULT_ANNUAL_ACCOUNTING_ROWS);
-    const annualTaxRows = restoreCollection("annualTaxRows", DEFAULT_ANNUAL_TAX_ROWS);
+    let proposals = IS_OFFLINE_DEMO ? restoreCollection("proposals", DEFAULT_PROPOSALS) : [];
+    let taxCases = IS_OFFLINE_DEMO ? restoreCollection("taxCases", DEFAULT_TAX_CASES) : [];
+    const annualAccountingRows = IS_OFFLINE_DEMO ? restoreCollection("annualAccountingRows", DEFAULT_ANNUAL_ACCOUNTING_ROWS) : [];
+    const annualTaxRows = IS_OFFLINE_DEMO ? restoreCollection("annualTaxRows", DEFAULT_ANNUAL_TAX_ROWS) : [];
 
     clients.forEach((client, index) => {
       if (!client.taxPic) client.taxPic = client.pic || TAX_PICS[0];
@@ -4448,6 +4462,7 @@
       allocationQuery: persistedDemoState?.ui?.allocationQuery || "",
       allocationAccFilter: persistedDemoState?.ui?.allocationAccFilter || "all",
       allocationTaxFilter: persistedDemoState?.ui?.allocationTaxFilter || "all",
+      allocationYear: Number(persistedDemoState?.ui?.allocationYear || new Date().getFullYear()),
       allocationShowChangedOnly: typeof persistedDemoState?.ui?.allocationShowChangedOnly === "boolean" ? persistedDemoState.ui.allocationShowChangedOnly : false,
       allocationDrafts: persistedDemoState?.ui?.allocationDrafts || {},
       allocationLastReport: persistedDemoState?.ui?.allocationLastReport || [],
@@ -4479,7 +4494,7 @@
       proposalSearch: persistedDemoState?.ui?.proposalSearch || "",
       caseSearch: persistedDemoState?.ui?.caseSearch || "",
       profileTab: persistedDemoState?.ui?.profileTab || "profile",
-      myWork: myWorkDemoMode ? createMyWorkDemoTasks() : Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
+      myWork: myWorkDemoMode ? createMyWorkDemoTasks() : IS_OFFLINE_DEMO && Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
       selectedMyWorkId: myWorkDemoMode ? "" : persistedDemoState?.ui?.selectedMyWorkId || "",
       myWorkDetailOpen: false,
       myWorkTab: persistedDemoState?.ui?.myWorkTab === "archived" ? "archived" : "current",
@@ -5653,7 +5668,7 @@
 
     function allocationRows() {
       const query = state.allocationQuery.trim().toLowerCase();
-      return [...clients]
+      return [...clientMasterClients]
         .filter((client) => hasLeadershipAccess() || client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic)
         .filter((client) => {
           const draft = state.allocationDrafts[client.id] || {};
@@ -5705,7 +5720,7 @@
           </head>
           <body>
             <h1>Allocation PIC Update Report</h1>
-            <p>Dibuat oleh ${state.selectedPic} pada ${generatedAt}</p>
+            <p>Tahun alokasi ${state.allocationLastReport[0]?.allocationYear || state.allocationYear} · Dibuat oleh ${state.selectedPic} pada ${generatedAt}</p>
             <table>
               <thead>
                 <tr>
@@ -6672,8 +6687,8 @@
     function renderAllocation(rootOverride = null) {
       const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
-      const allocationAccOptions = [...new Set([...ACC_PICS, ...clients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
-      const allocationTaxOptions = [...new Set([...TAX_PICS, ...clients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
+      const allocationAccOptions = [...new Set([...ACC_PICS, ...clientMasterClients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
+      const allocationTaxOptions = [...new Set([...TAX_PICS, ...clientMasterClients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
       const allocationWindow = windowedRows(rows, "allocation-clients", 48);
       const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
       const pendingChanges = rows.filter((client) => {
@@ -6698,6 +6713,7 @@
                 <input id="allocation-query" class="filter-input" type="text" placeholder="Search client, code, current PIC, next PIC" value="${state.allocationQuery}" />
               </div>
               <div class="toolbar-right">
+                <label class="pill neutral">Allocation year <input id="allocation-year" type="number" min="2000" max="2200" value="${state.allocationYear}" style="width:72px" /></label>
                 <label class="pill neutral"><input id="allocation-changed-only" type="checkbox" ${state.allocationShowChangedOnly ? "checked" : ""} /> Changed only</label>
                 <button class="ghost-btn" data-print-allocation-report="yes">Print Latest Report</button>
                 <button class="solid-btn" data-apply-allocation="yes">Apply PIC Update</button>
@@ -9663,6 +9679,7 @@
               allocationQuery: state.allocationQuery,
               allocationAccFilter: state.allocationAccFilter,
               allocationTaxFilter: state.allocationTaxFilter,
+              allocationYear: state.allocationYear,
               allocationShowChangedOnly: state.allocationShowChangedOnly,
               allocationDrafts: state.allocationDrafts,
               allocationLastReport: state.allocationLastReport,
@@ -11370,7 +11387,7 @@
 
       if (applyAllocationTrigger) {
         const report = [];
-        clients.forEach((client) => {
+        clientMasterClients.forEach((client) => {
           const draft = state.allocationDrafts[client.id];
           if (!draft) return;
           const nextAcc = draft.nextAccPic || client.accountingPic;
@@ -11378,20 +11395,14 @@
           if (nextAcc === client.accountingPic && nextTax === client.taxPic) return;
           report.push({
             clientId: client.id,
+            clientCode: client.clientCode,
             clientName: client.name,
             previousAccPic: client.accountingPic,
             nextAccPic: nextAcc,
             previousTaxPic: client.taxPic,
             nextTaxPic: nextTax
           });
-          client.accountingPic = nextAcc;
-          client.taxPic = nextTax;
-          client.pic = client.taxPic;
-          client.lastUpdated = new Date().toLocaleString("sv-SE").replace("T", " ").slice(0, 16);
-          syncClientToAnnualRows(client);
         });
-        state.allocationLastReport = report;
-        state.allocationDrafts = {};
         if (!report.length) {
           window.alert("Tidak ada perubahan PIC yang bisa di-apply.");
           commitUi("replace");
@@ -11399,19 +11410,23 @@
         }
         setDatabaseStatus("updating");
         try {
-          await Promise.all(report.map((change) => saveClientToDatabase(clients.find((client) => client.id === change.clientId), { showLoading: false })));
+          const response = await appFetch("/api/clients/allocation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              allocationYear: state.allocationYear,
+              changes: report.map((change) => ({ clientCode: change.clientCode, nextTaxPic: change.nextTaxPic, nextAccPic: change.nextAccPic }))
+            })
+          }, "", { trackUpdate: false });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error([result.error, ...(result.details || [])].filter(Boolean).join("\n"));
+          state.allocationLastReport = report.map((change) => ({ ...change, allocationYear: state.allocationYear }));
+          state.allocationDrafts = {};
+          await loadSharedClients(true);
           clearSyncFailure("PIC allocation");
           setDatabaseStatus("connected");
           commitUi("push");
         } catch (error) {
-          report.forEach((change) => {
-            const client = clients.find((item) => item.id === change.clientId);
-            if (!client) return;
-            client.accountingPic = change.previousAccPic;
-            client.taxPic = change.previousTaxPic;
-            client.pic = client.taxPic;
-            syncClientToAnnualRows(client);
-          });
           state.allocationDrafts = Object.fromEntries(report.map((change) => [change.clientId, { nextAccPic: change.nextAccPic, nextTaxPic: change.nextTaxPic }]));
           markSyncFailure("PIC allocation", error);
           setDatabaseStatus("failed");
@@ -11578,6 +11593,13 @@
         state.tableViewport["allocation-clients"] = 0;
         state.virtualScrollTop = { ...(state.virtualScrollTop || {}), "allocation-clients": 0 };
         commitUi("replace");
+        return;
+      }
+
+      if (target instanceof HTMLInputElement && target.id === "allocation-year") {
+        const year = Number(target.value);
+        if (Number.isInteger(year) && year >= 2000 && year <= 2200) state.allocationYear = year;
+        persistDemoState();
         return;
       }
 
@@ -12242,19 +12264,33 @@
 
     rerender();
     persistDemoState();
-    // Initial UI uses the local workspace immediately. Supabase refreshes
-    // silently afterwards so slow connections never block navigation.
-    loadCurrentProfile(true);
-    loadSharedClients(true);
+    // The authenticated profile request already reached Supabase successfully.
+    // Reflect that immediately while the broader schema health audit runs.
+    if (window.location.protocol === "file:") {
+      databaseHealthStatus = { text: "Database: demo mode", className: "database-status-chip is-demo", title: "Local demo data is active." };
+    } else {
+      databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Secure staff session verified. Workspace data is loading in the background." };
+    }
+    renderDatabaseSyncStatus();
+    refreshDatabaseStatus(true);
+    if (IS_OFFLINE_DEMO) {
+      renderDatabaseSyncStatus();
+    } else {
+      // Never expose sample records while shared records are loading. Reveal
+      // the workspace once each user-facing data source has answered.
+      await Promise.all([
+        loadCurrentProfile(true),
+        loadSharedClients(true),
+        loadSharedCases(true),
+        loadSharedOperationalWorkspaces(true),
+        loadSharedMyWork(true),
+        loadSharedAnnouncements(true)
+      ]);
+      startupOverlay?.classList.remove("visible", "initial-load");
+      startupOverlay?.setAttribute("aria-busy", "false");
+    }
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
-    scheduleBackgroundLoad(() => {
-      loadSharedCases(true);
-      loadSharedOperationalWorkspaces(true);
-      loadSharedMyWork(true);
-      loadSharedAnnouncements(true);
-      loadPerformanceLedger(true);
-      refreshDatabaseStatus(true);
-    });
+    scheduleBackgroundLoad(() => loadPerformanceLedger(true));
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       loadSharedAnnouncements(true);

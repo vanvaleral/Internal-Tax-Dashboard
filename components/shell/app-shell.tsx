@@ -21,8 +21,8 @@ export function AppShell({
       <div className="mx-auto flex min-h-screen max-w-[1600px] gap-6 px-4 py-4 md:px-6 lg:px-8">
         <aside className="hidden w-64 shrink-0 flex-col rounded-[28px] border border-line/70 bg-white/80 p-5 shadow-panel backdrop-blur md:flex">
           <div className="mb-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Tax Ops</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">Compliance Control</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">LMATS Consulting</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">Tax Dashboard</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Designed for fast recurring tax work, revision visibility, and clean accountability.
             </p>
