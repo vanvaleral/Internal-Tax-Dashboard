@@ -2606,6 +2606,7 @@
     }
 
     .client-table col.client-name-col { width: 190px; }
+    .client-table col.client-number-col { width: 48px; }
     .client-table col.client-form-col { width: 72px; }
     .client-table col.client-code-col { width: 74px; }
     .client-table col.client-npwp-col { width: 148px; }
@@ -6707,6 +6708,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th>No.</th>
                     <th>Code</th>
                     <th>Form</th>
                     <th>Client Name</th>
@@ -6718,7 +6720,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${virtualSpacer(8, allocationWindow.top)}${allocationWindow.rows.map((client) => {
+                  ${virtualSpacer(9, allocationWindow.top)}${allocationWindow.rows.map((client, index) => {
                     const draft = state.allocationDrafts[client.id] || {};
                     const nextAcc = draft.nextAccPic || client.accountingPic;
                     const nextTax = draft.nextTaxPic || client.taxPic;
@@ -6726,6 +6728,7 @@
                     const identity = splitBusinessName(client);
                     return `
                       <tr>
+                        <td>${allocationWindow.start + index + 1}</td>
                         <td>${escapeHtml(client.clientCode)}</td>
                         <td>${escapeHtml(identity.form || "Individual")}</td>
                         <td>${escapeHtml(identity.name)}</td>
@@ -6744,14 +6747,14 @@
                         <td><span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending Update" : "Unchanged"}</span></td>
                       </tr>
                     `;
-                  }).join("") || `<tr><td colspan="8"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(8, allocationWindow.bottom)}
+                  }).join("") || `<tr><td colspan="9"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(9, allocationWindow.bottom)}
                 </tbody>
               </table>
             </div>` : ""}
 
             ${isMobileLayout ? `<div>
               <div class="list-grid">
-                ${rows.map((client) => {
+                ${rows.map((client, index) => {
                   const draft = state.allocationDrafts[client.id] || {};
                   const nextAcc = draft.nextAccPic || client.accountingPic;
                   const nextTax = draft.nextTaxPic || client.taxPic;
@@ -6761,7 +6764,7 @@
                     <div class="mobile-card">
                       <div class="mobile-card-header">
                         <div>
-                          <div class="mobile-card-title">${escapeHtml(identity.name)}</div>
+                          <div class="mobile-card-title">${index + 1}. ${escapeHtml(identity.name)}</div>
                           <div class="subline">${escapeHtml(identity.form || "Individual")} · ${escapeHtml(client.clientCode)}</div>
                         </div>
                         <span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending" : "Stable"}</span>
@@ -6943,6 +6946,7 @@
               <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43">
                 <table class="client-table">
                   <colgroup>
+                    <col class="client-number-col">
                     <col class="client-form-col">
                     <col class="client-name-col">
                     <col class="client-npwp-col">
@@ -6956,6 +6960,7 @@
                   </colgroup>
                   <thead>
                     <tr>
+                      <th>No.</th>
                       <th>Form</th>
                       <th>Name</th>
                       <th>NPWP</th>
@@ -6969,11 +6974,12 @@
                     </tr>
                   </thead>
                   <tbody>
-                    ${virtualSpacer(10, activeClientWindow.top)}${activeClientWindow.rows.map((client) => {
+                    ${virtualSpacer(11, activeClientWindow.top)}${activeClientWindow.rows.map((client, index) => {
                       const identity = splitBusinessName(client);
                       const clientExpanded = state.expandedClientMasterId === client.id;
                       return `
                       <tr data-keyboard-row="client" data-client-master-toggle="${client.id}" tabindex="0" aria-expanded="${clientExpanded}">
+                        <td>${activeClientWindow.start + index + 1}</td>
                         <td>${identity.form || "Individual"}</td>
                         <td class="client-name-cell" title="${client.name}">
                           <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
@@ -6987,19 +6993,19 @@
                         <td>${currency(client.annualFee)}</td>
                         <td class="client-action-cell"><button class="client-action-icon" data-client-master-toggle="${client.id}" aria-expanded="${clientExpanded}" aria-label="${clientExpanded ? "Collapse" : "Expand"} ${escapeAttr(identity.name)}" title="${clientExpanded ? "Collapse obligations" : "Quick-edit obligations"}"><svg class="client-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg></button><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"} ${escapeAttr(identity.name)}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
-                      ${clientExpanded ? `<tr class="client-obligation-quick-row"><td colspan="10"><div class="client-obligation-quick-panel"><span class="eyebrow">Monthly obligations</span>${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_LABELS[key]}</label>`; }).join("")}${hasLeadershipAccess() ? `<span class="subline">Changes save automatically.</span>` : `<span class="subline">Leadership access is required to modify Client Master.</span>`}</div></td></tr>` : ""}
+                      ${clientExpanded ? `<tr class="client-obligation-quick-row"><td colspan="11"><div class="client-obligation-quick-panel"><span class="eyebrow">Monthly obligations</span>${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_LABELS[key]}</label>`; }).join("")}${hasLeadershipAccess() ? `<span class="subline">Changes save automatically.</span>` : `<span class="subline">Leadership access is required to modify Client Master.</span>`}</div></td></tr>` : ""}
                     `;
-                    }).join("")}${virtualSpacer(10, activeClientWindow.bottom)}
+                    }).join("")}${virtualSpacer(11, activeClientWindow.bottom)}
                   </tbody>
                 </table>
               </div>
               <div class="mobile-only">
                 <div class="list-grid">
-                  ${activeClientRows.map((client) => {
+                  ${activeClientRows.map((client, index) => {
                     const identity = splitBusinessName(client);
                     const clientExpanded = state.expandedClientMasterId === client.id;
                     return `
-                    <div class="mobile-card client-mobile-card"><div class="client-mobile-row" data-client-master-toggle="${client.id}"><div class="client-mobile-name"><button class="client-link" data-open-client="${client.id}">${identity.name}</button></div><div class="client-mobile-pic">Tax PIC: <strong>${client.taxPic || "-"}</strong></div><div class="client-mobile-pic">ACC PIC: <strong>${client.accountingPic || "-"}</strong></div><div class="client-mobile-actions"><button class="client-action-icon" data-client-master-toggle="${client.id}" aria-expanded="${clientExpanded}" aria-label="${clientExpanded ? "Collapse" : "Expand"} obligations"><svg class="client-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg></button><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit client" title="Edit client">&#9998;</button></div></div>${clientExpanded ? `<div class="client-obligation-quick-panel">${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_SHORT_LABELS[key]}</label>`; }).join("")}</div>` : ""}</div>
+                    <div class="mobile-card client-mobile-card"><div class="client-mobile-row" data-client-master-toggle="${client.id}"><div class="client-mobile-name"><button class="client-link" data-open-client="${client.id}">${index + 1}. ${identity.name}</button></div><div class="client-mobile-pic">Tax PIC: <strong>${client.taxPic || "-"}</strong></div><div class="client-mobile-pic">ACC PIC: <strong>${client.accountingPic || "-"}</strong></div><div class="client-mobile-actions"><button class="client-action-icon" data-client-master-toggle="${client.id}" aria-expanded="${clientExpanded}" aria-label="${clientExpanded ? "Collapse" : "Expand"} obligations"><svg class="client-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg></button><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit client" title="Edit client">&#9998;</button></div></div>${clientExpanded ? `<div class="client-obligation-quick-panel">${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_SHORT_LABELS[key]}</label>`; }).join("")}</div>` : ""}</div>
               `;
                   }).join("")}
                 </div>

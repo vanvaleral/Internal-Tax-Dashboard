@@ -164,8 +164,18 @@ test("Allocation separates company form from the client name", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /<th>Form<\/th>\s*<th>Client Name<\/th>/);
   assert.match(demo, /escapeHtml\(identity\.form \|\| "Individual"\)/);
-  assert.match(demo, /virtualSpacer\(8, allocationWindow\.top\)/);
+  assert.match(demo, /virtualSpacer\(9, allocationWindow\.top\)/);
   assert.match(demo, /compareText\(leftIdentity\.form, rightIdentity\.form\)/);
+});
+
+test("Clients and Allocation number their filtered client rows", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /allocationWindow\.rows\.map\(\(client, index\) =>/);
+  assert.match(demo, /allocationWindow\.start \+ index \+ 1/);
+  assert.match(demo, /activeClientWindow\.rows\.map\(\(client, index\) =>/);
+  assert.match(demo, /activeClientWindow\.start \+ index \+ 1/);
+  assert.match(demo, /client-number-col/);
+  assert.match(demo, /virtualSpacer\(11, activeClientWindow\.top\)/);
 });
 
 test("mobile navigation is limited to operational companion workspaces", async () => {
