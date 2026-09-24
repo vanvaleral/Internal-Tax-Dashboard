@@ -52,19 +52,16 @@ test("Settings exposes per-device Web Push controls", async () => {
   assert.match(demo, /\/api\/push-subscriptions/);
 });
 
-test("the client and case lists use windowed table rendering", async () => {
+test("the client and case lists use native scrolling without virtual spacers", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function windowedRows\(rows, tableId, rowHeight\)/);
-  assert.match(demo, /state\.tableViewport\[tableId\] = start/);
+  assert.match(demo, /rows,\s*top: 0,\s*bottom: 0/);
   assert.match(demo, /data-virtual-table="active-clients"/);
   assert.match(demo, /data-virtual-table="cases"/);
   assert.match(demo, /function restoreVirtualTableScrollPositions\(\)/);
   assert.match(demo, /Math\.min\(Number\(state\.virtualScrollTop\[tableId\] \|\| 0\), maximum\)/);
-  assert.match(demo, /"client-management-view", "allocation-view", "cases-view"/);
-  assert.match(demo, /overflow-anchor: none/);
-  assert.match(demo, /window\.setTimeout\(\(\) => \{/);
-  assert.match(demo, /const retainedScrollTop = wrap\.scrollTop/);
-  assert.match(demo, /wrap\.scrollTop = retainedScrollTop/);
+  assert.doesNotMatch(demo, /function updateVirtualTableViewport\(/);
+  assert.doesNotMatch(demo, /target\?\.matches\("\[data-virtual-table\]"\)/);
 });
 
 test("Clients provides PIC filtering and an autosaving obligation quick panel", async () => {
@@ -145,12 +142,12 @@ test("non-Operations UI changes never enqueue an Operations workspace save", asy
   assert.match(demo, /if \(state\.currentView === "matrix-view" && state\.operationsMode === "annual"/);
 });
 
-test("allocation uses virtual rows and does not build the hidden mobile layout on desktop", async () => {
+test("allocation uses native table scrolling and does not build the hidden mobile layout on desktop", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /const allocationWindow = windowedRows\(rows, "allocation-clients", 48\)/);
   assert.match(demo, /data-virtual-table="allocation-clients"/);
   assert.match(demo, /\$\{!isMobileLayout \? `<div class="table-wrap"/);
-  assert.match(demo, /\["client-management-view", "allocation-view", "cases-view"\]\.includes\(state\.currentView\)/);
+  assert.match(demo, /rows,\s*top: 0,\s*bottom: 0/);
 });
 
 test("Allocation combines ACC PIC and Tax PIC dropdown filters", async () => {

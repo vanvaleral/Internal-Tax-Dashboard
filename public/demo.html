@@ -1707,7 +1707,6 @@
     .table-wrap[data-virtual-table] {
       max-height: min(68vh, 720px);
       overscroll-behavior: contain;
-      overflow-anchor: none;
     }
 
     .virtual-spacer td {
@@ -6847,16 +6846,13 @@
     }
 
     function windowedRows(rows, tableId, rowHeight) {
-      const requestedStart = Number(state.tableViewport[tableId] || 0);
-      const pageSize = 56;
-      const start = Math.max(0, Math.min(requestedStart, Math.max(0, rows.length - pageSize)));
-      state.tableViewport[tableId] = start;
-      const end = Math.min(rows.length, start + pageSize);
+      // Native scrolling is smoother and reliable for the current dataset
+      // size. Keeping this return shape avoids special cases in table views.
       return {
-        start,
-        rows: rows.slice(start, end),
-        top: start * rowHeight,
-        bottom: Math.max(0, rows.length - end) * rowHeight
+        start: 0,
+        rows,
+        top: 0,
+        bottom: 0
       };
     }
 
@@ -6883,44 +6879,6 @@
         wrap.scrollTop = restored;
         state.virtualScrollTop[tableId] = restored;
       });
-    }
-
-    function updateVirtualTableViewport(wrap) {
-      const tableId = wrap.getAttribute("data-virtual-table");
-      const rowHeight = Number(wrap.getAttribute("data-row-height") || 44);
-      if (!tableId || !rowHeight) return;
-      const targetStart = Math.max(0, Math.floor(wrap.scrollTop / rowHeight) - 12);
-      const currentStart = Number(state.tableViewport[tableId] || 0);
-      state.virtualScrollTop = state.virtualScrollTop || {};
-      state.virtualScrollTop[tableId] = wrap.scrollTop;
-      // Always retain the user's latest scroll position, even when the
-      // render window has enough buffer and does not need moving yet.
-      if (Math.abs(targetStart - currentStart) < 8) return;
-      if (state.virtualRenderTimer) window.clearTimeout(state.virtualRenderTimer);
-      // Wait until the wheel/trackpad pauses so replacing tbody never fights
-      // the browser while it is applying momentum scrolling.
-      state.virtualRenderTimer = window.setTimeout(() => {
-        state.virtualRenderTimer = 0;
-        if (!["client-management-view", "allocation-view", "cases-view"].includes(state.currentView)) return;
-        state.tableViewport[tableId] = targetStart;
-        // Build the next row window off-screen, then replace only tbody.
-        // Keeping the scroll container in place prevents a visible jump to
-        // row one while a large client list is being virtualized.
-        const scratch = document.createElement("div");
-        const renderVirtualView = state.currentView === "allocation-view"
-          ? renderAllocation
-          : state.currentView === "cases-view"
-            ? renderCases
-            : renderClientManagement;
-        renderVirtualView(scratch);
-        const nextBody = scratch.querySelector(`[data-virtual-table="${tableId}"] tbody`);
-        const currentBody = wrap.querySelector("tbody");
-        const retainedScrollTop = wrap.scrollTop;
-        if (nextBody && currentBody) currentBody.replaceWith(nextBody);
-        else renderVirtualView();
-        wrap.scrollTop = retainedScrollTop;
-        state.virtualScrollTop[tableId] = retainedScrollTop;
-      }, 90);
     }
 
     function renderClientManagement(rootOverride = null) {
@@ -9995,11 +9953,6 @@
       restoreActiveEditor(activeEditor);
       if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
     }
-
-    document.addEventListener("scroll", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.matches("[data-virtual-table]")) updateVirtualTableViewport(target);
-    }, true);
 
     document.addEventListener("keydown", (event) => {
       if (!(event.target instanceof HTMLElement) || event.target.matches("input, textarea, select")) return;
