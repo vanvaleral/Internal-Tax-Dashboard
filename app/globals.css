@@ -42,37 +42,6 @@ button {
   height: 100dvh;
 }
 
-.page-loading {
-  display: flex;
-  min-height: 100dvh;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: rgba(245, 249, 251, .72);
-  color: #19384b;
-  font-size: 14px;
-}
-
-.page-loading-orbit {
-  display: grid;
-  width: 80px;
-  height: 80px;
-  place-items: center;
-  border: 2px solid #b9dff0;
-  border-top-color: #0788cf;
-  border-radius: 50%;
-  animation: page-loading-spin 1.8s linear infinite;
-}
-
-.page-loading-orbit img { width: 55px; height: 55px; animation: page-loading-counter-spin 1.8s linear infinite; }
-
-@keyframes page-loading-spin { to { transform: rotate(360deg); } }
-@keyframes page-loading-counter-spin { to { transform: rotate(-360deg); } }
-
-@media (prefers-reduced-motion: reduce) {
-  .page-loading-orbit, .page-loading-orbit img { animation: none; }
-}
 
 .auth-page {
   min-height: 100vh;

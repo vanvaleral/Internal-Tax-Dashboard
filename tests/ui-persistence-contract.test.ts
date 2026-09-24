@@ -152,7 +152,9 @@ test("production startup never renders demo records before shared data arrives",
   assert.match(demo, /let taxCases = IS_OFFLINE_DEMO \? restoreCollection\("taxCases", DEFAULT_TAX_CASES\) : \[\]/);
   assert.match(demo, /Loading secure workspace\.\.\./);
   assert.match(demo, /app-loading-overlay visible initial-load/);
-  assert.match(demo, /const initialLoads = \[loadSharedClients\(true\), loadStaffDirectory\(true\)\]/);
+  assert.match(demo, /const initialLoads = \[loadSharedClients\(true\)\]/);
+  assert.match(demo, /remainingLoads\.push\(loadStaffDirectory\(true\)\)/);
+  assert.doesNotMatch(demo, /Updating workspace\.\.\./);
   assert.match(demo, /const initialResults = await Promise\.all\(initialLoads\);\s*if \(!clientsLoadedFromDatabase \|\| initialResults\.some/);
   assert.match(demo, /Promise\.allSettled\(remainingLoads\)/);
   assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load", "is-entering"\)/);

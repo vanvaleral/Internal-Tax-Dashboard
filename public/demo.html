@@ -3523,6 +3523,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="startup-orbit.css?v=3" />
 </head>
 <body>
   <div class="shell">
@@ -3613,10 +3614,9 @@
   <div id="announcement-inbox-root"></div>
   <div id="appearance-settings-root"></div>
   <div class="app-loading-overlay visible initial-load" id="app-loading-overlay" aria-live="polite" aria-busy="true">
-    <div class="app-loading-card"><div class="app-loading-spinner"></div><strong id="app-loading-message">Updating workspace...</strong></div>
+    <div class="app-loading-card"><div class="startup-orbit" aria-hidden="true"><img src="favicon.svg" alt="" /></div><strong id="app-loading-message">Loading secure workspace...</strong></div>
   </div>
 
-  <link rel="stylesheet" href="startup-orbit.css?v=2" />
   <link rel="stylesheet" href="client-overview.css" />
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
@@ -3625,26 +3625,6 @@
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
     const startupOverlay = document.getElementById("app-loading-overlay");
     if (IS_OFFLINE_DEMO) startupOverlay?.classList.remove("visible", "initial-load");
-    const startupCard = startupOverlay?.querySelector(".app-loading-card");
-    if (startupCard) {
-      const orbit = document.createElement("div");
-      orbit.className = "startup-orbit";
-      orbit.setAttribute("aria-hidden", "true");
-      const logo = document.createElement("img");
-      logo.src = "favicon.svg";
-      logo.alt = "";
-      orbit.append(logo);
-      startupCard.prepend(orbit);
-      const caption = document.createElement("span");
-      caption.className = "startup-caption";
-      caption.textContent = "LMATS CONSULTING / TAX DASHBOARD";
-      startupCard.append(caption);
-    }
-    if (!IS_OFFLINE_DEMO && startupOverlay) {
-      startupOverlay.classList.add("visible", "initial-load");
-      const startupMessage = document.getElementById("app-loading-message");
-      if (startupMessage) startupMessage.textContent = "Loading secure workspace...";
-    }
     function safeHtml(markup) {
       return DOMPurify.sanitize(markup, { USE_PROFILES: { html: true, svg: true }, FORBID_TAGS: ["style", "iframe", "object", "embed"], ALLOW_DATA_ATTR: true });
     }
@@ -12303,7 +12283,7 @@
       renderDatabaseSyncStatus();
     } else {
       const initialView = state.currentView;
-      const initialLoads = [loadSharedClients(true), loadStaffDirectory(true)];
+      const initialLoads = [loadSharedClients(true)];
       const initialOperationScope = initialView === "matrix-view" ? "monthly_compliance"
         : initialView === "annual-accounting-view" ? "annual_accounting"
         : initialView === "annual-tax-view" ? "annual_tax" : "";
@@ -12311,8 +12291,7 @@
       if (["cases-view", "my-work-view"].includes(initialView)) initialLoads.push(loadSharedCases(true));
       if (initialView === "my-work-view") initialLoads.push(loadSharedMyWork(true));
       if (initialView === "client-view") {
-        initialLoads.push(loadSharedCases(true), loadSharedMyWork(true));
-        for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) initialLoads.push(loadSharedOperationalWorkspaces(true, scope));
+        initialLoads.push(loadSharedCases(true), loadSharedOperationalWorkspaces(true, "monthly_compliance"));
       }
       const initialResults = await Promise.all(initialLoads);
       if (!clientsLoadedFromDatabase || initialResults.some((result) => result === false)) {
@@ -12320,10 +12299,6 @@
         if (message) message.textContent = "Workspace data could not be loaded. Refresh to retry.";
         return;
       }
-      clientMasterClients.forEach((client) => {
-        client.taxPic = canonicalStaffName(client.taxPic, client.taxPicProfileId);
-        client.accountingPic = canonicalStaffName(client.accountingPic, client.accountingPicProfileId);
-      });
       databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Client Master loaded from the database." };
       rerender();
       persistDemoState();
@@ -12343,7 +12318,7 @@
       startupOverlay?.setAttribute("aria-busy", "false");
       const remainingLoads = [];
       if (initialView === "client-view") {
-        // The overview already loaded its three operational scopes.
+        remainingLoads.push(loadSharedOperationalWorkspaces(true, "annual_accounting"), loadSharedOperationalWorkspaces(true, "annual_tax"));
       } else if (initialOperationScope) {
         for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
           if (scope !== initialOperationScope) remainingLoads.push(loadSharedOperationalWorkspaces(true, scope));
@@ -12351,6 +12326,8 @@
       } else remainingLoads.push(loadSharedOperationalWorkspaces(true));
       if (!["cases-view", "my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedCases(true));
       if (!["my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedMyWork(true));
+      if (initialView === "client-view") remainingLoads.push(loadSharedMyWork(true));
+      remainingLoads.push(loadStaffDirectory(true));
       remainingLoads.push(loadSharedAnnouncements(true));
       Promise.allSettled(remainingLoads);
     }
