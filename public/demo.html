@@ -3612,17 +3612,19 @@
   <div id="fame-announcement-root"></div>
   <div id="announcement-inbox-root"></div>
   <div id="appearance-settings-root"></div>
-  <div class="app-loading-overlay" id="app-loading-overlay" aria-live="polite" aria-busy="true">
+  <div class="app-loading-overlay visible initial-load" id="app-loading-overlay" aria-live="polite" aria-busy="true">
     <div class="app-loading-card"><div class="app-loading-spinner"></div><strong id="app-loading-message">Updating workspace...</strong></div>
   </div>
 
-  <link rel="stylesheet" href="startup-orbit.css" />
+  <link rel="stylesheet" href="startup-orbit.css?v=2" />
+  <link rel="stylesheet" href="client-overview.css" />
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
     const startupOverlay = document.getElementById("app-loading-overlay");
+    if (IS_OFFLINE_DEMO) startupOverlay?.classList.remove("visible", "initial-load");
     const startupCard = startupOverlay?.querySelector(".app-loading-card");
     if (startupCard) {
       const orbit = document.createElement("div");
@@ -4338,6 +4340,8 @@
     let clients = IS_OFFLINE_DEMO ? restoreCollection("clients", DEFAULT_CLIENTS) : [];
     let clientsLoadedFromDatabase = false;
     let myWorkLoadedFromDatabase = false;
+    let casesLoadedFromDatabase = IS_OFFLINE_DEMO;
+    const operationalScopesLoaded = new Set(IS_OFFLINE_DEMO ? ["monthly_compliance", "annual_accounting", "annual_tax"] : []);
     let proposals = IS_OFFLINE_DEMO ? restoreCollection("proposals", DEFAULT_PROPOSALS) : [];
     let taxCases = IS_OFFLINE_DEMO ? restoreCollection("taxCases", DEFAULT_TAX_CASES) : [];
     const annualAccountingRows = IS_OFFLINE_DEMO ? restoreCollection("annualAccountingRows", DEFAULT_ANNUAL_ACCOUNTING_ROWS) : [];
@@ -8163,138 +8167,90 @@
     }
 
     function renderClientView() {
-      const client = selectedClient();
       const root = document.getElementById("client-view");
-      const totalPayable = OBLIGATIONS.reduce((sum, key) => sum + (client.obligations[key].payableAmount || 0), 0);
-
+      const client = clientMasterClients.find((item) => item.id === state.selectedClientId)
+        || clients.find((item) => item.id === state.selectedClientId);
+      if (!client) {
+        root.innerHTML = safeHtml(`<div class="workspace-frame workspace-client"><section class="panel"><h3>Client unavailable</h3><p>This client is not in your current access scope.</p><button class="ghost-btn" data-client-overview-open="clients">Back to Clients</button></section></div>`);
+        return;
+      }
+      const matchesClient = (row) => {
+        const clientIds = [client.id, client.databaseId].filter(Boolean);
+        const linkedIds = [row.clientId, row.databaseClientId].filter(Boolean);
+        if (linkedIds.length) return linkedIds.some((id) => clientIds.includes(id));
+        if (row.clientCode && client.clientCode) return row.clientCode === client.clientCode;
+        const name = normalizedEntityName(row.clientName || row.name);
+        return name === normalizedEntityName(client.name)
+          && clientMasterClients.filter((item) => normalizedEntityName(item.name) === name).length === 1;
+      };
+      const period = state.activeMonthlyPeriod;
+      const monthly = period ? (state.monthlyProgress[period] || []).find(matchesClient) : null;
+      const annualAccounting = annualAccountingRows.filter((row) => matchesClient(row) && (hasLeadershipAccess() || isAssignedToAnnualRow(row)));
+      const annualTax = annualTaxRows.filter((row) => matchesClient(row) && (hasLeadershipAccess() || isAssignedToAnnualRow(row)));
+      const relatedCases = casesLoadedFromDatabase || IS_OFFLINE_DEMO ? taxCases.filter(matchesClient) : [];
+      const openCases = relatedCases.filter((item) => !item.completionDate && !item.closedAt && item.stage !== "Closed");
+      const linkedTasks = state.myWork.filter((task) => relatedCases.some((item) => item.id === task.caseId));
+      const today = new Date().toISOString().slice(0, 10);
+      const pending = [];
+      if (isActiveClientRecord(client)) {
+        openCases.filter((item) => item.dueDate).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).forEach((item) => {
+          if (item.dueDate <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)) {
+            pending.push({ title: `${item.dueDate < today ? "Overdue case" : "Case due soon"}: ${item.caseType || item.caseCategory}`, detail: `${item.dueDate} · ${item.taxPic || "PIC unassigned"}`, view: "cases" });
+          }
+        });
+        if (monthly) {
+          const dataState = clientDataState(monthly);
+          if (dataState !== "received") pending.push({ title: dataState === "requesting" ? "Follow up requested client data" : "Request client data", detail: `${period} · Tax PIC ${monthly.taxPic || "unassigned"}`, view: "monthly" });
+          OBLIGATIONS.filter((key) => obligationLedgerState(monthly.obligations[key]) !== "na" && obligationLedgerState(monthly.obligations[key]) !== "completed")
+            .slice(0, 3).forEach((key) => pending.push({ title: `${OBLIGATION_LABELS[key]}: ${obligationLedgerState(monthly.obligations[key])}`, detail: `${period} · Tax PIC ${monthly.taxPic || "unassigned"}`, view: "monthly" }));
+        }
+        linkedTasks.filter((task) => !task.done && task.dueDate && task.dueDate <= today).forEach((task) => {
+          pending.push({ title: `Overdue task: ${task.title}`, detail: task.dueDate, view: "my-work" });
+        });
+      }
+      const activity = [];
+      if (monthly?.lastUpdated) activity.push({ date: monthly.lastUpdated, title: "Monthly record updated", detail: period });
+      relatedCases.filter((item) => item.completionDate || item.closedAt).forEach((item) => activity.push({ date: item.closedAt || item.completionDate, title: `${item.caseType || item.caseCategory} completed`, detail: item.letterNumber || item.subject || "Case" }));
+      linkedTasks.filter((task) => task.done && task.completedAt).forEach((task) => activity.push({ date: task.completedAt, title: task.title, detail: `Completed by ${task.completedByName || task.creatorName || "PIC"}` }));
+      activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const periodLabel = period || "No month selected";
+      const renderAnnual = (rows, type) => rows.length
+        ? rows.map((row) => {
+          const progress = type === "accounting" ? (row.progress || "Not started") : ((row.reported || row.notes === "Done") ? "Reported" : (row.status || "In progress"));
+          return `<div class="client-overview-line"><strong>${escapeHtml(progress)}</strong><span>${escapeHtml(row.deadline || row.taxPic || row.accountingPic || "-")}</span></div>`;
+        }).join("")
+        : `<p class="subline">${operationalScopesLoaded.has(type === "accounting" ? "annual_accounting" : "annual_tax") ? "No annual record linked to this client." : "Loading annual records..."}</p>`;
       root.innerHTML = safeHtml(`
-        <div class="workspace-frame workspace-client">
-          <section class="panel">
-            <div class="section-title">
-              <div>
-                <div class="eyebrow">Client Operational Overview</div>
-                <h3 style="margin-top:6px;">${escapeHtml(client.name)}</h3>
-                <p>${escapeHtml(client.notes || "")}</p>
-              </div>
-              <div class="chips">
-                <span class="badge neutral">${client.clientCode}</span>
-                <span class="badge accent">Tax ${client.taxPic}</span>
-                <span class="badge neutral">Acc ${client.accountingPic}</span>
-                <span class="badge warning">${client.followUpCount} follow-ups</span>
-                <span class="badge danger">${client.claimStatus}</span>
-              </div>
+        <div class="workspace-frame workspace-client client-overview">
+          <section class="panel client-overview-head">
+            <div><div class="eyebrow">Client Operational Overview</div><h2>${escapeHtml(client.name)}</h2><p>${escapeHtml(client.clientCode || "-")} · ${escapeHtml(client.clientStatus || "-")} · ${escapeHtml(client.taxOfficeRegion || "KPP unspecified")}</p></div>
+            <div class="client-overview-owners"><span>Tax PIC <strong>${escapeHtml(client.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(client.accountingPic || "Unassigned")}</strong></span><span>Period <strong>${escapeHtml(periodLabel)}</strong></span></div>
+          </section>
+          <section class="client-overview-grid">
+            <div class="panel client-overview-attention"><div class="section-title"><div><div class="eyebrow">Priority</div><h3>Needs attention now</h3></div><span class="pill ${pending.length ? "warning" : "accent"}">${pending.length} item(s)</span></div>
+              ${pending.length ? pending.slice(0, 6).map((item) => `<button class="client-overview-action" data-client-overview-open="${item.view}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)} →</span></button>`).join("") : `<div class="empty-state">${isActiveClientRecord(client) ? "No urgent action recorded for the selected period." : "Inactive client archive. No current action is scheduled."}</div>`}
+            </div>
+            <div class="panel"><div class="section-title"><div><div class="eyebrow">Current work</div><h3>Monthly compliance</h3><p>${escapeHtml(periodLabel)}</p></div>${monthly ? `<button class="tiny-btn" data-client-overview-open="monthly">Open</button>` : ""}</div>
+              ${monthly ? `<div class="client-overview-line"><strong>Client data</strong><span>${escapeHtml(DATA_STATE_META[clientDataState(monthly)].label)}</span></div><div class="client-overview-line"><strong>Obligations done</strong><span>${OBLIGATIONS.filter((key) => obligationLedgerState(monthly.obligations[key]) === "completed").length} / ${activeObligationKeys(monthly).length}</span></div><div class="client-overview-line"><strong>Claim</strong><span>${escapeHtml(monthly.claimStatus || "Draft")}</span></div><div class="client-overview-line"><strong>Total payable</strong><span>${currency(OBLIGATIONS.reduce((sum, key) => sum + Number(monthly.obligations[key]?.payableAmount || 0), 0))}</span></div>` : `<div class="empty-state">${period ? operationalScopesLoaded.has("monthly_compliance") ? "No monthly record for this client in the selected period." : "Loading monthly records..." : "Select or generate a month in Operations to view its snapshot."}</div>`}
             </div>
           </section>
-
-          <section class="dashboard-grid">
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Current Operations Row</h3>
-                <p>Full grouped obligation view for the selected client.</p>
-              </div>
+          <section class="client-overview-grid client-overview-grid-three">
+            <div class="panel"><div class="section-title"><div><h3>Annual accounting</h3></div><button class="tiny-btn" data-client-overview-open="annual-accounting">Open</button></div>${renderAnnual(annualAccounting, "accounting")}</div>
+            <div class="panel"><div class="section-title"><div><h3>Annual tax</h3></div><button class="tiny-btn" data-client-overview-open="annual-tax">Open</button></div>${renderAnnual(annualTax, "tax")}</div>
+            <div class="panel"><div class="section-title"><div><h3>Cases</h3><p>${openCases.length} open · ${relatedCases.length - openCases.length} closed</p></div><button class="tiny-btn" data-client-overview-open="cases">Open</button></div>
+              ${relatedCases.length ? relatedCases.slice(0, 4).map((item) => `<div class="client-overview-line"><strong>${escapeHtml(item.caseType || item.caseCategory || "Case")}</strong><span>${escapeHtml(item.dueDate || item.stage || "-")}</span></div>`).join("") : `<p class="subline">${casesLoadedFromDatabase || IS_OFFLINE_DEMO ? "No cases linked to this client." : "Loading cases..."}</p>`}
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Obligation</th>
-                    <th>Status</th>
-                    <th>Receipt</th>
-                    <th>Payable</th>
-                    <th>Revision</th>
-                    <th>Billing Code</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${OBLIGATIONS.map((key) => {
-                    const item = client.obligations[key];
-                    return `
-                      <tr>
-                        <td>${OBLIGATION_LABELS[key]}</td>
-                        <td>${STATUS_ICON[item.status]} ${STATUS_LABEL[item.status]}</td>
-                        <td>${item.receiptNumber || "-"}</td>
-                        <td>${currency(item.payableAmount)}</td>
-                        <td>${item.revisionRequired ? "Required" : "No"}</td>
-                        <td>${item.billingCode || "-"}</td>
-                        <td>${item.quickNotes || "-"}</td>
-                      </tr>
-                    `;
-                  }).join("")}
-                </tbody>
-              </table>
+          </section>
+          <section class="client-overview-grid">
+            <div class="panel"><div class="section-title"><div><h3>Recent activity</h3><p>Dated records visible to you.</p></div></div>
+              ${activity.slice(0, 5).map((item) => `<div class="client-overview-activity"><time>${escapeHtml(new Date(item.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }))}</time><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></div></div>`).join("") || `<p class="subline">No dated activity recorded yet.</p>`}
             </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Claim and Payment Summary</h3>
-                <p>Parallel workflow summary for this client.</p>
-              </div>
+            <div class="panel"><div class="section-title"><div><h3>Client reference</h3><p>Current master data.</p></div></div>
+              <div class="client-overview-line"><strong>NPWP</strong><span>${escapeHtml(client.npwp || "-")}</span></div><div class="client-overview-line"><strong>Industry</strong><span>${escapeHtml(client.industry || "-")}</span></div><div class="client-overview-line"><strong>Contract start</strong><span>${escapeHtml(client.contractStartedAt || client.engagementStart || "-")}</span></div><div class="client-overview-line"><strong>Partner / Supervisor</strong><span>${escapeHtml([client.partner, client.supervisor].filter(Boolean).join(" / ") || "-")}</span></div>
+              ${client.notes ? `<p class="client-overview-note">${escapeHtml(client.notes)}</p>` : ""}
             </div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>Total payable</strong><div class="subline">${currency(totalPayable)}</div></div>
-              <div class="detail-card"><strong>Claim status</strong><div class="subline">${client.claimStatus}</div></div>
-              <div class="detail-card"><strong>Payment coordination</strong><div class="subline">${client.paymentStatus}</div></div>
-              <div class="detail-card"><strong>Client status</strong><div class="subline">${client.clientStatus}</div></div>
-              <div class="detail-card"><strong>Industry</strong><div class="subline">${client.industry}</div></div>
-              <div class="detail-card"><strong>Service package</strong><div class="subline">${client.servicePackage}</div></div>
-              <div class="detail-card"><strong>Partner / Supervisor</strong><div class="subline">${client.partner} / ${client.supervisor}</div></div>
-              <div class="detail-card"><strong>Tax PIC</strong><div class="subline">${client.taxPic}</div></div>
-              <div class="detail-card"><strong>Accounting PIC</strong><div class="subline">${client.accountingPic}</div></div>
-              <div class="detail-card"><strong>Engagement</strong><div class="subline">${client.engagementStart || "-"}${client.engagementEnd ? ` → ${client.engagementEnd}` : ""}</div></div>
-              <div class="detail-card"><strong>Drive folder</strong><div class="subline">${client.drivePath}</div></div>
-              <div class="detail-card"><strong>NPWP</strong><div class="subline">${client.npwp || "-"}</div></div>
-              <div class="detail-card"><strong>Alamat</strong><div class="subline">${client.address || "-"}</div></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="dashboard-grid-3">
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Recurring Obligations</h3>
-                <p>Monthly grouped obligations for scanning and supervision.</p>
-              </div>
-            </div>
-            <div class="detail-list">
-              ${OBLIGATIONS.map((key) => `<div class="detail-card"><strong>${OBLIGATION_LABELS[key]}</strong></div>`).join("")}
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Timeline</h3>
-                <p>Compact operational history instead of fragmented Excel files.</p>
-              </div>
-            </div>
-            <div class="timeline-list">
-              <div class="timeline-item"><div class="date-line">${client.lastUpdated}</div><strong>Last row update</strong><div class="meta">${client.notes}</div></div>
-              <div class="timeline-item"><div class="date-line">${client.month} ${client.year}</div><strong>Claim status: ${client.claimStatus}</strong><div class="meta">${client.paymentStatus}</div></div>
-              <div class="timeline-item"><div class="date-line">Google Drive</div><strong>Folder created</strong><div class="meta">${client.drivePath}</div></div>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="section-title">
-              <div>
-                <h3>Operational Benefits</h3>
-                <p>Why the model is client-centric.</p>
-              </div>
-            </div>
-            <div class="detail-list">
-              <div class="detail-card"><strong>No fragmented monthly files</strong></div>
-              <div class="detail-card"><strong>Supervisor can scan all clients in one place</strong></div>
-              <div class="detail-card"><strong>Claim and compliance stay connected but separate</strong></div>
-            </div>
-          </div>
-        </section>
-        </div>
-      `);
+          </section>
+        </div>`);
     }
 
     function triggerPointsBurst(widget, pointsTotal, gained) {
@@ -8830,10 +8786,10 @@
       }
     }
 
-    async function loadSharedOperationalWorkspaces(background = false) {
+    async function loadSharedOperationalWorkspaces(background = false, scope = "") {
       try {
-        const response = await appFetch("/api/operations", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared operations...");
-        if (!response.ok) return;
+        const response = await appFetch(`/api/operations${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`, { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared operations...");
+        if (!response.ok) return false;
         const result = await response.json();
         for (const row of result.data || []) {
           if (operationalFailed[row.scope] || operationalPendingPayloads[row.scope] && Object.keys(operationalPendingPayloads[row.scope]).length) continue;
@@ -8846,8 +8802,11 @@
           if (row.scope === "annual_tax" && Array.isArray(row.payload)) annualTaxRows.splice(0, annualTaxRows.length, ...row.payload);
         }
         if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) clients = structuredClone(state.monthlyProgress[state.activeMonthlyPeriod]);
-        renderAfterSharedDataUpdate(["matrix-view"]);
-      } catch (error) { console.warn("[operations] shared load failed", error); }
+        if (scope) operationalScopesLoaded.add(scope);
+        else ["monthly_compliance", "annual_accounting", "annual_tax"].forEach((item) => operationalScopesLoaded.add(item));
+        renderAfterSharedDataUpdate(["matrix-view", "client-view"]);
+        return true;
+      } catch (error) { console.warn("[operations] shared load failed", error); return false; }
     }
 
     async function saveClientToDatabase(client, { showLoading = true } = {}) {
@@ -8877,13 +8836,16 @@
     async function loadSharedCases(background = false) {
       try {
         const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared cases...");
-        if (!response.ok) return;
+        if (!response.ok) return false;
         const result = await response.json();
         taxCases = (Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo);
+        casesLoadedFromDatabase = true;
         if (!taxCases.some((item) => item.id === state.selectedCaseId)) state.selectedCaseId = taxCases[0]?.id || "";
-        renderAfterSharedDataUpdate(["cases-view"]);
+        renderAfterSharedDataUpdate(["cases-view", "client-view"]);
+        return true;
       } catch (error) {
         console.warn("[cases] shared load failed", error);
+        return false;
       }
     }
 
@@ -9122,10 +9084,10 @@
     }
 
     async function loadSharedMyWork(background = false) {
-      if (myWorkDemoMode) return;
+      if (myWorkDemoMode) return true;
       try {
         const response = await appFetch("/api/my-work", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading My Work...");
-        if (!response.ok) return;
+        if (!response.ok) return false;
         const result = await response.json();
         const tasks = Array.isArray(result.tasks) ? result.tasks : [];
         // Keep tasks waiting for their first successful POST. A transient API
@@ -9139,12 +9101,14 @@
         ];
         myWorkLoadedFromDatabase = true;
         if (!state.myWork.some((task) => task.id === state.selectedMyWorkId)) state.selectedMyWorkId = state.myWork[0]?.id || "";
-        renderAfterSharedDataUpdate(["my-work-view"]);
+        renderAfterSharedDataUpdate(["my-work-view", "client-view"]);
         pendingTasks.forEach((task) => {
           if (!task.saving && !task.syncConflict) saveMyWorkTaskToDatabase(task);
         });
+        return true;
       } catch (error) {
         console.warn("[my-work] shared load failed", error);
+        return false;
       }
     }
 
@@ -9331,10 +9295,10 @@
     async function loadStaffDirectory(background = false) {
       try {
         const response = await appFetch("/api/staff", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading staff directory...");
-        if (!response.ok) return;
+        if (!response.ok) return false;
         const result = await response.json();
         const staff = Array.isArray(result.staff) ? result.staff : [];
-        if (!staff.length) return;
+        if (!staff.length) return false;
         staffDirectory = staff;
         const picName = (item) => item.display_name || item.full_name;
         const names = (items) => [...new Set(items.map(picName).filter(Boolean))];
@@ -9398,9 +9362,11 @@
         SUPERVISORS = names(staff.filter((item) => item.role === "supervisor"));
         staffDirectoryLoaded = true;
         rerender();
+        return true;
       } catch (error) {
         console.warn("[staff directory] request failed", error);
         // Keep fallback demo lists when the directory is temporarily unavailable.
+        return false;
       }
     }
 
@@ -9871,6 +9837,13 @@
       renderShellChrome();
       restoreVirtualTableScrollPositions();
       if (viewId === "my-work-view") loadSharedMyWork(true);
+      if (viewId === "client-view") {
+        if (!casesLoadedFromDatabase) loadSharedCases(true);
+        if (!myWorkLoadedFromDatabase) loadSharedMyWork(true);
+        for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
+          if (!operationalScopesLoaded.has(scope)) loadSharedOperationalWorkspaces(true, scope);
+        }
+      }
     }
 
     function generateClaim(client) {
@@ -10148,6 +10121,7 @@
       const exportClientsTrigger = target.closest("[data-export-clients]");
       const toggleClientStatusTrigger = target.closest("[data-toggle-client-status]");
       const openClientTrigger = target.closest("[data-open-client]");
+      const clientOverviewTrigger = target.closest("[data-client-overview-open]");
       const sortTrigger = target.closest("[data-sort-scope]");
       const openNotesTrigger = target.closest("[data-open-notes]");
       const closeNotesTrigger = target.closest("[data-close-notes]");
@@ -10999,6 +10973,25 @@
       if (openClientTrigger) {
         state.selectedClientId = openClientTrigger.getAttribute("data-open-client");
         switchView("client-view");
+        commitUi("push");
+        return;
+      }
+
+      if (clientOverviewTrigger) {
+        const destination = clientOverviewTrigger.getAttribute("data-client-overview-open");
+        if (window.matchMedia("(max-width: 900px)").matches && ["monthly", "annual-accounting", "annual-tax"].includes(destination)) return;
+        const client = clientMasterClients.find((item) => item.id === state.selectedClientId);
+        if (destination === "cases") {
+          const linked = taxCases.find((item) => item.clientId === client?.id || item.databaseClientId === client?.databaseId);
+          state.casesTab = linked?.caseCategory === "Pemeriksaan" ? "pemeriksaan" : "himbauan";
+          state.caseSearch = client ? displayClientName(client) : "";
+        }
+        if (destination === "monthly") { state.operationsMode = "monthly"; state.operationsTab = "active"; }
+        if (destination === "annual-accounting" || destination === "annual-tax") {
+          state.operationsMode = "annual";
+          state.annualTeam = destination === "annual-tax" ? "tax" : "accounting";
+        }
+        switchView(destination === "clients" ? "client-management-view" : destination === "cases" ? "cases-view" : destination === "my-work" ? "my-work-view" : "matrix-view");
         commitUi("push");
         return;
       }
@@ -12007,7 +12000,7 @@
 
       if (target.matches("[data-allocation-acc]")) {
         const clientId = target.getAttribute("data-allocation-acc");
-        const client = clients.find((item) => item.id === clientId);
+        const client = clientMasterClients.find((item) => item.id === clientId);
         if (!client) return;
         const draft = state.allocationDrafts[clientId] || {};
         draft.nextAccPic = target.value;
@@ -12019,7 +12012,7 @@
 
       if (target.matches("[data-allocation-tax]")) {
         const clientId = target.getAttribute("data-allocation-tax");
-        const client = clients.find((item) => item.id === clientId);
+        const client = clientMasterClients.find((item) => item.id === clientId);
         if (!client) return;
         const draft = state.allocationDrafts[clientId] || {};
         draft.nextTaxPic = target.value;
@@ -12297,29 +12290,43 @@
       }
     }
 
-    rerender();
-    persistDemoState();
+    if (IS_OFFLINE_DEMO) rerender();
     // The authenticated profile request already reached Supabase successfully.
     // Reflect that immediately while the broader schema health audit runs.
     if (window.location.protocol === "file:") {
       databaseHealthStatus = { text: "Database: demo mode", className: "database-status-chip is-demo", title: "Local demo data is active." };
     } else {
-      databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Secure staff session verified. Workspace data is loading in the background." };
+      databaseHealthStatus = { text: "Database: loading", className: "database-status-chip is-warning", title: "Loading the current workspace." };
     }
     renderDatabaseSyncStatus();
     if (IS_OFFLINE_DEMO) {
       renderDatabaseSyncStatus();
     } else {
-      // Never expose sample records while shared records are loading. Reveal
-      // the workspace once each user-facing data source has answered.
-      await Promise.all([
-        loadStaffDirectory(true),
-        loadSharedClients(true),
-        loadSharedCases(true),
-        loadSharedOperationalWorkspaces(true),
-        loadSharedMyWork(true),
-        loadSharedAnnouncements(true)
-      ]);
+      const initialView = state.currentView;
+      const initialLoads = [loadSharedClients(true), loadStaffDirectory(true)];
+      const initialOperationScope = initialView === "matrix-view" ? "monthly_compliance"
+        : initialView === "annual-accounting-view" ? "annual_accounting"
+        : initialView === "annual-tax-view" ? "annual_tax" : "";
+      if (initialOperationScope) initialLoads.push(loadSharedOperationalWorkspaces(true, initialOperationScope));
+      if (["cases-view", "my-work-view"].includes(initialView)) initialLoads.push(loadSharedCases(true));
+      if (initialView === "my-work-view") initialLoads.push(loadSharedMyWork(true));
+      if (initialView === "client-view") {
+        initialLoads.push(loadSharedCases(true), loadSharedMyWork(true));
+        for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) initialLoads.push(loadSharedOperationalWorkspaces(true, scope));
+      }
+      const initialResults = await Promise.all(initialLoads);
+      if (!clientsLoadedFromDatabase || initialResults.some((result) => result === false)) {
+        const message = document.getElementById("app-loading-message");
+        if (message) message.textContent = "Workspace data could not be loaded. Refresh to retry.";
+        return;
+      }
+      clientMasterClients.forEach((client) => {
+        client.taxPic = canonicalStaffName(client.taxPic, client.taxPicProfileId);
+        client.accountingPic = canonicalStaffName(client.accountingPic, client.accountingPicProfileId);
+      });
+      databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Client Master loaded from the database." };
+      rerender();
+      persistDemoState();
       // Data is ready: unlock immediately while the portal fades out.
       const finishStartup = () => {
         startupOverlay?.classList.remove("visible", "initial-load", "is-entering");
@@ -12334,6 +12341,18 @@
         window.setTimeout(finishStartup, 550);
       }
       startupOverlay?.setAttribute("aria-busy", "false");
+      const remainingLoads = [];
+      if (initialView === "client-view") {
+        // The overview already loaded its three operational scopes.
+      } else if (initialOperationScope) {
+        for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
+          if (scope !== initialOperationScope) remainingLoads.push(loadSharedOperationalWorkspaces(true, scope));
+        }
+      } else remainingLoads.push(loadSharedOperationalWorkspaces(true));
+      if (!["cases-view", "my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedCases(true));
+      if (!["my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedMyWork(true));
+      remainingLoads.push(loadSharedAnnouncements(true));
+      Promise.allSettled(remainingLoads);
     }
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
     scheduleBackgroundLoad(() => refreshDatabaseStatus(true));

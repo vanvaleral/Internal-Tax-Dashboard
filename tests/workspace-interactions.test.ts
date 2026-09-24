@@ -20,6 +20,13 @@ test("client editor resolves records from Client Master instead of a monthly sna
   assert.match(demo, /if \(editClientTrigger\)[\s\S]*?state\.clientEditor = \{ kind: "client", id: state\.activeClientFormId \};\s+renderClientEditor\(\)/);
 });
 
+test("allocation PIC drafts resolve the same Client Master rows that Apply uses", () => {
+  for (const field of ["acc", "tax"]) {
+    assert.match(demo, new RegExp(`if \\(target\\.matches\\(\\"\\[data-allocation-${field}\\]\\"\\)\\) \\{[\\s\\S]*?const client = clientMasterClients\\.find\\(\\(item\\) => item\\.id === clientId\\)`));
+  }
+  assert.match(demo, /if \(applyAllocationTrigger\) \{[\s\S]*?clientMasterClients\.forEach/);
+});
+
 test("operations row expansion is navigation-only and does not save the workspace", () => {
   assert.match(demo, /function bindDirectRowActions\(\)/);
   assert.match(demo, /state\.expandedClientId = state\.expandedClientId === clientId \? "" : clientId;\s+state\.selectedClientId = clientId;\s+commitWorkspaceNavigation\("replace"\)/);

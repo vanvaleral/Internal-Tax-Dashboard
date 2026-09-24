@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>LMATS Monogram</title>
+  <rect x="3" y="3" width="58" height="58" rx="17" fill="#06458f"/>
+  <path d="M13 15h9v25h13v9H13z" fill="#fff"/>
+  <path d="M29 15h9l6 10 6-10h5v34h-9V30l-2 4-6-10v25h-9z" fill="#00aef0"/>
+  <path d="M13 54h42" stroke="#64d7ff" stroke-width="3" stroke-linecap="round"/>
+</svg>

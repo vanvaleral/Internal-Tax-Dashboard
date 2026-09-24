@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LMATS Favicon Options</title>
+  <style>
+    :root { --cyan:#00aef0; --navy:#06458f; --ink:#122333; --muted:#667684; --line:#d8e2e9; --paper:#f4f8fa; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; padding:48px 24px; color:var(--ink); background:radial-gradient(circle at 20% 0%,#dff6ff 0,transparent 34%),var(--paper); font-family:"Trebuchet MS",sans-serif; }
+    main { max-width:1050px; margin:auto; }
+    header { display:flex; align-items:end; justify-content:space-between; gap:24px; margin-bottom:28px; }
+    h1 { margin:6px 0; font-size:clamp(30px,5vw,52px); letter-spacing:-.04em; }
+    p { margin:0; color:var(--muted); line-height:1.55; }
+    .eyebrow { color:var(--navy); font-size:12px; font-weight:800; letter-spacing:.18em; text-transform:uppercase; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    .card { padding:22px; border:1px solid var(--line); border-radius:22px; background:rgba(255,255,255,.9); box-shadow:0 14px 35px rgba(20,70,100,.08); }
+    .hero { display:grid; place-items:center; min-height:190px; border-radius:16px; background:linear-gradient(145deg,#fff,#eaf2f6); }
+    .hero img { width:112px; height:112px; }
+    h2 { margin:18px 0 6px; font-size:20px; }
+    .sizes { display:flex; align-items:center; gap:16px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+    .sizes img:nth-child(1) { width:16px; height:16px; }
+    .sizes img:nth-child(2) { width:32px; height:32px; }
+    .sizes img:nth-child(3) { width:48px; height:48px; }
+    .recommend { display:inline-block; margin-top:10px; padding:5px 9px; border-radius:999px; color:#fff; background:var(--navy); font-size:11px; font-weight:800; }
+    @media (max-width:760px) { body{padding:28px 14px} header{display:block}.grid{grid-template-columns:1fr}.hero{min-height:150px} }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div><div class="eyebrow">LMATS Consulting</div><h1>Favicon directions</h1><p>Compared at real browser sizes: 16, 32, and 48 pixels.</p></div><p>The final choice can also be used for push notifications and mobile shortcuts.</p></header>
+    <section class="grid">
+      <article class="card"><div class="hero"><img src="favicon-options/option-a-diamond.svg" alt="Diamond with three horizontal bars growing from bottom to top" /></div><h2>A. Heritage Diamond</h2><p>The official diamond and globe with three separate horizontal bars growing from bottom to top.</p><span class="recommend">Revised</span><div class="sizes"><img src="favicon-options/option-a-diamond.svg" alt="16 px"/><img src="favicon-options/option-a-diamond.svg" alt="32 px"/><img src="favicon-options/option-a-diamond.svg" alt="48 px"/></div></article>
+      <article class="card"><div class="hero"><img src="favicon-options/option-b-monogram.svg" alt="Monogram favicon" /></div><h2>B. LM Monogram</h2><p>More modern and bold, with maximum clarity in crowded browser tabs.</p><div class="sizes"><img src="favicon-options/option-b-monogram.svg" alt="16 px"/><img src="favicon-options/option-b-monogram.svg" alt="32 px"/><img src="favicon-options/option-b-monogram.svg" alt="48 px"/></div></article>
+      <article class="card"><div class="hero"><img src="favicon-options/option-c-orbit.svg" alt="Orbit favicon" /></div><h2>C. Global Orbit</h2><p>A lighter interpretation of the globe, suitable for the digital dashboard.</p><div class="sizes"><img src="favicon-options/option-c-orbit.svg" alt="16 px"/><img src="favicon-options/option-c-orbit.svg" alt="32 px"/><img src="favicon-options/option-c-orbit.svg" alt="48 px"/></div></article>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>LMATS Growth Diamond</title>
   <defs>
-    <linearGradient id="diamond" x1="12" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+    <linearGradient id="a" x1="12" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
       <stop stop-color="#00aef0"/>
       <stop offset="1" stop-color="#06458f"/>
     </linearGradient>
   </defs>
-  <rect x="9" y="9" width="46" height="46" rx="12" fill="url(#diamond)" transform="rotate(45 32 32)"/>
+  <rect x="9" y="9" width="46" height="46" rx="12" fill="url(#a)" transform="rotate(45 32 32)"/>
   <circle cx="32" cy="32" r="20" fill="#087cc3" stroke="#67d4ff" stroke-width="2"/>
   <path d="M19 18h29v7H19zm0 11h21v7H19zm0 11h12v7H19z" fill="#fff"/>
 </svg>

@@ -139,7 +139,8 @@ test("client master load surfaces failed syncs and does not retain sample record
 
 test("database connection status uses the verified profile before background schema checks", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /Secure staff session verified\. Workspace data is loading in the background\./);
+  assert.match(demo, /Database: loading/);
+  assert.match(demo, /Client Master loaded from the database\./);
   assert.match(demo, /scheduleBackgroundLoad\(\(\) => refreshDatabaseStatus\(true\)\)/);
   assert.doesNotMatch(demo, /loadPerformanceLedger\(true\);\s+refreshDatabaseStatus\(true\);/);
 });
@@ -150,7 +151,10 @@ test("production startup never renders demo records before shared data arrives",
   assert.match(demo, /let clients = IS_OFFLINE_DEMO \? restoreCollection\("clients", DEFAULT_CLIENTS\) : \[\]/);
   assert.match(demo, /let taxCases = IS_OFFLINE_DEMO \? restoreCollection\("taxCases", DEFAULT_TAX_CASES\) : \[\]/);
   assert.match(demo, /Loading secure workspace\.\.\./);
-  assert.match(demo, /await Promise\.all\(\[\s*loadStaffDirectory\(true\),\s*loadSharedClients\(true\),\s*loadSharedCases\(true\),\s*loadSharedOperationalWorkspaces\(true\),\s*loadSharedMyWork\(true\),\s*loadSharedAnnouncements\(true\)/);
+  assert.match(demo, /app-loading-overlay visible initial-load/);
+  assert.match(demo, /const initialLoads = \[loadSharedClients\(true\), loadStaffDirectory\(true\)\]/);
+  assert.match(demo, /const initialResults = await Promise\.all\(initialLoads\);\s*if \(!clientsLoadedFromDatabase \|\| initialResults\.some/);
+  assert.match(demo, /Promise\.allSettled\(remainingLoads\)/);
   assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load", "is-entering"\)/);
 });
 
@@ -263,7 +267,7 @@ test("My Work demo mode previews every task section without touching shared data
   assert.match(demo, /makeTask\("demo-completed-1"/);
   assert.match(demo, /makeTask\("demo-archive-1"/);
   assert.match(demo, /Preview data · not saved/);
-  assert.match(demo, /async function loadSharedMyWork\(background = false\) \{\s*if \(myWorkDemoMode\) return;/);
+  assert.match(demo, /async function loadSharedMyWork\(background = false\) \{\s*if \(myWorkDemoMode\) return true;/);
   assert.match(demo, /function saveMyWorkTaskToDatabase\(task, extra = \{\}\) \{\s*if \(myWorkDemoMode\) return;/);
   assert.match(demo, /myWork: myWorkDemoMode \? \[\] : state\.myWork/);
 });

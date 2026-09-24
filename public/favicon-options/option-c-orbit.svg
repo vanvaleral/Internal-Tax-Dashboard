@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>LMATS Orbit</title>
+  <circle cx="32" cy="32" r="29" fill="#e9f8ff"/>
+  <circle cx="32" cy="32" r="22" fill="#0788cf"/>
+  <path d="M12 38c9 8 30 10 42-3M13 24c10-7 28-8 40 1" fill="none" stroke="#79ddff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M20 17h9v21h16v9H20z" fill="#fff"/>
+  <circle cx="51" cy="14" r="5" fill="#00aef0" stroke="#fff" stroke-width="2"/>
+</svg>
