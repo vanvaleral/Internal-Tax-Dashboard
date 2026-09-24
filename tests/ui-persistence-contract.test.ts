@@ -160,6 +160,14 @@ test("production startup never renders demo records before shared data arrives",
   assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load", "is-entering"\)/);
 });
 
+test("portfolio snapshot shows every operational PIC without counting inactive clients", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /function clientPortfolioSnapshot\(\) \{\s*const activeClients = activeClientMasterRecords\(\)/);
+  assert.match(demo, /for \(const pic of \[\.\.\.ALL_PICS, \.\.\.portfolio\.flatMap/);
+  assert.match(demo, /clientPortfolioSnapshot\(\)\.picWorkload\.map/);
+  assert.doesNotMatch(demo, /clientPortfolioSnapshot\(\)\.picWorkload\.slice/);
+});
+
 test("client master is not restored from browser storage after a shared-data save fails", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /if \(\["clients", "proposals"\]\.includes\(key\)\) return deepClone\(fallback\);/);

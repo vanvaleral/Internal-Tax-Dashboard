@@ -4787,7 +4787,7 @@
         businessForm: row.businessForm || "",
         pic: row.taxPic || (useDefaults ? TAX_PICS[0] : ""),
         taxPic: row.taxPic || (useDefaults ? TAX_PICS[0] : ""),
-        accountingPic: row.accountingPic || row.taxPic || (useDefaults ? ACC_PICS[0] : ""),
+        accountingPic: row.accountingPic || (useDefaults ? ACC_PICS[0] : ""),
         partner: row.partner || (useDefaults ? PARTNERS[0] : ""),
         supervisor: row.supervisor || (useDefaults ? SUPERVISORS[0] : ""),
         team: row.team || "Tax + Accounting",
@@ -6593,7 +6593,7 @@
               <div class="metric"><div class="eyebrow">Annual Fee Base</div><strong>${currency(activePortfolioClients.reduce((sum, client) => sum + Number(client.annualFee || annualFeeFromMonthly(client.serviceFee)), 0))}</strong><div class="sub">Current active portfolio.</div></div>
               <div class="metric"><div class="eyebrow">PIC Coverage</div><strong>${new Set(activePortfolioClients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean)).size}</strong><div class="sub">People assigned across active clients.</div></div>
             </section>
-            <section class="panel"><div class="section-title"><div><h3>Portfolio Snapshot</h3><p>High-level client health without exposing the editable client workspace.</p></div></div><div class="detail-list">${clientPortfolioSnapshot().picWorkload.slice(0, 10).map((row) => `<div class="list-item"><strong>${row.pic}</strong><span>${row.clients} client(s)</span></div>`).join("") || `<div class="empty-state">No shared client records yet.</div>`}</div></section>
+            <section class="panel"><div class="section-title"><div><h3>Portfolio Snapshot</h3><p>Active clients assigned to each PIC, including PICs with no current allocation.</p></div></div><div class="detail-list">${clientPortfolioSnapshot().picWorkload.map((row) => `<div class="list-item"><strong>${escapeHtml(row.pic)}</strong><span>${row.clients} client(s)</span></div>`).join("") || `<div class="empty-state">No PIC records yet.</div>`}</div></section>
           ` : ``}
 
           ${state.managementTab === "recognition" ? `
@@ -6762,12 +6762,14 @@
                         <td>${escapeHtml(client.accountingPic)}</td>
                         <td>
                           <select class="inline-select" data-allocation-acc="${client.id}">
+                            ${nextAcc ? "" : `<option value="">No PIC yet</option>`}
                             ${optionsMarkup(ACC_PICS, nextAcc)}
                           </select>
                         </td>
                         <td>${escapeHtml(client.taxPic)}</td>
                         <td>
                           <select class="inline-select" data-allocation-tax="${client.id}">
+                            ${nextTax ? "" : `<option value="">No PIC yet</option>`}
                             ${optionsMarkup(TAX_PICS, nextTax)}
                           </select>
                         </td>
@@ -6801,8 +6803,8 @@
                         <div class="mobile-meta-box"><div class="eyebrow">TAX PIC Lama</div><strong>${client.taxPic}</strong></div>
                       </div>
                       <div class="detail-grid-2">
-                        <select class="field" data-allocation-acc="${client.id}">${optionsMarkup(ACC_PICS, nextAcc)}</select>
-                        <select class="field" data-allocation-tax="${client.id}">${optionsMarkup(TAX_PICS, nextTax)}</select>
+                        <select class="field" data-allocation-acc="${client.id}">${nextAcc ? "" : `<option value="">No PIC yet</option>`}${optionsMarkup(ACC_PICS, nextAcc)}</select>
+                        <select class="field" data-allocation-tax="${client.id}">${nextTax ? "" : `<option value="">No PIC yet</option>`}${optionsMarkup(TAX_PICS, nextTax)}</select>
                       </div>
                     </div>
                   `;
@@ -6857,10 +6859,15 @@
       const monthlyFee = portfolio.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
       const annualFee = portfolio.reduce((sum, client) => sum + Number(client.annualFee || annualFeeFromMonthly(client.serviceFee)), 0);
       const coveredPICS = new Set(portfolio.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean));
-      const picWorkload = ALL_PICS.map((pic) => ({
+      const picNames = new Map();
+      for (const pic of [...ALL_PICS, ...portfolio.flatMap((client) => [client.taxPic, client.accountingPic])]) {
+        const name = String(pic || "").trim();
+        if (name) picNames.set(name.toLocaleLowerCase("id-ID"), picNames.get(name.toLocaleLowerCase("id-ID")) || name);
+      }
+      const picWorkload = [...picNames].map(([key, pic]) => ({
         pic,
-        clients: portfolio.filter((client) => client.taxPic === pic || client.accountingPic === pic).length
-      })).filter((row) => row.clients > 0).sort((left, right) => right.clients - left.clients || compareText(left.pic, right.pic));
+        clients: portfolio.filter((client) => [client.taxPic, client.accountingPic].some((name) => String(name || "").trim().toLocaleLowerCase("id-ID") === key)).length
+      })).sort((left, right) => right.clients - left.clients || compareText(left.pic, right.pic));
       const industryCounts = Object.entries(portfolio.reduce((counts, client) => {
         const industry = client.industry || "Unclassified";
         counts[industry] = (counts[industry] || 0) + 1;
@@ -7013,7 +7020,7 @@
                           <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
                         </td>
                         <td>${client.npwp || "-"}</td>
-                        <td>${client.taxPic} / ${client.accountingPic}</td>
+                        <td>${escapeHtml(client.taxPic || "No PIC yet")} / ${escapeHtml(client.accountingPic || "No PIC yet")}</td>
                         <td class="client-industry-cell" title="${client.industry}">${client.industry}</td>
                         <td class="client-obligation-cell" title="${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").map((key) => OBLIGATION_LABELS[key]).join(", ")}">${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").map((key) => OBLIGATION_LABELS[key]).join(", ")}</td>
                         <td>${client.clientStatus}</td>
@@ -7070,8 +7077,8 @@
                 <section class="client-form-section">
                   <div class="client-form-section-title"><strong>Ownership & Contract</strong><span>Who is responsible</span></div>
                   <div class="detail-grid-2">
-                    <div class="client-field"><label for="client-form-tax-pic">PIC Tax</label><select id="client-form-tax-pic" class="field">${optionsMarkup(TAX_PICS, activeSample.taxPic)}</select></div>
-                    <div class="client-field"><label for="client-form-accounting-pic">PIC ACC</label><select id="client-form-accounting-pic" class="field">${optionsMarkup(ACC_PICS, activeSample.accountingPic)}</select></div>
+                    <div class="client-field"><label for="client-form-tax-pic">PIC Tax</label><select id="client-form-tax-pic" class="field"><option value="">No PIC yet</option>${optionsMarkup(TAX_PICS, activeSample.taxPic)}</select></div>
+                    <div class="client-field"><label for="client-form-accounting-pic">PIC ACC</label><select id="client-form-accounting-pic" class="field"><option value="">No PIC yet</option>${optionsMarkup(ACC_PICS, activeSample.accountingPic)}</select></div>
                   </div>
                   <div class="detail-grid-2">
                     <div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field">${optionsMarkup(PARTNERS, activeSample.partner)}</select></div>
@@ -8659,7 +8666,7 @@
         pph25: row.has_pph25_pp55,
         phrpb1: row.has_pb1,
         ppn: row.has_ppn
-      });
+      }, { useDefaults: false });
       client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
       client.databaseId = row.id;
       client.taxPicProfileId = row.tax_pic_profile_id || "";
@@ -9520,7 +9527,7 @@
               </section>
               <section class="client-form-section">
                 <div class="client-form-section-title"><strong>PIC & Scope</strong><span>Ownership and obligations</span></div>
-                <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}">PIC Tax</label><select id="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}" class="field"><option value="">Select PIC Tax</option>${optionsMarkup(TAX_PICS, taxPic)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}">PIC ACC</label><select id="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}" class="field"><option value="">Select PIC ACC</option>${optionsMarkup(ACC_PICS, accountingPic)}</select></div></div>
+                <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}">PIC Tax</label><select id="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}" class="field"><option value="">No PIC yet</option>${optionsMarkup(TAX_PICS, taxPic)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}">PIC ACC</label><select id="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}" class="field"><option value="">No PIC yet</option>${optionsMarkup(ACC_PICS, accountingPic)}</select></div></div>
                 ${isProposal ? `<div class="client-field"><label for="proposal-status">Proposal Status</label><select id="proposal-status" class="field">${optionsMarkup(PROPOSAL_STATUSES, record.status)}</select></div>` : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field"><option value="">Select partner</option>${optionsMarkup(PARTNERS, record.partner)}</select></div><div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field"><option value="">Select supervisor</option>${optionsMarkup(SUPERVISORS, record.supervisor)}</select></div></div><div class="detail-grid-2"><div class="client-field"><label for="client-form-start-date">Contract Start</label><input id="client-form-start-date" class="field" type="date" value="${record.contractStartedAt || record.engagementStart || ""}" /></div><div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${record.engagementEnd || ""}" /></div></div><div class="client-field"><label for="client-form-package">Service Package</label><select id="client-form-package" class="field"><option value="">Select package</option>${optionsMarkup(SERVICE_PACKAGES, record.servicePackage)}</select></div>`}
                 <div class="chips">${OBLIGATIONS.map((key) => `<label class="pill ${selectedObligations.includes(key) ? "accent" : "neutral"}"><input id="${isProposal ? "proposal-ob" : "client-ob"}-${key}" type="checkbox" ${selectedObligations.includes(key) ? "checked" : ""} /> ${OBLIGATION_LABELS[key]}</label>`).join("")}</div>
               </section>
