@@ -6849,6 +6849,7 @@
       const requestedStart = Number(state.tableViewport[tableId] || 0);
       const pageSize = 56;
       const start = Math.max(0, Math.min(requestedStart, Math.max(0, rows.length - pageSize)));
+      state.tableViewport[tableId] = start;
       const end = Math.min(rows.length, start + pageSize);
       return {
         start,
@@ -6861,6 +6862,26 @@
     function virtualSpacer(columns, height) {
       if (!height) return "";
       return `<tr class="virtual-spacer" aria-hidden="true" style="--virtual-height:${height}px"><td colspan="${columns}"></td></tr>`;
+    }
+
+    function captureVirtualTableScrollPositions() {
+      state.virtualScrollTop = state.virtualScrollTop || {};
+      document.querySelectorAll("[data-virtual-table]").forEach((wrap) => {
+        const tableId = wrap.getAttribute("data-virtual-table");
+        if (tableId) state.virtualScrollTop[tableId] = wrap.scrollTop;
+      });
+    }
+
+    function restoreVirtualTableScrollPositions() {
+      state.virtualScrollTop = state.virtualScrollTop || {};
+      document.querySelectorAll("[data-virtual-table]").forEach((wrap) => {
+        const tableId = wrap.getAttribute("data-virtual-table");
+        if (!tableId) return;
+        const maximum = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+        const restored = Math.max(0, Math.min(Number(state.virtualScrollTop[tableId] || 0), maximum));
+        wrap.scrollTop = restored;
+        state.virtualScrollTop[tableId] = restored;
+      });
     }
 
     function updateVirtualTableViewport(wrap) {
@@ -6878,12 +6899,16 @@
       if (state.virtualRenderFrame) return;
       state.virtualRenderFrame = window.requestAnimationFrame(() => {
         state.virtualRenderFrame = 0;
-        if (!["client-management-view", "allocation-view"].includes(state.currentView)) return;
+        if (!["client-management-view", "allocation-view", "cases-view"].includes(state.currentView)) return;
         // Build the next row window off-screen, then replace only tbody.
         // Keeping the scroll container in place prevents a visible jump to
         // row one while a large client list is being virtualized.
         const scratch = document.createElement("div");
-        const renderVirtualView = state.currentView === "allocation-view" ? renderAllocation : renderClientManagement;
+        const renderVirtualView = state.currentView === "allocation-view"
+          ? renderAllocation
+          : state.currentView === "cases-view"
+            ? renderCases
+            : renderClientManagement;
         renderVirtualView(scratch);
         const nextBody = scratch.querySelector(`[data-virtual-table="${tableId}"] tbody`);
         const currentBody = wrap.querySelector("tbody");
@@ -8077,7 +8102,7 @@
       `);
     }
 
-    function renderCases() {
+    function renderCases(rootOverride = null) {
       const scopedCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic || (item.id === state.selectedCaseId && item.id.startsWith("case-")));
@@ -8087,7 +8112,7 @@
       const caseWindow = windowedRows(caseList, "cases", 44);
       const expandedHimbauan = category === "Himbauan" ? caseList.find((item) => item.id === state.expandedHimbauanId) : null;
       const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
-      const root = document.getElementById("cases-view");
+      const root = rootOverride || document.getElementById("cases-view");
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">${deleteIcon()}</button>`;
       const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${item.id.startsWith("case-") ? `<div class="empty-state">Save this Himbauan first, then add progress updates.</div>` : expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed linked tasks yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress</div><div class="case-progress-list">${expandedProgress.progressEntries.map((entry) => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName)} · ${entry.createdAt ? new Date(entry.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${item.id}">Add</button></div></div></div>` : `<div class="subline">Loading progress...</div>`}</td></tr>` : "";
@@ -9775,6 +9800,7 @@
       renderActiveView();
       applyViewVisibility(viewId);
       renderShellChrome();
+      restoreVirtualTableScrollPositions();
       if (viewId === "my-work-view") loadSharedMyWork(true);
     }
 
@@ -9947,6 +9973,7 @@
     function rerender() {
       const activeEditor = activeEditorSnapshot();
       const scrollY = window.scrollY;
+      captureVirtualTableScrollPositions();
       renderActiveView();
       applyViewVisibility(state.currentView);
       renderShellChrome();
@@ -9959,6 +9986,7 @@
       renderAnnouncementInbox();
       renderAppearanceSettings();
       if (state.currentView === "matrix-view") bindDirectRowActions();
+      restoreVirtualTableScrollPositions();
       restoreActiveEditor(activeEditor);
       if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
     }

@@ -55,8 +55,12 @@ test("Settings exposes per-device Web Push controls", async () => {
 test("the client and case lists use windowed table rendering", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function windowedRows\(rows, tableId, rowHeight\)/);
+  assert.match(demo, /state\.tableViewport\[tableId\] = start/);
   assert.match(demo, /data-virtual-table="active-clients"/);
   assert.match(demo, /data-virtual-table="cases"/);
+  assert.match(demo, /function restoreVirtualTableScrollPositions\(\)/);
+  assert.match(demo, /Math\.min\(Number\(state\.virtualScrollTop\[tableId\] \|\| 0\), maximum\)/);
+  assert.match(demo, /"client-management-view", "allocation-view", "cases-view"/);
 });
 
 test("Clients provides PIC filtering and an autosaving obligation quick panel", async () => {
@@ -142,7 +146,7 @@ test("allocation uses virtual rows and does not build the hidden mobile layout o
   assert.match(demo, /const allocationWindow = windowedRows\(rows, "allocation-clients", 48\)/);
   assert.match(demo, /data-virtual-table="allocation-clients"/);
   assert.match(demo, /\$\{!isMobileLayout \? `<div class="table-wrap"/);
-  assert.match(demo, /\["client-management-view", "allocation-view"\]\.includes\(state\.currentView\)/);
+  assert.match(demo, /\["client-management-view", "allocation-view", "cases-view"\]\.includes\(state\.currentView\)/);
 });
 
 test("Allocation combines ACC PIC and Tax PIC dropdown filters", async () => {
