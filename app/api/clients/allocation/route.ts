@@ -29,9 +29,11 @@ export async function POST(request: Request) {
 
   const clientsByCode = new Map((clientsResult.data || []).map((client) => [client.client_code, client.id]));
   const staffByName = new Map<string, string[]>();
+  const staffLabelById = new Map<string, string>();
   for (const staff of staffResult.data || []) for (const label of [staff.display_name, staff.full_name]) {
     const key = asSafeText(label).toLowerCase();
     if (key) staffByName.set(key, [...(staffByName.get(key) || []), staff.id]);
+    staffLabelById.set(staff.id, asSafeText(staff.display_name) || asSafeText(staff.full_name));
   }
   const resolveStaff = (name: string) => [...new Set(staffByName.get(name.toLowerCase()) || [])];
   const errors: string[] = [];
@@ -46,8 +48,8 @@ export async function POST(request: Request) {
     if (accIds.length !== 1) errors.push(`${clientCode}: ACC PIC must match one active staff profile.`);
     return {
       client_id: clientsByCode.get(clientCode),
-      tax_pic_profile_id: taxIds[0], tax_pic_name: taxName,
-      accounting_pic_profile_id: accIds[0], accounting_pic_name: accName
+      tax_pic_profile_id: taxIds[0], tax_pic_name: staffLabelById.get(taxIds[0]) || taxName,
+      accounting_pic_profile_id: accIds[0], accounting_pic_name: staffLabelById.get(accIds[0]) || accName
     };
   });
   if (errors.length) return NextResponse.json({ error: "Allocation validation failed.", details: errors }, { status: 422 });

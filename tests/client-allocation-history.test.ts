@@ -7,6 +7,7 @@ const root = process.cwd();
 const demo = fs.readFileSync(path.join(root, "public", "demo.html"), "utf8");
 const route = fs.readFileSync(path.join(root, "app", "api", "clients", "allocation", "route.ts"), "utf8");
 const migration = fs.readFileSync(path.join(root, "supabase", "migrations", "202609240002_client_pic_allocation_history.sql"), "utf8");
+const canonicalLabelsMigration = fs.readFileSync(path.join(root, "supabase", "migrations", "202609240003_canonical_staff_labels.sql"), "utf8");
 
 test("allocation history stores yearly before and after PIC identities", () => {
   assert.match(migration, /create table if not exists public\.client_pic_allocation_history/);
@@ -35,8 +36,17 @@ test("allocation API enforces leadership and permanent staff identity", () => {
 test("Allocation UI applies one year-tagged batch from Client Master", () => {
   assert.match(demo, /allocationYear: Number\(/);
   assert.match(demo, /id="allocation-year"/);
-  assert.match(demo, /return \[\.\.\.clientMasterClients\]/);
+  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return activeClientMasterRecords\(\)/);
   assert.match(demo, /fetch\("\/api\/clients\/allocation"|appFetch\("\/api\/clients\/allocation"/);
   assert.match(demo, /allocationYear: state\.allocationYear/);
   assert.doesNotMatch(demo, /Promise\.all\(report\.map\(\(change\) => saveClientToDatabase/);
+});
+
+test("Allocation canonicalizes legacy PIC capitalization by permanent profile ID", () => {
+  assert.match(demo, /await loadStaffDirectory\(background\)/);
+  assert.match(demo, /clientMasterClients\.forEach/);
+  assert.match(demo, /canonicalStaffName\(client\.taxPic, client\.taxPicProfileId\)/);
+  assert.match(route, /staffLabelById\.get\(taxIds\[0\]\) \|\| taxName/);
+  assert.match(canonicalLabelsMigration, /where client\.tax_pic_profile_id = staff\.id/);
+  assert.match(canonicalLabelsMigration, /where client\.accounting_pic_profile_id = staff\.id/);
 });

@@ -5050,6 +5050,14 @@
       return String(name || "").trim().replace(/^(PT|CV|FA|BUT|UD|FIRMA|YAYASAN|KOPERASI)\.?\s+/i, "") || "-";
     }
 
+    function isActiveClientRecord(client) {
+      return String(client?.clientStatus || "").trim().toLowerCase() === "active";
+    }
+
+    function activeClientMasterRecords() {
+      return clientMasterClients.filter(isActiveClientRecord);
+    }
+
     let searchDebounceTimer = 0;
     const SEARCH_STATE_BY_INPUT = {
       "active-client-search": "clientSearch",
@@ -5668,7 +5676,7 @@
 
     function allocationRows() {
       const query = state.allocationQuery.trim().toLowerCase();
-      return [...clientMasterClients]
+      return activeClientMasterRecords()
         .filter((client) => hasLeadershipAccess() || client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic)
         .filter((client) => {
           const draft = state.allocationDrafts[client.id] || {};
@@ -6396,7 +6404,7 @@
       const stats = supervisorStats(list);
       const attention = mostProblematicClients(list);
       const billingQueue = billingReadyClients(list);
-      const activePortfolioClients = clientMasterClients.filter((client) => client.clientStatus !== "Inactive");
+      const activePortfolioClients = activeClientMasterRecords();
       const activeCount = activePortfolioClients.length;
       const activeMonthlyFeeBase = activePortfolioClients.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
       const proposalCount = proposals.filter((item) => !["Won", "Lost"].includes(item.status)).length;
@@ -6435,20 +6443,21 @@
       const currentYear = new Date().getFullYear();
       const growthYears = Array.from({ length: 6 }, (_, index) => currentYear - 5 + index);
       const growthClients = clientMasterClients;
+      const currentActiveClients = activeClientMasterRecords();
       const clientGrowth = growthYears.map((year) => {
         const endOfYear = `${year}-12-31`;
         const started = growthClients.filter((client) => (client.contractStartedAt || client.engagementStart || "").slice(0, 4) === String(year));
         const endedAt = (client) => client.clientStatus === "Inactive" ? (client.engagementEnd || client.inactivatedAt || "") : (client.inactivatedAt || "");
         const ended = growthClients.filter((client) => endedAt(client).slice(0, 4) === String(year));
         const active = year === currentYear
-          ? growthClients.filter((client) => client.clientStatus !== "Inactive")
+          ? currentActiveClients
           : growthClients.filter((client) => { const start = client.contractStartedAt || client.engagementStart || ""; const end = endedAt(client); return start && start <= endOfYear && (!end || end > endOfYear); });
         const monthlyFee = active.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
         return { year, started: started.length, ended: ended.length, active: active.length, monthlyFee };
       });
       const maxGrowthFee = Math.max(...clientGrowth.map((row) => row.monthlyFee), 1);
       const regions = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
-      const regionalCounts = regions.map((region) => ({ region, count: growthClients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region && client.clientStatus !== "Inactive").length }));
+      const regionalCounts = regions.map((region) => ({ region, count: currentActiveClients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region).length }));
       const root = document.getElementById("dashboard-view");
 
       root.innerHTML = safeHtml(`
@@ -6578,10 +6587,10 @@
 
           ${state.managementTab === "portfolio" ? `
             <section class="compact-grid-4">
-              <div class="metric"><div class="eyebrow">Active Clients</div><strong>${clients.length}</strong><div class="sub">Shared client master records.</div></div>
-              <div class="metric"><div class="eyebrow">Monthly Fee Base</div><strong>${currency(clients.reduce((sum, client) => sum + client.serviceFee, 0))}</strong><div class="sub">Before VAT and withholding.</div></div>
-              <div class="metric"><div class="eyebrow">Annual Fee Base</div><strong>${currency(clients.reduce((sum, client) => sum + client.annualFee, 0))}</strong><div class="sub">Current active portfolio.</div></div>
-              <div class="metric"><div class="eyebrow">PIC Coverage</div><strong>${new Set(clients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean)).size}</strong><div class="sub">People assigned across clients.</div></div>
+              <div class="metric"><div class="eyebrow">Active Clients</div><strong>${activePortfolioClients.length}</strong><div class="sub">Active client master records only.</div></div>
+              <div class="metric"><div class="eyebrow">Monthly Fee Base</div><strong>${currency(activePortfolioClients.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0))}</strong><div class="sub">Before VAT and withholding.</div></div>
+              <div class="metric"><div class="eyebrow">Annual Fee Base</div><strong>${currency(activePortfolioClients.reduce((sum, client) => sum + Number(client.annualFee || annualFeeFromMonthly(client.serviceFee)), 0))}</strong><div class="sub">Current active portfolio.</div></div>
+              <div class="metric"><div class="eyebrow">PIC Coverage</div><strong>${new Set(activePortfolioClients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean)).size}</strong><div class="sub">People assigned across active clients.</div></div>
             </section>
             <section class="panel"><div class="section-title"><div><h3>Portfolio Snapshot</h3><p>High-level client health without exposing the editable client workspace.</p></div></div><div class="detail-list">${clientPortfolioSnapshot().picWorkload.slice(0, 10).map((row) => `<div class="list-item"><strong>${row.pic}</strong><span>${row.clients} client(s)</span></div>`).join("") || `<div class="empty-state">No shared client records yet.</div>`}</div></section>
           ` : ``}
@@ -6687,8 +6696,9 @@
     function renderAllocation(rootOverride = null) {
       const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
-      const allocationAccOptions = [...new Set([...ACC_PICS, ...clientMasterClients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
-      const allocationTaxOptions = [...new Set([...TAX_PICS, ...clientMasterClients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
+      const activeAllocationClients = activeClientMasterRecords();
+      const allocationAccOptions = [...new Set([...ACC_PICS, ...activeAllocationClients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
+      const allocationTaxOptions = [...new Set([...TAX_PICS, ...activeAllocationClients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
       const allocationWindow = windowedRows(rows, "allocation-clients", 48);
       const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
       const pendingChanges = rows.filter((client) => {
@@ -6841,8 +6851,8 @@
     }
 
     function clientPortfolioSnapshot() {
-      const activeClients = clients.filter((client) => client.clientStatus === "Active");
-      const portfolio = activeClients.length ? activeClients : clients;
+      const activeClients = activeClientMasterRecords();
+      const portfolio = activeClients;
       const monthlyFee = portfolio.reduce((sum, client) => sum + Number(client.serviceFee || 0), 0);
       const annualFee = portfolio.reduce((sum, client) => sum + Number(client.annualFee || annualFeeFromMonthly(client.serviceFee)), 0);
       const coveredPICS = new Set(portfolio.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean));
@@ -6855,7 +6865,7 @@
         counts[industry] = (counts[industry] || 0) + 1;
         return counts;
       }, {})).map(([label, count]) => ({ label, count })).sort((left, right) => right.count - left.count || compareText(left.label, right.label));
-      const statusCounts = Object.entries(clients.reduce((counts, client) => {
+      const statusCounts = Object.entries(portfolio.reduce((counts, client) => {
         const status = client.clientStatus || "Unclassified";
         counts[status] = (counts[status] || 0) + 1;
         return counts;
@@ -6908,6 +6918,7 @@
       const monthlyFees = feeModel(activeSample.serviceFee, true, true);
       const annualFees = feeModel(activeSample.annualFee || annualFeeFromMonthly(activeSample.serviceFee), true, false);
       const managedClients = clientMasterClients;
+      const activeManagedClients = activeClientMasterRecords();
       const contractClients = managedClients.filter((client) => {
         const health = contractHealth(client);
         return state.contractFilter === "all"
@@ -6917,10 +6928,10 @@
       });
       const clientSearch = state.clientSearch.trim().toLowerCase();
       const viewingInactiveClients = state.clientManagementTab === "inactive";
-      const picFilterOptions = [...new Set(managedClients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
+      const picFilterOptions = [...new Set((viewingInactiveClients ? managedClients.filter((client) => !isActiveClientRecord(client)) : activeManagedClients).flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
       if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
       const activeClientRows = [...managedClients].filter((client) => {
-        const matchesStatus = viewingInactiveClients ? client.clientStatus === "Inactive" : client.clientStatus !== "Inactive";
+        const matchesStatus = viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client);
         const matchesPic = state.clientPicFilter === "all" || client.taxPic === state.clientPicFilter || client.accountingPic === state.clientPicFilter;
         return matchesStatus && matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
       }).sort((left, right) => {
@@ -7232,7 +7243,7 @@
               <div class="compact-grid-4">
                 <div class="metric"><div class="eyebrow">Annual Fee Base</div><strong>${currency(portfolio.annualFee)}</strong><div class="sub">${portfolio.portfolio.length ? currency(Math.round(portfolio.annualFee / portfolio.portfolio.length)) : currency(0)} average per active client.</div></div>
                 <div class="metric"><div class="eyebrow">Monthly Fee Base</div><strong>${currency(portfolio.monthlyFee)}</strong><div class="sub">DPP before VAT and PPh 23.</div></div>
-                <div class="metric"><div class="eyebrow">Active Managed Clients</div><strong>${portfolio.activeClients.length}</strong><div class="sub">${clients.length - portfolio.activeClients.length} client(s) outside active status.</div></div>
+                <div class="metric"><div class="eyebrow">Active Managed Clients</div><strong>${portfolio.activeClients.length}</strong><div class="sub">Inactive clients are retained only in the archive.</div></div>
                 <div class="metric"><div class="eyebrow">Technical Coverage</div><strong>${portfolio.coveredPICS.size}</strong><div class="sub">${portfolio.expiringContracts} contract(s) expiring soon.</div></div>
               </div>
             </section>
@@ -7240,7 +7251,7 @@
               <div class="panel">
                 <div class="section-title"><div><h3>Client Status</h3><p>Current portfolio composition.</p></div></div>
                 <div class="portfolio-bars">
-                  ${portfolio.statusCounts.map((row) => `<div class="portfolio-bar-row"><strong>${row.label}</strong><div class="portfolio-bar-track"><div class="portfolio-bar-fill" style="width:${clients.length ? Math.round((row.count / clients.length) * 100) : 0}%"></div></div><span>${row.count}</span></div>`).join("") || `<div class="empty-state">No client records available.</div>`}
+                  ${portfolio.statusCounts.map((row) => `<div class="portfolio-bar-row"><strong>${row.label}</strong><div class="portfolio-bar-track"><div class="portfolio-bar-fill" style="width:${portfolio.portfolio.length ? Math.round((row.count / portfolio.portfolio.length) * 100) : 0}%"></div></div><span>${row.count}</span></div>`).join("") || `<div class="empty-state">No active client records available.</div>`}
                 </div>
               </div>
               <div class="panel">
@@ -8129,7 +8140,7 @@
             </tbody></table></div>
           </section>
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Recently Deleted Cases</h3><p>Restore is available for three days after deletion.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No deleted cases available for restoration.</div>`}</div></section>` : ""}
-          <datalist id="case-client-options">${clientMasterClients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
+          <datalist id="case-client-options">${activeClientMasterRecords().map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
     }
@@ -8316,7 +8327,7 @@
         if (accountingMatch) return "PIC ACC";
         return "";
       };
-      const assignedClients = clientMasterClients.filter((client) => assignmentRole(client) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
+      const assignedClients = activeClientMasterRecords().filter((client) => assignmentRole(client) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
       root.innerHTML = safeHtml(`
         <div class="workspace-frame">
           <section class="panel">
@@ -9292,7 +9303,7 @@
         state.username = profile.username || state.username;
         state.teamDivision = profile.team_division || state.teamDivision;
         state.role = String(profile.role || "staff").toLowerCase();
-        loadStaffDirectory(background);
+        await loadStaffDirectory(background);
         rerender();
       } catch (error) {
         console.warn("[profile] request failed", error);
@@ -9331,6 +9342,13 @@
           client.pic = normalizePic(client.pic);
           client.taxPic = normalizePic(client.taxPic);
           client.accountingPic = normalizePic(client.accountingPic);
+          client.partner = normalizePic(client.partner);
+          client.supervisor = normalizePic(client.supervisor);
+        });
+        clientMasterClients.forEach((client) => {
+          client.taxPic = canonicalStaffName(client.taxPic, client.taxPicProfileId);
+          client.accountingPic = canonicalStaffName(client.accountingPic, client.accountingPicProfileId);
+          client.pic = client.taxPic;
           client.partner = normalizePic(client.partner);
           client.supervisor = normalizePic(client.supervisor);
         });

@@ -85,12 +85,13 @@ test("Client Growth normalizes KPP labels before calculating regional distributi
 test("Client Growth uses Client Master and includes active clients without a precise contract date", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /const growthClients = clientMasterClients/);
-  assert.match(demo, /year === currentYear\s+\? growthClients\.filter\(\(client\) => client\.clientStatus !== "Inactive"\)/);
+  assert.match(demo, /const currentActiveClients = activeClientMasterRecords\(\)/);
+  assert.match(demo, /year === currentYear\s+\? currentActiveClients/);
 });
 
 test("KPI Overview counts only active Client Master records", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /const activePortfolioClients = clientMasterClients\.filter\(\(client\) => client\.clientStatus !== "Inactive"\)/);
+  assert.match(demo, /const activePortfolioClients = activeClientMasterRecords\(\)/);
   assert.match(demo, /const activeCount = activePortfolioClients\.length/);
   assert.match(demo, /const activeMonthlyFeeBase = activePortfolioClients\.reduce/);
   assert.match(demo, /const assignedClients = activePortfolioClients\.filter/);
@@ -99,12 +100,24 @@ test("KPI Overview counts only active Client Master records", async () => {
 
 test("Profile client scope uses Client Master and permanent PIC profile IDs", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /const assignedClients = clientMasterClients\.filter/);
+  assert.match(demo, /const assignedClients = activeClientMasterRecords\(\)\.filter/);
   assert.match(demo, /client\.taxPicProfileId \|\| ""/);
   assert.match(demo, /client\.accountingPicProfileId \|\| ""/);
   assert.match(demo, /PIC TAX & PIC ACC/);
   assert.match(demo, /assignedClients\.map\(\(client, index\) => `<tr><td>\$\{index \+ 1\}<\/td>/);
   assert.match(demo, /<th>No\.<\/th><th>Client<\/th><th>Role<\/th><th>Status<\/th>/);
+});
+
+test("all current client portfolio views share the strict Active-only scope", async () => {
+  const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /function isActiveClientRecord\(client\) \{[\s\S]*?\.toLowerCase\(\) === "active"/);
+  assert.match(demo, /function activeClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(isActiveClientRecord\);/);
+  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return activeClientMasterRecords\(\)/);
+  assert.match(demo, /function clientPortfolioSnapshot\(\) \{\s*const activeClients = activeClientMasterRecords\(\);\s*const portfolio = activeClients;/);
+  assert.match(demo, /const regionalCounts = regions\.map\(\(region\) => \(\{ region, count: currentActiveClients\.filter/);
+  assert.match(demo, /<datalist id="case-client-options">\$\{activeClientMasterRecords\(\)\.map/);
+  assert.doesNotMatch(demo, /clientStatus !== "Inactive"/);
+  assert.doesNotMatch(demo, /const portfolio = activeClients\.length \? activeClients : clients/);
 });
 
 test("Monthly Compliance saves changed fields per client and preserves the active queue during client refresh", async () => {
