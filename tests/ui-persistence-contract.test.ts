@@ -162,8 +162,12 @@ test("production startup never renders demo records before shared data arrives",
 
 test("portfolio snapshot shows every operational PIC without counting inactive clients", async () => {
   const demo = await readFile(demoPath, "utf8");
+  assert.match(demo, /let ACC_PICS = \["Ivan", "Cemari", "Dewayu", "Tantri", "Dina"\]/);
+  assert.match(demo, /let TAX_PICS = \["Ita", "Okta", "Harry", "Denny", "Dimas", "Devira", "Budi", "Bagus", "Dinar"\]/);
+  assert.match(demo, /const EXPECTED_PIC_ROSTER = \[\.\.\.ACC_PICS, \.\.\.TAX_PICS\]/);
+  assert.match(demo, /for \(const pic of \[\.\.\.EXPECTED_PIC_ROSTER, \.\.\.ALL_PICS/);
   assert.match(demo, /function clientPortfolioSnapshot\(\) \{\s*const activeClients = activeClientMasterRecords\(\)/);
-  assert.match(demo, /for \(const pic of \[\.\.\.ALL_PICS, \.\.\.portfolio\.flatMap/);
+  assert.match(demo, /\.\.\.ALL_PICS, \.\.\.portfolio\.flatMap/);
   assert.match(demo, /clientPortfolioSnapshot\(\)\.picWorkload\.map/);
   assert.doesNotMatch(demo, /clientPortfolioSnapshot\(\)\.picWorkload\.slice/);
 });

@@ -3724,8 +3724,9 @@
     ];
 
     const PROPOSAL_STATUSES = ["New Lead", "Proposal Sent", "Negotiation", "Won", "Lost"];
-    let ACC_PICS = ["Ivan", "Cemari", "Dewayu", "Tantri", "Dina", "Dimas"];
-    let TAX_PICS = ["Ita", "Okta", "Harry", "Denny", "Bagus", "Dinar"];
+    let ACC_PICS = ["Ivan", "Cemari", "Dewayu", "Tantri", "Dina"];
+    let TAX_PICS = ["Ita", "Okta", "Harry", "Denny", "Dimas", "Devira", "Budi", "Bagus", "Dinar"];
+    const EXPECTED_PIC_ROSTER = [...ACC_PICS, ...TAX_PICS];
     let PARTNERS = ["Widi"];
     let SUPERVISORS = ["Raka"];
     let staffDirectoryLoaded = false;
@@ -6593,7 +6594,7 @@
               <div class="metric"><div class="eyebrow">Annual Fee Base</div><strong>${currency(activePortfolioClients.reduce((sum, client) => sum + Number(client.annualFee || annualFeeFromMonthly(client.serviceFee)), 0))}</strong><div class="sub">Current active portfolio.</div></div>
               <div class="metric"><div class="eyebrow">PIC Coverage</div><strong>${new Set(activePortfolioClients.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean)).size}</strong><div class="sub">People assigned across active clients.</div></div>
             </section>
-            <section class="panel"><div class="section-title"><div><h3>Portfolio Snapshot</h3><p>Active clients assigned to each PIC, including PICs with no current allocation.</p></div></div><div class="detail-list">${clientPortfolioSnapshot().picWorkload.map((row) => `<div class="list-item"><strong>${escapeHtml(row.pic)}</strong><span>${row.clients} client(s)</span></div>`).join("") || `<div class="empty-state">No PIC records yet.</div>`}</div></section>
+            <section class="panel"><div class="section-title"><div><h3>Portfolio Snapshot</h3><p>${clientPortfolioSnapshot().picWorkload.length} PICs · Active clients assigned to each PIC, including PICs with no current allocation.</p></div></div><div class="detail-list">${clientPortfolioSnapshot().picWorkload.map((row) => `<div class="list-item"><strong>${escapeHtml(row.pic)}${row.directoryMissing ? ` <small class="meta">Not in active staff directory</small>` : ""}</strong><span>${row.clients} client(s)</span></div>`).join("") || `<div class="empty-state">No PIC records yet.</div>`}</div></section>
           ` : ``}
 
           ${state.managementTab === "recognition" ? `
@@ -6860,12 +6861,13 @@
       const annualFee = portfolio.reduce((sum, client) => sum + Number(client.annualFee || annualFeeFromMonthly(client.serviceFee)), 0);
       const coveredPICS = new Set(portfolio.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean));
       const picNames = new Map();
-      for (const pic of [...ALL_PICS, ...portfolio.flatMap((client) => [client.taxPic, client.accountingPic])]) {
+      for (const pic of [...EXPECTED_PIC_ROSTER, ...ALL_PICS, ...portfolio.flatMap((client) => [client.taxPic, client.accountingPic])]) {
         const name = String(pic || "").trim();
         if (name) picNames.set(name.toLocaleLowerCase("id-ID"), picNames.get(name.toLocaleLowerCase("id-ID")) || name);
       }
       const picWorkload = [...picNames].map(([key, pic]) => ({
         pic,
+        directoryMissing: staffDirectoryLoaded && !staffDirectory.some((person) => person.role !== "partner" && String(person.display_name || person.full_name || "").trim().toLocaleLowerCase("id-ID") === key),
         clients: portfolio.filter((client) => [client.taxPic, client.accountingPic].some((name) => String(name || "").trim().toLocaleLowerCase("id-ID") === key)).length
       })).sort((left, right) => right.clients - left.clients || compareText(left.pic, right.pic));
       const industryCounts = Object.entries(portfolio.reduce((counts, client) => {

@@ -12,6 +12,6 @@ test("dashboard iframe uses the mobile dynamic viewport", async () => {
   ]);
 
   assert.match(frame, /className="demo-frame w-full border-0"/);
-  assert.match(frame, /src="\/demo\.html\?v=startup-v2"/);
+  assert.match(frame, /src="\/demo\.html\?v=portfolio-pics-v3"/);
   assert.match(globals, /\.demo-frame \{[\s\S]*height: 100vh;[\s\S]*height: 100dvh;/);
 });
