@@ -103,6 +103,8 @@ test("Profile client scope uses Client Master and permanent PIC profile IDs", as
   assert.match(demo, /client\.taxPicProfileId \|\| ""/);
   assert.match(demo, /client\.accountingPicProfileId \|\| ""/);
   assert.match(demo, /PIC TAX & PIC ACC/);
+  assert.match(demo, /assignedClients\.map\(\(client, index\) => `<tr><td>\$\{index \+ 1\}<\/td>/);
+  assert.match(demo, /<th>No\.<\/th><th>Client<\/th><th>Role<\/th><th>Status<\/th>/);
 });
 
 test("Monthly Compliance saves changed fields per client and preserves the active queue during client refresh", async () => {

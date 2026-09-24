@@ -7118,16 +7118,12 @@
                     ${proposalRows.map((proposal) => `
                       <tr>
                         <td>${proposal.name}<div class="subline">${proposal.address}</div></td>
-                        <td>
-                          <select class="inline-select" data-proposal-status="${proposal.id}">
-                            ${PROPOSAL_STATUSES.map((status) => `<option value="${status}" ${proposal.status === status ? "selected" : ""}>${status}</option>`).join("")}
-                          </select>
-                        </td>
+                        <td><span class="pill ${proposal.clientStatus === "Contract" ? "warning" : "neutral"}">${proposal.clientStatus === "Contract" ? "Contract" : "Proposal"}</span></td>
                         <td>${proposal.proposedPic}</td>
                         <td>${obligationLabelsFromKeys(proposal.obligations)}</td>
                         <td>${currency(proposal.monthlyFee)}</td>
                         <td>${currency(proposal.annualFee)}</td>
-                        <td><div class="inline-controls"><button class="tiny-btn" data-edit-proposal="${proposal.id}">Edit</button><button class="tiny-btn" data-convert-proposal="${proposal.id}">Convert to Active</button></div></td>
+                        <td><div class="inline-controls"><button class="tiny-btn" data-edit-proposal="${proposal.id}">Edit</button><button class="tiny-btn" data-convert-proposal="${proposal.id}">${proposal.clientStatus === "Contract" ? "Convert to Active" : "Convert to Contract"}</button></div></td>
                       </tr>
                     `).join("")}
                   </tbody>
@@ -7142,7 +7138,7 @@
                           <div class="mobile-card-title">${proposal.name}</div>
                           <div class="subline">${proposal.address}</div>
                         </div>
-                        <span class="pill warning">${proposal.status}</span>
+                        <span class="pill warning">${proposal.clientStatus === "Contract" ? "Contract" : "Proposal"}</span>
                       </div>
                       <div class="mobile-meta-grid">
                         <div class="mobile-meta-box"><div class="eyebrow">Proposed PIC</div><strong>${proposal.proposedPic}</strong></div>
@@ -7152,7 +7148,7 @@
                       </div>
                       <div class="inline-controls">
                         <button class="tiny-btn" data-edit-proposal="${proposal.id}">Edit</button>
-                        <button class="tiny-btn" data-convert-proposal="${proposal.id}">Convert to Active</button>
+                        <button class="tiny-btn" data-convert-proposal="${proposal.id}">${proposal.clientStatus === "Contract" ? "Convert to Active" : "Convert to Contract"}</button>
                       </div>
                     </div>
                   `).join("")}
@@ -7160,7 +7156,7 @@
               </div>
             </section>
 
-            <section class="client-master-layout">
+            <section class="client-master-layout" hidden aria-hidden="true">
               <div class="panel client-setup-panel">
                 <div class="section-title">
                   <div>
@@ -8331,8 +8327,8 @@
               <div class="detail-card"><div class="eyebrow">Assigned Clients</div><strong>${assignedClients.length}</strong><div class="subline">Based on PIC ACC or PIC TAX.</div></div>
             </div>
             <div ${state.profileTab === "clients" ? "" : "hidden"}><div class="toolbar compact-toolbar" style="margin-top:16px;"><input id="profile-client-search" class="filter-input" type="search" value="${escapeAttr(state.profileClientSearch)}" placeholder="Search my clients..." /></div>
-            <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
-              ${assignedClients.map((client) => `<tr><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
+            <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>No.</th><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
+              ${assignedClients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
             <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Announcement History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete announcement" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
@@ -8672,6 +8668,7 @@
         engagementStart: row.engagement_start,
         engagementEnd: row.engagement_end,
         contractStartedAt: row.contract_started_at,
+        contractSignedAt: row.contract_signed_at,
         inactivatedAt: row.inactivated_at,
         taxOfficeRegion: row.tax_office_region,
         notes: row.notes,
@@ -8689,6 +8686,14 @@
       client.accountingPicProfileId = row.accounting_pic_profile_id || "";
       client.sourceSystem = row.source_system;
       client.proposalStatus = row.proposal_status || "";
+      client.responsiblePersonName = row.responsible_person_name || "";
+      client.responsiblePersonBirthPlace = row.responsible_person_birth_place || "";
+      client.responsiblePersonBirthDate = row.responsible_person_birth_date || "";
+      client.responsiblePersonAddress = row.responsible_person_address || "";
+      client.notaryName = row.notary_name || "";
+      client.notaryAddress = row.notary_address || "";
+      client.deedNumber = row.deed_number || "";
+      client.deedDate = row.deed_date || "";
       return client;
     }
 
@@ -8754,20 +8759,20 @@
         }
         const rows = Array.isArray(result.data) ? result.data : [];
         const mapped = rows.map(databaseClientToDemo);
-        clientMasterClients = mapped.filter((client) => client.clientStatus !== "Proposal");
+        clientMasterClients = mapped.filter((client) => !["Proposal", "Contract"].includes(client.clientStatus));
         // A client-master refresh must not replace the in-progress monthly
         // snapshot, otherwise a later autosave can erase queue progress.
         clients = state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]
           ? structuredClone(state.monthlyProgress[state.activeMonthlyPeriod])
           : structuredClone(clientMasterClients);
-        proposals = mapped.filter((client) => client.clientStatus === "Proposal").map((client) => ({
+        proposals = mapped.filter((client) => ["Proposal", "Contract"].includes(client.clientStatus)).map((client) => ({
           ...client,
           proposedPic: client.taxPic,
           proposedAccPic: client.accountingPic,
           obligations: OBLIGATIONS.filter((key) => client.obligations[key].status !== "na"),
           monthlyFee: client.serviceFee,
           annualFee: client.annualFee,
-          status: client.proposalStatus || "New Lead"
+          status: client.proposalStatus || (client.clientStatus === "Contract" ? "Contract Draft" : "Proposal")
         }));
         clientsLoadedFromDatabase = true;
         if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
@@ -9452,6 +9457,49 @@
       if (!record) {
         state.clientEditor = null;
         root.innerHTML = safeHtml("");
+        return;
+      }
+      if (isProposal) {
+        const isContract = record.clientStatus === "Contract";
+        const identity = splitBusinessName(record);
+        const selectedObligations = Array.isArray(record.obligations) ? record.obligations : [];
+        const stageLabel = isContract ? "Contract" : "Proposal / Quotation";
+        root.innerHTML = safeHtml(`
+          <div class="client-editor-backdrop" role="presentation">
+            <section class="client-editor-modal" role="dialog" aria-modal="true" aria-label="${stageLabel}">
+              <div class="client-editor-head"><div><div class="eyebrow">${isContract ? "Prospective contract" : "Prospective client"}</div><h3>${stageLabel}</h3></div><button class="ghost-btn" data-close-client-editor="yes">Close</button></div>
+              <div class="detail-list">
+                <section class="client-form-section">
+                  <div class="client-form-section-title"><strong>Identity</strong><span>${isContract ? "Contract party" : "Proposal details"}</span></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-business-form">Form</label><select id="proposal-business-form" class="field">${optionsMarkup(BUSINESS_FORMS, identity.form)}</select></div><div class="client-field"><label for="proposal-name">Name</label><input id="proposal-name" class="field" value="${escapeAttr(identity.name || "")}" placeholder="Prospective client" /></div></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-npwp">NPWP ${isContract ? "" : "(optional)"}</label><input id="proposal-npwp" class="field" value="${escapeAttr(record.npwp || "")}" /></div><div class="client-field"><label for="proposal-address">Address / Regency (optional)</label><input id="proposal-address" class="field" value="${escapeAttr(record.address || "")}" /></div></div>
+                  <div class="client-field"><label for="proposal-responsible-person">Director / Responsible Person</label><input id="proposal-responsible-person" class="field" value="${escapeAttr(record.responsiblePersonName || "")}" /></div>
+                  ${isContract ? `<div class="client-field"><label for="proposal-industry">Company Type / Business Activity</label><input id="proposal-industry" class="field" value="${escapeAttr(record.industry || "")}" /></div>` : ""}
+                </section>
+                ${isContract ? `<section class="client-form-section">
+                  <div class="client-form-section-title"><strong>Responsible Person</strong><span>Contract identity</span></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-birth-place">Birth Place</label><input id="proposal-birth-place" class="field" value="${escapeAttr(record.responsiblePersonBirthPlace || "")}" /></div><div class="client-field"><label for="proposal-birth-date">Birth Date</label><input id="proposal-birth-date" class="field" type="date" value="${escapeAttr(record.responsiblePersonBirthDate || "")}" /></div></div>
+                  <div class="client-field"><label for="proposal-responsible-address">Address</label><input id="proposal-responsible-address" class="field" value="${escapeAttr(record.responsiblePersonAddress || "")}" /></div>
+                </section>
+                <section class="client-form-section">
+                  <div class="client-form-section-title"><strong>Company Deed</strong><span>Notarial information</span></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-notary-name">Notary Name</label><input id="proposal-notary-name" class="field" value="${escapeAttr(record.notaryName || "")}" /></div><div class="client-field"><label for="proposal-notary-address">Notary Address / Regency</label><input id="proposal-notary-address" class="field" value="${escapeAttr(record.notaryAddress || "")}" /></div></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-deed-number">Company Establishment Deed No.</label><input id="proposal-deed-number" class="field" value="${escapeAttr(record.deedNumber || "")}" /></div><div class="client-field"><label for="proposal-deed-date">Deed Date</label><input id="proposal-deed-date" class="field" type="date" value="${escapeAttr(record.deedDate || "")}" /></div></div>
+                </section>
+                <section class="client-form-section">
+                  <div class="client-form-section-title"><strong>PIC & Scope</strong><span>PIC may be assigned later in Allocation</span></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-tax-pic">PIC Tax (optional)</label><select id="proposal-tax-pic" class="field"><option value="">Assign later</option>${optionsMarkup(TAX_PICS, record.proposedPic)}</select></div><div class="client-field"><label for="proposal-acc-pic">PIC ACC (optional)</label><select id="proposal-acc-pic" class="field"><option value="">Assign later</option>${optionsMarkup(ACC_PICS, record.proposedAccPic)}</select></div></div>
+                  <div class="client-field"><label for="proposal-contract-start">Contract Start Month</label><input id="proposal-contract-start" class="field" type="month" value="${escapeAttr(String(record.contractStartedAt || "").slice(0, 7))}" /></div>
+                  <div class="chips">${OBLIGATIONS.map((key) => `<label class="pill ${selectedObligations.includes(key) ? "accent" : "neutral"}"><input id="proposal-ob-${key}" type="checkbox" ${selectedObligations.includes(key) ? "checked" : ""} /> ${OBLIGATION_LABELS[key]}</label>`).join("")}</div>
+                </section>` : ""}
+                <section class="client-form-section">
+                  <div class="client-form-section-title"><strong>Commercial Terms</strong><span>Excluding VAT and PPh 23</span></div>
+                  <div class="detail-grid-2"><div class="client-field"><label for="proposal-monthly-fee">Monthly Fee</label><input id="proposal-monthly-fee" class="field" type="number" min="0" value="${Number(record.monthlyFee || 0)}" /></div><div class="client-field"><label for="proposal-annual-fee">Annual Fee (monthly x 12 x 30%)</label><input id="proposal-annual-fee" class="field" type="number" min="0" value="${Number(record.annualFee || 0)}" /></div></div>
+                </section>
+              </div>
+              <div class="client-editor-actions"><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" data-save-proposal="${record.id}">Save ${isContract ? "Contract" : "Proposal"}</button></div>
+            </section>
+          </div>`);
         return;
       }
       const taxPic = isProposal ? record.proposedPic : record.taxPic;
@@ -10926,7 +10974,17 @@
           includeVat: false,
           includePph23: false,
           notes: "",
-          status: "New Lead"
+          status: "Proposal",
+          clientStatus: "Proposal",
+          responsiblePersonName: "",
+          responsiblePersonBirthPlace: "",
+          responsiblePersonBirthDate: "",
+          responsiblePersonAddress: "",
+          notaryName: "",
+          notaryAddress: "",
+          deedNumber: "",
+          deedDate: "",
+          contractStartedAt: ""
         };
         proposals.unshift(record);
         state.activeProposalId = record.id;
@@ -10955,15 +11013,29 @@
         proposal.businessForm = clientEditorField("proposal-business-form").value;
         proposal.name = joinBusinessName(proposal.businessForm, proposalName);
         proposal.npwp = clientEditorField("proposal-npwp").value.trim();
-        proposal.industry = clientEditorField("proposal-industry").value.trim();
         proposal.address = clientEditorField("proposal-address").value.trim();
-        proposal.proposedPic = clientEditorField("proposal-tax-pic").value;
-        proposal.proposedAccPic = clientEditorField("proposal-acc-pic").value;
-        proposal.status = clientEditorField("proposal-status").value;
+        proposal.responsiblePersonName = clientEditorField("proposal-responsible-person").value.trim();
+        if (!proposal.responsiblePersonName) {
+          window.alert("Director / responsible person is required.");
+          return;
+        }
+        const optionalValue = (id) => clientEditorField(id)?.value?.trim() || "";
+        proposal.industry = optionalValue("proposal-industry");
+        proposal.proposedPic = optionalValue("proposal-tax-pic");
+        proposal.proposedAccPic = optionalValue("proposal-acc-pic");
+        proposal.responsiblePersonBirthPlace = optionalValue("proposal-birth-place");
+        proposal.responsiblePersonBirthDate = optionalValue("proposal-birth-date");
+        proposal.responsiblePersonAddress = optionalValue("proposal-responsible-address");
+        proposal.notaryName = optionalValue("proposal-notary-name");
+        proposal.notaryAddress = optionalValue("proposal-notary-address");
+        proposal.deedNumber = optionalValue("proposal-deed-number");
+        proposal.deedDate = optionalValue("proposal-deed-date");
+        proposal.contractStartedAt = optionalValue("proposal-contract-start") ? `${optionalValue("proposal-contract-start")}-01` : "";
+        proposal.status = proposal.clientStatus === "Contract" ? "Contract Draft" : "Proposal";
         proposal.monthlyFee = Number(clientEditorField("proposal-monthly-fee").value || 0);
         proposal.annualFee = Number(clientEditorField("proposal-annual-fee").value || 0);
-        proposal.notes = clientEditorField("proposal-notes").value.trim();
-        proposal.obligations = OBLIGATIONS.filter((key) => clientEditorField(`proposal-ob-${key}`).checked);
+        proposal.notes = optionalValue("proposal-notes");
+        proposal.obligations = OBLIGATIONS.filter((key) => clientEditorField(`proposal-ob-${key}`)?.checked);
         try {
           await saveClientToDatabase({
             clientCode: proposal.clientCode || `PR-${String(proposals.indexOf(proposal) + 1).padStart(3, "0")}`,
@@ -10973,12 +11045,21 @@
             industry: proposal.industry,
             taxPic: proposal.proposedPic,
             accountingPic: proposal.proposedAccPic,
-            clientStatus: "Proposal",
+            clientStatus: proposal.clientStatus || "Proposal",
             serviceFee: proposal.monthlyFee,
             annualFee: proposal.annualFee,
             notes: proposal.notes,
             proposalStatus: proposal.status,
             businessForm: proposal.businessForm,
+            responsiblePersonName: proposal.responsiblePersonName,
+            responsiblePersonBirthPlace: proposal.responsiblePersonBirthPlace,
+            responsiblePersonBirthDate: proposal.responsiblePersonBirthDate,
+            responsiblePersonAddress: proposal.responsiblePersonAddress,
+            notaryName: proposal.notaryName,
+            notaryAddress: proposal.notaryAddress,
+            deedNumber: proposal.deedNumber,
+            deedDate: proposal.deedDate,
+            contractStartedAt: proposal.contractStartedAt,
             obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
           });
           state.clientEditor = null;
@@ -11376,46 +11457,34 @@
       if (convertProposalButton) {
         const proposal = proposals.find((item) => item.id === convertProposalButton.getAttribute("data-convert-proposal"));
         if (!proposal) return;
-        proposal.status = "Won";
-        const convertedClientCode = nextClientCode();
-        const newClient = {
-          id: `client-${convertedClientCode.slice(3)}`,
-          clientCode: convertedClientCode,
-          name: proposal.name,
-          businessForm: proposal.businessForm || splitBusinessName(proposal).form,
-          pic: proposal.proposedPic,
-          taxPic: proposal.proposedPic,
-          accountingPic: proposal.proposedAccPic || ACC_PICS[0],
-          partner: PARTNERS[0],
-          supervisor: SUPERVISORS[0],
-          team: "Tax + Accounting",
-          clientStatus: "Active",
-          industry: proposal.industry || "Other",
-          servicePackage: proposal.obligations.length ? "Monthly + Annual" : "Annual Only",
-          engagementStart: "2026-08-17",
-          engagementEnd: "",
-          dataState: "missing",
-          followUpCount: 0,
-          notes: proposal.notes,
-          lastUpdated: "2026-05-20 12:35",
-          year: 2026,
-          month: "May",
-          npwp: proposal.npwp,
-          address: proposal.address,
-          serviceFee: proposal.monthlyFee,
-          annualFee: proposal.annualFee,
-          claimStatus: "Draft",
-          paymentStatus: "No Billing Yet",
-          billingUploaded: false,
-          drivePath: `Clients/${proposal.name}/2026/May/`,
-          obligations: {
-            pph21: { status: proposal.obligations.includes("pph21") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-            unifikasi: { status: proposal.obligations.includes("unifikasi") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-            pph25: { status: proposal.obligations.includes("pph25") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-            phrpb1: { status: proposal.obligations.includes("phrpb1") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-            ppn: { status: proposal.obligations.includes("ppn") ? "awaiting" : "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" }
+        const isContract = proposal.clientStatus === "Contract";
+        if (!isContract) {
+          if (!proposal.name || !proposal.responsiblePersonName || Number(proposal.monthlyFee || 0) <= 0) {
+            window.alert("Save the proposal with its name, responsible person, and monthly fee before converting it to a contract.");
+            return;
           }
-        };
+        } else {
+          const requiredContractFields = [
+            [proposal.businessForm, "form"], [proposal.name, "name"], [proposal.npwp, "NPWP"],
+            [proposal.industry, "company type / business activity"], [proposal.responsiblePersonName, "responsible person"],
+            [proposal.responsiblePersonBirthPlace, "responsible person's birth place"], [proposal.responsiblePersonBirthDate, "responsible person's birth date"],
+            [proposal.responsiblePersonAddress, "responsible person's address"], [proposal.notaryName, "notary name"],
+            [proposal.notaryAddress, "notary address"], [proposal.deedNumber, "deed number"], [proposal.deedDate, "deed date"],
+            [proposal.contractStartedAt, "contract start month"]
+          ];
+          const missing = requiredContractFields.filter(([value]) => !String(value || "").trim()).map(([, label]) => label);
+          if (Number(proposal.monthlyFee || 0) <= 0) missing.push("monthly fee");
+          if (Number(proposal.annualFee || 0) <= 0) missing.push("annual fee");
+          if (!proposal.obligations?.length) missing.push("at least one tax obligation");
+          if (missing.length) {
+            window.alert(`Complete the contract before activation: ${missing.join(", ")}.`);
+            state.clientEditor = { kind: "proposal", id: proposal.id };
+            renderClientEditor();
+            return;
+          }
+          if (!window.confirm("Confirm that the contract has been signed and convert this record to an active client?")) return;
+        }
+        const nextStatus = isContract ? "Active" : "Contract";
         try {
           await saveClientToDatabase({
             clientCode: proposal.clientCode,
@@ -11425,25 +11494,34 @@
             industry: proposal.industry,
             taxPic: proposal.proposedPic,
             accountingPic: proposal.proposedAccPic,
-            clientStatus: "Proposal",
+            clientStatus: nextStatus,
             serviceFee: proposal.monthlyFee,
             annualFee: proposal.annualFee,
             notes: proposal.notes,
-            proposalStatus: "Won",
+            proposalStatus: isContract ? "Contract Signed" : "Contract Draft",
             businessForm: proposal.businessForm || splitBusinessName(proposal).form,
+            contractStartedAt: proposal.contractStartedAt,
+            engagementStart: proposal.contractStartedAt,
+            contractSignedAt: isContract ? new Date().toISOString().slice(0, 10) : "",
+            responsiblePersonName: proposal.responsiblePersonName,
+            responsiblePersonBirthPlace: proposal.responsiblePersonBirthPlace,
+            responsiblePersonBirthDate: proposal.responsiblePersonBirthDate,
+            responsiblePersonAddress: proposal.responsiblePersonAddress,
+            notaryName: proposal.notaryName,
+            notaryAddress: proposal.notaryAddress,
+            deedNumber: proposal.deedNumber,
+            deedDate: proposal.deedDate,
             obligations: Object.fromEntries(OBLIGATIONS.map((key) => [key, { status: proposal.obligations.includes(key) ? "awaiting" : "na" }]))
           });
-          await saveClientToDatabase(newClient);
           await loadSharedClients();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Proposal could not be converted.");
           return;
         }
-        state.selectedClientId = newClient.id;
-        state.activeClientFormId = newClient.id;
-        state.activeProposalId = proposal.id;
-        state.clientManagementTab = "active";
-        switchView("client-management-view");
+        const convertedRecord = proposals.find((item) => item.clientCode === proposal.clientCode);
+        state.clientEditor = !isContract && convertedRecord ? { kind: "proposal", id: convertedRecord.id } : null;
+        state.clientManagementTab = isContract ? "active" : "proposal";
+        if (!isContract && convertedRecord) state.activeProposalId = convertedRecord.id;
         commitUi("push");
         return;
       }
@@ -11451,6 +11529,11 @@
 
     document.addEventListener("input", (event) => {
       const target = event.target instanceof HTMLInputElement ? event.target : null;
+      if (target?.id === "proposal-monthly-fee") {
+        const annualFee = clientEditorField("proposal-annual-fee");
+        if (annualFee && annualFee instanceof HTMLInputElement) annualFee.value = String(Math.round(Number(target.value || 0) * 12 * 0.3));
+        return;
+      }
       if (target?.id === "my-work-archive-search") {
         state.myWorkArchiveQuery = target.value;
         const cursor = target.selectionStart;

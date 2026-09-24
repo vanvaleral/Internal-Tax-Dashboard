@@ -228,3 +228,7 @@ Recommended later tables:
 - Preserve current recurring task data if any real records already exist.
 - Add new columns/tables rather than rewriting `compliance_tasks` destructively.
 - Treat the current schema as a seed prototype, not as final domain design.
+
+## Proposal and Contract Pipeline
+
+Proposal, contract, and active-client stages retain one `client_master` row so conversion does not duplicate the client identity. The `status` progression is `Proposal` -> `Contract` -> `Active`; contract legal fields remain nullable while the record is a proposal and are validated by the application before activation. Migration `202609240001_proposal_contract_workflow.sql` adds the legal-party, notary, deed, and signing fields without rewriting existing client records.
