@@ -112,7 +112,7 @@ test("all current client portfolio views share the strict Active-only scope", as
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function isActiveClientRecord\(client\) \{[\s\S]*?\.toLowerCase\(\) === "active"/);
   assert.match(demo, /function activeClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(isActiveClientRecord\);/);
-  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return activeClientMasterRecords\(\)/);
+  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return sortClientMasterRows\(activeClientMasterRecords\(\)/);
   assert.match(demo, /function clientPortfolioSnapshot\(\) \{\s*const activeClients = activeClientMasterRecords\(\);\s*const portfolio = activeClients;/);
   assert.match(demo, /const regionalCounts = regions\.map\(\(region\) => \(\{ region, count: currentActiveClients\.filter/);
   assert.match(demo, /<datalist id="case-client-options">\$\{activeClientMasterRecords\(\)\.map/);
@@ -212,10 +212,10 @@ test("Allocation combines ACC PIC and Tax PIC dropdown filters", async () => {
 
 test("Allocation separates company form from the client name", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /<th>Form<\/th>\s*<th>Client Name<\/th>/);
+  assert.match(demo, /<th>\$\{sortHeader\("allocation", "form", "Form"\)\}<\/th>\s*<th>\$\{sortHeader\("allocation", "name", "Client Name"\)\}<\/th>/);
   assert.match(demo, /escapeHtml\(identity\.form \|\| "Individual"\)/);
   assert.match(demo, /virtualSpacer\(9, allocationWindow\.top\)/);
-  assert.match(demo, /compareText\(leftIdentity\.form, rightIdentity\.form\)/);
+  assert.match(demo, /sortClientMasterRows\(activeClientMasterRecords\(\)/);
 });
 
 test("Clients and Allocation number their filtered client rows", async () => {

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   if (duplicateError) return NextResponse.json({ error: duplicateError.message }, { status: 500 });
   if ((duplicate || []).length) return NextResponse.json({ error: "A staff profile with this name or display name already exists." }, { status: 409 });
 
-  const claimCode = `STAFF-${randomBytes(5).toString("hex").toUpperCase()}`;
+  const claimCode = `STAFF-${randomBytes(16).toString("hex").toUpperCase()}`;
   const claimCodeHash = createHash("sha256").update(claimCode).digest("hex");
   const { data, error } = await actor.admin.from("staff_profiles").insert({
     full_name: fullName,

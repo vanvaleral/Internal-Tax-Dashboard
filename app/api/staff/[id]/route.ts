@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentActor, isLeadership, type CurrentActor, type StaffRole } from "@/lib/access";
 import { STAFF_DIRECTORY_TEAMS, isStaffDirectoryRole, canManageDirectoryRole } from "@/lib/staff-directory";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -24,10 +24,29 @@ export async function PATCH(request: Request, context: Context) {
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can change PIC Access." }, { status: 403 });
   const { id } = await context.params;
-  const { data: existing, error: existingError } = await actor.admin.from("staff_profiles").select("id, full_name, display_name, employment_title, team_division, role, directory_active").eq("id", id).maybeSingle();
+  const { data: existing, error: existingError } = await actor.admin.from("staff_profiles").select("id, full_name, display_name, employment_title, team_division, role, directory_active, auth_user_id").eq("id", id).maybeSingle();
   if (existingError || !existing) return NextResponse.json({ error: existingError?.message || "Staff profile was not found." }, { status: 404 });
 
   const body = await request.json();
+  if (body.action === "regenerate-claim-code") {
+    if (!canManageDirectoryRole(actor.profile.role, existing.role as StaffRole, existing.role as StaffRole)) {
+      return NextResponse.json({ error: "Only a Partner can regenerate a Partner/Admin claim code." }, { status: 403 });
+    }
+    if (existing.auth_user_id || !existing.directory_active) {
+      return NextResponse.json({ error: "Claim codes can only be regenerated for active, unregistered staff." }, { status: 409 });
+    }
+    const claimCode = `STAFF-${randomBytes(16).toString("hex").toUpperCase()}`;
+    const claimCodeHash = createHash("sha256").update(claimCode).digest("hex");
+    const { data: updated, error: updateError } = await actor.admin.from("staff_profiles")
+      .update({ claim_code_hash: claimCodeHash })
+      .eq("id", id).is("auth_user_id", null).eq("directory_active", true)
+      .select("id").maybeSingle();
+    if (updateError) return NextResponse.json({ error: "Could not regenerate the staff claim code." }, { status: 500 });
+    if (!updated) return NextResponse.json({ error: "This profile changed while the code was being regenerated. Refresh PIC Access." }, { status: 409 });
+    try { await notifyLeadership(actor, "Regenerated claim code for", existing.display_name || existing.full_name); }
+    catch (notificationError) { console.error("[staff] claim code notification could not be created", notificationError); }
+    return NextResponse.json({ claimCode, staffName: existing.display_name || existing.full_name }, { headers: { "Cache-Control": "no-store" } });
+  }
   const nextRole = String(body.role ?? existing.role).toLowerCase();
   const nextTeam = String(body.teamDivision ?? existing.team_division ?? "");
   const nextFullName = String(body.fullName ?? existing.full_name).trim();

@@ -3732,6 +3732,7 @@
     let staffDirectoryLoaded = false;
     let staffDirectory = [];
     let latestStaffClaimCode = "";
+    let latestStaffClaimFor = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
     const canImportClientMaster = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
@@ -4523,6 +4524,8 @@
       monthlyEditMode: false,
       monthlyDeleteSelection: [],
       sorts: {
+        clients: { key: "form", dir: "asc" },
+        allocation: { key: "form", dir: "asc" },
         monthly: { key: "name", dir: "asc" },
         annualAccounting: { key: "name", dir: "asc" },
         annualTax: { key: "name", dir: "asc" },
@@ -5303,7 +5306,38 @@
     }
 
     function sortHeader(scope, key, label) {
-      return `<button class="sort-btn" data-sort-scope="${scope}" data-sort-key="${key}">${label}<span class="sort-arrow">${sortArrow(scope, key)}</span></button>`;
+      return `<button class="sort-btn" data-sort-scope="${scope}" data-sort-key="${key}" aria-label="Sort by ${escapeAttr(label)} ${state.sorts[scope]?.key === key && state.sorts[scope]?.dir === "asc" ? "descending" : "ascending"}">${label}<span class="sort-arrow" aria-hidden="true">${sortArrow(scope, key)}</span></button>`;
+    }
+
+    function sortClientMasterRows(rows, scope) {
+      const { key, dir } = state.sorts[scope];
+      const direction = dir === "desc" ? -1 : 1;
+      const value = (client, field) => {
+        const identity = splitBusinessName(client);
+        const draft = state.allocationDrafts[client.id] || {};
+        const fields = {
+          code: client.clientCode,
+          form: identity.form,
+          name: identity.name,
+          npwp: client.npwp,
+          taxPic: client.taxPic,
+          accPic: client.accountingPic,
+          nextTaxPic: draft.nextTaxPic || client.taxPic,
+          nextAccPic: draft.nextAccPic || client.accountingPic,
+          industry: client.industry,
+          status: scope === "allocation" ? (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic) || (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) ? "Pending Update" : "Unchanged" : client.clientStatus,
+          obligations: activeObligationKeys(client).length,
+          monthlyFee: Number(client.serviceFee || 0),
+          annualFee: Number(client.annualFee || 0)
+        };
+        return fields[field] ?? "";
+      };
+      return [...rows].sort((left, right) => {
+        const a = value(left, key);
+        const b = value(right, key);
+        const result = typeof a === "number" && typeof b === "number" ? a - b : compareText(a, b);
+        return result * direction || compareText(splitBusinessName(left).name, splitBusinessName(right).name) || compareText(left.clientCode, right.clientCode);
+      });
     }
 
     function compareDatesDisplay(a, b) {
@@ -5678,7 +5712,7 @@
 
     function allocationRows() {
       const query = state.allocationQuery.trim().toLowerCase();
-      return activeClientMasterRecords()
+      return sortClientMasterRows(activeClientMasterRecords()
         .filter((client) => hasLeadershipAccess() || client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic)
         .filter((client) => {
           const draft = state.allocationDrafts[client.id] || {};
@@ -5696,12 +5730,7 @@
             draft.nextAccPic || "",
             draft.nextTaxPic || ""
           ].join(" ").toLowerCase().includes(query);
-        })
-        .sort((left, right) => {
-          const leftIdentity = splitBusinessName(left);
-          const rightIdentity = splitBusinessName(right);
-          return compareText(leftIdentity.form, rightIdentity.form) || compareText(leftIdentity.name, rightIdentity.name);
-        });
+        }), "allocation");
     }
 
     function printAllocationReport() {
@@ -6554,7 +6583,7 @@
                 <div class="client-field"><label for="staff-new-role">Access Role</label><select class="field" id="staff-new-role"><option value="staff">Staff</option><option value="leader">Leader</option><option value="supervisor">Supervisor</option><option value="partner">Partner</option></select></div>
                 <div class="client-field" style="align-self:end;"><button class="solid-btn" data-create-staff="yes">Add Staff Profile</button></div>
               </div>
-              ${latestStaffClaimCode ? `<div class="detail-card" style="margin-bottom:16px;"><div class="eyebrow">New Staff Claim Code</div><strong>${escapeHtml(latestStaffClaimCode)}</strong><div class="subline">Share this one-time code privately. The employee uses it with the firm referral code during registration.</div></div>` : ""}
+              ${latestStaffClaimCode ? `<div class="detail-card" style="margin-bottom:16px;"><div class="section-title"><div><div class="eyebrow">Claim code for ${escapeHtml(latestStaffClaimFor)}</div><strong>${escapeHtml(latestStaffClaimCode)}</strong></div><button class="ghost-btn" data-dismiss-staff-claim="yes">Hide code</button></div><div class="subline">Copy this code now and share it privately with this employee. Any previous code for this profile is invalid.</div></div>` : ""}
               <div class="table-wrap desktop-only">
                 <table>
                   <thead>
@@ -6577,7 +6606,7 @@
                         <td><select class="field" data-staff-team="${staff.id}"><option value="Tax Team" ${staff.team_division === "Tax Team" ? "selected" : ""}>Tax Team</option><option value="Accounting Team" ${staff.team_division === "Accounting Team" ? "selected" : ""}>Accounting Team</option></select></td>
                         <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner"].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select></td>
                         <td><span class="pill ${staff.auth_user_id ? "accent" : "neutral"}">${staff.auth_user_id ? "Registered" : "Pending"}</span></td>
-                        <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${staff.directory_active === false ? `<button class="ghost-btn restore-icon-btn" data-restore-staff="${staff.id}">Restore</button>` : `<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">${deleteIcon()}</button>`}</div></td>
+                        <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${staff.directory_active !== false && !staff.auth_user_id && (!["partner", "admin"].includes(staff.role) || ["partner", "admin"].includes(state.role)) ? `<button class="ghost-btn" data-regenerate-staff-claim="${staff.id}" aria-label="Regenerate claim code for ${escapeAttr(staff.display_name || staff.full_name)}">Regenerate code</button>` : ""}${staff.directory_active === false ? `<button class="ghost-btn restore-icon-btn" data-restore-staff="${staff.id}">Restore</button>` : `<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">${deleteIcon()}</button>`}</div></td>
                       </tr>
                     `).join("") || `<tr><td colspan="7"><div class="empty-state">Loading staff directory...</div></td></tr>`}
                   </tbody>
@@ -6737,14 +6766,14 @@
                 <thead>
                   <tr>
                     <th>No.</th>
-                    <th>Code</th>
-                    <th>Form</th>
-                    <th>Client Name</th>
-                    <th>Current ACC PIC</th>
-                    <th>Next ACC PIC</th>
-                    <th>Current TAX PIC</th>
-                    <th>Next TAX PIC</th>
-                    <th>Status</th>
+                    <th>${sortHeader("allocation", "code", "Code")}</th>
+                    <th>${sortHeader("allocation", "form", "Form")}</th>
+                    <th>${sortHeader("allocation", "name", "Client Name")}</th>
+                    <th>${sortHeader("allocation", "accPic", "Current ACC PIC")}</th>
+                    <th>${sortHeader("allocation", "nextAccPic", "Next ACC PIC")}</th>
+                    <th>${sortHeader("allocation", "taxPic", "Current TAX PIC")}</th>
+                    <th>${sortHeader("allocation", "nextTaxPic", "Next TAX PIC")}</th>
+                    <th>${sortHeader("allocation", "status", "Status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -6940,15 +6969,11 @@
       const viewingInactiveClients = state.clientManagementTab === "inactive";
       const picFilterOptions = [...new Set((viewingInactiveClients ? managedClients.filter((client) => !isActiveClientRecord(client)) : activeManagedClients).flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
       if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
-      const activeClientRows = [...managedClients].filter((client) => {
+      const activeClientRows = sortClientMasterRows([...managedClients].filter((client) => {
         const matchesStatus = viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client);
         const matchesPic = state.clientPicFilter === "all" || client.taxPic === state.clientPicFilter || client.accountingPic === state.clientPicFilter;
         return matchesStatus && matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
-      }).sort((left, right) => {
-        const leftIdentity = splitBusinessName(left);
-        const rightIdentity = splitBusinessName(right);
-        return leftIdentity.form.localeCompare(rightIdentity.form) || leftIdentity.name.localeCompare(rightIdentity.name);
-      });
+      }), "clients");
       const activeClientWindow = windowedRows(activeClientRows, "active-clients", 43);
       const proposalQuery = state.proposalSearch.trim().toLowerCase();
       const proposalRows = proposals.filter((proposal) => !proposalQuery || [displayClientName(proposal), proposal.proposedPic, proposal.proposedAccPic, proposal.status, proposal.notes].join(" ").toLowerCase().includes(proposalQuery));
@@ -6978,7 +7003,7 @@
                   <h3>${viewingInactiveClients ? "Inactive Clients" : "Active Clients"}</h3>
                   <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : "Client master overview. Select a client to review or update its operational profile."}</p>
                 </div>
-                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /></div>
+                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="mobile-only"><select id="client-sort-mobile" class="filter-select" aria-label="Sort clients">${[["form", "Form"], ["name", "Name"], ["taxPic", "Tax PIC"], ["accPic", "ACC PIC"], ["industry", "Industry"], ["monthlyFee", "Monthly Fee"]].map(([key, label]) => `<option value="${key}" ${state.sorts.clients.key === key ? "selected" : ""}>${label}</option>`).join("")}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
               </div>
               <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43">
                 <table class="client-table">
@@ -6998,15 +7023,15 @@
                   <thead>
                     <tr>
                       <th>No.</th>
-                      <th>Form</th>
-                      <th>Name</th>
-                      <th>NPWP</th>
-                      <th>PIC Tax / ACC</th>
-                      <th>Industry</th>
-                      <th>Obligations</th>
-                      <th>Status</th>
-                      <th>Monthly Fee</th>
-                      <th>Annual Fee</th>
+                      <th>${sortHeader("clients", "form", "Form")}</th>
+                      <th>${sortHeader("clients", "name", "Name")}</th>
+                      <th>${sortHeader("clients", "npwp", "NPWP")}</th>
+                      <th>${sortHeader("clients", "taxPic", "Tax")} / ${sortHeader("clients", "accPic", "ACC")}</th>
+                      <th>${sortHeader("clients", "industry", "Industry")}</th>
+                      <th>${sortHeader("clients", "obligations", "Obligations")}</th>
+                      <th>${sortHeader("clients", "status", "Status")}</th>
+                      <th>${sortHeader("clients", "monthlyFee", "Monthly Fee")}</th>
+                      <th>${sortHeader("clients", "annualFee", "Annual Fee")}</th>
                       <th aria-label="Edit"></th>
                     </tr>
                   </thead>
@@ -9808,6 +9833,11 @@
     }
 
     function switchView(viewId) {
+      if (viewId !== "dashboard-view" && latestStaffClaimCode) {
+        latestStaffClaimCode = "";
+        latestStaffClaimFor = "";
+        document.querySelector("[data-dismiss-staff-claim]")?.closest(".detail-card")?.remove();
+      }
       // Keep supervisor-only views inaccessible even when a staff user follows
       // an old link or clicks an embedded management shortcut.
       if ((viewId === "dashboard-view" || viewId === "allocation-view") && !hasLeadershipAccess()) {
@@ -10145,6 +10175,8 @@
       const publishPerformanceTrigger = target.closest("[data-publish-performance]");
       const refreshStaffAccessTrigger = target.closest("[data-refresh-staff-access]");
       const createStaffTrigger = target.closest("[data-create-staff]");
+      const regenerateStaffClaimTrigger = target.closest("[data-regenerate-staff-claim]");
+      const dismissStaffClaimTrigger = target.closest("[data-dismiss-staff-claim]");
       const saveStaffTrigger = target.closest("[data-save-staff]");
       const archiveStaffTrigger = target.closest("[data-archive-staff]");
       const restoreStaffTrigger = target.closest("[data-restore-staff]");
@@ -10315,7 +10347,13 @@
       }
 
       if (sortTrigger) {
-        toggleSort(sortTrigger.getAttribute("data-sort-scope"), sortTrigger.getAttribute("data-sort-key"));
+        const scope = sortTrigger.getAttribute("data-sort-scope");
+        toggleSort(scope, sortTrigger.getAttribute("data-sort-key"));
+        if (["clients", "allocation"].includes(scope)) {
+          const tableId = scope === "clients" ? "active-clients" : "allocation-clients";
+          const wrap = document.querySelector(`[data-virtual-table="${tableId}"]`);
+          if (wrap) wrap.scrollTop = 0;
+        }
         commitUi("push");
         return;
       }
@@ -10678,6 +10716,10 @@
       }
 
       if (managementTabTrigger) {
+        if (managementTabTrigger.getAttribute("data-management-tab") !== "workload") {
+          latestStaffClaimCode = "";
+          latestStaffClaimFor = "";
+        }
         state.managementTab = managementTabTrigger.getAttribute("data-management-tab");
         commitWorkspaceNavigation("push");
         if (state.managementTab === "workload") loadStaffAccessDirectory();
@@ -10700,9 +10742,38 @@
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || "Staff profile could not be created.");
           latestStaffClaimCode = result.claimCode || "";
+          latestStaffClaimFor = displayName;
           await loadStaffAccessDirectory();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Staff profile could not be created.");
+        }
+        return;
+      }
+
+      if (dismissStaffClaimTrigger) {
+        latestStaffClaimCode = "";
+        latestStaffClaimFor = "";
+        renderDashboard();
+        return;
+      }
+
+      if (regenerateStaffClaimTrigger) {
+        const id = regenerateStaffClaimTrigger.getAttribute("data-regenerate-staff-claim");
+        const staff = staffDirectory.find((item) => item.id === id);
+        if (!id || !staff || !window.confirm(`Regenerate the claim code for ${staff.display_name || staff.full_name}? The old code will stop working immediately.`)) return;
+        try {
+          const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ action: "regenerate-claim-code" })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Claim code could not be regenerated.");
+          latestStaffClaimCode = result.claimCode || "";
+          latestStaffClaimFor = result.staffName || staff.display_name || staff.full_name;
+          renderDashboard();
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : "Claim code could not be regenerated.");
         }
         return;
       }
@@ -11603,6 +11674,12 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+
+      if (target instanceof HTMLSelectElement && target.id === "client-sort-mobile") {
+        state.sorts.clients = { key: target.value, dir: "asc" };
+        commitUi("replace");
+        return;
+      }
 
       if (target instanceof HTMLSelectElement && ["allocation-acc-filter", "allocation-tax-filter"].includes(target.id)) {
         if (target.id === "allocation-acc-filter") state.allocationAccFilter = target.value || "all";

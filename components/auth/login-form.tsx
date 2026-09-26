@@ -8,7 +8,6 @@ type Registration = {
   email: string;
   password: string;
   confirmPassword: string;
-  referralCode: string;
   staffClaimCode: string;
 };
 
@@ -18,7 +17,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberIdentifier, setRememberIdentifier] = useState(true);
-  const [registration, setRegistration] = useState<Registration>({ username: "", email: "", password: "", confirmPassword: "", referralCode: "", staffClaimCode: "" });
+  const [registration, setRegistration] = useState<Registration>({ username: "", email: "", password: "", confirmPassword: "", staffClaimCode: "" });
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -104,7 +103,7 @@ export function LoginForm() {
       <section className="auth-card">
         <div className="eyebrow">Tax Firm Operating System</div>
         <h1>{mode === "sign-in" ? "Sign in" : "Create account"}</h1>
-        <p className="auth-copy">{mode === "sign-in" ? "Use your email address or username and password." : "Create a staff account using the firm referral code and your private staff claim code."}</p>
+        <p className="auth-copy">{mode === "sign-in" ? "Use your email address or username and password." : "Create a staff account using your private staff claim code."}</p>
         {mode === "sign-in" ? (
           <form onSubmit={submit} className="auth-form">
             <label>Email or username<input value={identifier} onChange={(event) => setIdentifier(event.target.value)} required autoComplete="username" placeholder="name@company.com or username" /></label>
@@ -112,7 +111,7 @@ export function LoginForm() {
             <label className="remember-identifier"><input type="checkbox" checked={rememberIdentifier} onChange={(event) => setRememberIdentifier(event.target.checked)} /> Remember my username on this device</label>
             <p className="auth-hint">Your password is never stored here. A secure Supabase session keeps you signed in after login.</p>
             <button className="solid-btn auth-submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"}</button>
-            <button type="button" className="auth-mode-button" onClick={() => { setMode("register"); setMessage(""); }}>New staff member? Register with a referral code.</button>
+            <button type="button" className="auth-mode-button" onClick={() => { setMode("register"); setMessage(""); }}>New staff member? Register with a claim code.</button>
             {message && <div className="auth-message is-error">{message}</div>}
           </form>
         ) : (
@@ -121,7 +120,6 @@ export function LoginForm() {
             <label>Email address<input type="email" value={registration.email} onChange={(event) => updateRegistration("email", event.target.value)} required autoComplete="email" placeholder="name@company.com" /></label>
             <label>Password<span className="password-field"><input type={showPassword ? "text" : "password"} value={registration.password} onChange={(event) => updateRegistration("password", event.target.value)} required minLength={8} autoComplete="new-password" placeholder="At least 8 characters" /><button type="button" className="password-toggle" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></span></label>
             <label>Confirm password<input type={showPassword ? "text" : "password"} value={registration.confirmPassword} onChange={(event) => updateRegistration("confirmPassword", event.target.value)} required autoComplete="new-password" placeholder="Repeat password" /></label>
-            <label>Referral code<input value={registration.referralCode} onChange={(event) => updateRegistration("referralCode", event.target.value)} required autoComplete="off" placeholder="Enter referral code" /></label>
             <label>Staff claim code<input value={registration.staffClaimCode} onChange={(event) => updateRegistration("staffClaimCode", event.target.value.toUpperCase())} required autoComplete="off" placeholder="Provided privately by management" /></label>
             <p className="auth-hint">Your name, team, title, and role are applied automatically from the staff directory.</p>
             <button className="solid-btn auth-submit" disabled={submitting}>{submitting ? "Creating account..." : "Create account"}</button>

@@ -36,7 +36,7 @@ test("allocation API enforces leadership and permanent staff identity", () => {
 test("Allocation UI applies one year-tagged batch from Client Master", () => {
   assert.match(demo, /allocationYear: Number\(/);
   assert.match(demo, /id="allocation-year"/);
-  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return activeClientMasterRecords\(\)/);
+  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return sortClientMasterRows\(activeClientMasterRecords\(\)/);
   assert.match(demo, /fetch\("\/api\/clients\/allocation"|appFetch\("\/api\/clients\/allocation"/);
   assert.match(demo, /allocationYear: state\.allocationYear/);
   assert.doesNotMatch(demo, /Promise\.all\(report\.map\(\(change\) => saveClientToDatabase/);

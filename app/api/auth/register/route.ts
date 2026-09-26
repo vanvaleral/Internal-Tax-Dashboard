@@ -5,20 +5,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const USERNAME_PATTERN = /^[a-z0-9._-]{3,40}$/;
 
 export async function POST(request: Request) {
-  const referralCode = process.env.INVITE_REFERRAL_CODE;
   const admin = createAdminClient();
-  if (!referralCode || !admin) {
+  if (!admin) {
     return NextResponse.json({ error: "Registration is not configured." }, { status: 503 });
   }
 
   const body = await request.json();
-  const code = String(body.referralCode || "").trim();
   const email = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "");
   const username = String(body.username || "").trim().toLowerCase();
   const staffClaimCode = String(body.staffClaimCode || "").trim().toUpperCase();
 
-  if (code !== referralCode) return NextResponse.json({ error: "Referral code is not valid." }, { status: 401 });
   if (!/^\S+@\S+\.\S+$/.test(email)) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ error: "Password must contain at least 8 characters." }, { status: 400 });
   if (!USERNAME_PATTERN.test(username)) {
@@ -83,6 +80,7 @@ export async function POST(request: Request) {
     .update({ auth_user_id: created.user.id, username, claim_code_hash: null, claimed_at: new Date().toISOString() })
     .eq("id", pendingProfile.id)
     .is("auth_user_id", null)
+    .eq("claim_code_hash", claimCodeHash)
     .select("id")
     .maybeSingle();
   if (profileError || !profile) {
