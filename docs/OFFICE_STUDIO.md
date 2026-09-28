@@ -2,30 +2,29 @@
 
 ## Purpose
 
-`/office/studio` is a small playable art-direction demo linked from `/office`. It reuses the existing authenticated route boundary. It is separate from the shared office and makes no database writes or schema changes.
+`/office/studio` is a playable 2D art-direction demo linked from `/office`. It reuses the existing authenticated route boundary. It is separate from the shared office and makes no database writes or schema changes.
 
-The user's approved concept guides the dense furnished environment, warm lighting, expressive character, and dark side panel. This implementation uses 2D raster layers, not a live 3D scene. The background workstations are scenic illustrations; one foreground desk and one character are interactive. The view is fixed.
+The user's approved concept guides the furnished environment, warm lighting, expressive character, and dark side panel. The camera stays fixed. All 11 marked chairs across seven illustrated desk groups are interactive, including the partner room. Their coordinates are maintained in `lib/office-studio-map.ts`.
 
-## Assets
+## Assets and layering
 
-Built-in image generation created the following original PNG assets. They are committed to `public/office-art/` and served by the website:
+Built-in image generation created these project PNG assets:
 
-- `studio-room-v2.png`: environment plate based on the approved office concept.
-- `character-poses-v2.png`: three equal-width sprite cells: standing, lifted, seated with chair. Transparent alpha is retained.
-- `studio-desk-v1.png`: separate foreground desk with computer and accessories, transparent alpha.
+- `studio-room-v2.png`: environment with all desks, furniture, and the partner room.
+- `character-poses-v2.png`: three transparent sprite cells for standing, lifted, and seated poses.
 
-The layout layers the seated sprite behind the desk and the lifted sprite above it. CSS supplies breathing, lift sway, landing bounce, focus motion, ground shadow and destination marker. These are three illustrated poses plus procedural motion, not frame-by-frame skeletal animation. Animations respect reduced-motion preferences.
+The separate foreground desk was removed. The seated sprite is clipped at most desks so its lower half appears behind the illustrated worktop. CSS supplies breathing, lift sway, landing bounce, focus motion, walking bob, ground shadow, and destination marker. These are three illustrated poses plus procedural motion. Reduced-motion preferences are respected.
 
 ## Controls
 
-Drag Arif, release over open foreground floor or the interactive desk, then use Start working / Stand controls. Desk click is an alternative. Keyboard: focus character; arrows move; Enter/Space sit or stand; Escape cancels a drag. Pointer cancellation/window blur also restores the prior position. A reset button starts the demo again. Optional synthesized sound is opt-in and uses no external audio library.
+Drag Arif and release near a marked chair to sit, or on an open aisle to move. Click a chair or choose a desk from the list. Click open floor to walk there; walking routes pass through corridors and avoid furniture. Start working / Rest / Stand controls use the current seat. Keyboard: focus Arif; arrows move, Enter/Space sit at the selected desk or stand, Escape cancels a drag. Pointer cancellation/window blur restores the prior position. Reset starts again. Optional synthesized sound is opt-in and uses no external audio library.
 
-Loading includes cached-image checks and a visible failure/reload state. Movement stays in component state and resets when the page reloads. The dark guide panel reports real demo progress and does not show fabricated online users or chat messages. Links lead to the existing shared office for actual chat and voice.
+Loading includes cached-image checks and a visible failure/reload state. Movement stays in component state and resets on page reload. The guide panel reports actual demo progress and does not show fabricated online users or chat messages. Links lead to the existing shared office for actual chat and voice.
 
 ## Integration and rollback
 
-No dependencies or Supabase migration are required. Delete `app/office/studio`, `components/office/office-studio.tsx`, `components/office/office-studio.css`, the three asset files, and the studio link in `virtual-office.tsx` to remove this experiment.
+No dependencies or Supabase migration are required. Remove `app/office/studio`, `components/office/office-studio.tsx`, `components/office/office-studio.css`, `lib/office-studio-map.ts`, the two studio assets, and the studio link in `virtual-office.tsx` to remove the experiment.
 
-## Acceptance checks
+## Verification
 
-Check desktop/mobile composition, all three image loads, character drag/drop, invalid drop return, desk seating, working/rest transitions, standing, reset, keyboard controls and reduced motion. The proof scene should be approved before expanding interactions to the whole illustrated office.
+`node --experimental-strip-types --test tests/office-studio-map.test.ts` checks all chair destinations, blocked furniture, and walking routes from each desk. Browser acceptance covers desktop/mobile composition, chair selection, floor movement, drag/drop, invalid drop, work/rest/stand, keyboard, and asset loading. The room illustration is static; only Arif is an interactive character in this demo.
