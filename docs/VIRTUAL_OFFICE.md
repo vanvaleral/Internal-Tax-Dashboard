@@ -10,9 +10,9 @@ The mini game defaults to enabled. Set `VIRTUAL_OFFICE_GAME_ENABLED=false` in Ve
 
 ## Current scope
 
-- Avatar movement is displayed to other visitors through five-second polling; a visitor is shown online for 45 seconds after their last update.
+- The office is an illustrated isometric room. Visitors click a floor tile or use arrow keys to move their character. Movement is displayed to other visitors through five-second polling; a visitor is shown online for 45 seconds after their last update.
 - Each visitor can choose an avatar color and one decoration for their desk.
-- Chat contains the most recent 40 messages and allows 280 characters per message, with a short send cooldown.
-- The shared mini game counts 12 filing moves per round. It does not award performance points.
+- Chat is docked inside the game scene. Recent messages also appear as speech bubbles above visitors. The room shows the most recent 40 messages and allows 280 characters per message, with a short send cooldown.
+- The mini game opens from the room's filing desk. Players sort labeled documents into matching trays; each correct move contributes to a shared 12-file round. It does not award performance points.
 
 The office is a first iteration, not a replacement for tax workflows. If future upgrades use earned points, only verified work events should determine that entitlement, through server-side logic.

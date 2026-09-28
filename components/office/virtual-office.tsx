@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { OfficeGame } from "./office-game";
+import { OfficeScene } from "./office-scene";
 import "./virtual-office.css";
 
 type Person = { staff_profile_id: string; avatar_color: string; desk_style: string; x: number; y: number; staff: { display_name: string | null; full_name: string } | null };
@@ -20,6 +21,8 @@ export function VirtualOffice({ gameEnabled }: { gameEnabled: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
+  const [gameOpen, setGameOpen] = useState(false);
   const initialized = useRef(false);
   const positionRef = useRef(position);
   const colorRef = useRef(color);
@@ -80,31 +83,26 @@ export function VirtualOffice({ gameEnabled }: { gameEnabled: boolean }) {
     finally { setBusy(false); }
   }
 
-  const people = data?.profiles || [];
-  const occupants = people.filter(person => person.staff_profile_id !== data?.me.id);
+  const others = (data?.profiles || []).filter(person => person.staff_profile_id !== data?.me.id);
+  const online = others.length + (data ? 1 : 0);
+  const recent = (staffId: string) => data?.messages.slice().reverse().find(item => item.staff_profile_id === staffId && Date.now() - new Date(item.created_at).getTime() < 18000)?.message;
+  const avatars = [
+    ...others.map(person => ({ id: person.staff_profile_id, name: nameOf(person), color: person.avatar_color, x: person.x, y: person.y, bubble: recent(person.staff_profile_id) })),
+    { id: "me", name: data?.me.name || "Kamu", color, x: position.x, y: position.y, mine: true }
+  ];
+
   return <main className="office-page">
-    <header className="office-header"><div><span className="office-eyebrow">LMATS · TAX DASHBOARD</span><h1>Kantor Virtual</h1><p>Tempat singgah bersama di sela pekerjaan.</p></div><Link href="/dashboard" className="office-back">← Kembali ke dashboard</Link></header>
+    <div className="office-topbar"><div className="office-brand"><span className="office-brand-icon">✦</span><div><span>LMATS WORLD</span><strong>Kantor Virtual</strong></div></div><div className="office-top-actions"><span className="office-online"><i />{online} online</span><Link href="/dashboard" className="office-back">← Dashboard</Link></div></div>
     {error && <div className="office-error" role="alert">{error}</div>}
-    <div className="office-layout">
-      <section className="office-main-card"><div className="office-card-head"><div><span className="office-eyebrow">RUANG BERSAMA</span><h2>Studio Tax Team</h2></div><span className="office-online"><i />{people.length} online</span></div>
-        <div className="office-room" role="grid" aria-label="Peta kantor virtual" onKeyDown={event => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(event.key)) { event.preventDefault(); move(position.x + (event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0), position.y + (event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0)); } }} tabIndex={0}>
-          <div className="office-room-label">THE COMMON ROOM <span>✦</span></div>
-          <div className="office-table"><span>☕</span><small>MEJA BERSAMA</small></div>
-          <div className="office-rug" />
-          <div className="office-window">☀</div>
-          <div className="office-bookshelf">▥<small>ARSIP</small></div>
-          <div className="office-own-desk"><span>{furniture.find(item => item.id === desk)?.icon}</span><small>MEJAMU</small></div>
-          {occupants.map(person => <div key={person.staff_profile_id} className="office-person" style={{ left: `${(person.x + .5) / 12 * 100}%`, top: `${(person.y + .5) / 8 * 100}%` }} title={nameOf(person)}><span className={`office-avatar ${person.avatar_color}`}>●</span><small>{nameOf(person)}</small></div>)}
-          <div className="office-person office-me" style={{ left: `${(position.x + .5) / 12 * 100}%`, top: `${(position.y + .5) / 8 * 100}%` }}><span className={`office-avatar ${color}`}>●</span><small>{data?.me.name || "Kamu"} (kamu)</small></div>
-          <div className="office-floor-grid">{Array.from({ length: 96 }, (_, index) => <button key={index} type="button" aria-label={`Berjalan ke petak ${index % 12 + 1}, ${Math.floor(index / 12) + 1}`} onClick={() => move(index % 12, Math.floor(index / 12))} />)}</div>
-        </div>
-        <p className="office-hint">Klik lantai untuk berjalan, atau gunakan tombol panah saat peta dipilih. Posisi rekan diperbarui setiap beberapa detik.</p>
-        <div className="office-desk-panel"><div><span className="office-eyebrow">SUDUTMU</span><h3>Tata meja kerjamu</h3><p>Dekorasi dan warna avatar tersimpan untuk kunjungan berikutnya.</p></div><div className="office-picker"><span>Warna avatar</span><div>{palette.map(item => <button key={item} type="button" className={`office-color ${item} ${color === item ? "selected" : ""}`} onClick={() => chooseColor(item)} aria-label={`Warna ${item}`} aria-pressed={color === item} />)}</div></div><div className="office-picker"><span>Hiasan meja</span><div>{furniture.map(item => <button key={item.id} type="button" className={`office-furniture ${desk === item.id ? "selected" : ""}`} onClick={() => chooseDesk(item.id)} aria-pressed={desk === item.id} title={item.label}>{item.icon}<small>{item.label}</small></button>)}</div></div></div>
-      </section>
-      <aside className="office-side">
-        <section className="office-card office-chat"><div className="office-card-head"><div><span className="office-eyebrow">OBROLAN</span><h2>Ruang ngobrol</h2></div><span>💬</span></div><div className="office-messages" aria-live="polite">{!data?.messages.length && <p className="office-empty">Belum ada pesan. Sapa rekanmu duluan!</p>}{data?.messages.map(item => <div className={`office-message ${item.staff_profile_id === data?.me.id ? "mine" : ""}`} key={item.id}><strong>{item.staff_profile_id === data?.me.id ? "Kamu" : nameOf(item)}</strong><p>{item.message}</p><time>{new Date(item.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</time></div>)}<div ref={chatEnd} /></div><form onSubmit={event => { event.preventDefault(); void sendMessage(); }}><input value={message} maxLength={280} onChange={event => setMessage(event.target.value)} placeholder="Tulis pesan untuk tim..." aria-label="Pesan untuk tim" /><button type="submit" disabled={busy || !message.trim()}>Kirim</button></form></section>
-        {gameEnabled && <OfficeGame />}
-      </aside>
+    <div className="office-game-shell">
+      <div className="office-scene-wrap" tabIndex={0} onKeyDown={event => { if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); move(position.x + (event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0), position.y + (event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0)); } }}>
+        <OfficeScene avatars={avatars} decoration={desk} gameEnabled={gameEnabled} onMove={move} onGame={() => setGameOpen(true)} />
+        <div className="office-scene-title"><span>✧ RUANG 01</span><strong>Common Room</strong><small>Klik lantai untuk berjalan · gunakan tombol panah</small></div>
+        <div className="office-scene-actions"><button onClick={() => setChatOpen(!chatOpen)}>💬 {chatOpen ? "Tutup chat" : "Buka chat"}</button>{gameEnabled && <button onClick={() => setGameOpen(true)}>📁 Main bersama</button>}</div>
+        {chatOpen && <section className="office-chat-dock" aria-label="Chat dalam game"><div className="office-chat-head"><span>💬 Chatroom</span><small>{online} pemain online</small><button onClick={() => setChatOpen(false)} aria-label="Tutup chat">×</button></div><div className="office-messages" aria-live="polite">{!data?.messages.length && <p className="office-empty">Belum ada pesan. Sapa rekanmu!</p>}{data?.messages.map(item => <div className="office-message" key={item.id}><strong>{item.staff_profile_id === data?.me.id ? "Kamu" : nameOf(item)}</strong><span>{item.message}</span></div>)}<div ref={chatEnd} /></div><form onSubmit={event => { event.preventDefault(); void sendMessage(); }}><input value={message} maxLength={280} onChange={event => setMessage(event.target.value)} placeholder="Ketik pesan ke ruangan..." aria-label="Pesan untuk chatroom" /><button type="submit" disabled={busy || !message.trim()}>➤</button></form></section>}
+        {gameEnabled && gameOpen && <OfficeGame onClose={() => setGameOpen(false)} />}
+      </div>
+      <div className="office-bottom-bar"><div className="office-character-panel"><span className={`office-mini-avatar ${color}`}>●</span><div><strong>{data?.me.name || "Kamu"}</strong><small>Penghuni kantor</small></div></div><div className="office-customize"><span>Warna avatar</span>{palette.map(item => <button key={item} type="button" className={`office-color ${item} ${color === item ? "selected" : ""}`} onClick={() => chooseColor(item)} aria-label={`Warna ${item}`} aria-pressed={color === item} />)}</div><div className="office-customize"><span>Hiasan mejamu</span>{furniture.map(item => <button key={item.id} type="button" className={`office-furniture ${desk === item.id ? "selected" : ""}`} onClick={() => chooseDesk(item.id)} aria-label={item.label} aria-pressed={desk === item.id}>{item.icon}</button>)}</div></div>
     </div>
   </main>;
 }
