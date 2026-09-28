@@ -39,3 +39,7 @@ To remove the office entirely, remove the dashboard `/office` link, `app/office`
 ## Verification
 
 `node --experimental-strip-types --test tests/office-layout-voice.test.ts tests/office-voice-route.test.ts` checks layout geometry, seat capacities, signal validation, ICE configuration, staff authorization, session ownership and room boundaries. TypeScript and a local browser fixture check rendering and desk controls. The fixture does not establish a real two-device voice call.
+
+## Illustrated art-direction demo
+
+Visit `/office/studio` via **Coba studio 2D** for the separate one-character, one-desk illustrated demo. See `OFFICE_STUDIO.md` for scope, assets, controls and removal instructions. No additional database migration is needed.

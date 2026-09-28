@@ -94,7 +94,7 @@ export function VirtualOffice({ gameEnabled, voiceEnabled = true }: { gameEnable
     finally { setSending(false); }
   }
   return <main className="office-page">
-    <header className="office-topbar"><div className="office-brand"><span className="office-brand-icon">L<span>m</span></span><div><span>LMATS CONSULTING</span><strong>Our workspace</strong></div></div><div className="office-top-actions"><span className="office-online"><i />{online} di kantor</span><Link href="/dashboard" className="office-back">Kembali ke dashboard ↗</Link></div></header>
+    <header className="office-topbar"><div className="office-brand"><span className="office-brand-icon">L<span>m</span></span><div><span>LMATS CONSULTING</span><strong>Our workspace</strong></div></div><div className="office-top-actions"><Link href="/office/studio" className="office-back">Coba studio 2D ↗</Link><span className="office-online"><i />{online} di kantor</span><Link href="/dashboard" className="office-back">Kembali ke dashboard ↗</Link></div></header>
     <div className="office-game-shell"><div className="office-world-heading"><div><span className="office-eyebrow">VIRTUAL OFFICE</span><h1>Ruang untuk bekerja. Tempat untuk bertemu.</h1></div><div className="office-toolbar"><button onClick={() => setCustomize(!customize)} aria-expanded={customize}>◈ Karakter & dekorasi</button>{gameEnabled && <button onClick={() => setGameOpen(true)}>▧ Mini game</button>}</div></div>
       {error && <div className="office-error" role="alert">{error}</div>}
       <div className="office-workspace"><div className="office-room-column"><div className="office-room-caption"><span><i /> Denah kantor LMATS</span><small>{saving ? 'Menyimpan…' : 'Seret karaktermu · lepas di kursi untuk duduk'}</small></div>
