@@ -11,9 +11,10 @@ The user's approved concept guides the furnished environment, warm lighting, exp
 Built-in image generation created these project PNG assets:
 
 - `studio-room-v2.png`: environment with all desks, furniture, and the partner room.
-- `character-poses-v2.png`: three transparent sprite cells for standing, lifted, and seated poses.
+- `character-poses-v2.png`: original static sprite cells, retained for the profile portrait and rollback.
+- `character-standing-v3.webp`, `character-lifted-v3.webp`, `character-seated-v3.webp`: transparent frame animations extracted from the user-provided Kling video. Each is 24 frames at 8 fps. Matching `*-still-v3.webp` images serve reduced-motion users.
 
-The separate foreground desk was removed. The seated sprite is clipped at most desks so its lower half appears behind the illustrated worktop. CSS supplies breathing, lift sway, landing bounce, focus motion, walking bob, ground shadow, and destination marker. These are three illustrated poses plus procedural motion. Reduced-motion preferences are respected.
+The separate foreground desk was removed. The seated animation is clipped at most desks so its lower half appears behind the illustrated worktop. The source video's black backdrop is removed from each frame and its three simultaneous character tracks are exported separately. CSS supplies lift sway, landing bounce, walking bob, ground shadow, and destination marker. Reduced-motion preferences are respected.
 
 ## Controls
 
@@ -23,7 +24,7 @@ Loading includes cached-image checks and a visible failure/reload state. Movemen
 
 ## Integration and rollback
 
-No dependencies or Supabase migration are required. Remove `app/office/studio`, `components/office/office-studio.tsx`, `components/office/office-studio.css`, `lib/office-studio-map.ts`, the two studio assets, and the studio link in `virtual-office.tsx` to remove the experiment.
+No dependencies or Supabase migration are required. Remove `app/office/studio`, `components/office/office-studio.tsx`, `components/office/office-studio.css`, `lib/office-studio-map.ts`, the `studio-*` room assets, the `character-*-v3.webp` animations, and the studio link in `virtual-office.tsx` to remove the experiment.
 
 ## Verification
 

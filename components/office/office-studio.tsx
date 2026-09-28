@@ -35,6 +35,7 @@ export function OfficeStudio() {
   const here = drag || position;
   const target = drag ? studioDestination(drag) : null;
   const seated = !!activeSeat && !drag;
+  const animation = drag ? 'lifted' : seated ? 'seated' : 'standing';
 
   useEffect(() => {
     const completed = Array.from(stage.current?.querySelectorAll<HTMLImageElement>('img[data-art]') || []);
@@ -182,9 +183,12 @@ export function OfficeStudio() {
           const offset: Record<string, StudioPoint> = { ArrowLeft: { x: -3, y: 0 }, ArrowRight: { x: 3, y: 0 }, ArrowUp: { x: 0, y: -3 }, ArrowDown: { x: 0, y: 3 } };
           if (offset[event.key]) { event.preventDefault(); const from = seated ? activeSeat!.stand : position; const at = { x: from.x + offset[event.key].x, y: from.y + offset[event.key].y }; const next = studioDestination(at); if (next?.kind === 'seat') sit(next.seat); else if (next?.kind === 'floor') toFloor(next.point); }
         }} disabled={!loaded} aria-label={`Arif, ${seated ? `duduk di ${activeSeat?.label}` : 'berdiri'}. Seret untuk mengangkat, atau gunakan tombol panah.`}>
-          <span className="studio-sprite-motion"><span className={`studio-sprite-window frame-${drag ? 1 : seated ? 2 : 0}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img data-art="character" src={`${ART}character-poses-v2.png`} alt="" draggable={false} onLoad={() => loadedArt('character')} onError={() => setFailed(true)} />
+          <span className="studio-sprite-motion"><span className="studio-sprite-window">
+            <picture>
+              <source media="(prefers-reduced-motion: reduce)" srcSet={`${ART}character-${animation}-still-v3.webp`} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img data-art="character" className="studio-character-anim" src={`${ART}character-${animation}-v3.webp`} alt="" draggable={false} onLoad={() => loadedArt('character')} onError={() => setFailed(true)} />
+            </picture>
           </span></span>
           <span className="studio-name"><i />Arif<span>{drag ? 'Diangkat' : pose === 'working' ? 'Fokus' : seated ? activeSeat?.desk : 'Itu kamu'}</span></span>
         </button>
