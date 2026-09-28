@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { BarChart3, KanbanSquare, ShieldCheck } from "lucide-react";
+import { BarChart3, KanbanSquare, ShieldCheck, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "Board", icon: KanbanSquare },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/office", label: "Virtual Office", icon: Users },
   { href: "/login", label: "Auth", icon: ShieldCheck }
 ];
 
