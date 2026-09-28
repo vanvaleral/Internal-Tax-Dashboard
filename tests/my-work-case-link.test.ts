@@ -19,14 +19,16 @@ test("daily tasks persist an authorized optional Case link", () => {
 });
 
 test("existing cases retain their Client Master link when an edit omits clientId", () => {
-  assert.match(casesRoute, /payloadFor\(actor: any, input: Record<string, unknown>, fallbackClientId = ""\)/);
-  assert.match(casesRoute, /select\("client_id, tax_pic_profile_id, accounting_pic_profile_id"\)/);
-  assert.match(casesRoute, /payloadFor\(actor, body\.case \|\| body, existing\.client_id \|\| ""\)/);
+  assert.match(casesRoute, /payloadFor\(actor: any, input: Record<string, unknown>, fallbackClientId = "", editingAssignedCase = false\)/);
+  assert.match(casesRoute, /select\("client_id, tax_pic_profile_id, accounting_pic_profile_id, tax_pic_name, accounting_pic_name, updated_at"\)/);
+  assert.match(casesRoute, /payloadFor\(actor, caseInput, existing\.client_id \|\| "", true\)/);
+  assert.match(casesRoute, /update\.tax_pic_profile_id = existing\.tax_pic_profile_id/);
 });
 
-test("tax claims refresh payable rows and load with one authenticated request", () => {
+test("tax claims preserve saved drafts and load with one authenticated request", () => {
   assert.match(monthlyClaimsRoute, /submitted\?\.payableAmount \?\? item\?\.payableAmount/);
-  assert.match(monthlyClaimsRoute, /existing\.draft[\s\S]*rows: obligationRows/);
+  assert.match(monthlyClaimsRoute, /if \(existing\) return NextResponse\.json\(\{ data: existing/);
+  assert.doesNotMatch(monthlyClaimsRoute, /existing\.draft[\s\S]*rows: obligationRows/);
   assert.match(monthlyClaimsRoute, /viewerId: actor\.profile\.id/);
   assert.doesNotMatch(claimTemplate, /fetch\("\/api\/profile"/);
   assert.match(monthlyClaimsRoute, /Promise\.all\(\[/);

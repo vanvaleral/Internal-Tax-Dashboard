@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadRoute, mockDatabase, request } from "./route-harness.ts";
 import * as security from "../lib/workspace-security.ts";
+import * as monthlyValidation from "../lib/monthly-patch-validation.ts";
 
 function fixture(role = "staff") {
   const profile = { id: role === "staff" ? "a" : "supervisor", role, full_name: "Synthetic User" };
@@ -12,7 +13,7 @@ function fixture(role = "staff") {
     client_master: [{ id: "A", client_code: "CL-001", legal_name: "Client A", tax_pic_profile_id: "a", status: "Active" }, { id: "B", client_code: "CL-002", legal_name: "Client B", tax_pic_profile_id: "b", status: "Active" }],
     staff_profiles: [{ id: "a", full_name: "Synthetic Tax", team_division: "Tax Team", directory_active: true }]
   });
-  const route = loadRoute("app/api/operations/route.ts", { "@/lib/access": { currentActor: async () => ({ profile, admin: db }), isLeadership: (value: string) => value !== "staff" }, "@/lib/workspace-security": security });
+  const route = loadRoute("app/api/operations/route.ts", { "@/lib/access": { currentActor: async () => ({ profile, admin: db }), isLeadership: (value: string) => value !== "staff" }, "@/lib/workspace-security": security, "@/lib/monthly-patch-validation": monthlyValidation });
   return { route, db, a, b };
 }
 
@@ -70,6 +71,18 @@ test("monthly row PATCH saves only the edited fields and preserves other clients
   assert.equal(rows[0].obligations.pph21.receiptNumber, "NTPN-123");
   assert.equal(rows[0].serviceFee, 100);
   assert.equal(rows[1].name, "Client B");
+});
+
+test("monthly row PATCH rejects malformed values before writing the workspace", async () => {
+  const { route, db } = fixture();
+  const before = structuredClone(db.tables.operational_workspace_state[1]);
+  const response = await route.PATCH(request({
+    period: "August 2026",
+    rowId: "A",
+    changes: { obligations: { pph21: { payableAmount: "not a number" } } }
+  }));
+  assert.equal(response.status, 400);
+  assert.deepEqual(db.tables.operational_workspace_state[1], before);
 });
 
 test("F08 supervisor generating another PIC's month receives the generated queue", async () => {

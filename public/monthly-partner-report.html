@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monthly Leadership Report | LMATS Consulting</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <style>
+    :root { --ink:#183047; --muted:#64798a; --line:#d9e4eb; --cyan:#02a9e6; --blue:#0b4a91; --pale:#eef8fc; --amber:#b96a19; --paper:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:#e8eff2; font:13px/1.45 "Aptos", "Trebuchet MS", sans-serif; }
+    button, select { font:inherit; }
+    .toolbar { position:sticky; top:0; z-index:2; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px max(16px,calc((100vw - 900px)/2)); background:#173248; color:white; }
+    .toolbar strong { display:block; letter-spacing:.02em; }
+    .toolbar small { color:#bfd5df; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .controls select, .controls button { min-height:34px; padding:6px 10px; border:1px solid #9bb2c0; border-radius:7px; background:white; color:var(--ink); cursor:pointer; }
+    .controls button:disabled { cursor:not-allowed; opacity:.48; }
+    .controls .print { border-color:var(--cyan); background:var(--cyan); color:#06334a; font-weight:700; }
+    .sheet { width:min(210mm,calc(100vw - 28px)); min-height:297mm; margin:18px auto; padding:16mm 15mm 14mm; background:var(--paper); box-shadow:0 15px 46px #17324824; }
+    .brand { display:flex; align-items:center; gap:12px; padding-bottom:12px; border-bottom:3px solid var(--cyan); }
+    .brand img { width:44px; height:44px; }
+    .brand strong { display:block; color:var(--blue); font-size:18px; letter-spacing:.11em; }
+    .brand span { color:#4180a3; font-size:9px; letter-spacing:.19em; text-transform:uppercase; }
+    .report-head { display:flex; justify-content:space-between; gap:16px; margin:22px 0 18px; }
+    .eyebrow { color:var(--blue); font-size:9px; font-weight:800; letter-spacing:.19em; text-transform:uppercase; }
+    h1 { margin:4px 0 7px; font-size:26px; line-height:1.12; letter-spacing:-.035em; }
+    h2 { margin:0 0 9px; font-size:14px; }
+    p { margin:0; }
+    .muted { color:var(--muted); }
+    .report-meta { min-width:142px; padding:10px 12px; border-left:2px solid var(--cyan); background:var(--pale); font-size:11px; }
+    .report-meta strong { display:block; margin-top:2px; font-size:13px; }
+    .demo-warning { padding:8px 10px; margin-bottom:15px; border:1px solid #efcf9d; border-radius:5px; background:#fff8eb; color:#85501c; font-size:10px; font-weight:700; }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-bottom:17px; }
+    .metric { padding:10px; border:1px solid var(--line); border-radius:6px; }
+    .metric span { display:block; color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.09em; }
+    .metric strong { display:block; margin:3px 0 1px; font-size:22px; line-height:1; }
+    .metric small { color:var(--muted); font-size:9px; }
+    .section { margin-top:18px; }
+    .section-head { display:flex; justify-content:space-between; align-items:end; gap:10px; margin-bottom:7px; }
+    .section-head p { color:var(--muted); font-size:10px; }
+    table { width:100%; border-collapse:collapse; font-size:10px; }
+    th { padding:7px 6px; background:#edf4f8; color:#536d7f; text-align:left; font-size:8px; letter-spacing:.1em; text-transform:uppercase; }
+    td { padding:7px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    tbody tr:nth-child(even) { background:#fafcfd; }
+    .name { font-weight:700; }
+    .tag { display:inline-block; padding:2px 6px; border-radius:3px; background:#e7f2f8; color:#1d6284; font-size:9px; font-weight:700; }
+    .tag.warn { background:#fff0dd; color:#986019; }
+    .tag.red { background:#fce7e6; color:#a83631; }
+    .note-box { margin-top:14px; padding:11px 13px; border-left:3px solid var(--cyan); background:#f4f9fb; font-size:10px; }
+    .note-box strong { display:block; margin-bottom:3px; }
+    .page-foot { display:flex; justify-content:space-between; gap:12px; margin-top:25px; padding-top:8px; border-top:1px solid var(--line); color:var(--muted); font-size:9px; }
+    .activity { display:grid; grid-template-columns:112px minmax(0,1fr) 78px; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:11px; }
+    .activity strong { display:block; }
+    .activity small { color:var(--muted); }
+    .activity .right { text-align:right; }
+    .signature { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:28px; font-size:10px; }
+    .signature div { padding-top:34px; border-bottom:1px solid #8ca5b3; }
+    @page { size:A4 portrait; margin:0; }
+    @media print { body { background:#fff; print-color-adjust:exact; -webkit-print-color-adjust:exact; } .toolbar { display:none; } .sheet { width:210mm; height:297mm; min-height:0; margin:0; box-shadow:none; break-after:page; overflow:hidden; } .sheet:last-child { break-after:auto; } }
+    @media(max-width:650px) { .toolbar { display:block; } .controls { margin-top:9px; } .sheet { padding:18px; min-height:0; } .report-head { display:block; } .report-meta { margin-top:12px; } .metrics { grid-template-columns:repeat(2,1fr); } .activity { grid-template-columns:88px minmax(0,1fr); } .activity .right { grid-column:2; text-align:left; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar"><div><strong>Monthly Leadership Report</strong><small>Print layout preview · data ilustrasi</small></div><div class="controls"><label for="period">Periode</label><select id="period"><option value="2026-09">September 2026</option><option value="2026-10">Oktober 2026</option></select><button id="finalize" disabled title="Menunggu snapshot server-side dan audit finalisasi">Finalize · coming soon</button><button class="print" id="print">Print / PDF</button></div></div>
+  <main>
+    <article class="sheet">
+      <header class="brand"><img src="./favicon.svg" alt="" /><div><strong>LMATS CONSULTING</strong><span>Tax Consulting · Accounting · Business Advisory</span></div></header>
+      <div class="report-head"><div><div class="eyebrow">Confidential · Partner briefing</div><h1>Laporan Kinerja Bulanan</h1><p class="muted" id="subtitle"></p></div><div class="report-meta">PERIODE LAPORAN<strong id="period-label"></strong><span>Status: <b>Preview</b></span></div></div>
+      <div class="demo-warning">DATA ILUSTRASI. Tampilan ini belum mengambil histori database dan belum dapat difinalisasi.</div>
+      <section class="metrics" id="metrics"></section>
+      <section class="section"><div class="section-head"><h2>Ringkasan per PIC</h2><p>Poin disetujui dan pending ditampilkan terpisah</p></div><table><thead><tr><th>PIC / Tim</th><th class="num">My Work</th><th class="num">Compliance</th><th class="num">Case</th><th class="num">Outstanding</th><th class="num">Poin approved</th><th class="num">Poin pending</th></tr></thead><tbody id="pic-rows"></tbody></table></section>
+      <section class="section"><div class="section-head"><h2>Perhatian partner</h2><p>Prioritas untuk keputusan atau eskalasi</p></div><table><thead><tr><th>Item</th><th>Penanggung jawab</th><th>Kondisi per akhir bulan</th></tr></thead><tbody id="attention-rows"></tbody></table></section>
+      <div class="note-box"><strong>Cara membaca laporan</strong><span id="method-note"></span> “Outstanding” berarti pekerjaan/kasus terbuka, bukan poin yang belum diperoleh. Poin pending adalah entri ledger yang belum disetujui.</div>
+      <footer class="page-foot"><span>LMATS Consulting · Internal management use only</span><span>1 / 2</span></footer>
+    </article>
+    <article class="sheet">
+      <header class="brand"><img src="./favicon.svg" alt="" /><div><strong>LMATS CONSULTING</strong><span>Monthly activity register</span></div></header>
+      <div class="report-head"><div><div class="eyebrow">Activity & carry-over</div><h1>Yang dikerjakan PIC</h1><p class="muted" id="detail-subtitle"></p></div><div class="report-meta">PERIODE LAPORAN<strong id="detail-period"></strong><span>Status: <b>Preview</b></span></div></div>
+      <div class="demo-warning">DATA ILUSTRASI. Aktivitas di bulan berikutnya tidak mengubah isi laporan bulan sebelumnya.</div>
+      <section class="section"><div class="section-head"><h2>Aktivitas penting</h2><p>Ringkasan aktivitas, bukan daftar seluruh task harian</p></div><div id="activities"></div></section>
+      <section class="section"><div class="section-head"><h2>Carry-over ke bulan berikutnya</h2><p>Item yang masih terbuka pada akhir periode</p></div><table><thead><tr><th>Item</th><th>PIC</th><th>Langkah berikutnya</th></tr></thead><tbody id="carry-over"></tbody></table></section>
+      <div class="signature"><div>Disiapkan oleh · Leadership</div><div>Ditinjau oleh · Partner</div></div>
+      <footer class="page-foot"><span>Snapshot final memerlukan tanggal, aktor, dan versi revisi</span><span>2 / 2</span></footer>
+    </article>
+  </main>
+  <script>
+    const basePics = [
+      ["Ita", "Tax", 14, 8, 1, 3, 82, 8], ["Cemari", "Accounting", 12, 6, 0, 2, 75, 5],
+      ["Bagus", "Tax", 16, 9, 1, 4, 78, 12], ["Denny", "Tax", 13, 7, 2, 3, 69, 6],
+      ["Dewayu", "Accounting", 11, 6, 0, 2, 64, 4], ["Harry", "Tax", 15, 8, 1, 2, 73, 7]
+    ];
+    const reports = {
+      "2026-09": {
+        label:"September 2026", completed:72, compliance:44, outstanding:16, pending:42,
+        attention:[["Case Contoh A · dibuka 20 Sep", "Bagus", "Menunggu konfirmasi progres; masih terbuka pada 30 Sep"], ["Data laporan Klien Contoh B", "Cemari", "Dokumen Agustus–September belum lengkap"], ["PPh Klien Contoh C", "Denny", "Menunggu pembayaran klien"]],
+        activities:[["Bagus", "Membuka Case Contoh A pada 20 September; permintaan dokumen awal dikirim.", "Open"], ["Ita", "Menyelesaikan 8 kontrol compliance bulanan.", "Done"], ["Cemari", "Menyusun laporan interim Klien Contoh B sampai Agustus.", "In process"], ["Denny", "Melakukan follow-up pembayaran Klien Contoh C.", "Waiting"], ["Dewayu", "Menerima dan mencocokkan data administrasi bulanan.", "Done"], ["Harry", "Menuntaskan kontrol pajak dan mendokumentasikan tindak lanjut.", "Done"]],
+        carry:[["Case Contoh A", "Bagus", "Konfirmasi progres dan dokumen pada Oktober"], ["Laporan Klien Contoh B", "Cemari", "Lengkapi data September"]],
+        note:"Case yang dibuat pada September ditampilkan sebagai terbuka berdasarkan kondisi per 30 September."
+      },
+      "2026-10": {
+        label:"Oktober 2026", completed:79, compliance:48, outstanding:11, pending:29,
+        attention:[["Case Contoh A · carry-over Sep", "Bagus", "Follow-up 5 Okt tercatat; menunggu respons akhir"], ["Data laporan Klien Contoh B", "Cemari", "Data September diterima; penyusunan berlanjut"]],
+        activities:[["Bagus", "Follow-up Case Contoh A pada 5 Oktober; progres baru tercatat di Oktober.", "Follow-up"], ["Ita", "Menyelesaikan kontrol compliance periode Oktober.", "Done"], ["Cemari", "Menerima data tertunda dan melanjutkan penyusunan laporan.", "In process"], ["Denny", "Menyelesaikan konfirmasi pembayaran Klien Contoh C.", "Done"], ["Dewayu", "Melakukan rekonsiliasi data interim.", "Done"], ["Harry", "Mendokumentasikan penyelesaian kewajiban pajak Oktober.", "Done"]],
+        carry:[["Case Contoh A", "Bagus", "Tunggu respons akhir klien"]],
+        note:"Follow-up 5 Oktober muncul di laporan Oktober, bukan mengubah snapshot September."
+      }
+    };
+    const $ = (id) => document.getElementById(id);
+    function escape(value) { return String(value).replace(/[&<>"']/g, (character) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[character]); }
+    function render() {
+      const key = $("period").value;
+      const report = reports[key];
+      $("period-label").textContent = report.label;
+      $("detail-period").textContent = report.label;
+      $("subtitle").textContent = `Aktivitas dan posisi outstanding per 30 ${key === "2026-09" ? "September" : "Oktober"} 2026`;
+      $("detail-subtitle").textContent = `Kegiatan selama ${report.label} dan pekerjaan yang berlanjut`;
+      $("metrics").innerHTML = [["Tasks selesai", report.completed, "My Work"], ["Compliance selesai", report.compliance, "Monthly + annual"], ["Outstanding", report.outstanding, "Per akhir periode"], ["Poin pending", report.pending, "Belum disetujui"]].map(([label, value, note]) => `<div class="metric"><span>${escape(label)}</span><strong>${value}</strong><small>${escape(note)}</small></div>`).join("");
+      $("pic-rows").innerHTML = basePics.map(([name, team, tasks, compliance, cases, open, approved, pending]) => `<tr><td><span class="name">${escape(name)}</span><br><span class="muted">${escape(team)}</span></td><td class="num">${tasks + (key === "2026-10" ? 1 : 0)}</td><td class="num">${compliance}</td><td class="num">${cases}</td><td class="num">${open}</td><td class="num"><strong>${approved}</strong></td><td class="num">${pending}</td></tr>`).join("");
+      $("attention-rows").innerHTML = report.attention.map(([item, pic, condition]) => `<tr><td><strong>${escape(item)}</strong></td><td>${escape(pic)}</td><td>${escape(condition)}</td></tr>`).join("");
+      $("activities").innerHTML = report.activities.map(([pic, detail, status]) => `<div class="activity"><div><strong>${escape(pic)}</strong><small>${escape(basePics.find((row) => row[0] === pic)?.[1] || "")}</small></div><div>${escape(detail)}</div><div class="right"><span class="tag ${status === "Waiting" ? "warn" : status === "Open" ? "red" : ""}">${escape(status)}</span></div></div>`).join("");
+      $("carry-over").innerHTML = report.carry.map(([item, pic, next]) => `<tr><td><strong>${escape(item)}</strong></td><td>${escape(pic)}</td><td>${escape(next)}</td></tr>`).join("");
+      $("method-note").textContent = `${report.note} `;
+    }
+    $("period").addEventListener("change", render);
+    $("print").addEventListener("click", () => window.print());
+    render();
+  </script>
+</body>
+</html>

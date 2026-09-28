@@ -148,6 +148,28 @@ Each obligation item should store:
 
 ## 4. Annual compliance
 
+The current application stores `annual_accounting` and `annual_tax` as separate
+JSONB scopes in `operational_workspace_state`. Annual accounting rows now have
+three optional arrays of zero-based month indexes (`0` = January, `11` =
+December): `technicalAdminMonths`, `dataMonths`, and
+`reportPreparationMonths`. They are versioned and audited with the rest of the
+workspace. Omitted arrays on older records mean no months checked, not missing
+records. Migration `202609260002_annual_accounting_month_checklists.sql` adds a
+`NOT VALID` database check for new writes; it does not rewrite existing annual
+history. Before validating the constraint, inspect existing data with:
+
+```sql
+select scope, version
+from public.operational_workspace_state
+where scope = 'annual_accounting'
+  and not public.annual_accounting_month_checklists_valid(payload);
+```
+
+If rows appear, back up and repair only those invalid month arrays before
+running `alter table public.operational_workspace_state validate constraint
+annual_accounting_month_checklists_valid`. Do not generate new annual records
+until the yearly identity, PIC snapshot, and outside-contract rules are agreed.
+
 Recommended separate models:
 - `annual_accounting_controls`
 - `annual_tax_controls`

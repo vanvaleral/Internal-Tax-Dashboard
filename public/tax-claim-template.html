@@ -103,6 +103,7 @@
     .signature input { text-align:right; padding:1px 0; }
     .signature .name { font-size:14px; color:var(--navy); font-weight:850; }
     .legal { display:flex; justify-content:space-between; gap:12px; margin-top:12px; color:var(--muted); font-size:9px; }
+    .claim-record-reference { margin-top:5px; color:var(--muted); font-size:9px; overflow-wrap:anywhere; }
     @media (max-width:680px) { .page { width:100%; margin:0; } .hero,.content { padding-left:22px; padding-right:22px; } .logo-panel { grid-template-columns:1fr; gap:9px; } .brand-contact { padding:8px 0 0; border-left:0; border-top:1px solid var(--line); white-space:normal; } .wordmark strong { font-size:18px; } .wordmark span { font-size:7px; white-space:normal; } .client-row,.total-card,.payment-grid,.footer { grid-template-columns:1fr; } .deadline-copy,.signature { text-align:left; } .signature input { text-align:left; } .legal { display:block; line-height:1.7; } .hero::after { opacity:.5; } }
     @media print {
       @page { size:A4 portrait; margin:10mm; }
@@ -171,6 +172,7 @@
       <section class="reference"><h2>REFERENSI JATUH TEMPO</h2><table><thead><tr><th>JENIS PAJAK</th><th>JATUH TEMPO</th><th>SANKSI TERLAMBAT</th></tr></thead><tbody><tr><td>PPh Pasal 21, 23, 4(2), 26</td><td>15 bulan berikutnya</td><td>1% per bulan</td></tr><tr><td>PPh Pasal 25 / PPh Final 1%</td><td>15 bulan berikutnya</td><td>1% per bulan</td></tr><tr><td>PPN</td><td>Akhir bulan berikutnya</td><td>1% per bulan</td></tr><tr><td>PHR</td><td>20 bulan berikutnya</td><td>2% per bulan</td></tr></tbody></table></section>
       <footer class="footer"><div>Terima kasih atas kerja sama dan kepercayaan Anda kepada LMATS Consulting.</div><div class="signature"><input data-draft="issued" value="Denpasar, 02 Juni 2025" /><input class="name" data-draft="signatory" value="Denny Wijaya" /><input data-draft="role" value="Tax Consultant" /></div></footer>
       <div class="legal"><span>LMATS Consulting | Jl. Astasura No. 18, Peguyangan Kanging, Denpasar Utara, Bali</span><span>www.lmatsconsulting.com</span></div>
+      <div class="claim-record-reference" id="claim-record-reference"></div>
     </section>
   </main>
   <script src="claim-values.js"></script>
@@ -191,10 +193,11 @@
     document.body.dataset.claimReady = "false";
     document.querySelectorAll("input, textarea, button").forEach(control => { control.disabled = true; });
     const claimId = new URLSearchParams(location.search).get("claimId");
+    const printId = new URLSearchParams(location.search).get("printId");
     let claimBootstrap = null;
     try {
       const candidate = JSON.parse(window.name || "null");
-      if (candidate?.type === "monthly-tax-claim-bootstrap" && candidate.claimId === claimId && candidate.data?.draft) claimBootstrap = candidate;
+      if (!printId && candidate?.type === "monthly-tax-claim-bootstrap" && candidate.claimId === claimId && candidate.data?.draft) claimBootstrap = candidate;
     } catch { /* Direct opens and legacy window names use the normal GET fallback. */ }
     window.name = "";
     const parseAmount = ClaimValues.parseAmount;
@@ -228,11 +231,11 @@
     function applyDraft(draft) { if (!draft) return; document.querySelectorAll("[data-draft]").forEach(input => { if (draft[input.dataset.draft] !== undefined) input.value = draft[input.dataset.draft]; }); if (Array.isArray(draft.rows) && draft.rows.length) { document.getElementById("claim-rows").innerHTML = ""; draft.rows.forEach(values => { newRow(); const inputs = rows().at(-1).querySelectorAll("input"); values.forEach((value, index) => { if (inputs[index]) inputs[index].value = value; }); }); } document.querySelectorAll(".tax-amount").forEach(input => input.value = formatNumber(input.value)); refreshTotal(); }
     const templateDefaults = readDraft();
     function resetAndApply(draft) { applyDraft(templateDefaults); applyDraft(draft); }
-    document.getElementById("save-draft").addEventListener("click", async () => {
-      if (!claimReady || !refreshTotal()) return;
+    async function saveDraft() {
+      if (printId || !claimReady || !refreshTotal()) return false;
       const data = readDraft();
       localStorage.setItem(draftKey, JSON.stringify({ draft:data, version:claimVersion, user:workspaceUser, claimId }));
-      if (!claimId) { status("Draft saved on this device."); return; }
+      if (!claimId) { status("Draft saved on this device."); return true; }
       document.getElementById("save-draft").disabled = true;
       try {
         const response = await fetch("/api/monthly-claims", { method:"PATCH", headers:{ "Content-Type":"application/json", Accept:"application/json", "X-Workspace-User":workspaceUser }, body:JSON.stringify({ id:claimId, draft:data, version:claimVersion }) });
@@ -241,34 +244,62 @@
         claimVersion = result.data.updated_at;
         localStorage.removeItem(draftKey);
         status("Saved to database.");
-      } catch (error) { status(error.message); }
+        return true;
+      } catch (error) { status(error.message); return false; }
       finally { refreshTotal(); }
-    });
+    }
+    document.getElementById("save-draft").addEventListener("click", saveDraft);
     document.getElementById("reset-draft").addEventListener("click", () => { if (confirm("Discard this device's draft and reload the saved claim?")) { localStorage.removeItem(draftKey); location.reload(); } });
-    document.getElementById("print-claim").addEventListener("click", () => { if (claimReady && refreshTotal()) window.print(); });
+    document.getElementById("print-claim").addEventListener("click", async () => {
+      if (!claimReady || !refreshTotal()) return;
+      if (printId) { window.print(); return; }
+      if (claimId) {
+        if (!await saveDraft()) { status("Save the claim to the database before printing."); return; }
+        try {
+          const response = await fetch("/api/monthly-claims", { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ action:"prepare-print", id:claimId, version:claimVersion }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Print snapshot could not be saved.");
+          status(`Print snapshot ${result.data.id} saved.`);
+          document.getElementById("claim-record-reference").textContent = `Claim ID ${claimId} | Print snapshot ${result.data.id}`;
+        } catch (error) { status(error.message); return; }
+      }
+      window.print();
+    });
     (async () => {
       try {
         workspaceUser = location.protocol === "file:" ? "offline-preview" : "standalone";
         if (claimId) {
           let result = claimBootstrap;
           if (!result) {
-            const response = await fetch(`/api/monthly-claims?id=${encodeURIComponent(claimId)}`, { cache:"no-store", headers:{ Accept:"application/json" } });
+            const endpoint = printId ? `/api/monthly-claims?printId=${encodeURIComponent(printId)}` : `/api/monthly-claims?id=${encodeURIComponent(claimId)}`;
+            const response = await fetch(endpoint, { cache:"no-store", headers:{ Accept:"application/json" } });
             result = await response.json();
             if (!response.ok || !result.data?.draft) throw new Error(result.error || "This claim could not be loaded. Reload to retry.");
+            if (printId && result.data.claimId !== claimId) throw new Error("Print snapshot does not belong to this claim.");
           }
           workspaceUser = result.viewerId || "authorized-user";
           claimVersion = result.data.updated_at;
           resetAndApply(result.data.draft);
+          document.getElementById("claim-record-reference").textContent = `Claim ID ${claimId}${printId ? ` | Print snapshot ${printId}` : ""}`;
         }
         draftKey = `lmats-claim-v2:${workspaceUser}:${claimId || "standalone"}`;
         let recovery;
         try { recovery = JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { /* Ignore an invalid local draft. */ }
-        if (recovery?.user === workspaceUser && recovery.claimId === claimId && recovery.version === claimVersion && confirm("Restore the unsaved draft for this claim on this device?")) resetAndApply(recovery.draft);
+        if (!printId && recovery?.user === workspaceUser && recovery.claimId === claimId && recovery.version === claimVersion && confirm("Restore the unsaved draft for this claim on this device?")) resetAndApply(recovery.draft);
         claimReady = true;
         document.body.dataset.claimReady = "true";
         document.querySelectorAll("input, textarea, button").forEach(control => { control.disabled = false; });
+        if (claimId) {
+          document.getElementById("logo-upload").disabled = true;
+          document.getElementById("logo-upload").closest("label").hidden = true;
+          document.querySelector(".deadline-copy").contentEditable = "false";
+        }
         status("Ready.");
         refreshTotal();
+        if (printId) {
+          document.querySelectorAll("input, textarea, #add-row, .remove-row, #save-draft, #reset-draft").forEach(control => { control.disabled = true; });
+          status("Saved print snapshot · read-only.");
+        }
       } catch (error) { status(error.message); }
     })();
   </script>

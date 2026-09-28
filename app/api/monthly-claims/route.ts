@@ -14,6 +14,18 @@ export async function POST(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   const body = await request.json().catch(() => ({}));
+  if (body.action === "prepare-print") {
+    const id = String(body.id || "");
+    const { data: claim, error: claimError } = await actor.admin.from("monthly_tax_claims").select("id, draft, updated_at, tax_pic_profile_id, accounting_pic_profile_id").eq("id", id).maybeSingle();
+    if (claimError || !claim || !canAccess(actor, claim)) return NextResponse.json({ error: "Tax claim was not found." }, { status: 404 });
+    if (body.version !== claim.updated_at) return NextResponse.json({ error: "The saved claim changed. Reload before printing.", code: "VERSION_CONFLICT" }, { status: 409 });
+    const { data, error } = await actor.admin.rpc("prepare_monthly_tax_claim_print", {
+      p_claim_id: id, p_version: body.version, p_actor_profile_id: actor.profile.id
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data?.id) return NextResponse.json({ error: "The claim changed before the print snapshot was saved.", code: "VERSION_CONFLICT" }, { status: 409 });
+    return NextResponse.json({ data: { id: data.id, printed_at: data.printed_at } });
+  }
   const period = String(body.period || "");
   const clientId = String(body.clientId || "");
   if (!period || !clientId) return NextResponse.json({ error: "A generated period and client are required." }, { status: 400 });
@@ -38,13 +50,7 @@ export async function POST(request: Request) {
       });
   }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid claim amount." }, { status: 400 }); }
-  if (existing) {
-    const draft = { ...(existing.draft && typeof existing.draft === "object" ? existing.draft : {}), rows: obligationRows };
-    const { data: refreshed, error: refreshError } = await actor.admin.from("monthly_tax_claims").update({ draft }).eq("id", existing.id).eq("updated_at", existing.updated_at).select("id, draft, updated_at").maybeSingle();
-    if (refreshError) return NextResponse.json({ error: refreshError.message }, { status: 500 });
-    if (!refreshed) return NextResponse.json({ error: "This claim changed while payable values were being refreshed. Open it again to retry.", code: "VERSION_CONFLICT" }, { status: 409 });
-    return NextResponse.json({ data: refreshed, viewerId: actor.profile.id, existing: true, refreshed: true });
-  }
+  if (existing) return NextResponse.json({ data: existing, viewerId: actor.profile.id, existing: true });
   const clientName = `${row.businessForm && row.businessForm !== "Individual" ? `${row.businessForm} ` : ""}${row.name || ""}`.trim();
   const draft = { title: "KLAIM PAJAK", client: clientName, "client-note": "Ringkasan kewajiban pajak yang perlu dipersiapkan untuk masa pajak berikut.", period, rows: obligationRows, issued: `Denpasar, ${new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}`, signatory: actor.profile.display_name || actor.profile.full_name, role: "Tax Consultant" };
   const { data, error: insertError } = await actor.admin.from("monthly_tax_claims").insert({ period_key: period, client_id: clientId, tax_pic_profile_id: row.taxPicSnapshotProfileId || row.taxPicProfileId, accounting_pic_profile_id: row.accountingPicSnapshotProfileId || row.accountingPicProfileId || null, created_by_profile_id: actor.profile.id, source_snapshot: row, draft }).select("id, draft, updated_at").single();
@@ -55,7 +61,38 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  const id = new URL(request.url).searchParams.get("id");
+  const url = new URL(request.url);
+  const printsFor = url.searchParams.get("prints");
+  const printId = url.searchParams.get("printId");
+  if (printsFor || printId) {
+    const { data: print, error: printError } = printId
+      ? await actor.admin.from("monthly_tax_claim_prints").select("id, claim_id, draft_snapshot, printed_at").eq("id", printId).maybeSingle()
+      : { data: null, error: null };
+    if (printError || (printId && !print)) return NextResponse.json({ error: "Print snapshot was not found." }, { status: 404 });
+    const claimId = print?.claim_id || printsFor;
+    const { data: claim, error: claimError } = await actor.admin.from("monthly_tax_claims").select("id, tax_pic_profile_id, accounting_pic_profile_id").eq("id", claimId).maybeSingle();
+    if (claimError || !claim || !canAccess(actor, claim)) return NextResponse.json({ error: "Tax claim was not found." }, { status: 404 });
+    if (print) return NextResponse.json({ data: { id: print.id, claimId: claim.id, draft: print.draft_snapshot, printedAt: print.printed_at }, viewerId: actor.profile.id });
+    const { data, error } = await actor.admin.from("monthly_tax_claim_prints").select("id, claim_id, printed_at, printed_by_profile_id").eq("claim_id", claim.id).order("printed_at", { ascending: false }).limit(100);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data: data || [] });
+  }
+  if (url.searchParams.get("list") === "1") {
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 200), 1), 200);
+    const offset = Math.max(Number(url.searchParams.get("offset") || 0), 0);
+    let query = actor.admin.from("monthly_tax_claims")
+      .select("id, period_key, client_id, tax_pic_profile_id, accounting_pic_profile_id, created_at, updated_at, source_snapshot")
+      .order("created_at", { ascending: false }).order("id").range(offset, offset + limit - 1);
+    if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
+    const { data, error } = await query;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data: (data || []).map((claim) => ({
+      id: claim.id, period: claim.period_key, clientId: claim.client_id,
+      clientName: claim.source_snapshot?.name || claim.source_snapshot?.clientName || "Client",
+      createdAt: claim.created_at, updatedAt: claim.updated_at
+    })) });
+  }
+  const id = url.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Claim ID is required." }, { status: 400 });
   const { data, error } = await actor.admin.from("monthly_tax_claims").select("*").eq("id", id).maybeSingle();
   if (error || !data || !canAccess(actor, data)) return NextResponse.json({ error: "Tax claim was not found." }, { status: 404 });

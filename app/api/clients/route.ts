@@ -131,21 +131,20 @@ export async function POST(request: Request) {
   }
   if (rejected.length) return NextResponse.json({ error: "Import contains invalid rows.", validation }, { status: 422 });
   const payload = rows.map((row, index) => buildPayload(row, ownership.ids[index]));
-  const { data: existing, error: existingError } = await actor.admin.from("client_master").select("*").in("client_code", payload.map((row) => row.client_code));
-  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
-  const before = new Map((existing || []).map((client) => [client.client_code, client]));
-  const { data, error } = await actor.admin.from("client_master").upsert(payload, { onConflict: "client_code" }).select("id, client_code, legal_name");
+  const { data: committed, error } = await actor.admin.rpc("commit_client_master_import", {
+    p_rows: payload,
+    p_actor_user_id: actor.userId,
+    p_actor_profile_id: actor.profile.id,
+    p_operation: body.operation === "bulk-import" ? "bulk-import" : "save",
+    p_file_name: asSafeText(body.fileName) || null,
+    p_file_sha256: asSafeText(body.fileSha256) || null
+  });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const activity = (data || []).map((client) => ({ client_id: client.id, action: before.has(client.client_code) ? "client_master_updated" : "client_master_created", previous_value: before.get(client.client_code) || null, new_value: payload.find((row) => row.client_code === client.client_code) || null, actor_user_id: actor.userId }));
-  if (activity.length) {
-    const { error: auditError } = await actor.admin.from("client_master_activity").insert(activity);
-    if (auditError) console.error("[clients] client activity could not be written", auditError);
-  }
-  if (body.operation === "bulk-import") await actor.admin.from("client_import_batches").insert({ imported_by_profile_id: actor.profile.id, file_name: asSafeText(body.fileName) || null, file_sha256: asSafeText(body.fileSha256) || null, total_rows: rows.length, valid_rows: payload.length, created_count: payload.filter((row) => !before.has(row.client_code)).length, updated_count: payload.filter((row) => before.has(row.client_code)).length, rejected_rows: validation.filter((entry) => entry.errors.length), committed_at: new Date().toISOString() });
-  const created = payload.filter((row) => !before.has(row.client_code));
-  if (created.length) after(async () => {
-    try { await createOperationalAnnouncement({ title: `New clients added: ${created.length}`, message: `${actor.profile.display_name || actor.profile.full_name} added ${created.slice(0, 3).map((client) => client.legal_name).join(", ")}${created.length > 3 ? ` and ${created.length - 3} more` : ""}.`, senderProfileId: actor.profile.id, eventKey: notificationEventKey("client-import", created.map((client) => client.client_code).sort().join(",")), sourceType: "client_master" }); }
+  const data = Array.isArray(committed?.data) ? committed.data : [];
+  const createdCount = Number(committed?.created || 0);
+  if (createdCount) after(async () => {
+    try { await createOperationalAnnouncement({ title: `New clients added: ${createdCount}`, message: `${actor.profile.display_name || actor.profile.full_name} added ${createdCount} client(s).`, senderProfileId: actor.profile.id, eventKey: notificationEventKey("client-import", data.map((client: { client_code: string }) => client.client_code).sort().join(",")), sourceType: "client_master" }); }
     catch (error) { console.error("[clients] notification could not be created", error); }
   });
-  return NextResponse.json({ data, mode: "database", imported: payload.length, created: created.length, updated: payload.length - created.length });
+  return NextResponse.json({ data, mode: "database", imported: payload.length, created: createdCount, updated: Number(committed?.updated || 0) });
 }

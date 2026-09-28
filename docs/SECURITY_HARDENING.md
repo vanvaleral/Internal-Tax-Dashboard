@@ -48,3 +48,31 @@ After deploying the app, test with one staff and one supervisor account:
 
 Keep `SUPABASE_SERVICE_ROLE_KEY` server-only. It must never be prefixed with
 `NEXT_PUBLIC_` or exposed in the browser.
+
+## Legacy compliance view (2026-09-28)
+
+`202609280001_secure_legacy_compliance_view.sql` makes `compliance_board` a
+security-invoker view and revokes `anon` access. Production was updated on
+2026-09-28; a read-only check confirmed `anon` has no SELECT privilege while
+`authenticated` retains SELECT. The view now obeys the underlying RLS policies.
+Do not recreate this view from `supabase/schema.sql` without preserving these
+permissions and `security_invoker = true`.
+
+## PIC Access retention (2026-09-26)
+
+Apply `supabase/migrations/202609260001_staff_access_retention.sql` before deploying
+the matching app version, and take a Supabase backup first. This additive migration
+records when staff access is archived and when Auth-account deletion starts/ends.
+It intentionally does not backfill old inactive profiles: they remain restorable
+without an automatic deadline until reactivated and archived through PIC Access.
+
+Newly archived staff appear in PIC Access > Recently Deleted and can be restored
+for 14 days. The existing daily `/api/maintenance/purge-deleted` job then deletes
+their Supabase Auth account and clears the profile's login/claim credentials. The
+staff profile itself is retained for historical foreign keys and audit records.
+The job processes up to 100 expired profiles per day and retries failed deletions
+on the next run. Check its response/logs if it reports `failedStaffAccess`.
+Because this is daily, physical deletion may happen after the exact 14-day mark;
+the app blocks restoration once the 14 days have elapsed. Verify the existing
+Vercel cron and `CRON_SECRET` remain configured. Never delete historical staff
+profiles directly while business records reference them.

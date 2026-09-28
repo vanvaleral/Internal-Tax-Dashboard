@@ -7,12 +7,12 @@ function canAccess(actor: any, client: any) {
   return isLeadership(actor.profile.role) || [client.tax_pic_profile_id, client.accounting_pic_profile_id].includes(actor.profile.id);
 }
 
-async function payloadFor(actor: any, input: Record<string, unknown>, fallbackClientId = "") {
+async function payloadFor(actor: any, input: Record<string, unknown>, fallbackClientId = "", editingAssignedCase = false) {
   const clientId = String(input.clientId || fallbackClientId || "");
   if (!clientId) throw new Error("Choose a client before saving a case.");
   const { data: client, error } = await actor.admin.from("client_master").select("id, legal_name, tax_pic_name, accounting_pic_name, tax_pic_profile_id, accounting_pic_profile_id").eq("id", clientId).maybeSingle();
   if (error || !client) throw new Error(error?.message || "Client was not found.");
-  if (!canAccess(actor, client)) throw new Error("You are not assigned to this client.");
+  if (!editingAssignedCase && !canAccess(actor, client)) throw new Error("You are not assigned to this client.");
   const category = input.caseCategory === "Pemeriksaan" ? "Pemeriksaan" : "Himbauan";
   const receivedDate = String(input.receivedDate || "");
   return {
@@ -153,12 +153,42 @@ export async function PATCH(request: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ data });
     }
-    const { data: existing } = await actor.admin.from("tax_cases").select("client_id, tax_pic_profile_id, accounting_pic_profile_id").eq("id", id).maybeSingle();
+    const { data: existing, error: lookupError } = await actor.admin.from("tax_cases").select("client_id, tax_pic_profile_id, accounting_pic_profile_id, tax_pic_name, accounting_pic_name, updated_at").eq("id", id).is("deleted_at", null).maybeSingle();
+    if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
     if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
-    const payload = await payloadFor(actor, body.case || body, existing.client_id || "");
-    const { created_by: _createdBy, ...update } = payload;
-    const { data, error } = await actor.admin.from("tax_cases").update(update).eq("id", id).select("*").single();
+    if (body.version !== existing.updated_at) return NextResponse.json({ error: "This case changed in another session. Reload before saving.", code: "VERSION_CONFLICT" }, { status: 409 });
+    if (body.action === "assign-pic") {
+      if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can reassign a case PIC." }, { status: 403 });
+      const taxId = String(body.taxPicProfileId || "");
+      const accountingId = String(body.accountingPicProfileId || "");
+      if (!taxId && !accountingId) return NextResponse.json({ error: "Choose at least one case PIC." }, { status: 400 });
+      const { data: staff, error: staffError } = await actor.admin.from("staff_profiles").select("id, full_name, display_name, team_division, directory_active").in("id", [taxId, accountingId].filter(Boolean));
+      if (staffError) return NextResponse.json({ error: staffError.message }, { status: 500 });
+      const taxPic = taxId ? (staff || []).find((person: any) => person.id === taxId && person.directory_active !== false && person.team_division === "Tax Team") : null;
+      const accountingPic = accountingId ? (staff || []).find((person: any) => person.id === accountingId && person.directory_active !== false && person.team_division === "Accounting Team") : null;
+      if ((taxId && !taxPic) || (accountingId && !accountingPic)) return NextResponse.json({ error: "Choose active PICs from the correct teams." }, { status: 400 });
+      const { data, error } = await actor.admin.from("tax_cases").update({
+        tax_pic_profile_id: taxId || null, tax_pic_name: taxPic?.display_name || taxPic?.full_name || null,
+        accounting_pic_profile_id: accountingId || null, accounting_pic_name: accountingPic?.display_name || accountingPic?.full_name || null,
+        updated_by_profile_id: actor.profile.id
+      }).eq("id", id).eq("updated_at", body.version).select("*").maybeSingle();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (!data) return NextResponse.json({ error: "This case changed in another session.", code: "VERSION_CONFLICT" }, { status: 409 });
+      return NextResponse.json({ data });
+    }
+    const caseInput = body.case || body;
+    if (caseInput.clientId && caseInput.clientId !== existing.client_id) return NextResponse.json({ error: "Change the linked client through a separate reviewed action." }, { status: 400 });
+    const payload = await payloadFor(actor, caseInput, existing.client_id || "", true);
+    const update: Record<string, unknown> = { ...payload };
+    delete update.created_by;
+    update.tax_pic_profile_id = existing.tax_pic_profile_id;
+    update.accounting_pic_profile_id = existing.accounting_pic_profile_id;
+    update.tax_pic_name = existing.tax_pic_name;
+    update.accounting_pic_name = existing.accounting_pic_name;
+    update.updated_by_profile_id = actor.profile.id;
+    const { data, error } = await actor.admin.from("tax_cases").update(update).eq("id", id).eq("updated_at", body.version).select("*").maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "This case changed in another session.", code: "VERSION_CONFLICT" }, { status: 409 });
     return NextResponse.json({ data });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update case." }, { status: 403 }); }
 }

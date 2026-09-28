@@ -37,7 +37,8 @@ test("claim code regeneration is authorized, one-time, and never stores the plai
   assert.match(route, /notifyLeadership\(actor, "Regenerated claim code for"/);
   assert.match(route, /"Cache-Control": "no-store"/);
   assert.match(register, /\.update\(\{ auth_user_id: created\.user\.id, username, claim_code_hash: null, claimed_at: new Date\(\)\.toISOString\(\) \}\)[\s\S]*?\.eq\("claim_code_hash", claimCodeHash\)/);
-  assert.match(demo, /staff\.directory_active !== false && !staff\.auth_user_id && \(!\["partner", "admin"\]\.includes\(staff\.role\)/);
+  assert.match(demo, /staffDirectory\.filter\(\(staff\) => staff\.directory_active !== false\)/);
+  assert.match(demo, /!staff\.auth_user_id && \(!\["partner", "admin"\]\.includes\(staff\.role\)/);
   assert.match(demo, /data-regenerate-staff-claim="\$\{staff\.id\}"/);
   assert.match(demo, /body: JSON\.stringify\(\{ action: "regenerate-claim-code" \}\)/);
 });

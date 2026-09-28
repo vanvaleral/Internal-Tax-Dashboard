@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { canAccessMonthlyRow, clientIdentifier, mergeWorkspace, scopedWorkspace } from "@/lib/workspace-security";
+import { validateMonthlyPatch } from "@/lib/monthly-patch-validation";
 
 const scopes = new Set(["monthly_compliance", "annual_accounting", "annual_tax"]);
 
@@ -191,6 +192,29 @@ export async function PUT(request: Request) {
   }
   const serialize = (row: any) => row ? { ...row, payload: scopedWorkspace(scope, row.payload, allowed, actor.profile.id, isLeadership(actor.profile.role)) } : null;
   if (version !== (current?.version || 0)) return NextResponse.json({ error: "This workspace changed in another session. Your edits are retained; reload and reconcile before retrying.", code: "VERSION_CONFLICT", latest: serialize(current) }, { status: 409 });
+  if (scope !== "monthly_compliance" && Array.isArray(body.payload)) {
+    const storedRows = Array.isArray(current?.payload) ? current.payload as Record<string, any>[] : [];
+    const fields = [["accountingPicProfileId", "accountingPic"], ["taxPicProfileId", "taxPic"], ["reportPicProfileId", "reportPic"]] as const;
+    const changedAssignments = (body.payload as Record<string, any>[]).filter((row) => {
+      if (!row?.annualWorkId) return false;
+      const previous = storedRows.find((item) => item.annualWorkId === row.annualWorkId);
+      return !previous || fields.some(([id, name]) => row[id] !== previous[id] || row[name] !== previous[name]);
+    });
+    if (changedAssignments.length) {
+      const { data: staff, error } = await actor.admin.from("staff_profiles").select("id, display_name, full_name, directory_active").eq("directory_active", true);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const byId = new Map((staff || []).map((person) => [person.id, person]));
+      for (const row of changedAssignments) for (const [idField, nameField] of fields) {
+        const id = String(row[idField] || "");
+        const name = String(row[nameField] || "").trim().toLowerCase();
+        if (!id && !name) continue;
+        const person = byId.get(id);
+        if (!person || ![person.display_name, person.full_name].some((label) => String(label || "").trim().toLowerCase() === name)) {
+          return NextResponse.json({ error: "Annual PIC must match an active staff directory entry." }, { status: 400 });
+        }
+      }
+    }
+  }
   let payload;
   try { payload = mergeWorkspace(scope, current?.payload, body.payload, allowed, actor.profile.id, isLeadership(actor.profile.role)); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid workspace." }, { status: 400 }); }
@@ -216,6 +240,8 @@ export async function PATCH(request: Request) {
   const rowId = String(body.rowId || "").trim();
   const changes = body.changes && typeof body.changes === "object" && !Array.isArray(body.changes) ? body.changes as Record<string, any> : null;
   if (!period || !rowId || !changes) return NextResponse.json({ error: "A period, client row, and changes are required." }, { status: 400 });
+  try { validateMonthlyPatch(changes); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid monthly change." }, { status: 400 }); }
 
   for (let attempt = 0; attempt < 4; attempt++) {
     const { data: current, error: readError } = await actor.admin.from("operational_workspace_state").select("payload, version").eq("scope", "monthly_compliance").maybeSingle();
