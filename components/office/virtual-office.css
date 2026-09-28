@@ -1,1 +1,116 @@
-.office-page{min-height:100vh;padding:18px clamp(12px,3vw,42px) 34px;background:#e7e4d8;color:#2f3e4b;font-family:"Plus Jakarta Sans",sans-serif}.office-topbar{max-width:1450px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between;gap:14px}.office-brand{display:flex;align-items:center;gap:11px}.office-brand-icon{display:grid;place-items:center;width:42px;height:42px;border:3px solid #455866;border-radius:11px;background:#ffd57b;color:#a26451;font-size:25px;box-shadow:3px 3px 0 #ab8f76}.office-brand div{display:grid}.office-brand div span{color:#779086;font-size:10px;letter-spacing:.2em;font-weight:900}.office-brand strong{font-size:19px;line-height:1.25}.office-top-actions{display:flex;align-items:center;gap:9px}.office-online,.office-back{padding:10px 13px;border:2px solid #70817a;border-radius:9px;background:#fff9eb;color:#3d5055;font-size:11px;font-weight:900;white-space:nowrap;box-shadow:2px 3px 0 #bbb6a3}.office-online{display:flex;align-items:center;gap:6px}.office-online i{width:9px;height:9px;border-radius:50%;background:#55bd75}.office-error{max-width:1450px;margin:0 auto 12px;padding:10px 14px;border:2px solid #bf7868;border-radius:9px;background:#ffebe3;font-size:12px}.office-game-shell{max-width:1450px;margin:auto;padding:9px;border:3px solid #596b6a;border-radius:16px;background:#f6e9cf;box-shadow:0 12px 0 #9b9e8a,0 24px 45px #42595736}.office-scene-wrap{position:relative;border:3px solid #5b6b72;border-radius:9px;overflow:hidden;aspect-ratio:1000/610;min-height:480px;background:#a9d7d5;outline-offset:4px}.office-scene{display:block;width:100%;height:100%}.office-floor-tile{cursor:pointer;transition:fill .15s}.office-floor-tile:hover{fill:#fff0ad}.office-scene-game{cursor:pointer;outline:none}.office-scene-game:hover{filter:brightness(1.15)}.office-scene-title{position:absolute;top:17px;left:17px;display:grid;gap:2px;padding:10px 13px;border:2px solid #5d706e;border-radius:8px;background:#fff8e9e8;box-shadow:3px 4px 0 #78918a7a;pointer-events:none}.office-scene-title span{font-size:9px;font-weight:900;letter-spacing:.15em;color:#a27458}.office-scene-title strong{font-size:19px}.office-scene-title small{font-size:10px;color:#71827a}.office-scene-actions{position:absolute;top:17px;right:17px;display:flex;gap:7px}.office-scene-actions button{border:2px solid #486668;border-radius:8px;background:#fff9e9;color:#31505b;padding:10px 13px;font-size:11px;font-weight:900;cursor:pointer;box-shadow:2px 3px 0 #64817c}.office-chat-dock{position:absolute;right:17px;bottom:15px;z-index:5;display:flex;flex-direction:column;width:min(330px,36%);height:min(305px,55%);border:3px solid #506871;border-radius:11px;background:#fff9ecdF;backdrop-filter:blur(8px);box-shadow:5px 7px 0 #3f636663}.office-chat-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:2px solid #a7bab2;background:#d3ece2;font-size:12px;font-weight:900}.office-chat-head small{margin-left:auto;color:#658178;font-size:10px}.office-chat-head button{border:0;background:transparent;font-size:20px;font-weight:900;color:#496466;cursor:pointer}.office-messages{flex:1;min-height:0;overflow:auto;padding:10px 11px;display:flex;flex-direction:column;gap:7px}.office-empty{margin:auto;color:#81928b;font-size:11px;text-align:center}.office-message{display:grid;gap:2px;align-self:flex-start;max-width:100%;padding:6px 8px;border-radius:8px;background:#fff;box-shadow:1px 2px 0 #a9bcb4;font-size:11px}.office-message strong{color:#3c7970;font-size:10px}.office-message span{overflow-wrap:anywhere}.office-chat-dock form{display:flex;gap:5px;padding:8px;border-top:2px solid #cfddd2}.office-chat-dock input{min-width:0;flex:1;border:2px solid #abc3b7;border-radius:7px;background:#fffef7;padding:8px;font-size:11px;outline-color:#399f81}.office-chat-dock form button{border:2px solid #337564;border-radius:7px;background:#49a78b;color:#fff;font-weight:900;cursor:pointer;padding:0 10px}.office-chat-dock form button:disabled{opacity:.5;cursor:default}.office-bottom-bar{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:12px 15px 4px}.office-character-panel{display:flex;align-items:center;gap:9px;margin-right:auto}.office-mini-avatar{display:grid;place-items:center;width:36px;height:36px;border:2px solid #526372;border-radius:10px;color:#f7dcb4;font-size:24px;box-shadow:2px 2px 0 #b7a997}.office-mini-avatar.teal,.office-color.teal{background:#2cae9d}.office-mini-avatar.blue,.office-color.blue{background:#5689d8}.office-mini-avatar.coral,.office-color.coral{background:#e78777}.office-mini-avatar.violet,.office-color.violet{background:#9a79d3}.office-mini-avatar.gold,.office-color.gold{background:#daa957}.office-character-panel div{display:grid;gap:2px}.office-character-panel strong{font-size:12px}.office-character-panel small{font-size:10px;color:#89918a}.office-customize{display:flex;align-items:center;gap:6px}.office-customize>span{margin-right:4px;color:#667971;font-size:10px;font-weight:900}.office-color{width:25px;height:25px;border:2px solid #fff8e5;border-radius:7px;cursor:pointer;box-shadow:1px 2px 0 #878f85}.office-color.selected,.office-furniture.selected{outline:2px solid #355c5c;outline-offset:2px}.office-furniture{width:31px;height:31px;border:2px solid #a8b4a4;border-radius:7px;background:#fff9e8;font-size:16px;cursor:pointer}.office-game-overlay{position:absolute;inset:0;z-index:7;display:grid;place-items:center;padding:16px;background:#263f54a8;backdrop-filter:blur(3px)}.office-game-window{width:min(100%,560px);max-height:100%;overflow:auto;border:4px solid #485c69;border-radius:15px;background:#fff8e6;box-shadow:8px 10px 0 #203d4d7c}.office-game-header{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;background:#d8ede1;border-bottom:3px solid #829c91}.office-game-header span{font-size:10px;letter-spacing:.13em;font-weight:900;color:#4e8c73}.office-game-header h2{font-size:24px;margin:1px 0}.office-game-header button{width:34px;height:34px;border:2px solid #74877d;border-radius:7px;background:#fff9e7;font-size:23px;font-weight:900;cursor:pointer}.office-game-stage{position:relative;height:195px;overflow:hidden;background:linear-gradient(#a6d9e7 0 55%,#aed68f 55% 100%);border-bottom:3px solid #809f77}.office-game-cloud{position:absolute;top:12px;left:8%;color:#fff;font-size:70px}.office-game-cloud.second{left:auto;right:13%;top:32px;font-size:45px}.office-file-stack{position:absolute;left:10%;bottom:10px;font-size:62px}.office-paper{position:absolute;left:50%;top:15px;transform:translateX(-50%);display:grid;justify-items:center;gap:2px;width:143px;padding:13px;background:#fffdf1;border:4px solid #566b73;border-radius:6px;box-shadow:7px 8px 0 #587c764d;transform-origin:center;animation:paper-float 2.4s ease-in-out infinite}.office-paper span{font-size:36px}.office-paper strong{font-size:19px}.office-paper small{font-size:9px;color:#789087}.office-game-counter{position:absolute;right:5%;bottom:20px;display:grid;justify-items:center;padding:8px 12px;border:3px solid #69796d;border-radius:9px;background:#fff8e7}.office-game-counter strong{font-size:20px}.office-game-counter strong small{font-size:12px}.office-game-counter span{font-size:8px;font-weight:900;color:#708076}.office-game-instruction{margin:14px 18px 10px;text-align:center;font-size:12px}.office-trays{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 16px}.office-tray{display:grid;justify-items:center;gap:4px;padding:13px 5px;border:3px solid #596a70;border-radius:10px;background:#daf0eb;box-shadow:3px 4px 0 #a8bcb1;cursor:pointer;transition:transform .12s,box-shadow .12s}.office-tray:hover{transform:translateY(-3px);box-shadow:3px 7px 0 #a8bcb1}.office-tray:disabled{opacity:.6;cursor:default}.office-tray span{font-size:29px}.office-tray strong{font-size:11px}.tray-1{background:#f7e0c1}.tray-2{background:#e7ddf8}.office-game-status{min-height:28px;margin:13px 18px 0;text-align:center;color:#54796c;font-size:11px;font-weight:800}.office-progress{height:12px;margin:0 18px;border:2px solid #6b8877;border-radius:6px;background:#ecedde;overflow:hidden}.office-progress div{height:100%;background:repeating-linear-gradient(45deg,#65bf83 0 10px,#79d296 10px 20px);transition:width .25s}.office-game-disclaimer{display:block;margin:9px 18px 15px;text-align:center;color:#8a978e;font-size:9px}@keyframes paper-float{50%{transform:translate(-50%,-4px)}}@media(max-width:850px){.office-scene-wrap{min-height:420px;aspect-ratio:auto}.office-scene{width:100%;height:100%;object-fit:cover}.office-chat-dock{width:42%;height:53%}.office-scene-title small{display:none}}@media(max-width:640px){.office-page{padding:10px 8px 26px}.office-brand strong{font-size:15px}.office-brand-icon{width:34px;height:34px}.office-back,.office-online{padding:7px;font-size:9px}.office-scene-wrap{min-height:600px}.office-scene{position:absolute;top:65px;left:50%;width:920px;height:560px;max-width:none;transform:translateX(-50%)}.office-scene-title{top:8px;left:8px;padding:7px}.office-scene-title strong{font-size:14px}.office-scene-actions{top:8px;right:8px}.office-scene-actions button{padding:7px;font-size:9px}.office-chat-dock{right:8px;bottom:8px;width:min(320px,calc(100% - 16px));height:230px}.office-bottom-bar{gap:12px}.office-character-panel{width:100%}.office-game-overlay{padding:8px}.office-game-stage{height:155px}.office-game-header h2{font-size:19px}.office-paper{width:120px}.office-paper span{font-size:25px}.office-tray{padding:9px 3px}.office-tray span{font-size:22px}}
+.office-page { min-height:100vh; padding:26px clamp(14px,3vw,48px) 40px; background:#eef1ec; color:#29453d; font-family:'Plus Jakarta Sans',sans-serif; }
+.office-topbar { max-width:1660px; margin:0 auto 27px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.office-brand { display:flex; align-items:center; gap:12px; }
+.office-brand-icon { width:44px; height:44px; display:grid; place-items:center; position:relative; background:#244f44; border-radius:12px; color:#eef4e8; font:italic 30px Georgia,serif; }
+.office-brand-icon>span { position:absolute; font-size:14px; bottom:7px; right:8px; }
+.office-brand>div { display:grid; gap:3px; }
+.office-brand>div>span,.office-eyebrow { font-size:9px; font-weight:800; letter-spacing:1.7px; color:#7c9183; }
+.office-brand strong { font-size:18px; font-weight:700; }
+.office-top-actions { display:flex; align-items:center; gap:20px; }
+.office-online { display:flex; align-items:center; gap:7px; font-size:11px; color:#548169; }
+.office-online i,.office-room-caption i { width:6px; height:6px; display:inline-block; background:#75aa86; border-radius:50%; }
+.office-back { font-size:11px; color:#52675a; background:#fbfcf8; border:1px solid #d9e0d5; border-radius:8px; padding:10px 13px; }
+.office-game-shell { max-width:1660px; margin:auto; border:1px solid #d9e1d6; border-radius:20px; background:#fafbf7; box-shadow:0 12px 50px #304c3710; overflow:hidden; }
+.office-world-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:22px 26px; border-bottom:1px solid #e2e7dd; }
+.office-world-heading h1 { margin:6px 0 0; font-size:clamp(16px,1.6vw,23px); font-weight:600; letter-spacing:-.5px; }
+.office-toolbar { display:flex; gap:7px; }
+.office-toolbar button,.office-desk-actions button,.office-furniture { border:1px solid #d6dfd1; border-radius:8px; background:#fffef9; color:#4d6859; padding:9px 12px; cursor:pointer; font-size:11px; }
+.office-workspace { display:grid; grid-template-columns:minmax(0,1fr) 296px; }
+.office-room-column { min-width:0; padding:18px 20px 0; }
+.office-room-caption { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:2px 3px 10px; font-size:11px; color:#607869; }
+.office-room-caption i { margin-right:5px; }
+.office-room-caption small { font-size:10px; color:#839384; }
+.office-scene-wrap { position:relative; border:1px solid #dce2d6; border-radius:13px; background:#eff2ec; overflow:hidden; }
+.office-map-scroll { overflow-x:auto; }
+.office-scene { display:block; width:100%; height:auto; min-width:620px; }
+.office-desk,.office-seat { cursor:pointer; }
+.office-desk:hover>rect { stroke:#508b72; stroke-width:2px; }
+.office-desk:focus { outline:none; }
+.office-desk:focus-visible>rect { stroke:#235d49; stroke-width:3px; }
+.office-draggable { cursor:grab; touch-action:none; outline:none; }
+.office-draggable:active { cursor:grabbing; }
+.office-draggable:focus-visible { filter:drop-shadow(0 0 4px #329772); }
+.office-scene-toast { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); max-width:85%; background:#244f44f2; color:#f4faef; padding:10px 18px; border-radius:9px; font-size:11px; text-align:center; pointer-events:none; box-shadow:0 6px 24px #12352722; }
+.office-desk-inspector { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:14px; background:#f0f4ec; border:1px solid #dce5d6; border-radius:11px; padding:15px 17px; }
+.office-desk-inspector>div:first-child { display:grid; gap:4px; }
+.office-desk-inspector strong { font-size:13px; }
+.office-desk-inspector small { font-size:10px; color:#82917f; }
+.office-desk-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:5px; }
+.office-desk-actions button { font-size:10px; padding:8px 10px; }
+.office-page button:disabled { opacity:.45; cursor:default; }
+.office-primary { background:#2f6652!important; border:1px solid #2f6652!important; color:white!important; border-radius:8px; padding:10px 13px; font-size:11px; cursor:pointer; }
+.office-secondary { background:#f8faf5; color:#527060; border:1px solid #d3e0d3; padding:10px 12px; border-radius:8px; font-size:11px; cursor:pointer; }
+.office-room-footer { display:flex; align-items:center; gap:16px; padding:17px 4px; font-size:9px; color:#81917f; }
+.office-room-footer span { display:flex; align-items:center; gap:5px; }
+.office-room-footer>small { margin-left:auto; font-size:9px; }
+.office-legend { display:block; width:7px; height:7px; border-radius:3px; background:#97ada1; }
+.office-legend.active { background:#398361; }
+.office-sidebar { border-left:1px solid #e2e8dc; padding:0 18px 18px; background:#fdfefb; display:flex; flex-direction:column; }
+.office-sidebar-tabs { display:flex; gap:16px; border-bottom:1px solid #e5eadd; }
+.office-sidebar-tabs button { padding:17px 0 13px; border:0; border-bottom:2px solid transparent; color:#90a18f; background:transparent; font-size:11px; font-weight:600; cursor:pointer; }
+.office-sidebar-tabs button.active { color:#325d49; border-bottom-color:#46755c; }
+.office-chat-dock { display:flex; flex-direction:column; min-height:380px; flex:1; }
+.office-chat-dock[hidden] { display:none; }
+.office-panel-heading { display:flex; align-items:center; gap:9px; padding:19px 0 15px; }
+.office-feature-icon { display:grid; place-items:center; flex-shrink:0; width:31px; height:31px; border:1px solid #e3e9dc; border-radius:9px; background:#f3f7ed; color:#6c917a; font-size:19px; }
+.office-panel-heading h2 { font-size:12px; margin:0; font-weight:700; }
+.office-panel-heading p { font-size:9px; line-height:1.5; color:#8d9d89; margin:3px 0 0; }
+.office-messages { height:280px; flex:1; overflow:auto; max-height:420px; display:flex; flex-direction:column; gap:11px; padding:6px 3px 10px; }
+.office-empty { margin:auto; text-align:center; color:#a4b09a; max-width:185px; }
+.office-empty>span { display:grid; place-items:center; width:52px; height:52px; border-radius:50%; background:#f1f5eb; margin:0 auto 14px; font-size:29px; }
+.office-empty strong { font-size:11px; font-weight:500; }
+.office-empty p { font-size:10px; line-height:1.8; }
+.office-message { background:#f1f5ed; border:1px solid #e5ebdf; border-radius:11px 11px 11px 2px; padding:9px 11px; max-width:90%; align-self:flex-start; }
+.office-message.own { background:#e7efe3; align-self:flex-end; border-radius:11px 11px 2px 11px; }
+.office-message strong { font-size:9px; color:#649273; }
+.office-message p { font-size:11px; line-height:1.6; margin:3px 0; overflow-wrap:anywhere; white-space:pre-wrap; }
+.office-message time { display:block; text-align:right; font-size:8px; color:#9baa92; }
+.office-chat-dock form { display:flex; gap:6px; padding:10px 0 18px; }
+.office-chat-dock input { flex:1; min-width:0; border:1px solid #dae3d4; background:#f8faf4; border-radius:8px; padding:10px; font-size:11px; outline-color:#6f9c7b; }
+.office-chat-dock form button { width:33px; border:0; border-radius:8px; background:#426e57; color:white; font-size:18px; cursor:pointer; }
+.office-present-people { border-top:1px solid #e3e9dd; padding-top:17px; margin-top:auto; }
+.office-person-row { display:flex; align-items:center; gap:8px; font-size:10px; padding-top:13px; }
+.office-person-row>small { margin-left:auto; font-size:9px; color:#8ba47f; }
+.office-person-row span small { color:#93a389; font-size:9px; }
+.office-person-dot { width:21px; height:21px; border-radius:7px; border:3px solid #e7eedf; }
+.teal { background:#2a9d8f; }.blue { background:#628bce; }.coral { background:#d27d6e; }.violet { background:#9a80b8; }.gold { background:#c49d54; }
+.office-customize-panel { display:flex; flex-wrap:wrap; gap:20px; padding:15px 17px; margin-top:12px; border:1px solid #dce5d6; border-radius:10px; }
+.office-customize-panel>div>span { font-size:10px; color:#6f876f; display:block; margin-bottom:10px; }
+.office-customize-panel>div>div { display:flex; gap:7px; }
+.office-color { width:26px; height:26px; border:2px solid #f6faf3; border-radius:8px; cursor:pointer; }
+.office-color.selected,.office-furniture.selected { outline:2px solid #72967b; outline-offset:2px; }
+.office-furniture { font-size:10px; padding:7px 9px; }
+.office-error { margin:12px 22px; border:1px solid #e7cbbc; border-radius:8px; background:#fff4ed; color:#a06751; padding:11px 14px; font-size:11px; }
+.office-voice-panel { padding-bottom:16px; }
+.office-status-dot { margin-left:auto; flex-shrink:0; width:7px; height:7px; border-radius:50%; background:#c8d3c0; }
+.office-status-dot.live { background:#5eaa79; box-shadow:0 0 0 4px #64a87817; }
+.office-voice-label { display:grid; gap:7px; font-size:10px; color:#869681; margin-bottom:13px; }
+.office-voice-label select { padding:10px; border:1px solid #dce5d4; border-radius:8px; background:#f7faf2; font-size:11px; color:#4b7056; }
+.office-voice-panel>.office-primary,.office-voice-panel>.office-secondary { width:100%; }
+.office-voice-controls { display:flex; gap:6px; }
+.office-voice-controls>button:first-child { flex:1; }
+.office-leave { border:1px solid #e4cabe; background:#fff4ec; color:#a97964; border-radius:8px; font-size:10px; padding:8px; cursor:pointer; }
+.office-voice-peers { margin:14px 0; background:#f2f7ed; border-radius:9px; padding:10px; }
+.office-voice-peers>div { display:flex; justify-content:space-between; gap:6px; padding:6px 0; font-size:10px; }
+.office-voice-peers small { font-size:8px; color:#87a078; }
+.office-voice-peers>p,.office-voice-note { font-size:10px; color:#8b9b80; line-height:1.7; }
+.office-voice-note { display:block; margin-top:13px; }
+.office-voice-error { border:1px solid #ead5c3; border-radius:7px; background:#fff8f0; padding:9px; color:#9f7963; font-size:10px; line-height:1.6; }
+.office-game-overlay { position:absolute; inset:0; z-index:10; display:grid; place-items:center; padding:15px; background:#294b44b0; backdrop-filter:blur(4px); }
+.office-game-window { width:min(100%,490px); max-height:100%; overflow:auto; border:1px solid #dce4d8; border-radius:16px; background:#fcfcf5; box-shadow:0 20px 60px #18382d44; }
+.office-game-header { display:flex; align-items:center; justify-content:space-between; padding:15px 20px; border-bottom:1px solid #dbe5d7; }
+.office-game-header span { font-size:9px; letter-spacing:2px; color:#839d78; }.office-game-header h2 { margin:4px 0 0; font-size:19px; }
+.office-game-header button { border:0; background:#edf3e8; color:#799470; border-radius:50%; width:29px; height:29px; cursor:pointer; }
+.office-game-stage { height:165px; position:relative; overflow:hidden; background:linear-gradient(#ebf2e4 65%,#d7e0c9 65%); }
+.office-game-cloud { display:none; }.office-file-stack { position:absolute; font-size:40px; left:25px; bottom:14px; }
+.office-paper { position:absolute; top:14px; left:50%; transform:translateX(-50%); width:128px; display:grid; justify-items:center; gap:4px; padding:12px; background:#fffef7; border:1px solid #cad7bf; border-radius:8px; box-shadow:6px 8px 0 #a3b69340; }
+.office-paper span { font-size:27px; }.office-paper strong { font-size:16px; }.office-paper small { font-size:8px; color:#89a078; }
+.office-game-counter { position:absolute; right:15px; bottom:17px; display:grid; justify-items:center; gap:4px; padding:8px; border-radius:9px; background:#f4f8ed; }.office-game-counter strong { font-size:19px; }.office-game-counter small { font-size:10px; }.office-game-counter>span { font-size:7px; letter-spacing:1px; }
+.office-game-instruction { padding:0 17px; font-size:11px; line-height:1.7; text-align:center; }
+.office-trays { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 17px; }
+.office-tray { display:grid; gap:6px; justify-items:center; padding:10px 6px; border:1px solid #d0dfc3; background:#eef4e7; border-radius:8px; cursor:pointer; }.office-tray span { font-size:24px; }.office-tray strong { font-size:10px; }.tray-1 { background:#f5efe0; }.tray-2 { background:#eeebf3; }
+.office-game-status { min-height:22px; margin:12px 15px 3px; font-size:10px; color:#6f9560; text-align:center; }.office-progress { height:8px; margin:0 17px; border-radius:5px; background:#e1e9d8; overflow:hidden; }.office-progress>div { height:100%; background:#8ab37a; transition:width .2s; }.office-game-disclaimer { display:block; text-align:center; font-size:8px; color:#95a68a; margin:8px 17px 14px; }
+@media(min-width:1600px) { .office-workspace { grid-template-columns:minmax(0,1fr) 320px; }.office-messages { min-height:340px; } }
+@media(max-width:1050px) { .office-workspace { grid-template-columns:1fr; }.office-sidebar { border-left:0; border-top:1px solid #dfe7d8; display:block; }.office-messages { height:210px; max-height:210px; }.office-present-people { padding-bottom:12px; }.office-world-heading { align-items:flex-start; }.office-toolbar { flex-wrap:wrap; justify-content:flex-end; } }
+@media(max-width:650px) { .office-page { padding:14px 8px 24px; }.office-topbar { margin-bottom:15px; }.office-top-actions { gap:7px; }.office-online { font-size:9px; }.office-brand strong { font-size:15px; }.office-brand>div>span { font-size:7px; }.office-back { font-size:9px; padding:8px; }.office-world-heading { padding:17px 14px; flex-direction:column; }.office-room-column { padding:13px 9px 0; }.office-room-caption { flex-direction:column; align-items:flex-start; }.office-desk-inspector { flex-direction:column; align-items:flex-start; }.office-room-footer { gap:10px; }.office-room-footer>small { display:none; }.office-game-overlay { position:fixed; z-index:100; padding:18px; }.office-game-window { max-height:85vh; }.office-scene-toast { font-size:9px; padding:8px; }.office-customize-panel { gap:15px; } }
+@media(prefers-reduced-motion:reduce) { .office-page * { transition:none!important; animation:none!important; } }

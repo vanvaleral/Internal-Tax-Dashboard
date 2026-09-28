@@ -1,108 +1,112 @@
 "use client";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { OfficeGame } from './office-game';
+import { OfficeScene } from './office-scene';
+import { OfficeVoice } from './office-voice';
+import { OFFICE_DESKS, OFFICE_SEATS, OFFICE_SPAWN, validFloorPoint, type OfficePoint } from '@/lib/office-layout';
+import './virtual-office.css';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { OfficeGame } from "./office-game";
-import { OfficeScene } from "./office-scene";
-import "./virtual-office.css";
-
-type Person = { staff_profile_id: string; avatar_color: string; desk_style: string; x: number; y: number; staff: { display_name: string | null; full_name: string } | null };
+type Person = { staff_profile_id: string; avatar_color: string; desk_style: string; position_x: number; position_y: number; seat_id: string | null; activity: string; staff: { display_name: string | null; full_name: string } | null };
 type Message = { id: number; staff_profile_id: string; message: string; created_at: string; staff: { display_name: string | null; full_name: string } | null };
-type OfficeData = { me: { id: string; name: string }; profiles: Person[]; messages: Message[] };
-const palette = ["teal", "blue", "coral", "violet", "gold"];
-const furniture = [{ id: "plant", icon: "🪴", label: "Tanaman" }, { id: "lamp", icon: "💡", label: "Lampu" }, { id: "books", icon: "📚", label: "Buku" }, { id: "coffee", icon: "☕", label: "Kopi" }];
-const nameOf = (person: { staff: { display_name: string | null; full_name: string } | null }) => person.staff?.display_name || person.staff?.full_name || "Rekan tim";
+type OfficeData = { me: { id: string; name: string }; mine: Person | null; profiles: Person[]; messages: Message[] };
+const palette = ['teal', 'blue', 'coral', 'violet', 'gold'];
+const furniture = [{ id: 'plant', label: 'Tanaman', icon: '✿' }, { id: 'lamp', label: 'Lampu', icon: '☀' }, { id: 'books', label: 'Buku', icon: '▤' }, { id: 'coffee', label: 'Kopi', icon: '☕' }];
+const personName = (p: { staff: Person['staff'] }) => p.staff?.display_name || p.staff?.full_name || 'Rekan tim';
 
-export function VirtualOffice({ gameEnabled }: { gameEnabled: boolean }) {
+export function VirtualOffice({ gameEnabled, voiceEnabled = true }: { gameEnabled: boolean; voiceEnabled?: boolean }) {
   const [data, setData] = useState<OfficeData | null>(null);
-  const [position, setPosition] = useState({ x: 4, y: 4 });
-  const [color, setColor] = useState("teal");
-  const [desk, setDesk] = useState("plant");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [mine, setMine] = useState<Person | null>(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selectedDesk, setSelectedDesk] = useState<string | null>(null);
+  const [customize, setCustomize] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
-  const initialized = useRef(false);
-  const positionRef = useRef(position);
-  const colorRef = useRef(color);
-  const deskRef = useRef(desk);
+  const [tab, setTab] = useState('chat');
+  const pending = useRef(0);
+  const revision = useRef(0);
+  const queue = useRef(Promise.resolve());
   const chatEnd = useRef<HTMLDivElement>(null);
-
   const refresh = useCallback(async () => {
+    const startedAtRevision = revision.current;
     try {
-      const response = await fetch("/api/office", { cache: "no-store" });
+      const response = await fetch('/api/office', { cache: 'no-store', signal: AbortSignal.timeout(12000) });
       const next = await response.json();
-      if (!response.ok) throw new Error(next.error || "Kantor belum dapat dimuat.");
+      if (!response.ok) throw new Error(next.error || 'Kantor belum dapat dimuat.');
       setData(next);
-      if (!initialized.current) {
-        const mine = next.profiles.find((person: Person) => person.staff_profile_id === next.me.id);
-        if (mine) {
-          setPosition({ x: mine.x, y: mine.y }); setColor(mine.avatar_color); setDesk(mine.desk_style);
-          positionRef.current = { x: mine.x, y: mine.y }; colorRef.current = mine.avatar_color; deskRef.current = mine.desk_style;
-        }
-        initialized.current = true;
-      }
-      setError("");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Koneksi terputus."); }
+      if (pending.current === 0 && startedAtRevision === revision.current) setMine(next.mine);
+      setError('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Koneksi terputus.'); }
   }, []);
-
-  const save = useCallback(async (nextPosition = positionRef.current, nextColor = colorRef.current, nextDesk = deskRef.current) => {
-    try {
-      const response = await fetch("/api/office", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ x: nextPosition.x, y: nextPosition.y, avatarColor: nextColor, deskStyle: nextDesk }) });
-      if (!response.ok) throw new Error((await response.json()).error || "Gagal menyimpan.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Gagal menyimpan."); }
+  const mutate = useCallback((body: Record<string, unknown>) => {
+    revision.current++; pending.current++; setSaving(true);
+    queue.current = queue.current.then(async () => {
+      try {
+        const response = await fetch('/api/office', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(12000) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Perubahan belum tersimpan.');
+        setMine(result.profile); setError('');
+      } catch (cause) { setError(cause instanceof Error ? cause.message : 'Gagal menyimpan.'); }
+      finally { pending.current--; setSaving(pending.current > 0); }
+    });
+    return queue.current;
   }, []);
-
   useEffect(() => {
-    void refresh();
-    const poll = window.setInterval(() => void refresh(), 5000);
-    const heartbeat = window.setInterval(() => void save(), 20000);
-    return () => { window.clearInterval(poll); window.clearInterval(heartbeat); };
-  }, [refresh, save]);
+    void refresh().then(() => mutate({ action: 'heartbeat' }));
+    const poll = setInterval(() => void refresh(), 4000);
+    const heartbeat = setInterval(() => void mutate({ action: 'heartbeat' }), 15000);
+    return () => { clearInterval(poll); clearInterval(heartbeat); };
+  }, [refresh, mutate]);
+  useEffect(() => { chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [data?.messages.at(-1)?.id, tab]);
+  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 4500); return () => clearTimeout(timer); }, [notice]);
 
-  useEffect(() => { if (initialized.current && data && !data.profiles.some(person => person.staff_profile_id === data.me.id)) void save(); }, [data, save]);
-  useEffect(() => { chatEnd.current?.scrollIntoView({ block: "nearest" }); }, [data?.messages.length]);
-
-  function move(x: number, y: number) {
-    const next = { x: Math.max(0, Math.min(11, x)), y: Math.max(0, Math.min(7, y)) };
-    setPosition(next); positionRef.current = next; void save(next);
-  }
-  function chooseColor(next: string) { setColor(next); colorRef.current = next; void save(positionRef.current, next); }
-  function chooseDesk(next: string) { setDesk(next); deskRef.current = next; void save(positionRef.current, colorRef.current, next); }
-  async function sendMessage() {
-    if (busy || !message.trim()) return;
-    setBusy(true);
-    try {
-      const response = await fetch("/api/office", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", message }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Aksi gagal.");
-      setMessage("");
-      await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Aksi gagal."); }
-    finally { setBusy(false); }
-  }
-
-  const others = (data?.profiles || []).filter(person => person.staff_profile_id !== data?.me.id);
+  const others = (data?.profiles || []).filter(p => p.staff_profile_id !== data?.me.id);
+  const recent = (id: string) => data?.messages.slice().reverse().find(m => m.staff_profile_id === id && Date.now() - new Date(m.created_at).getTime() < 18000)?.message;
+  const avatars = [...others.map(p => ({ id: p.staff_profile_id, name: personName(p), color: p.avatar_color, x: p.position_x, y: p.position_y, seatId: p.seat_id, activity: p.activity, bubble: recent(p.staff_profile_id) })), { id: 'me', name: data?.me.name || 'Kamu', color: mine?.avatar_color || 'teal', x: mine?.position_x ?? OFFICE_SPAWN.x, y: mine?.position_y ?? OFFICE_SPAWN.y, mine: true, seatId: mine?.seat_id, activity: mine?.activity, bubble: data ? recent(data.me.id) : undefined }];
+  const occupied = new Set(others.map(p => p.seat_id).filter(Boolean));
+  const deskInfo = OFFICE_DESKS.find(d => d.id === selectedDesk);
+  const deskSeats = OFFICE_SEATS.filter(s => s.deskId === selectedDesk);
+  const ownSeat = OFFICE_SEATS.find(s => s.id === mine?.seat_id);
   const online = others.length + (data ? 1 : 0);
-  const recent = (staffId: string) => data?.messages.slice().reverse().find(item => item.staff_profile_id === staffId && Date.now() - new Date(item.created_at).getTime() < 18000)?.message;
-  const avatars = [
-    ...others.map(person => ({ id: person.staff_profile_id, name: nameOf(person), color: person.avatar_color, x: person.x, y: person.y, bubble: recent(person.staff_profile_id) })),
-    { id: "me", name: data?.me.name || "Kamu", color, x: position.x, y: position.y, mine: true }
-  ];
 
+  function move(point: OfficePoint, seatId: string | null) {
+    if (!data || saving) { setNotice('Tunggu sampai posisi sebelumnya tersimpan.'); return; }
+    if (seatId && occupied.has(seatId)) { setNotice('Kursi itu sedang dipakai. Pilih kursi kosong.'); return; }
+    if (mine) setMine({ ...mine, position_x: point.x, position_y: point.y, seat_id: seatId, activity: seatId ? 'seated' : 'idle' });
+    void mutate({ action: 'move', x: point.x, y: point.y, seatId }).then(() => refresh());
+    setNotice(seatId ? 'Duduk di meja. Pilih Mulai bekerja untuk menggunakan meja.' : 'Posisi karakter diperbarui.');
+  }
+  function standUp() {
+    if (!mine) return;
+    const candidates = [{ x: mine.position_x + 52, y: mine.position_y }, { x: mine.position_x - 52, y: mine.position_y }, { x: mine.position_x, y: mine.position_y + 54 }, { x: mine.position_x, y: mine.position_y - 54 }];
+    move(candidates.find(validFloorPoint) || OFFICE_SPAWN, null);
+  }
+  async function sendMessage() {
+    if (sending || !message.trim()) return; setSending(true);
+    try {
+      const response = await fetch('/api/office', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'chat', message }) });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error);
+      setMessage(''); await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Pesan belum terkirim.'); }
+    finally { setSending(false); }
+  }
   return <main className="office-page">
-    <div className="office-topbar"><div className="office-brand"><span className="office-brand-icon">✦</span><div><span>LMATS WORLD</span><strong>Kantor Virtual</strong></div></div><div className="office-top-actions"><span className="office-online"><i />{online} online</span><Link href="/dashboard" className="office-back">← Dashboard</Link></div></div>
-    {error && <div className="office-error" role="alert">{error}</div>}
-    <div className="office-game-shell">
-      <div className="office-scene-wrap" tabIndex={0} onKeyDown={event => { if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); move(position.x + (event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0), position.y + (event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0)); } }}>
-        <OfficeScene avatars={avatars} decoration={desk} gameEnabled={gameEnabled} onMove={move} onGame={() => setGameOpen(true)} />
-        <div className="office-scene-title"><span>✧ RUANG 01</span><strong>Common Room</strong><small>Klik lantai untuk berjalan · gunakan tombol panah</small></div>
-        <div className="office-scene-actions"><button onClick={() => setChatOpen(!chatOpen)}>💬 {chatOpen ? "Tutup chat" : "Buka chat"}</button>{gameEnabled && <button onClick={() => setGameOpen(true)}>📁 Main bersama</button>}</div>
-        {chatOpen && <section className="office-chat-dock" aria-label="Chat dalam game"><div className="office-chat-head"><span>💬 Chatroom</span><small>{online} pemain online</small><button onClick={() => setChatOpen(false)} aria-label="Tutup chat">×</button></div><div className="office-messages" aria-live="polite">{!data?.messages.length && <p className="office-empty">Belum ada pesan. Sapa rekanmu!</p>}{data?.messages.map(item => <div className="office-message" key={item.id}><strong>{item.staff_profile_id === data?.me.id ? "Kamu" : nameOf(item)}</strong><span>{item.message}</span></div>)}<div ref={chatEnd} /></div><form onSubmit={event => { event.preventDefault(); void sendMessage(); }}><input value={message} maxLength={280} onChange={event => setMessage(event.target.value)} placeholder="Ketik pesan ke ruangan..." aria-label="Pesan untuk chatroom" /><button type="submit" disabled={busy || !message.trim()}>➤</button></form></section>}
-        {gameEnabled && gameOpen && <OfficeGame onClose={() => setGameOpen(false)} />}
-      </div>
-      <div className="office-bottom-bar"><div className="office-character-panel"><span className={`office-mini-avatar ${color}`}>●</span><div><strong>{data?.me.name || "Kamu"}</strong><small>Penghuni kantor</small></div></div><div className="office-customize"><span>Warna avatar</span>{palette.map(item => <button key={item} type="button" className={`office-color ${item} ${color === item ? "selected" : ""}`} onClick={() => chooseColor(item)} aria-label={`Warna ${item}`} aria-pressed={color === item} />)}</div><div className="office-customize"><span>Hiasan mejamu</span>{furniture.map(item => <button key={item.id} type="button" className={`office-furniture ${desk === item.id ? "selected" : ""}`} onClick={() => chooseDesk(item.id)} aria-label={item.label} aria-pressed={desk === item.id}>{item.icon}</button>)}</div></div>
+    <header className="office-topbar"><div className="office-brand"><span className="office-brand-icon">L<span>m</span></span><div><span>LMATS CONSULTING</span><strong>Our workspace</strong></div></div><div className="office-top-actions"><span className="office-online"><i />{online} di kantor</span><Link href="/dashboard" className="office-back">Kembali ke dashboard ↗</Link></div></header>
+    <div className="office-game-shell"><div className="office-world-heading"><div><span className="office-eyebrow">VIRTUAL OFFICE</span><h1>Ruang untuk bekerja. Tempat untuk bertemu.</h1></div><div className="office-toolbar"><button onClick={() => setCustomize(!customize)} aria-expanded={customize}>◈ Karakter & dekorasi</button>{gameEnabled && <button onClick={() => setGameOpen(true)}>▧ Mini game</button>}</div></div>
+      {error && <div className="office-error" role="alert">{error}</div>}
+      <div className="office-workspace"><div className="office-room-column"><div className="office-room-caption"><span><i /> Denah kantor LMATS</span><small>{saving ? 'Menyimpan…' : 'Seret karaktermu · lepas di kursi untuk duduk'}</small></div>
+        <div className="office-scene-wrap"><div className="office-map-scroll"><OfficeScene avatars={avatars} decoration={mine?.desk_style || 'plant'} onDrop={move} onDesk={setSelectedDesk} onInvalidDrop={() => setNotice('Lokasi terhalang meja atau dinding. Lepas di lantai atau kursi.')} /></div>{notice && <div className="office-scene-toast" role="status">{notice}</div>}{gameEnabled && gameOpen && <OfficeGame onClose={() => setGameOpen(false)} />}</div>
+        <div className="office-desk-inspector"><div><span className="office-eyebrow">{deskInfo ? 'MEJA TERPILIH' : 'AKTIVITASMU'}</span><strong>{deskInfo?.name || (ownSeat ? OFFICE_DESKS.find(d => d.id === ownSeat.deskId)?.name : 'Sedang di ruang kerja')}</strong><small>{mine?.activity === 'working' ? 'Bekerja di meja · bisa tetap mengikuti meeting suara' : ownSeat ? 'Duduk · siap mulai bekerja' : 'Pilih meja atau seret karakter ke salah satu kursi.'}</small></div><div className="office-desk-actions">{deskInfo && deskSeats.map(seat => <button key={seat.id} disabled={saving || occupied.has(seat.id) || mine?.seat_id === seat.id} onClick={() => move(seat, seat.id)}>{seat.id.toUpperCase()} · {occupied.has(seat.id) ? 'Terisi' : mine?.seat_id === seat.id ? 'Kursimu' : 'Duduk'}</button>)}{ownSeat && <><button className="office-primary" disabled={saving} onClick={() => void mutate({ action: 'activity', activity: mine?.activity === 'working' ? 'seated' : 'working' })}>{mine?.activity === 'working' ? 'Selesai bekerja' : 'Mulai bekerja'}</button><button disabled={saving} onClick={standUp}>Berdiri</button></>}</div></div>
+        {customize && <div className="office-customize-panel"><div><span>Warna pakaian</span><div>{palette.map(color => <button key={color} aria-label={`Pakaian ${color}`} aria-pressed={mine?.avatar_color === color} className={`office-color ${color} ${mine?.avatar_color === color ? 'selected' : ''}`} onClick={() => void mutate({ action: 'appearance', avatarColor: color, deskStyle: mine?.desk_style || 'plant' })} />)}</div></div><div><span>Dekorasi personal di kursimu</span><div>{furniture.map(item => <button key={item.id} aria-pressed={mine?.desk_style === item.id} className={`office-furniture ${mine?.desk_style === item.id ? 'selected' : ''}`} onClick={() => void mutate({ action: 'appearance', avatarColor: mine?.avatar_color || 'teal', deskStyle: item.id })}>{item.icon} {item.label}</button>)}</div></div></div>}
+        <div className="office-room-footer"><span><b className="office-legend empty" /> Kursi tersedia</span><span><b className="office-legend active" /> Sedang bekerja</span><small>Denah mengikuti referensi ruanganmu.</small></div>
+      </div><aside className="office-sidebar"><div className="office-sidebar-tabs"><button className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>Percakapan</button>{voiceEnabled && <button className={tab === 'voice' ? 'active' : ''} onClick={() => setTab('voice')}>Meeting suara</button>}</div>
+        <section className="office-chat-dock" hidden={tab !== 'chat'}><div className="office-panel-heading"><span className="office-feature-icon">☷</span><div><h2>Chat kantor</h2><p>Semua rekan dalam satu percakapan.</p></div></div><div className="office-messages" aria-live="polite">{!data?.messages.length && <div className="office-empty"><span>✧</span><strong>Mulai percakapan</strong><p>Sapa rekanmu atau ajak mereka bergabung ke meeting.</p></div>}{data?.messages.map(item => <div className={`office-message ${item.staff_profile_id === data.me.id ? 'own' : ''}`} key={item.id}><strong>{item.staff_profile_id === data.me.id ? 'Kamu' : personName(item)}</strong><p>{item.message}</p><time>{new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</time></div>)}<div ref={chatEnd} /></div><form onSubmit={event => { event.preventDefault(); void sendMessage(); }}><input maxLength={280} value={message} onChange={event => setMessage(event.target.value)} placeholder="Pesan untuk rekan…" aria-label="Pesan chat kantor" /><button disabled={sending || !message.trim()} aria-label="Kirim pesan">↑</button></form></section>
+        {voiceEnabled && <div hidden={tab !== 'voice'}><OfficeVoice /></div>}
+        <div className="office-present-people"><span className="office-eyebrow">DI RUANGAN INI</span><div className="office-person-row"><i className={`office-person-dot ${mine?.avatar_color || 'teal'}`} /><span>{data?.me.name || 'Memuat…'} <small>(kamu)</small></span><small>{mine?.activity === 'working' ? 'Bekerja' : 'Online'}</small></div>{others.map(p => <div className="office-person-row" key={p.staff_profile_id}><i className={`office-person-dot ${p.avatar_color}`} /><span>{personName(p)}</span><small>{p.activity === 'working' ? 'Bekerja' : 'Online'}</small></div>)}</div>
+      </aside></div>
     </div>
   </main>;
 }

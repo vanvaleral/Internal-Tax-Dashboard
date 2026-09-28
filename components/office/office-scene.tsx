@@ -1,55 +1,87 @@
 "use client";
+import { useRef, useState, type PointerEvent } from "react";
+import { OFFICE_DESKS, OFFICE_SEATS, resolveOfficeDrop, type OfficePoint } from "@/lib/office-layout";
 
-type Point = { x: number; y: number };
-type Avatar = { id: string; name: string; color: string; x: number; y: number; bubble?: string; mine?: boolean };
-const colors: Record<string, string> = { teal: "#2cae9d", blue: "#5689d8", coral: "#e78777", violet: "#9a79d3", gold: "#daa957" };
-const decorations: Record<string, string> = { plant: "🪴", lamp: "💡", books: "📚", coffee: "☕" };
-const iso = (x: number, y: number): Point => ({ x: 500 + (x - y) * 31, y: 180 + (x + y) * 15 });
-const tile = (x: number, y: number) => [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)].map(p => `${p.x},${p.y}`).join(" ");
+export type SceneAvatar = OfficePoint & { id: string; name: string; color: string; mine?: boolean; bubble?: string; seatId?: string | null; activity?: string };
+const colors: Record<string, string> = { teal: '#2a9d8f', blue: '#628bce', coral: '#d27d6e', violet: '#9a80b8', gold: '#c49d54' };
 
-function Character({ avatar }: { avatar: Avatar }) {
-  const at = iso(avatar.x + .5, avatar.y + .5);
-  return <g transform={`translate(${at.x} ${at.y})`} className="office-character">
-    <ellipse cy="4" rx="19" ry="8" fill="#314b52" opacity=".22" />
-    <path d="M-11 -14 L11 -14 L15 1 L-15 1Z" fill={colors[avatar.color] || colors.teal} stroke="#354155" strokeWidth="2" />
-    <path d="M-7 -12 L-8 1 M7 -12 L8 1" stroke="#f0bd94" strokeWidth="4" />
-    <rect x="-12" y="-38" width="24" height="25" rx="8" fill="#f2c49f" stroke="#354155" strokeWidth="2" />
-    <path d="M-13 -31 Q-16 -50 0 -49 Q17 -48 14 -30 L9 -37 L-10 -36Z" fill="#333747" />
-    <path d="M-7 -28 h3 m9 0 h3" stroke="#354155" strokeWidth="3" /><path d="M-2 -20 q3 3 6 0" fill="none" stroke="#af665f" strokeWidth="1.5" />
-    {avatar.mine && <path d="M-6 -56 L0 -65 L6 -56Z" fill="#ffe078" stroke="#99764a" strokeWidth="2" />}
-    <rect x="-48" y="14" width="96" height="21" rx="9" fill={avatar.mine ? "#ffe398" : "#fff8ea"} stroke="#596374" strokeWidth="2" />
-    <text y="29" textAnchor="middle" fontSize="11" fontWeight="800" fill="#344458">{avatar.name.slice(0, 15)}{avatar.mine ? " • kamu" : ""}</text>
-    {avatar.bubble && <g transform="translate(0 -81)"><rect x="-73" y="-23" width="146" height="37" rx="9" fill="#fffdf5" stroke="#596779" strokeWidth="2" /><path d="M-7 13 L0 21 L7 13" fill="#fffdf5" stroke="#596779" strokeWidth="2" /><text textAnchor="middle" y="0" fontSize="10" fontWeight="700" fill="#405165">{avatar.bubble.slice(0, 23)}{avatar.bubble.length > 23 ? "…" : ""}</text></g>}
+function Plant({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) {
+  return <g transform={`translate(${x} ${y}) scale(${scale})`} filter="url(#softShadow)"><circle r="20" fill="#d1c5b5" /><circle r="15" fill="#746553" />{[0,60,120,180,240,300].map(angle => <ellipse key={angle} cy="-16" rx="9" ry="20" transform={`rotate(${angle})`} fill={angle % 120 ? '#55886c' : '#75a888'} stroke="#3f7157" strokeWidth="1.5" />)}<circle r="8" fill="#89b799" /></g>;
+}
+function AvatarArt({ avatar, lifted }: { avatar: SceneAvatar; lifted: boolean }) {
+  return <g transform={`translate(${avatar.x} ${avatar.y - (lifted ? 22 : 0)}) scale(${lifted ? 1.12 : 1})`} className="office-person-art">
+    <g filter="url(#softShadow)">
+      <ellipse cy="12" rx="20" ry="13" fill={colors[avatar.color] || colors.teal} />
+      <ellipse cx="-18" cy="12" rx="5" ry="9" fill="#edc1a1" /><ellipse cx="18" cy="12" rx="5" ry="9" fill="#edc1a1" />
+      {!avatar.seatId && <><rect x="-12" y="20" width="10" height="10" rx="4" fill="#3d4656" /><rect x="3" y="20" width="10" height="10" rx="4" fill="#3d4656" /></>}
+      <circle cy="-4" r="18" fill="url(#skinTone)" stroke="#bb9277" strokeWidth="1" />
+      <path d="M-17 -2 Q-25 -27 0 -26 Q24 -25 18 -2 L12 -12 Q-2 -8 -13 -13Z" fill="url(#hairTone)" />
+      <circle cx="-6" cy="-3" r="1.7" fill="#3b3435" /><circle cx="7" cy="-3" r="1.7" fill="#3b3435" /><path d="M-3 5 Q1 8 5 5" stroke="#b67468" strokeWidth="1.6" fill="none" />
+    </g>
+    <g transform="translate(0 39)"><rect x="-55" y="0" width="110" height="22" rx="11" fill={avatar.mine ? '#214f48' : '#fffffff0'} stroke={avatar.mine ? '#9dc8b4' : '#d7e0da'} /><text y="15" textAnchor="middle" fontSize="10" fontWeight="700" fill={avatar.mine ? '#fff' : '#40544e'}>{avatar.name.slice(0, 16)}{avatar.mine ? ' · kamu' : ''}</text></g>
+    {avatar.activity === 'working' && <g transform="translate(19 -20)"><circle r="10" fill="#428f6a" stroke="white" strokeWidth="2" /><path d="M-4 0 L-1 3 L5 -4" stroke="white" fill="none" strokeWidth="2" /></g>}
+    {avatar.bubble && <g transform="translate(0 -62)"><rect x="-80" y="-23" width="160" height="36" rx="10" fill="white" stroke="#d0dcd4" /><path d="M-5 13 L0 20 L6 13" fill="white" /><text textAnchor="middle" y="0" fill="#355047" fontSize="10">{avatar.bubble.slice(0, 25)}{avatar.bubble.length > 25 ? '…' : ''}</text></g>}
   </g>;
 }
 
-export function OfficeScene({ avatars, decoration, gameEnabled, onMove, onGame }: { avatars: Avatar[]; decoration: string; gameEnabled: boolean; onMove: (x: number, y: number) => void; onGame: () => void }) {
-  return <svg className="office-scene" viewBox="0 0 1000 610" role="img" aria-label="Ruang kantor virtual dengan karakter dan furnitur">
+export function OfficeScene({ avatars, decoration, onDrop, onDesk, onInvalidDrop }: { avatars: SceneAvatar[]; decoration: string; onDrop: (point: OfficePoint, seatId: string | null) => void; onDesk: (id: string) => void; onInvalidDrop: () => void }) {
+  const svg = useRef<SVGSVGElement>(null);
+  const [drag, setDrag] = useState<OfficePoint | null>(null);
+  const offset = useRef({ x: 0, y: 0 });
+  const mine = avatars.find(a => a.mine);
+  function location(event: PointerEvent<SVGSVGElement | SVGGElement>) {
+    const root = svg.current!; const point = root.createSVGPoint(); point.x = event.clientX; point.y = event.clientY;
+    const matrix = root.getScreenCTM(); return matrix ? point.matrixTransform(matrix.inverse()) : { x: 0, y: 0 };
+  }
+  function lift(event: PointerEvent<SVGGElement>) {
+    if (!mine || event.button !== 0) return;
+    event.preventDefault(); const point = location(event);
+    offset.current = { x: point.x - mine.x, y: point.y - mine.y };
+    svg.current?.setPointerCapture(event.pointerId); setDrag({ x: mine.x, y: mine.y });
+  }
+  function drop(event: PointerEvent<SVGSVGElement>) {
+    if (!drag) return;
+    const point = location(event); const target = resolveOfficeDrop({ x: point.x - offset.current.x, y: point.y - offset.current.y });
+    setDrag(null); if (svg.current?.hasPointerCapture(event.pointerId)) svg.current.releasePointerCapture(event.pointerId);
+    if (target) onDrop(target, target.seatId); else onInvalidDrop();
+  }
+  const target = drag ? resolveOfficeDrop(drag) : null;
+  return <svg ref={svg} className="office-scene" viewBox="0 0 1100 600" aria-label="Denah kantor. Seret karaktermu, lalu lepas di lantai atau kursi." onPointerMove={event => { if (drag) { const point = location(event); setDrag({ x: point.x - offset.current.x, y: point.y - offset.current.y }); } }} onPointerUp={drop} onPointerCancel={() => setDrag(null)} onLostPointerCapture={() => setDrag(null)}>
     <defs>
-      <linearGradient id="office-sky" x2="0" y2="1"><stop stopColor="#a5d9e9" /><stop offset="1" stopColor="#e4f6dd" /></linearGradient>
-      <pattern id="office-grass" width="30" height="30" patternUnits="userSpaceOnUse"><rect width="30" height="30" fill="#8ac687" /><path d="M5 9 l3 -5 M24 21 l3 -5" stroke="#67aa70" strokeWidth="2" /></pattern>
+      <linearGradient id="deskWood" x2="0" y2="1"><stop stopColor="#e6cda3" /><stop offset="1" stopColor="#c8a778" /></linearGradient>
+      <linearGradient id="chairFabric" x2="0" y2="1"><stop stopColor="#829c96" /><stop offset="1" stopColor="#536f6a" /></linearGradient>
+      <radialGradient id="skinTone"><stop stopColor="#f5d3b4" /><stop offset="1" stopColor="#dba780" /></radialGradient>
+      <linearGradient id="hairTone"><stop stopColor="#534744" /><stop offset="1" stopColor="#292b30" /></linearGradient>
+      <pattern id="floorWood" width="150" height="38" patternUnits="userSpaceOnUse"><rect width="150" height="38" fill="#e9e1d3" /><path d="M0 0 H150 M0 38 H150 M149 0 V38" stroke="#d8cebc" /><path d="M5 9 Q70 5 140 12 M12 29 Q85 24 135 30" stroke="#e2d7c6" fill="none" /></pattern>
+      <pattern id="partnerCarpet" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#d6dfd8" /><path d="M0 0 L8 8 M8 0 L0 8" stroke="#cbd6ce" strokeWidth=".6" /></pattern>
+      <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="4" stdDeviation="3" floodColor="#2f3d36" floodOpacity=".22" /></filter>
+      <filter id="deskShadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="1" dy="8" stdDeviation="5" floodColor="#584c39" floodOpacity=".24" /></filter>
     </defs>
-    <rect width="1000" height="610" fill="url(#office-sky)" />
-    <path d="M0 300 Q170 236 305 301 Q480 245 632 290 Q802 215 1000 310 V610 H0Z" fill="#82c389" />
-    <path d="M0 345 Q190 270 340 356 Q525 298 735 345 Q866 315 1000 375 V610 H0Z" fill="url(#office-grass)" />
-    <g fill="#fff" opacity=".85"><ellipse cx="137" cy="83" rx="58" ry="17" /><ellipse cx="114" cy="69" rx="30" ry="22" /><ellipse cx="825" cy="95" rx="67" ry="19" /></g>
-    <path d="M500 -20 L252 100 L252 300 L500 180Z" fill="#f6deb1" stroke="#866b63" strokeWidth="6" />
-    <path d="M500 -20 L872 160 L872 360 L500 180Z" fill="#fff0cc" stroke="#866b63" strokeWidth="6" />
-    <path d="M252 300 L500 180 L872 360 L624 480Z" fill="#ba916b" stroke="#795c59" strokeWidth="8" />
-    {Array.from({ length: 8 }, (_, y) => Array.from({ length: 12 }, (_, x) => <polygon key={`${x}-${y}`} points={tile(x, y)} fill={(x + y) % 2 ? "#ead6ae" : "#f5e6c6"} stroke="#d9bf98" strokeWidth="1" className="office-floor-tile" onClick={() => onMove(x, y)}><title>{`Berjalan ke petak ${x + 1}, ${y + 1}`}</title></polygon>))}
-    <path d="M300 116 L392 71 L392 178 L300 223Z" fill="#9bd2dd" stroke="#715b5f" strokeWidth="8" /><path d="M346 93 V201 M300 167 L392 122" stroke="#715b5f" strokeWidth="6" />
-    <path d="M694 72 L814 130 L814 231 L694 173Z" fill="#a8d7df" stroke="#715b5f" strokeWidth="8" /><path d="M754 101 V202" stroke="#715b5f" strokeWidth="6" />
-    <path d="M459 64 L537 101 L537 159 L459 122Z" fill="#fffaf0" stroke="#876b63" strokeWidth="6" /><text x="474" y="107" fontSize="22" fontWeight="900" fill="#528c82" transform="rotate(24 474 107)">LMATS</text>
-    <path d="M311 306 L473 227 L635 304 L472 383Z" fill="#b5d5c7" opacity=".9" />
-    <path d="M388 305 L445 278 L540 323 L484 351Z" fill="#c98169" stroke="#7b565b" strokeWidth="5" /><path d="M388 305 V334 L484 380 V351 M484 351 L540 323 V351 L484 380" fill="#aa655c" stroke="#7b565b" strokeWidth="4" /><path d="M410 306 L445 288 L516 324 L482 340Z" fill="#f3a17e" />
-    <g transform="translate(322 266)"><ellipse cy="0" rx="22" ry="13" fill="#805a53" /><path d="M-20 -4 Q-20 -31 0 -34 Q22 -31 22 -4Z" fill="#b98469" /><path d="M-20 3 V31 L0 42 V13 M0 13 L20 3 V31 L0 42" fill="#936755" /></g>
-    <g transform="translate(720 300)"><path d="M-47 0 L0 -25 L54 2 L7 27Z" fill="#d2a96d" stroke="#765a55" strokeWidth="4" /><path d="M-47 0 V30 L7 56 V27 M7 27 L54 2 V32 L7 56" fill="#ab765a" stroke="#765a55" strokeWidth="4" /><path d="M-18 -8 L0 -18 L29 -4 L9 6Z" fill="#506976" /><path d="M9 6 L29 -4 V15 L9 25Z" fill="#314b58" /><path d="M-24 3 L0 17 L16 10" fill="none" stroke="#fff5d7" strokeWidth="6" /></g>
-    <g transform="translate(802 352)"><path d="M-28 -65 L4 -79 L29 -67 L-4 -52Z" fill="#769c71" /><path d="M-28 -65 V12 L-4 24 V-52 M-4 -52 L29 -67 V10 L-4 24" fill="#60805f" /><path d="M-24 -40 L23 -61 M-24 -13 L23 -34" stroke="#e9d7a6" strokeWidth="5" /><rect x="-17" y="-47" width="8" height="21" fill="#d98570" /><rect y="-55" width="9" height="23" fill="#78b6b2" /></g>
-    <g transform="translate(355 348)"><path d="M-18 4 L0 -5 L18 4 L0 14Z" fill="#b28362" /><path d="M-18 4 V21 L0 31 V14 M0 14 L18 4 V21 L0 31" fill="#906950" /><path d="M-13 1 Q-34 -14 -21 -30 Q-12 -38 -5 -22 Q-1 -49 15 -36 Q36 -19 12 -4Z" fill="#499f70" stroke="#327d5e" strokeWidth="4" /></g>
-    <g transform="translate(623 407)"><path d="M-18 4 L0 -5 L18 4 L0 14Z" fill="#bd8664" /><path d="M-18 4 V23 L0 31 V14 M0 14 L18 4 V23 L0 31" fill="#9e654e" /><text y="-11" textAnchor="middle" fontSize="34">{decorations[decoration] || "🪴"}</text></g>
-    <g className={gameEnabled ? "office-scene-game" : ""} role={gameEnabled ? "button" : undefined} tabIndex={gameEnabled ? 0 : undefined} onClick={gameEnabled ? onGame : undefined} onKeyDown={event => { if (gameEnabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onGame(); } }} transform="translate(650 314)"><path d="M-40 12 L0 -8 L48 15 L8 37Z" fill="#487d78" stroke="#36515a" strokeWidth="5" /><path d="M-40 12 V29 L8 54 V37 M8 37 L48 15 V34 L8 54" fill="#346b68" stroke="#36515a" strokeWidth="4" /><path d="M-13 -24 L8 -34 L29 -24 L8 -14Z" fill="#f2c76e" stroke="#65717a" strokeWidth="2" /><path d="M-10 -16 L10 -26 L30 -16 L9 -6Z" fill="#fff6dc" stroke="#65717a" strokeWidth="2" /><text y="77" textAnchor="middle" fontSize="13" fontWeight="900" fill="#2d5e59">{gameEnabled ? "✦ MAIN SUSUN BERKAS" : "MEJA ARSIP"}</text></g>
-    {avatars.slice().sort((a, b) => a.x + a.y - b.x - b.y).map(avatar => <Character key={avatar.id} avatar={avatar} />)}
-    <path d="M252 300 L624 480 L872 360" fill="none" stroke="#886c5d" strokeWidth="10" strokeLinecap="round" />
-    <g fill="#4c9a65"><circle cx="220" cy="429" r="25" /><circle cx="198" cy="445" r="18" /><circle cx="907" cy="450" r="30" /><circle cx="932" cy="461" r="18" /></g>
+    <rect width="1100" height="600" rx="18" fill="#eff2ec" />
+    <rect x="27" y="43" width="1046" height="523" rx="5" fill="#adb5aa" opacity=".3" />
+    <rect x="30" y="35" width="1040" height="522" fill="url(#floorWood)" stroke="#fdfcf8" strokeWidth="12" />
+    <rect x="38" y="42" width="1024" height="508" fill="none" stroke="#b7b7a7" strokeWidth="2" />
+    <path d="M110 35 H320 M555 35 H745 M886 35 H1015" stroke="#c4dfe0" strokeWidth="11" /><path d="M110 35 H320 M555 35 H745 M886 35 H1015" stroke="#92b6b8" strokeWidth="2" />
+    <path d="M110 48 L210 135 H320 L260 48Z M555 48 L635 135 H745 L700 48Z" fill="#fffde8" opacity=".4" />
+    <text x="76" y="100" fontSize="10" fontWeight="800" letterSpacing="3" fill="#839082">LMATS / WORKSPACE</text>
+    <text x="76" y="124" fontSize="20" fontWeight="600" fill="#3f564c">A good place to work.</text>
+    <rect x="817" y="183" width="245" height="365" fill="url(#partnerCarpet)" />
+    <path d="M810 550 V414 M810 340 V178 H1066" stroke="#9ca99e" strokeWidth="13" fill="none" /><path d="M810 550 V414 M810 340 V178 H1066" stroke="#f9fbf6" strokeWidth="7" fill="none" />
+    <path d="M810 340 L866 389" stroke="#8ba697" strokeWidth="3" /><path d="M810 414 A74 74 0 0 0 866 389" stroke="#a5b7aa" strokeWidth="1" fill="none" strokeDasharray="4 4" />
+    <text x="936" y="212" textAnchor="middle" fill="#5e7b69" fontSize="10" fontWeight="800" letterSpacing="2">RUANG PARTNER</text>
+    <rect x="888" y="448" width="151" height="70" rx="10" fill="#b2c7bb" filter="url(#softShadow)" /><rect x="895" y="452" width="137" height="14" rx="5" fill="#8fae9b" />{[897,943,989].map(x => <rect key={x} x={x} y="469" width="42" height="37" rx="5" fill="#c7d7cc" stroke="#a4baab" />)}
+    <rect x="896" y="396" width="131" height="31" rx="12" fill="#b79c77" filter="url(#softShadow)" /><circle cx="920" cy="410" r="8" fill="#f7f3e9" /><circle cx="920" cy="410" r="5" fill="#87644a" /><rect x="956" y="402" width="29" height="15" rx="2" fill="#738779" />
+    <Plant x={1040} y={94} /><Plant x={75} y={315} scale={.75} /><Plant x={850} y={516} scale={.6} />
+    {OFFICE_SEATS.map(seat => <g key={seat.id} transform={`translate(${seat.x} ${seat.y}) rotate(${seat.facing})`} className="office-seat" onClick={() => onDesk(seat.deskId)}><title>{`Duduk di kursi ${seat.id.toUpperCase()}`}</title><g filter="url(#softShadow)"><path d="M-15 17 L15 -17 M-15 -17 L15 17" stroke="#788982" strokeWidth="4" /><rect x="-17" y="-19" width="34" height="36" rx="10" fill="url(#chairFabric)" stroke="#526e62" /><rect x="-20" y="8" width="40" height="14" rx="5" fill="#6e8a7e" stroke="#587367" /><path d="M-20 -9 V10 M20 -9 V10" stroke="#3f5650" strokeWidth="4" strokeLinecap="round" /></g></g>)}
+    {OFFICE_DESKS.map(d => <g key={d.id} role="button" tabIndex={0} aria-label={`Interaksi ${d.name}`} className="office-desk" onClick={() => onDesk(d.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onDesk(d.id); } }}><rect x={d.x} y={d.y + 5} width={d.w} height={d.h} rx="5" fill="#a98a63" filter="url(#deskShadow)" /><rect x={d.x} y={d.y} width={d.w} height={d.h} rx="5" fill="url(#deskWood)" stroke="#bca074" /><path d={`M${d.x + 5} ${d.y + 7} H${d.x + d.w - 5} M${d.x + 5} ${d.y + d.h - 7} H${d.x + d.w - 5}`} stroke="#f0dab7" strokeWidth="1" /></g>)}
+    {OFFICE_SEATS.map(seat => {
+      const desk = OFFICE_DESKS.find(d => d.id === seat.deskId)!;
+      const x = seat.facing === 90 || seat.facing === -90 ? desk.x + desk.w / 2 : seat.x;
+      const y = seat.facing === 90 || seat.facing === -90 ? seat.y : desk.y + desk.h / 2;
+      return <g key={`computer-${seat.id}`} transform={`translate(${x} ${y}) rotate(${seat.facing})`} pointerEvents="none"><rect x="-16" y="-16" width="32" height="20" rx="3" fill="#3e5058" filter="url(#softShadow)" /><rect x="-13" y="-13" width="26" height="14" rx="1" fill="#99c3c4" /><path d="M-9 -9 H7 M-9 -6 H2" stroke="#d4eff0" strokeWidth="1.4" /><path d="M0 4 V9 M-7 9 H7" stroke="#6a7a7c" strokeWidth="3" /><rect x="-15" y="11" width="26" height="7" rx="2" fill="#e6ece7" stroke="#acb6ac" /><rect x="15" y="10" width="5" height="8" rx="2.5" fill="#e7e9de" /></g>;
+    })}
+    <rect x="43" y="541" width="730" height="9" fill="#c8bdab" opacity=".5" />
+    {avatars.filter(a => !(a.mine && drag)).map(a => <g key={a.id} className={a.mine ? 'office-draggable' : ''} onPointerDown={a.mine ? lift : undefined} tabIndex={a.mine ? 0 : undefined} role={a.mine ? 'button' : undefined} aria-label={a.mine ? 'Angkat dan seret karaktermu. Tombol panah untuk bergeser.' : a.name} onKeyDown={event => { if (!a.mine || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return; event.preventDefault(); const result = resolveOfficeDrop({ x: a.x + (event.key === 'ArrowRight' ? 20 : event.key === 'ArrowLeft' ? -20 : 0), y: a.y + (event.key === 'ArrowDown' ? 20 : event.key === 'ArrowUp' ? -20 : 0) }); if (result) onDrop(result, result.seatId); }}><AvatarArt avatar={a} lifted={false} />{a.mine && a.seatId && <g pointerEvents="none" transform={`translate(${a.x + 34} ${a.y + 8})`}><circle r="9" fill="#f7f9f3" /><text y="4" fontSize="11" textAnchor="middle">{decoration === 'plant' ? '✿' : decoration === 'coffee' ? '☕' : decoration === 'books' ? '▤' : '☀'}</text></g>}</g>)}
+    {drag && mine && <g pointerEvents="none"><ellipse cx={drag.x} cy={drag.y + 11} rx="26" ry="12" fill="#223b33" opacity=".22" /><circle cx={target?.x ?? drag.x} cy={target?.y ?? drag.y} r="27" fill={target ? '#74b79530' : '#dd827c30'} stroke={target ? '#428969' : '#c96861'} strokeDasharray="5 4" /><AvatarArt avatar={{ ...mine, ...drag, seatId: null }} lifted /><text x={drag.x} y={drag.y + 80} textAnchor="middle" fill="#355447" fontSize="11" fontWeight="700">{target?.seatId ? 'Lepas untuk duduk' : target ? 'Lepas di sini' : 'Pilih lantai atau kursi'}</text></g>}
   </svg>;
 }
