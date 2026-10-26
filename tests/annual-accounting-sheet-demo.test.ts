@@ -7,8 +7,8 @@ import * as XLSX from "xlsx";
 const html = readFileSync(new URL("../public/annual-accounting-sheet-demo.html", import.meta.url), "utf8");
 const script = readFileSync(new URL("../public/annual-accounting-sheet-demo.js", import.meta.url), "utf8");
 
-function loadDemo(team = "accounting") {
-  const dom = new JSDOM(html, { runScripts: "outside-only", url: `http://localhost/annual-accounting-sheet-demo.html${team === "tax" ? "?team=tax" : ""}` });
+function loadDemo(team = "accounting", search = "") {
+  const dom = new JSDOM(html, { runScripts: "outside-only", url: `http://localhost/annual-accounting-sheet-demo.html?${team === "tax" ? "team=tax&" : ""}${search}` });
   const w = dom.window as any;
   w.matchMedia = () => ({ matches: false });
   w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
@@ -31,12 +31,54 @@ function loadDemo(team = "accounting") {
   return { dom, w, api, cell, choose, key, actAs, paste };
 }
 
+test("Add Client dropdown retains generation and external-work actions for both annual teams", () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = loadDemo(team);
+    try {
+      const button = d.w.document.getElementById("add-client-button"), menu = d.w.document.getElementById("add-client-menu");
+      assert.equal(menu.hidden, true);
+      button.click(); assert.equal(menu.hidden, false); assert.equal(button.getAttribute("aria-expanded"), "true");
+      assert.equal(d.w.document.getElementById("generate-button").textContent, "Generate Clients");
+      assert.equal(d.w.document.getElementById("outside-button").textContent, "Add Ext Client");
+      d.w.document.getElementById("generate-button").click();
+      assert.equal(menu.hidden, true); assert.equal(d.w.document.getElementById("generate-dialog").open, true);
+      d.w.document.getElementById("generate-dialog").close();
+      button.click(); d.w.document.getElementById("outside-button").click();
+      assert.equal(menu.hidden, true);
+      assert.equal(d.w.document.getElementById(team === "tax" ? "tax-subject-dialog" : "outside-dialog").open, true);
+      button.click(); button.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      assert.equal(menu.hidden, true); assert.equal(d.w.document.activeElement, button);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("Full Screen opens a standalone new tab retaining team, year, filters and sort, with both teams available", () => {
+  const d = loadDemo("tax", "embedded=1&year=2024&status=complete&view=filing&pic=Ivan&taxPic=Bagus&search=Rin&sort=clientName&direction=desc");
+  try {
+    const link = d.w.document.getElementById("fullscreen-button"), url = new URL(link.href);
+    assert.equal(link.target, "_blank"); assert.match(link.rel, /noopener/);
+    assert.equal(url.searchParams.has("embedded"), false); assert.equal(url.searchParams.get("fullscreen"), "1");
+    for (const [key, value] of [["team", "tax"], ["year", "2024"], ["status", "complete"], ["view", "filing"], ["pic", "Ivan"], ["taxPic", "Bagus"], ["search", "Rin"], ["direction", "desc"]]) assert.equal(url.searchParams.get(key), value);
+    const fullscreen = loadDemo("tax", url.searchParams.toString());
+    try {
+      assert.equal(fullscreen.w.document.documentElement.classList.contains("sheet-fullscreen"), true);
+      assert.equal(fullscreen.w.document.getElementById("fullscreen-team-tabs").hidden, false);
+      assert.equal(fullscreen.w.document.getElementById("fullscreen-button").hidden, true);
+      assert.equal(fullscreen.api.state.year, 2024); assert.equal(fullscreen.api.state.view, "filing"); assert.equal(fullscreen.api.state.status, "complete");
+      const accounting = new URL(fullscreen.w.document.querySelector('[data-sheet-team="accounting"]').href);
+      assert.equal(accounting.searchParams.get("team"), null); assert.equal(accounting.searchParams.get("view"), null); assert.equal(accounting.searchParams.get("year"), "2024");
+    } finally { fullscreen.dom.window.close(); }
+  } finally { d.dom.window.close(); }
+});
+
 test("Accounting column titles are centered with distinct group colors that survive sorting", () => {
   const d = loadDemo();
   try {
     const style = d.w.document.createElement("style");
     style.textContent = readFileSync(new URL("../public/annual-accounting-sheet-demo.css", import.meta.url), "utf8");
     d.w.document.head.append(style);
+    const fullScreenIcon = d.w.getComputedStyle(d.w.document.querySelector("#fullscreen-button>svg"));
+    assert.equal(fullScreenIcon.width, "16px"); assert.equal(fullScreenIcon.height, "16px");
     const backgrounds = new Set<string>();
     for (const group of ["admin", "data", "preparation", "payment", "deadline"]) {
       const headers = Array.from(d.w.document.querySelectorAll(`#annual-grid thead th[data-header-group="${group}"]`)) as any[];
@@ -176,13 +218,13 @@ test("Tax and ACC filters combine, and column headings toggle workflow and progr
   } finally { d.dom.window.close(); }
 });
 
-test("custom number columns support numeric sorting, schema undo, and existing ownership checks", () => {
+test("existing custom number columns retain sorting, value undo and ownership checks after removing Add Column", () => {
   const d = loadDemo();
   try {
-    const form = d.w.document.getElementById("column-form");
-    const submitColumn = () => { form.elements.title.value = "Adjustment amount"; form.elements.type.value = "number"; form.dispatchEvent(new d.w.Event("submit", { bubbles: true, cancelable: true })); };
-    d.w.document.getElementById("add-column-button").click(); submitColumn();
-    assert.equal(d.api.state.customColumns.length, 1);
+    assert.equal(d.w.document.getElementById("add-column-button"), null);
+    assert.equal(d.w.document.getElementById("column-dialog"), null);
+    d.api.state.customColumns = [{ field: "custom_existing", title: "Adjustment amount", type: "number", width: 120 }];
+    d.w.document.getElementById("reset-filters").click();
     const field = d.api.state.customColumns[0].field;
     let c = d.api.columns.findIndex((col: any) => col.field === field);
     d.choose(0, c); d.paste("10\n2\n0");
@@ -193,15 +235,10 @@ test("custom number columns support numeric sorting, schema undo, and existing o
     assert.deepEqual(Array.from(d.api.visible.slice(0, 3), (row: any) => row[field]), [10, 2, 0]);
     assert.equal(d.api.visible[d.api.visible.length - 1][field], undefined);
     d.w.document.getElementById("undo-button").click();
-    d.w.document.getElementById("undo-button").click();
-    assert.equal(d.api.state.customColumns.length, 0);
-    d.w.document.getElementById("redo-button").click(); d.w.document.getElementById("redo-button").click();
+    assert.equal(d.api.state.rows.some((row: any) => row[field] !== undefined), false);
+    d.w.document.getElementById("redo-button").click();
     assert.equal(d.api.state.customColumns.length, 1);
     d.actAs("acc-cemari");
-    assert.equal(d.w.document.getElementById("add-column-button").disabled, true);
-    const beforeColumns = JSON.stringify(d.api.state.customColumns);
-    submitColumn();
-    assert.equal(JSON.stringify(d.api.state.customColumns), beforeColumns);
     c = d.api.columns.findIndex((col: any) => col.field === field);
     const other = d.api.visible.findIndex((row: any) => row.accountingPicId !== "acc-cemari" && !row.assistantIds.includes("acc-cemari"));
     const beforeRows = JSON.stringify(d.api.state.rows);

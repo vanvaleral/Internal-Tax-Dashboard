@@ -1,13 +1,16 @@
 /* Shared annual sheet renderer. Samples by default; authenticated persistence only with live=1. */
 (() => {
   "use strict";
+  const pageParams = new URLSearchParams(location.search);
+  const fullScreenMode = pageParams.get("fullscreen") === "1";
   const liveMode = new URLSearchParams(location.search).get("live") === "1";
-  let liveRoster = [], liveReady = false, liveBusy = false, columnsReady = false;
+  let liveRoster = [], liveReady = false, liveBusy = false;
   const embeddedPreview = window.parent !== window && new URLSearchParams(location.search).get("embedded") === "1";
   const taxMode = new URLSearchParams(location.search).get("team") === "tax";
   const taxConfig = taxMode ? window.AnnualTaxSheetConfig : null;
   if (taxMode && !taxConfig) throw new Error("Annual Tax preview configuration is unavailable.");
   if (embeddedPreview) document.documentElement.classList.add("sheet-embedded");
+  if (fullScreenMode) document.documentElement.classList.add("sheet-fullscreen");
   if (taxMode) taxConfig.configureUI(document);
   else {
     document.documentElement.classList.add("accounting-sheet");
@@ -41,7 +44,7 @@
   const controlItems = control => control.items || months;
   const sampleNames = ["PT Bumi Niaga", "CV Allumer Utama", "PT Bali Sentral", "CV Cipta Surya Teknik", "PT Budi Sentosa Ongko W", "PT Eden Restaurant & Events", "CV Cadudasa Pratama", "PT Merah Putih Logistik", "PT Bali Prima Interior", "CV Dasa Cipta", "PT Garuda Diesel Indonesia", "PT Sajanna Property", "CV Belajar Terus Menerus", "PT North Hills Bali", "CV Berpikir Positif", "PT Nusantara Distribusi", "PT Tirta Mandiri", "CV Rupa Ishana"];
   const master = liveMode ? [] : sampleNames.map((name, index) => ({ clientId: `sample-client-${index + 1}`, name, accountingPic: accPics[index % accPics.length], taxPic: taxPics[index % taxPics.length], active: true }));
-  let counter = 0, customColumnCounter = 0;
+  let counter = 0;
   function createRow(client, year, outside = false) {
     const id = liveMode ? crypto.randomUUID() : taxMode ? `demo-tax-work-${++counter}` : `demo-work-${++counter}`;
     if (taxMode) { const row = taxConfig.createRow(client, year, id, staffId); if (liveMode) row.subjectId = client.subjectId || id; return row; }
@@ -68,6 +71,11 @@
     return rows;
   }
   const state = { rows: seed(), customColumns: [], year: liveMode ? new Date().getFullYear() - 1 : 2025, view: "summary", status: "incomplete", pic: "", taxPic: "", search: "", sort: { field: "clientName", type: "text", title: taxMode ? "SPT subject" : "Client", direction: "asc" }, actorId: liveMode ? "" : "supervisor-demo", selection: { r: 0, c: 0 }, range: null, history: [], future: [] };
+  const requestedYear = pageParams.get("year"), explicitYear = requestedYear !== null && /^(0|20\d{2}|2100)$/.test(requestedYear);
+  if (explicitYear) state.year = Number(requestedYear);
+  if (["incomplete", "complete"].includes(pageParams.get("status"))) state.status = pageParams.get("status");
+  if ((taxMode ? ["summary", "documents", "preparation", "filing", "all"] : ["summary"]).includes(pageParams.get("view"))) state.view = pageParams.get("view");
+  state.pic = (pageParams.get("pic") || "").slice(0, 180); state.taxPic = (pageParams.get("taxPic") || "").slice(0, 180); state.search = (pageParams.get("search") || "").slice(0, 1000);
   let visible = [], columns = [], drag = null, editor = null, toastTimer;
   let picProgressCollapsed = true;
   let activeRange = null;
@@ -275,16 +283,19 @@
     $("sort-status").title = "Click a column heading to sort. Click again to reverse.";
     $("access-description").textContent = isLeadership() ? `Edit all work; manage PIC assignments${taxMode ? ", subject identities," : ""} and deadlines.${taxMode ? "" : " Client Master names stay locked."}` : `${actor()?.name || "Loading"}: edit your own ${taxMode ? "Tax" : "ACC"} work and assigned assistance only. PIC and deadline cells stay locked.`;
     $("outside-button").disabled = !isLeadership() && !(taxMode ? actorTaxName() : actorAccName());
-    $("add-column-button").disabled = !isLeadership();
     if (liveMode) {
       for (const id of ["generate-button", "empty-generate", "export-button"]) $(id).disabled = !liveReady || liveBusy;
       $("outside-button").disabled ||= !liveReady || liveBusy;
       $("generate-button").disabled ||= state.year === 0;
       $("outside-button").disabled ||= state.year === 0;
-      $("add-column-button").disabled ||= !liveReady || liveBusy || !columnsReady;
     }
-    $("add-column-button").title = isLeadership() ? "Add a shared Text, Number, or Date column" : "Only leader, supervisor, or partner can add shared columns";
-    if (liveMode && !columnsReady) $("add-column-button").title = "Apply the annual_sheet_columns migration to enable shared custom columns.";
+    $("add-client-button").disabled = $("generate-button").disabled && $("outside-button").disabled;
+    if ($("add-client-button").disabled) closeAddClientMenu();
+    $("fullscreen-button").href = fullScreenUrl();
+    document.querySelectorAll("[data-sheet-team]").forEach(link => {
+      link.href = fullScreenUrl(link.dataset.sheetTeam);
+      if (link.dataset.sheetTeam === (taxMode ? "tax" : "accounting")) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+    });
     $("control-description").textContent = taxMode ? state.view === "summary" ? "One row per SPT subject. Click a milestone strip for its checklist; linked companies are references, not new Client Master allocations." : state.view === "filing" || state.view === "all" ? "Enter the tax payable amount (0 for nil), payment date / NTPN when payable, and filing date / NTPE before marking Reported or Done." : `${coverageControls[0].title}: click or drag to mark individual milestones. Progress does not automatically check them.` : "Click a segmented bar to adjust its slider (0-12 months from January); move away to restore the segments. NTPE marks Done and moves the row to Complete. Clearing NTPE restores its previous status.";
     $("control-description").title = $("control-description").textContent;
     const table = $("annual-grid");
@@ -596,27 +607,39 @@
   document.querySelectorAll("[data-status]").forEach(button => button.addEventListener("click", () => { finishEdit(false); state.status = button.dataset.status; state.selection.r = 0; state.range = null; render(); }));
   $("undo-button").addEventListener("click", undo); $("redo-button").addEventListener("click", redo);
   $("help-button").addEventListener("click", () => { $("help-panel").hidden = !$("help-panel").hidden; $("help-button").setAttribute("aria-expanded", String(!$("help-panel").hidden)); });
-  $("add-column-button").addEventListener("click", () => {
-    if (!isLeadership()) { notify("Only leader, supervisor, or partner can add shared columns."); return; }
-    if (!finishEdit(true)) return;
-    $("column-form").reset(); $("column-error").hidden = true; $("column-dialog").showModal();
+  function closeAddClientMenu(focus = false) {
+    $("add-client-menu").hidden = true; $("add-client-button").setAttribute("aria-expanded", "false");
+    if (focus) $("add-client-button").focus();
+  }
+  $("add-client-button").addEventListener("click", () => {
+    const show = $("add-client-menu").hidden;
+    $("add-client-menu").hidden = !show; $("add-client-button").setAttribute("aria-expanded", String(show));
   });
-  $("column-form").addEventListener("submit", event => {
-    event.preventDefault();
-    const error = $("column-error"); error.hidden = true;
-    if (!isLeadership()) { error.textContent = "Only leader, supervisor, or partner can add shared columns."; error.hidden = false; return; }
-    const form = new FormData(event.target); const title = String(form.get("title") || "").trim(); const type = String(form.get("type") || "");
-    if (!title || title.length > 48 || !["text", "number", "date"].includes(type)) { error.textContent = "Enter a column name (up to 48 characters) and a valid cell type."; error.hidden = false; return; }
-    if (buildColumns().some(col => col.title.toLowerCase() === title.toLowerCase())) { error.textContent = "This column name is already used. Choose a different name."; error.hidden = false; return; }
-    const field = `custom_${++customColumnCounter}`;
-    change(`Added ${title} column`, () => state.customColumns.push({ field, title, type, width: type === "text" ? 180 : 120 }));
-    $("column-dialog").close();
-    if (visible.length) select(state.selection.r, columns.findIndex(col => col.field === field), true);
-    if (!liveMode) notify(`Added ${title}. Fill in a value for each ${taxMode ? "SPT subject" : "annual client"} row; Undo removes the new column.`);
-  });
+  document.addEventListener("click", event => { if (!event.target.closest(".add-client-actions")) closeAddClientMenu(); });
+  document.querySelector(".add-client-actions").addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); closeAddClientMenu(true); } });
+  document.querySelector(".add-client-actions").addEventListener("focusout", event => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) closeAddClientMenu(); });
+  function fullScreenUrl(team = taxMode ? "tax" : "accounting") {
+    const url = new URL("./annual-accounting-sheet-demo.html", location.href), params = url.searchParams;
+    params.set("fullscreen", "1"); if (team === "tax") params.set("team", "tax");
+    if (liveMode) { params.set("live", "1"); if (pageParams.get("account")) params.set("account", pageParams.get("account")); }
+    params.set("year", state.year); params.set("status", state.status);
+    for (const [key, value] of [["pic", state.pic], ["taxPic", state.taxPic], ["search", state.search]]) if (value) params.set(key, value);
+    if (team === (taxMode ? "tax" : "accounting")) {
+      params.set("view", state.view); params.set("sort", state.sort.field); params.set("direction", state.sort.direction);
+      if (state.sort.month !== undefined) params.set("month", state.sort.month);
+    }
+    return url.href;
+  }
+  function guardFullScreenNavigation(event) {
+    if (!finishEdit(true) || liveBusy || liveMode && !liveReady) { event.preventDefault(); notify("Wait for the current database save to finish before opening another annual sheet."); return; }
+    event.currentTarget.href = event.currentTarget.dataset.sheetTeam ? fullScreenUrl(event.currentTarget.dataset.sheetTeam) : fullScreenUrl();
+  }
+  $("fullscreen-button").addEventListener("click", guardFullScreenNavigation);
+  document.querySelectorAll("[data-sheet-team]").forEach(link => link.addEventListener("click", guardFullScreenNavigation));
   const generationKey = row => taxMode ? row.subjectId : row.clientId;
   const generationCandidates = () => (taxMode ? taxConfig.priorCandidates(state) : master).filter(client => (taxMode || client.active && client.accountingPic) && matchesAccPic(client) && matchesTaxPic(client) && (isLeadership() || staffId(taxMode ? client.taxPic : client.accountingPic, taxMode ? "tax" : "acc") === state.actorId));
   function showGeneration() {
+    closeAddClientMenu();
     if (liveMode && (!liveReady || liveBusy || state.year === 0)) return;
     $("generate-year").textContent = state.year;
     const existing = new Set(yearRows().map(generationKey).filter(Boolean));
@@ -637,6 +660,7 @@
     state.status = "incomplete"; $("generate-dialog").close(); render(); if (!liveMode) notify(`${candidates.length} ${taxMode ? "SPT subject(s)" : "client(s)"} added. Previous years remain separate.`);
   });
   $("outside-button").addEventListener("click", () => {
+    closeAddClientMenu();
     if (taxMode) { showTaxSubjectForm(); return; }
     if (!isLeadership() && !actorAccName()) { notify("Only an ACC PIC or leadership can add annual accounting work."); return; }
     const form = $("outside-form"); form.reset();
@@ -748,8 +772,8 @@
     accPics.splice(0, accPics.length, ...new Set(liveRoster.filter(person => person.team === "Accounting Team").map(person => person.name)));
     taxPics.splice(0, taxPics.length, ...new Set(liveRoster.filter(person => person.team === "Tax Team").map(person => person.name)));
     if (data.clients) master.splice(0, master.length, ...data.clients);
-    state.rows = data.rows; state.customColumns = data.columns; columnsReady = data.columnsReady;
-    if (firstLoad && state.rows.length && !state.rows.some(row => row.year === state.year)) state.year = Math.max(...state.rows.map(row => row.year));
+    state.rows = data.rows; state.customColumns = data.columns;
+    if (firstLoad && !explicitYear && state.rows.length && !state.rows.some(row => row.year === state.year)) state.year = Math.max(...state.rows.map(row => row.year));
     if (state.year === 0 && !state.rows.some(row => row.year === 0)) state.year = Math.max(new Date().getFullYear() - 1, ...state.rows.map(row => row.year));
     const years = [...new Set([state.year, ...Array.from({ length: 101 }, (_, index) => 2000 + index), ...state.rows.map(row => row.year)])].sort((a, b) => b - a);
     $("year-select").innerHTML = years.map(year => `<option value="${year}" ${year === state.year ? "selected" : ""}>${year || "Year not set"}</option>`).join("");
@@ -786,6 +810,12 @@
   }
   window.addEventListener("resize", () => { if (!editor) render(); });
   window.AnnualSheetDemo = { state, transition, parseValue, canEdit, buildExportWorkbook, accountingPicProgress, accountingControlCoverage, get columns() { return columns; }, get visible() { return visible; } };
+  const requestedSort = [...buildColumns("all"), ...buildColumns("summary")].find(col => col.field === pageParams.get("sort") && (col.month === undefined ? !pageParams.has("month") : col.month === Number(pageParams.get("month"))));
+  if (requestedSort && ["asc", "desc"].includes(pageParams.get("direction"))) state.sort = { ...requestedSort, direction: pageParams.get("direction") };
+  $("year-select").value = String(state.year); $("pic-filter").value = state.pic; $("tax-pic-filter").value = state.taxPic; $("search").value = state.search;
+  if (!liveMode && !$("year-select").querySelector(`option[value="${state.year}"]`) && ![...$("year-select").options].some(option => Number(option.value) === state.year)) { const option = document.createElement("option"); option.value = state.year; option.textContent = state.year || "Year not set"; $("year-select").append(option); $("year-select").value = String(state.year); }
+  $("fullscreen-team-tabs").hidden = !fullScreenMode;
+  $("fullscreen-button").hidden = fullScreenMode;
   render();
   if (liveMode) {
     document.documentElement.classList.add("sheet-live");
@@ -796,6 +826,9 @@
     const refresh = document.createElement("button"); refresh.className = "text-button"; refresh.textContent = "Refresh"; refresh.addEventListener("click", () => { if (!editor && !liveBusy) loadLive(); });
     document.querySelector(".filter-toolbar .tools").prepend(refresh);
     window.addEventListener("message", event => { if (event.origin === location.origin && event.source === window.parent && event.data?.type === "annual-sheet:refresh" && !editor && !liveBusy) loadLive(); });
+    const refreshIfIdle = () => { if (!document.hidden && !editor && !liveBusy) loadLive(); };
+    window.addEventListener("focus", refreshIfIdle);
+    document.addEventListener("visibilitychange", refreshIfIdle);
     window.addEventListener("beforeunload", event => { if (liveBusy) { event.preventDefault(); event.returnValue = ""; } });
     loadLive();
   }

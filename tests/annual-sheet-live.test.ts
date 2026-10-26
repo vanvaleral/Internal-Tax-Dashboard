@@ -165,6 +165,10 @@ test("live sheet never seeds samples, uses authenticated roster and waits for da
     assert.equal(api.state.rows.length, 0, "no demo records while loading");
     await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(api.state.rows.length, 1); assert.equal(api.state.actorId, "acc-1");
+    const fullScreenUrl = new URL(w.document.getElementById("fullscreen-button").href);
+    assert.equal(fullScreenUrl.searchParams.get("live"), "1");
+    assert.equal(fullScreenUrl.searchParams.get("account"), "auth-user-1");
+    assert.equal(fullScreenUrl.searchParams.has("embedded"), false);
     assert.equal(w.document.querySelector(".access-toolbar").hidden, true);
     assert.equal(api.state.rows[0].clientName, "Actual Client");
     const notes = api.columns.findIndex((col: any) => col.field === "notes");
@@ -178,6 +182,9 @@ test("live sheet never seeds samples, uses authenticated roster and waits for da
     };
     paste("Confirmed note");
     assert.equal(api.state.rows[0].notes, "Old note", "pending changes must not masquerade as saved");
+    const pendingNavigation = new w.MouseEvent("click", { bubbles: true, cancelable: true });
+    w.document.getElementById("fullscreen-button").dispatchEvent(pendingNavigation);
+    assert.equal(pendingNavigation.defaultPrevented, true, "new-tab navigation must wait for database confirmation");
     release!(); await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(api.state.rows[0].notes, "Confirmed note");
     assert.equal(db.tables.operational_workspace_state[0].payload[0].notes, "Confirmed note");

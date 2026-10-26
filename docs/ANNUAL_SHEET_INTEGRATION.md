@@ -15,6 +15,15 @@ Both support PIC filtering, sorting, shared custom columns, year/status filters,
 batch generation and selected-year Excel export. Staff exports include only rows
 they are authorized to read; they are not firm-wide exports.
 
+The toolbar uses **Add Client** with **Generate Clients** and **Add Ext Client**
+actions. These retain the existing generation review and annual-only external
+work/subject forms. **Full Screen** replaces Add Column and opens a standalone
+new tab using the whole page, with Accounting/Tax team navigation. It retains the
+year, status, PIC/search filters, active view and standard-column sort. Live mode
+and the account binding are carried over; embedded mode and demo actor switching
+are not. Navigation waits for active saves, and visible idle sheets refresh when
+the user returns to the tab. No browser fullscreen permission is required.
+
 ## Persistence And Permissions
 
 - Existing `operational_workspace_state` arrays remain authoritative. IDs and
@@ -61,7 +70,8 @@ Creation records retain the actor and timestamp, and each row's values live in i
 existing workspace JSON. No service key is sent to the browser.
 
 The core sheets can read/edit existing annual work before this migration is
-applied; **Add column** remains disabled with an explanatory title. The migration
+applied. The toolbar no longer exposes Add Column; existing definitions and values
+are still loaded, editable by the appropriate PIC, and exported. The migration
 does not initialize empty annual workspaces or rewrite any existing data.
 
 Follow the existing backup and migration-ledger cautions in

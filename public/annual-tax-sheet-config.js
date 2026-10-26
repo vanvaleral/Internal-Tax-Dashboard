@@ -74,8 +74,8 @@
     document.documentElement.classList.add("tax-sheet");
     document.querySelector("h1").innerHTML = 'Annual tax<span class="title-dot">.</span>';
     document.querySelector(".metric > span").textContent = "SPT subjects";
-    byId("generate-button").textContent = "Review prior-year subjects";
-    byId("outside-button").textContent = "+ Add SPT subject";
+    byId("generate-button").title = "Review prior-year SPT subjects before adding them to this year";
+    byId("outside-button").title = "Add an external SPT subject to this annual sheet";
     byId("annual-grid").setAttribute("aria-label", "Editable annual tax return control");
     byId("search").placeholder = "Find SPT subject, group, PIC, note...";
     byId("export-button").title = "Export every SPT subject for the selected year, including completed returns and all milestones. Filters do not limit the export.";
@@ -90,8 +90,6 @@
     byId("empty-generate").textContent = "Review prior-year subjects";
     byId("empty-state").querySelector("p").textContent = "No SPT subjects match this year, status, and filter.";
     document.querySelector(".page-foot > span:last-child").innerHTML = '<kbd>Click</kbd> dropdown <kbd>F2</kbd> edit <kbd>Drag</kbd> fill checks <kbd>?</kbd> shortcuts';
-    byId("column-dialog").querySelector(".form-hint").textContent = "Leadership manages columns. Assigned Tax PICs and named assistants can edit their own subject rows.";
-    byId("column-dialog").querySelector(".dialog-head p").textContent = "Appears before Notes in every year and milestone view. Each SPT subject keeps its own value.";
   }
   function buildWorkbook(XLSX, snapshot) {
     const rows = [...snapshot.rows].sort((a, b) => a.clientName.localeCompare(b.clientName));
