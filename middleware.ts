@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isPublicUiAsset } from "./lib/public-ui-assets";
 
 type CookieMutation = {
   name: string;
@@ -9,6 +10,7 @@ type CookieMutation = {
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
+  if (isPublicUiAsset(request.nextUrl.pathname, request.method)) return response;
   // The handler authenticates this exact scheduler route with CRON_SECRET.
   if (["/api/maintenance/purge-deleted", "/api/maintenance/deliver-notifications"].includes(request.nextUrl.pathname)) return response;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -3565,9 +3565,29 @@
     @media(max-width:700px) { .annual-plan-grid { grid-template-columns:1fr; } .annual-plan-head { display:block; } }
     @media(max-width:700px) { .annual-compact-table summary { grid-template-columns:16px minmax(0,1fr) 72px; } .annual-compact-table summary .annual-compact-extra { display:none; } .annual-months { grid-template-columns:repeat(6,minmax(0,1fr)); } }
   </style>
-  <link rel="stylesheet" href="startup-orbit.css?v=3" />
+  <style>
+    .app-loading-overlay.initial-load{z-index:1100;background:rgba(242,240,234,.78);backdrop-filter:blur(10px)}
+    .app-loading-overlay:not(.visible){display:none}
+    .app-loading-card{display:grid;justify-items:center;gap:14px;background:transparent;box-shadow:none;color:#35575d;font-size:13px;font-weight:400}
+    .app-loading-card strong{font-weight:400}
+    .workspace-bars{display:flex;align-items:flex-end;gap:5px;height:30px}
+    .workspace-bars i{display:block;width:5px;height:12px;border-radius:2px;background:#0891a6;transform-origin:bottom;animation:workspace-pulse 1.1s ease-in-out infinite}
+    .workspace-bars i:nth-child(2){height:18px;animation-delay:120ms}.workspace-bars i:nth-child(3){height:24px;animation-delay:240ms}.workspace-bars i:nth-child(4){height:30px;animation-delay:360ms}
+    @keyframes workspace-pulse{0%,100%{transform:scaleY(.6);opacity:.45}50%{transform:scaleY(1);opacity:1}}
+    @media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}
+  </style>
 </head>
 <body>
+  <div class="app-loading-overlay visible initial-load" id="app-loading-overlay" role="status" aria-live="polite" aria-busy="true">
+    <div class="app-loading-card"><span class="workspace-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><strong id="app-loading-message">Loading secure workspace...</strong><noscript>JavaScript is required to open this workspace.</noscript></div>
+  </div>
+  <script data-workspace-boot>
+    (() => {
+      const notify = () => { if (parent !== window) parent.postMessage({ type: "dashboard:mounted" }, location.protocol === "file:" ? "*" : location.origin); };
+      window.addEventListener("message", event => { if (event.origin === location.origin && event.source === parent && event.data?.type === "workspace:status") notify(); });
+      notify();
+    })();
+  </script>
   <div class="shell">
     <aside class="sidebar">
       <div>
@@ -3655,11 +3675,7 @@
   <div id="fame-announcement-root"></div>
   <div id="announcement-inbox-root"></div>
   <div id="appearance-settings-root"></div>
-  <div class="app-loading-overlay visible initial-load" id="app-loading-overlay" aria-live="polite" aria-busy="true">
-    <div class="app-loading-card"><div class="startup-orbit" aria-hidden="true"><img src="favicon.svg" alt="" /></div><strong id="app-loading-message">Loading secure workspace...</strong></div>
-  </div>
-
-  <link rel="stylesheet" href="client-overview.css" />
+  <link rel="stylesheet" href="client-overview.css" media="print" onload="this.media='all'" />
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
@@ -12864,19 +12880,11 @@
       databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Client Master loaded from the database." };
       rerender();
       persistDemoState();
-      // Data is ready: unlock immediately while the portal fades out.
+      // Never add animation time to a confirmed database load.
       const finishStartup = () => {
         startupOverlay?.classList.remove("visible", "initial-load", "is-entering");
       };
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        finishStartup();
-      } else {
-        startupOverlay?.classList.add("is-entering");
-        startupOverlay?.addEventListener("animationend", (event) => {
-          if (event.target === startupOverlay) finishStartup();
-        });
-        window.setTimeout(finishStartup, 550);
-      }
+      finishStartup();
       startupOverlay?.setAttribute("aria-busy", "false");
       const remainingLoads = [];
       if (initialView === "client-view") {

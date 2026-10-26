@@ -26,6 +26,29 @@ the user returns to the tab. No browser fullscreen permission is required.
 
 ## Loading And Refresh
 
+The Next shell, dashboard HTML and annual sheets use the same small CSS-only cyan
+bar animation. Critical loader styles and markup ship in the initial HTML; no
+logo image or external animation stylesheet is needed. Annual sheet styles load
+without blocking first paint. The sheet stays hidden until both its styles and
+authenticated initial data are ready, with no minimum animation time or exit
+delay. Style/data failures stay visible rather than exposing sample or unstyled
+content. No migration is required for this loading change.
+
+An iframe parent covers the navigation gap, then hands over to the child's own
+initial loader using a source/origin-checked mounted message. A status handshake
+also handles listeners installed after that first message. Iframe `load` alone
+does not release the parent cover or signal database readiness. Background reads
+do not restore the initial loader.
+
+Reviewed public UI assets (exact paths in `lib/public-ui-assets.ts`) skip Supabase
+middleware calls on GET/HEAD, avoiding repeated session/profile round trips for
+CSS, data-free JavaScript and the favicon. HTML pages, renderers with embedded
+client/staff demo fixtures, downloads and all data/API routes still pass through
+the existing authentication, active-staff and account checks.
+There is no generic file-extension bypass and no cached authorization. This is
+consistent with the [Supabase SSR guidance](https://supabase.com/docs/guides/auth/server-side/creating-a-client?queryGroups=framework&framework=nextjs)
+to avoid running session middleware on routes that do not access Supabase.
+
 Initial loading still waits for authenticated database data and never shows demo
 records. Client Master candidates are fetched only when Accounting's Generate
 Clients dialog is opened; Tax does not query Client Master for its subject sheet.

@@ -1,17 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="sheet-booting">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Annual Accounting Sheet | LMATS Consulting</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./annual-accounting-sheet-demo.css" />
+  <style>
+    .sheet-booting .workbook{visibility:hidden}
+    .sheet-loading[hidden]{display:none!important}
+    #sheet-loading{position:fixed;inset:0;z-index:100;display:grid;place-content:center;justify-items:center;gap:14px;padding:24px;background:rgba(242,240,234,.78);backdrop-filter:blur(10px);color:#35575d;font:13px "Segoe UI",sans-serif;text-align:center}
+    .workspace-bars{display:flex;align-items:flex-end;gap:5px;height:30px}
+    .workspace-bars i{display:block;width:5px;height:12px;border-radius:2px;background:#0891a6;transform-origin:bottom;animation:workspace-pulse 1.1s ease-in-out infinite}
+    .workspace-bars i:nth-child(2){height:18px;animation-delay:120ms}.workspace-bars i:nth-child(3){height:24px;animation-delay:240ms}.workspace-bars i:nth-child(4){height:30px;animation-delay:360ms}
+    @keyframes workspace-pulse{0%,100%{transform:scaleY(.6);opacity:.45}50%{transform:scaleY(1);opacity:1}}
+    @media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}
+  </style>
+  <link id="sheet-styles" rel="stylesheet" href="./annual-accounting-sheet-demo.css" media="print" onload="this.media='all';this.dataset.ready='true';window.dispatchEvent(new Event('sheet-styles-ready'))" onerror="this.dataset.failed='true';window.dispatchEvent(new Event('sheet-styles-error'))" />
+  <noscript><style>.sheet-booting .workbook{display:none}</style></noscript>
   <script src="./annual-tax-sheet-config.js" defer></script>
   <script src="./annual-sheet-live.js" defer></script>
   <script src="./annual-accounting-sheet-demo.js" defer></script>
 </head>
 <body>
-  <div id="sheet-loading" class="sheet-loading" role="status" hidden>Loading annual workspace...</div>
+  <div id="sheet-loading" class="sheet-loading" role="status" aria-live="polite" aria-busy="true"><span class="workspace-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Loading annual workspace...</span><noscript>JavaScript is required to open this workspace.</noscript></div>
+  <script data-workspace-boot>
+    (() => {
+      const notify = () => { if (parent !== window) parent.postMessage({ type: "annual-sheet:mounted", team: new URLSearchParams(location.search).get("team") === "tax" ? "tax" : "accounting" }, location.protocol === "file:" ? "*" : location.origin); };
+      window.addEventListener("message", event => { if (event.origin === location.origin && event.source === parent && event.data?.type === "workspace:status") notify(); });
+      notify();
+    })();
+  </script>
   <main class="workbook">
     <header class="page-head">
       <div class="identity"><img src="./favicon.svg" alt="" /><div><span class="eyebrow">LMATS CONSULTING / OPERATIONS</span><h1>Annual accounting<span class="title-dot">.</span></h1></div></div>

@@ -45,7 +45,7 @@ test("initial annual load skips Client Master and lazy generation reads only cur
   assert.equal(legacy.body.clients.length, 1, "older open tabs must retain their legacy initial candidates until reloaded");
 });
 
-async function openRefreshFixture() {
+async function openRefreshFixture({ holdInitial = false, stylesReady = false } = {}) {
   const { route, db } = setup();
   const dom = new JSDOM(readFileSync(new URL("../public/annual-accounting-sheet-demo.html", import.meta.url), "utf8"), { runScripts: "outside-only", url: "http://localhost/annual-accounting-sheet-demo.html?live=1&account=auth-user-1" });
   const w = dom.window as any;
@@ -53,7 +53,8 @@ async function openRefreshFixture() {
   w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   w.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   Object.defineProperty(w.document, "hidden", { value: false });
-  let clock = 1000000, holdRead = false, releaseRead: (() => void) | undefined, failure = 0;
+  if (stylesReady) w.document.getElementById("sheet-styles").dataset.ready = "true";
+  let clock = 1000000, holdRead = holdInitial, releaseRead: (() => void) | undefined, failure = 0;
   w.Date.now = () => clock;
   const requests: string[] = [];
   w.fetch = async (url: string, options: any) => {
@@ -76,6 +77,51 @@ async function openRefreshFixture() {
     focus() { w.dispatchEvent(new w.Event("focus")); w.document.dispatchEvent(new w.Event("visibilitychange")); }
   };
 }
+
+test("annual startup waits for confirmed data and stylesheet readiness without an extra animation delay", async () => {
+  const d = await openRefreshFixture();
+  try {
+    const root = d.w.document.documentElement, overlay = d.w.document.getElementById("sheet-loading");
+    assert.equal(d.api.state.rows.length, 1, "database data has arrived");
+    assert.equal(root.classList.contains("sheet-booting"), true, "do not expose an unstyled sheet");
+    assert.equal(overlay.hidden, false);
+    const styles = d.w.document.getElementById("sheet-styles");
+    d.w.Function(styles.getAttribute("onload")).call(styles);
+    assert.equal(styles.media, "all");
+    assert.equal(root.classList.contains("sheet-booting"), false);
+    assert.equal(overlay.hidden, true, "no timer or animation is required to unlock");
+    d.advance(); d.focus(); await d.tick();
+    assert.equal(overlay.hidden, true, "background refresh must not bring back a loading screen");
+    d.advance(); d.fail(403); d.focus(); await d.tick();
+    d.w.dispatchEvent(new d.w.Event("sheet-styles-ready"));
+    assert.equal(overlay.hidden, false, "stylesheet events cannot clear an access error");
+  } finally { d.dom.window.close(); }
+});
+
+test("fast annual styles never dismiss the loader before authenticated data arrives", async () => {
+  const d = await openRefreshFixture({ holdInitial: true, stylesReady: true });
+  try {
+    const overlay = d.w.document.getElementById("sheet-loading");
+    assert.equal(d.api.state.rows.length, 0);
+    assert.equal(overlay.hidden, false);
+    assert.equal(d.w.document.documentElement.classList.contains("sheet-booting"), true);
+    d.release(); await d.tick();
+    assert.equal(d.api.state.rows.length, 1);
+    assert.equal(overlay.hidden, true);
+    assert.equal(d.w.document.documentElement.classList.contains("sheet-booting"), false);
+  } finally { d.dom.window.close(); }
+});
+
+test("stylesheet failures remain visible instead of exposing an unstyled annual workspace", async () => {
+  const d = await openRefreshFixture();
+  try {
+    const styles = d.w.document.getElementById("sheet-styles");
+    d.w.Function(styles.getAttribute("onerror")).call(styles);
+    assert.equal(d.w.document.getElementById("sheet-loading").hidden, false);
+    assert.match(d.w.document.getElementById("sheet-loading").textContent, /styles could not be loaded/);
+    assert.equal(d.w.document.documentElement.classList.contains("sheet-booting"), true);
+  } finally { d.dom.window.close(); }
+});
 
 test("tab refresh is throttled, never locks confirmed cells and leaves unchanged grid DOM intact", async () => {
   const d = await openRefreshFixture();
@@ -269,6 +315,16 @@ test("production dashboard keeps live frames stable, ignores untrusted messages 
     const state = { currentView: "matrix-view", operationsMode: "annual", annualTeam: "accounting", role: "staff" };
     api.render(root, state);
     const frame = w.document.querySelector("iframe"); assert.match(frame.src, /embedded=1&live=1$/);
+    const loading = frame.parentElement.querySelector(".annual-sheet-loading");
+    assert.ok(loading, "show a cover before the iframe HTML arrives");
+    const mounted = { type: "annual-sheet:mounted", team: "accounting" };
+    frame.dispatchEvent(new w.Event("load"));
+    assert.equal(loading.isConnected, true, "iframe load alone does not prove its loader is visible");
+    w.dispatchEvent(new w.MessageEvent("message", { origin: "http://evil.example", source: frame.contentWindow, data: mounted }));
+    w.dispatchEvent(new w.MessageEvent("message", { origin: "http://localhost", source: w, data: mounted }));
+    assert.equal(loading.isConnected, true);
+    w.dispatchEvent(new w.MessageEvent("message", { origin: "http://localhost", source: frame.contentWindow, data: mounted }));
+    assert.equal(loading.isConnected, false, "hand over to the child loader, including its retry/access errors");
     api.syncVisibility({ ...state, currentView: "my-work-view" }); assert.equal(frame.parentElement.hidden, true);
     api.render(root, state); assert.equal(w.document.querySelector("iframe"), frame);
     const data = { type: "annual-sheet:state", team: "accounting", saved: true, actorId: "supervisor-demo" };

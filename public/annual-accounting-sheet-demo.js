@@ -905,7 +905,7 @@
         if (!data || epoch !== liveEpoch || liveBusy) return;
         if (!initial && liveSnapshot(data) === lastLiveSnapshot) return;
         if (!initial && interactingWithSheet()) { deferredRefresh = { data, epoch, checkedAt: Date.now() }; return; }
-        applyLiveContext(data); render(); overlay.hidden = true;
+        applyLiveContext(data); render(); finishSheetStartup();
         $("save-status").textContent = "Connected. Changes are confirmed by the database before appearing here.";
       } catch (error) {
         if (epoch !== liveEpoch || error.name === "AbortError") return;
@@ -924,7 +924,23 @@
   if (!liveMode && !$("year-select").querySelector(`option[value="${state.year}"]`) && ![...$("year-select").options].some(option => Number(option.value) === state.year)) { const option = document.createElement("option"); option.value = state.year; option.textContent = state.year || "Year not set"; $("year-select").append(option); $("year-select").value = String(state.year); }
   $("fullscreen-team-tabs").hidden = !fullScreenMode;
   $("fullscreen-button").hidden = fullScreenMode;
+  // CSS is non-blocking so the initial loader can paint while assets and data arrive.
+  function finishSheetStartup() {
+    if (liveMode && !liveReady) return;
+    if ($("sheet-styles").dataset.ready !== "true") return;
+    document.documentElement.classList.remove("sheet-booting");
+    $("sheet-loading").hidden = true;
+    $("sheet-loading").setAttribute("aria-busy", "false");
+  }
+  function sheetStylesFailed() {
+    $("sheet-loading").hidden = false;
+    $("sheet-loading").textContent = "Workspace styles could not be loaded. Reload the page to retry.";
+  }
+  window.addEventListener("sheet-styles-ready", finishSheetStartup);
+  window.addEventListener("sheet-styles-error", sheetStylesFailed);
   render();
+  if ($("sheet-styles").dataset.failed === "true") sheetStylesFailed();
+  else finishSheetStartup();
   if (liveMode) {
     document.documentElement.classList.add("sheet-live");
     $("reset-demo").textContent = "Refresh";
