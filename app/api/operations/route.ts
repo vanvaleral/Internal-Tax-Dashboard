@@ -79,7 +79,7 @@ export async function GET(request: Request) {
   if (scope && scopes.has(scope)) query = query.eq("scope", scope);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (isLeadership(actor.profile.role)) return NextResponse.json({ data: data || [] });
+  if (isLeadership(actor.profile.role)) return NextResponse.json({ data: (data || []).map(row => ({ ...row, payload: scopedWorkspace(row.scope, row.payload, new Set(), actor.profile.id, true) })) });
   const { data: clients, error: clientsError } = await actor.admin.from("client_master").select("id, client_code, legal_name").or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
   if (clientsError) return NextResponse.json({ error: clientsError.message }, { status: 500 });
   const allowed = new Set((clients || []).flatMap((client) => [client.id, client.client_code, client.legal_name]));
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       .select("payload, version").eq("scope", "annual_accounting").maybeSingle();
     if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
     const rows = Array.isArray(current?.payload) ? current.payload as Record<string, any>[] : [];
-    const existing = new Set(rows.filter(row => Number(row.taxYear) === year && row.clientId).map(row => String(row.clientId)));
+    const existing = new Set(rows.filter(row => !row.deletedAt && Number(row.taxYear) === year && row.clientId).map(row => String(row.clientId)));
     const candidates = eligible.filter(client => !existing.has(String(client.id)));
     if (body.action === "preview-annual-accounting") return NextResponse.json({ year, assigned: eligible.length, alreadyGenerated: eligible.length - candidates.length, clients: candidates.map(client => ({ id: client.id, name: client.legal_name, accountingPic: client.accounting_pic_name || "", taxPic: client.tax_pic_name || "" })) });
     if (!candidates.length) return NextResponse.json({ year, created: 0, alreadyGenerated: eligible.length });

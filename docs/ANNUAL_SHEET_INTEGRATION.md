@@ -24,6 +24,41 @@ and the account binding are carried over; embedded mode and demo actor switching
 are not. Navigation waits for active saves, and visible idle sheets refresh when
 the user returns to the tab. No browser fullscreen permission is required.
 
+## Loading And Refresh
+
+Initial loading still waits for authenticated database data and never shows demo
+records. Client Master candidates are fetched only when Accounting's Generate
+Clients dialog is opened; Tax does not query Client Master for its subject sheet.
+Candidate reads are rechecked for the current active ACC assignments. API responses
+include Server-Timing for authentication and data-query duration, to help separate
+application/database time from browser/network/platform startup time.
+
+Returning to a tab or team uses a background refresh, not the save-lock state.
+Automatic reads are coalesced and limited to once per 30 seconds per sheet; the
+Refresh button bypasses that interval. Confirmed cells remain usable, and unchanged
+responses do not rebuild the grid. Changed responses wait while a cell, formula
+field, slider, dropdown or dialog is being edited. Starting a save cancels and
+invalidates older reads, including their transport cache, so a late response cannot
+replace a newer confirmed save. Temporary refresh failures retain the last confirmed
+data; detected authentication/account/access errors clear and lock the sheet.
+
+No role or write authorization is cached server-side. Every save still authenticates
+and validates current PIC ownership and field baselines, and only appears in the
+sheet after database confirmation. Automatic refresh throttling is not a guarantee
+of a specific live load time; deployed latency must be measured separately.
+
+Clicking a spreadsheet row number opens **Delete Row**. Deletion requires a
+confirmation and is available only to that team's primary PIC or leadership;
+assistance permission alone does not allow deletion. This is a recoverable delete:
+the row, its ID, values, and audit history remain in the workspace JSON, with the
+deleting actor and timestamp. Client Master and the other annual team are never
+modified. The **Deleted** tab is read-only and its row-number menu offers
+**Restore Row**. Deleted rows are excluded from active totals, exports, management
+workspaces and future-year suggestions. The selected client-year may be generated
+again; restoring its older deleted row is blocked if an active duplicate exists.
+Deleting/restoring clears cell undo history; use Deleted/Restore for recovery.
+No additional migration or automatic permanent purge is required.
+
 ## Persistence And Permissions
 
 - Existing `operational_workspace_state` arrays remain authoritative. IDs and

@@ -12,6 +12,16 @@
 .view-tabs button,.view-tabs button[aria-selected=true]{font-weight:600}
 .view-tabs{flex-shrink:0}
 .add-client-actions{position:relative}
+.row-number-action{display:grid;place-items:center;width:100%;height:100%;padding:0;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.row-number-action:hover:not(:disabled),.row-number-action[aria-expanded=true]{background:#dcedea;color:#087f8d;font-weight:700}
+.annual-row-menu{position:fixed;z-index:40;min-width:180px;padding:5px;border:1px solid #cbdedb;border-radius:7px;background:#fff;box-shadow:0 8px 24px #20323b26}
+.annual-row-menu>button{display:flex;align-items:center;gap:8px;width:100%;padding:9px 10px;border-radius:4px;background:transparent;text-align:left;font-size:12px}
+.annual-row-menu>button:hover:not(:disabled){background:#edf5f3}
+.annual-row-menu>button.is-delete{color:#a63e36}
+.annual-row-menu>button.is-delete:hover:not(:disabled){background:#fff0ed}
+.danger{background:#ad4038;color:#fff}
+.danger:hover{background:#92352e}
+#delete-row-name{font-weight:600;color:var(--ink);margin-bottom:10px}
 .add-client-actions>.button>svg{width:14px;height:14px}
 .add-client-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:20;min-width:190px;padding:5px;border:1px solid #cbdedb;border-radius:8px;background:#fff;box-shadow:0 8px 24px #20323b21}
 .add-client-menu>button{display:block;width:100%;padding:10px 12px;border-radius:4px;background:transparent;text-align:left;font-size:12px;white-space:nowrap}

@@ -21,6 +21,9 @@ function profileId(row: Row, team: AnnualTeam, staff: Row[]) {
 export function annualCanEdit(row: Row, team: AnnualTeam, actor: Row, staff: Row[]) {
   return isLeadership(actor.role) || profileId(row, team, staff) === actor.id || (Array.isArray(row.assistantProfileIds) && row.assistantProfileIds.includes(actor.id));
 }
+export function annualCanManage(row: Row, team: AnnualTeam, actor: Row, staff: Row[]) {
+  return isLeadership(actor.role) || profileId(row, team, staff) === actor.id;
+}
 export function annualCanRead(row: Row, actor: Row, staff: Row[]) {
   return annualCanEdit(row, "accounting", actor, staff) || annualCanEdit(row, "tax", actor, staff);
 }
@@ -44,7 +47,7 @@ export function annualToSheet(row: Row, team: AnnualTeam, staff: Row[], columns:
     accountingPic: assignedName(accId, row.accountingPic || row.reportPic), accountingPicId: accId,
     taxPic: assignedName(taxId, row.taxPic), taxPicId: taxId, assistantIds: row.assistantProfileIds || [],
     progress: text(row.progress) || (row.reported || Number(row.laporCount) > 0 ? "Reported" : "Data Request"), deadline: date(row.deadline),
-    notes: text(row.notes), ntpe: text(row.ntpe), progressBeforeNtpe: text(row.progressBeforeNtpe)
+    notes: text(row.notes), ntpe: text(row.ntpe), progressBeforeNtpe: text(row.progressBeforeNtpe), deletedAt: text(row.deletedAt), deletedByProfileId: text(row.deletedByProfileId)
   };
   if (team === "accounting") {
     monthFields.forEach(field => { output[field] = Array.isArray(row[field]) ? row[field] : []; });
@@ -93,6 +96,7 @@ export function applyAnnualEdits(stored: Row[], edits: Row[], team: AnnualTeam, 
     seen.add(edit.id);
     const raw = rows.find(row => String(row.id || row.annualWorkId) === edit.id);
     if (!raw || !annualCanEdit(raw, team, actor, staff)) throw new Error("You cannot edit this annual work row.");
+    if (raw.deletedAt) throw new Error("Deleted rows cannot be edited. Restore the row first.");
     const previous = annualToSheet(raw, team, staff, columns), next = structuredClone(previous), fields = Object.keys(edit.changes);
     if (!fields.length) continue;
     for (const field of fields) {
@@ -139,7 +143,7 @@ export function applyAnnualEdits(stored: Row[], edits: Row[], team: AnnualTeam, 
   for (const edit of edits.filter(item => Object.hasOwn(item.changes, "year"))) {
     const row = rows.find(item => String(item.id || item.annualWorkId) === edit.id)!;
     const key = team === "accounting" ? row.clientId : row.subjectId || row.annualWorkId || row.id;
-    if (key && rows.some(other => other !== row && (team === "accounting" ? other.clientId : other.subjectId || other.annualWorkId || other.id) === key && Number(other.taxYear || other.year) === row.taxYear)) throw new Error("This client/subject already has work for that year.");
+    if (key && rows.some(other => !other.deletedAt && other !== row && (team === "accounting" ? other.clientId : other.subjectId || other.annualWorkId || other.id) === key && Number(other.taxYear || other.year) === row.taxYear)) throw new Error("This client/subject already has work for that year.");
   }
   return rows;
 }
@@ -155,7 +159,7 @@ export function addAnnualRows(stored: Row[], creates: Row[], team: AnnualTeam, a
     if (team === "accounting" && input.clientId) {
       const client = clients.find(item => item.id === input.clientId && item.status === "Active");
       if (!client?.accounting_pic_profile_id || !isLeadership(actor.role) && client.accounting_pic_profile_id !== actor.id) throw new Error("This client is not eligible for your annual accounting workload.");
-      if (rows.some(row => row.clientId === client.id && Number(row.taxYear || row.year) === input.year)) continue;
+      if (rows.some(row => !row.deletedAt && row.clientId === client.id && Number(row.taxYear || row.year) === input.year)) continue;
       clientId = client.id; contractType = "Contract";
       assignedAccId = client.accounting_pic_profile_id; assignedTaxId = client.tax_pic_profile_id || "";
       accName = label(staff.find(person => person.id === assignedAccId) || {}) || text(client.accounting_pic_name);
@@ -182,12 +186,28 @@ export function addAnnualRows(stored: Row[], creates: Row[], team: AnnualTeam, a
     if (team === "accounting") monthFields.forEach(field => { raw[field] = []; });
     else {
       validateField("subjectType", input.subjectType || "Individual", team, []);
-      const prior = input.subjectId && rows.find(row => String(row.subjectId || row.annualWorkId || row.id) === input.subjectId && Number(row.taxYear || row.year) < input.year && annualCanRead(row, actor, staff));
+      const prior = input.subjectId && rows.find(row => String(row.subjectId || row.annualWorkId || row.id) === input.subjectId && Number(row.taxYear || row.year) <= input.year && annualCanRead(row, actor, staff));
       raw.subjectId = prior ? input.subjectId : input.id;
-      if (rows.some(row => String(row.subjectId || row.annualWorkId || row.id) === raw.subjectId && Number(row.taxYear || row.year) === input.year)) continue;
+      if (rows.some(row => !row.deletedAt && String(row.subjectId || row.annualWorkId || row.id) === raw.subjectId && Number(row.taxYear || row.year) === input.year)) continue;
       Object.assign(raw, { subjectType: input.subjectType || "Individual", groupName: text(input.groupName), recordMethod: input.recordMethod === "Pembukuan" ? "Pembukuan" : "Pencatatan", documents: [], preparation: [], filing: [], laporDate: "", paymentDate: "", paymentNtpn: "", reportPic: accName, reportPicProfileId: raw.accountingPicProfileId });
     }
     rows.push(raw);
   }
+  return rows;
+}
+
+export function manageAnnualRow(stored: Row[], id: string, before: Row, restore: boolean, team: AnnualTeam, actor: Row, staff: Row[], columns: AnnualColumn[]) {
+  const rows = structuredClone(stored), row = rows.find(item => String(item.id || item.annualWorkId) === id);
+  if (!row || !annualCanManage(row, team, actor, staff)) throw new Error(`You cannot ${restore ? "restore" : "delete"} this annual work row.`);
+  const current = annualToSheet(row, team, staff, columns);
+  if (!before || typeof before !== "object" || Object.keys(current).some(field => !Object.hasOwn(before, field) || !equal(before[field], current[field]))) throw new Error("CONFLICT: This annual row changed. Review the latest data before deleting or restoring it.");
+  if (restore !== Boolean(row.deletedAt)) throw new Error(restore ? "This annual row is already active." : "This annual row is already deleted.");
+  if (restore && current.year) {
+    const key = team === "accounting" ? row.clientId : current.subjectId;
+    if (key && rows.some(other => other !== row && !other.deletedAt && Number(other.taxYear || other.year) === current.year && (team === "accounting" ? other.clientId : String(other.subjectId || other.annualWorkId || other.id)) === key)) throw new Error("CONFLICT: An active row already exists for this client or subject and year. Review that row before restoring.");
+  }
+  const at = new Date().toISOString();
+  row.changeLog = [...(Array.isArray(row.changeLog) ? row.changeLog : []), { action: restore ? "annual_row_restored" : "annual_row_deleted", byProfileId: actor.id, at, before: { deletedAt: row.deletedAt || "", deletedByProfileId: row.deletedByProfileId || "" }, after: { deletedAt: restore ? "" : at, deletedByProfileId: restore ? "" : actor.id } }];
+  row.deletedAt = restore ? "" : at; row.deletedByProfileId = restore ? "" : actor.id;
   return rows;
 }

@@ -71,6 +71,58 @@ test("Full Screen opens a standalone new tab retaining team, year, filters and s
   } finally { d.dom.window.close(); }
 });
 
+test("row numbers open delete actions for both teams, confirm removal, preserve data and restore from Deleted", () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = loadDemo(team);
+    try {
+      const row = d.api.visible[0], id = row.id, original = JSON.stringify(row);
+      const count = d.api.visible.length, activeCount = d.w.document.getElementById("metric-total").textContent;
+      const trigger = () => [...d.w.document.querySelectorAll("[data-row-actions]")].find((button: any) => button.dataset.rowActions === id);
+      trigger().click();
+      assert.equal(d.w.document.getElementById("row-actions-menu").hidden, false);
+      assert.equal(d.w.document.getElementById("manage-row-button").textContent, "Delete Row");
+      d.w.document.getElementById("manage-row-button").click();
+      assert.equal(d.w.document.getElementById("delete-row-dialog").open, true);
+      assert.match(d.w.document.getElementById("delete-row-name").textContent, new RegExp(row.clientName));
+      assert.equal(d.api.visible.length, count, "opening confirmation must not delete anything");
+      d.w.document.querySelector('[data-close="delete-row-dialog"]').click();
+      assert.equal(d.api.visible.length, count);
+      trigger().click(); d.w.document.getElementById("manage-row-button").click(); d.w.document.getElementById("confirm-delete-row").click();
+      assert.equal(d.api.state.rows.some((item: any) => item.id === id), true);
+      assert.equal(d.api.visible.some((item: any) => item.id === id), false);
+      assert.equal(d.w.document.getElementById("deleted-count").textContent, "1");
+      assert.equal(Number(d.w.document.getElementById("metric-total").textContent), Number(activeCount) - 1);
+      const workbook = d.api.buildExportWorkbook(XLSX, { year: 2025, rows: d.api.state.rows.filter((item: any) => item.year === 2025), customColumns: [] });
+      const exportRows = XLSX.utils.sheet_to_json<Record<string, any>>(workbook.Sheets.Summary, { range: 4 });
+      assert.equal(exportRows.length, Number(activeCount) - 1);
+      assert.equal(exportRows.some(item => item["Annual Work ID"] === id), false);
+      d.w.document.querySelector('[data-status="deleted"]').click();
+      assert.equal(d.api.visible[0].id, id); assert.equal(d.api.canEdit(d.api.visible[0], d.api.columns.find((col: any) => col.field === "notes")), false);
+      assert.equal(d.w.document.getElementById("export-button").disabled, true);
+      trigger().click(); d.w.document.getElementById("manage-row-button").click();
+      assert.equal(d.w.document.getElementById("deleted-count").textContent, "0");
+      const restored = d.api.state.rows.find((item: any) => item.id === id);
+      const { deletedAt, deletedByProfileId, ...data } = restored;
+      assert.equal(JSON.stringify(data), original);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("non-PIC and assistant row-number menus cannot delete, and Escape returns focus", () => {
+  const d = loadDemo();
+  try {
+    d.actAs("acc-cemari");
+    const row = d.api.visible.find((item: any) => item.assistantIds.includes("acc-cemari"));
+    const button = [...d.w.document.querySelectorAll("[data-row-actions]")].find((item: any) => item.dataset.rowActions === row.id);
+    button.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    assert.equal(d.w.document.getElementById("manage-row-button").disabled, true);
+    assert.equal(d.api.canEdit(row, d.api.columns.find((col: any) => col.field === "notes")), true, "assistance edit permission must not imply deletion permission");
+    d.w.document.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(d.w.document.getElementById("row-actions-menu").hidden, true);
+    assert.equal(d.w.document.activeElement, button);
+  } finally { d.dom.window.close(); }
+});
+
 test("Accounting column titles are centered with distinct group colors that survive sorting", () => {
   const d = loadDemo();
   try {

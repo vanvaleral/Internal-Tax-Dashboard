@@ -65,7 +65,7 @@
   }
   function priorCandidates(state) {
     const latest = new Map();
-    state.rows.filter(row => row.year < state.year).forEach(row => { const previous = latest.get(row.subjectId); if (!previous || previous.year < row.year) latest.set(row.subjectId, row); });
+    state.rows.filter(row => !row.deletedAt && row.year < state.year).forEach(row => { const previous = latest.get(row.subjectId); if (!previous || previous.year < row.year) latest.set(row.subjectId, row); });
     return [...latest.values()].map(row => ({ clientId: row.subjectId, subjectId: row.subjectId, linkedClientId: row.clientId, name: row.clientName, subjectType: row.subjectType, groupName: row.groupName, recordMethod: row.recordMethod, taxPic: row.taxPic, accountingPic: row.accountingPic }));
   }
   function configureUI(document) {
@@ -92,7 +92,7 @@
     document.querySelector(".page-foot > span:last-child").innerHTML = '<kbd>Click</kbd> dropdown <kbd>F2</kbd> edit <kbd>Drag</kbd> fill checks <kbd>?</kbd> shortcuts';
   }
   function buildWorkbook(XLSX, snapshot) {
-    const rows = [...snapshot.rows].sort((a, b) => a.clientName.localeCompare(b.clientName));
+    const rows = snapshot.rows.filter(row => !row.deletedAt).sort((a, b) => a.clientName.localeCompare(b.clientName));
     const extra = snapshot.customColumns, date = value => value ? new Date(`${value}T00:00:00Z`) : "";
     const done = row => ["Reported", "Done"].includes(row.progress) && !completionError(row);
     const fields = ["SPT subject", "Type", "Linked client / group", "Tax PIC", "ACC PIC", "Completion", "Progress", ...controls.map(control => `${control.title} (checks)`), "Tax payable (Rp)", "Payment date", "NTPN", "Filing date", "NTPE / receipt", "Internal deadline", ...extra.map(col => col.title), "Notes", "Subject ID", "Annual Work ID"];

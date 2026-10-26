@@ -39,6 +39,7 @@ export function canAccessMonthlyRow(row: Row, profileId: string, allowed: Set<st
 }
 
 export function scopedWorkspace(scope: string, payload: any, allowed: Set<string>, profileId: string, leadership: boolean): any {
+  if (scope !== "monthly_compliance" && Array.isArray(payload)) payload = payload.filter(row => !row?.deletedAt);
   if (leadership) return payload;
   const filter = (rows: any) => Array.isArray(rows) ? rows.filter(row => row && typeof row === "object" && (scope === "monthly_compliance" ? canAccessMonthlyRow(row, profileId, allowed) : canAccessAnnualRow(row, profileId, allowed))) : [];
   return redactFees(scope === "monthly_compliance"

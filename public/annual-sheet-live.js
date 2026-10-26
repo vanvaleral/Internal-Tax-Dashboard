@@ -4,19 +4,35 @@
   if (new URLSearchParams(location.search).get("live") !== "1") return;
   const team = new URLSearchParams(location.search).get("team") === "tax" ? "tax" : "accounting";
   const expectedUserId = new URLSearchParams(location.search).get("account") || "";
-  let context = null, undoStack = [], redoStack = [];
+  let context = null, undoStack = [], redoStack = [], revision = 0, readPromise = null, readController = null, clientsPromise = null;
   const equal = (a, b) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
-  async function request(body) {
-    const response = await fetch(`/api/annual-sheet${body ? "" : `?team=${team}`}`, {
+  function cancelLoad() { revision++; readController?.abort(); readController = null; readPromise = null; }
+  async function request(body, options = {}) {
+    if (body) cancelLoad();
+    const response = await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}`}`, {
       method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
       headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(context?.userId || expectedUserId ? { "x-workspace-user": context?.userId || expectedUserId } : {}) },
-      ...(body ? { body: JSON.stringify({ ...body, team }) } : {})
+      ...(body ? { body: JSON.stringify({ ...body, team }) } : {}),
+      ...(options.signal ? { signal: options.signal } : {})
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Annual work could not be saved. Reload and retry.");
+    if (options.readRevision !== undefined && options.readRevision !== revision) return null;
+    if (!response.ok) { const error = new Error(data.error || "Annual work could not be saved. Reload and retry."); error.status = response.status; throw error; }
+    if (options.clients) return data.clients || [];
     context = data;
     if (window.parent !== window) window.parent.postMessage({ type: "annual-sheet:state", team, year: data.rows?.[0]?.year || 0, version: data.version, saved: !!body }, location.origin);
     return data;
+  }
+  function load() {
+    if (readPromise) return readPromise;
+    const controller = new AbortController(); readController = controller;
+    const pending = request(undefined, { signal: controller.signal, readRevision: revision }).finally(() => { if (readPromise === pending) { readPromise = null; readController = null; } });
+    readPromise = pending; return pending;
+  }
+  function loadClients() {
+    if (clientsPromise) return clientsPromise;
+    clientsPromise = request(undefined, { clients: true }).finally(() => { clientsPromise = null; });
+    return clientsPromise;
   }
   const fields = () => ["clientName", "year", "accountingPic", "taxPic", "progress", "deadline", "notes", "ntpe", ...(team === "tax" ? ["subjectType", "groupName", "recordMethod", "documents", "preparation", "filing", "payableAmount", "paymentDate", "paymentNtpn", "filingDate"] : ["technicalAdminMonths", "dataMonths", "reportPreparationMonths", "paymentValue"]), ...(context?.columns || []).map(col => col.field)];
   function rowEdits(before, next) {
@@ -63,5 +79,10 @@
     const result = await request({ action: "commit", edits, creates: [] });
     source.pop(); (redo ? undoStack : redoStack).push(entry); return result;
   }
-  window.AnnualSheetLive = { load: () => request(), commit, undo: () => replay(false), redo: () => replay(true), get canUndo() { return !!undoStack.length; }, get canRedo() { return !!redoStack.length; }, get context() { return context; } };
+  async function manageRow(row, restore) {
+    const result = await request({ action: restore ? "restore-row" : "archive-row", rowId: row.id, before: row });
+    undoStack = []; redoStack = []; return result;
+  }
+  function clearAccess() { cancelLoad(); context = null; undoStack = []; redoStack = []; }
+  window.AnnualSheetLive = { load, cancelLoad, clearAccess, loadClients, commit, manageRow, undo: () => replay(false), redo: () => replay(true), get canUndo() { return !!undoStack.length; }, get canRedo() { return !!redoStack.length; }, get context() { return context; } };
 })();

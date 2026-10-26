@@ -5,6 +5,7 @@
   const fullScreenMode = pageParams.get("fullscreen") === "1";
   const liveMode = new URLSearchParams(location.search).get("live") === "1";
   let liveRoster = [], liveReady = false, liveBusy = false;
+  let liveEpoch = 0, lastRefreshAt = 0, refreshPromise = null, deferredRefresh = null, lastLiveSnapshot = "", generationLoading = false;
   const embeddedPreview = window.parent !== window && new URLSearchParams(location.search).get("embedded") === "1";
   const taxMode = new URLSearchParams(location.search).get("team") === "tax";
   const taxConfig = taxMode ? window.AnnualTaxSheetConfig : null;
@@ -73,24 +74,26 @@
   const state = { rows: seed(), customColumns: [], year: liveMode ? new Date().getFullYear() - 1 : 2025, view: "summary", status: "incomplete", pic: "", taxPic: "", search: "", sort: { field: "clientName", type: "text", title: taxMode ? "SPT subject" : "Client", direction: "asc" }, actorId: liveMode ? "" : "supervisor-demo", selection: { r: 0, c: 0 }, range: null, history: [], future: [] };
   const requestedYear = pageParams.get("year"), explicitYear = requestedYear !== null && /^(0|20\d{2}|2100)$/.test(requestedYear);
   if (explicitYear) state.year = Number(requestedYear);
-  if (["incomplete", "complete"].includes(pageParams.get("status"))) state.status = pageParams.get("status");
+  if (["incomplete", "complete", "deleted"].includes(pageParams.get("status"))) state.status = pageParams.get("status");
   if ((taxMode ? ["summary", "documents", "preparation", "filing", "all"] : ["summary"]).includes(pageParams.get("view"))) state.view = pageParams.get("view");
   state.pic = (pageParams.get("pic") || "").slice(0, 180); state.taxPic = (pageParams.get("taxPic") || "").slice(0, 180); state.search = (pageParams.get("search") || "").slice(0, 1000);
   let visible = [], columns = [], drag = null, editor = null, toastTimer;
   let picProgressCollapsed = true;
   let activeRange = null;
+  let rowMenuId = "", pendingRowDeletion = null;
   const viewScrollPositions = new Map();
   const done = (row) => ["Reported", "Done"].includes(row.progress) && (!taxMode || row.historicalCompletion || !taxConfig.completionError(row));
-  const yearRows = () => state.rows.filter(row => row.year === state.year);
+  const yearRows = (includeDeleted = false) => state.rows.filter(row => row.year === state.year && (includeDeleted || !row.deletedAt));
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const actor = () => actors.find(person => person.id === state.actorId);
   const isLeadership = () => ["leader", "supervisor", "partner", "admin"].includes(actor()?.role);
   const actorAccName = () => accPics.find(name => staffId(name) === state.actorId) || "";
   const actorTaxName = () => taxPics.find(name => staffId(name, "tax") === state.actorId) || "";
   const ownsRow = (row) => (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId || row.assistantIds.includes(state.actorId);
+  const canManageRow = row => row && (!liveMode ? isLeadership() || (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId : liveReady && !liveBusy && row.canManageRow);
   function canEdit(row, col) {
     if (liveMode && (!liveReady || liveBusy)) return false;
-    if (!row || !col || col.type === "summary") return false;
+    if (!row || row.deletedAt || !col || col.type === "summary") return false;
     if (taxMode && ["clientName", "subjectType", "groupName"].includes(col.field)) return isLeadership();
     if (col.field === "clientName") return isLeadership() && row.outside;
     if (["accountingPic", "taxPic", "deadline", "year"].includes(col.field)) return isLeadership();
@@ -118,12 +121,12 @@
     $("save-status").textContent = `${label}. Demo only; no database changes.`;
   }
   function undo() {
-    if (liveMode) { if (!editor && !liveBusy) saveLive(() => window.AnnualSheetLive.undo(), "Undone"); return; }
+    if (liveMode) { if (!editor && !liveBusy && window.AnnualSheetLive.canUndo) saveLive(() => window.AnnualSheetLive.undo(), "Undone"); return; }
     if (editor || !state.history.length) return;
     const previous = state.history.pop(); state.future.push({ rows: clone(state.rows), customColumns: clone(state.customColumns), label: previous.label }); state.rows = previous.rows; state.customColumns = previous.customColumns; state.range = null; render(); notify(`Undone: ${previous.label}`);
   }
   function redo() {
-    if (liveMode) { if (!editor && !liveBusy) saveLive(() => window.AnnualSheetLive.redo(), "Redone"); return; }
+    if (liveMode) { if (!editor && !liveBusy && window.AnnualSheetLive.canRedo) saveLive(() => window.AnnualSheetLive.redo(), "Redone"); return; }
     if (editor || !state.future.length) return;
     const next = state.future.pop(); state.history.push({ rows: clone(state.rows), customColumns: clone(state.customColumns), label: next.label }); state.rows = next.rows; state.customColumns = next.customColumns; state.range = null; render(); notify(`Redone: ${next.label}`);
   }
@@ -258,6 +261,7 @@
     return String(row.accountingPic || "").trim().toLowerCase() === state.pic.toLowerCase();
   }
   function render() {
+    closeRowMenu();
     const scroller = $("grid-scroll"), scrollPosition = { top: scroller.scrollTop, left: scroller.scrollLeft };
     const restoreGridFocus = document.activeElement?.closest("#annual-grid");
     const selectedRowId = visible[state.selection.r]?.id;
@@ -265,11 +269,15 @@
     if (![...buildColumns("all"), ...buildColumns("summary")].some(isSortedColumn)) state.sort = { field: "clientName", type: "text", title: taxMode ? "SPT subject" : "Client", direction: "asc" };
     const query = state.search.toLowerCase();
     const all = yearRows();
-    visible = all.filter(row => done(row) === (state.status === "complete") && matchesAccPic(row) && matchesTaxPic(row) && (!query || [row.clientName, row.groupName, row.subjectType, row.accountingPic, row.taxPic, row.notes, row.ntpe, row.progress, ...state.customColumns.map(col => row[col.field])].join(" ").toLowerCase().includes(query))).sort(compareRows);
+    visible = yearRows(true).filter(row => (state.status === "deleted" ? !!row.deletedAt : !row.deletedAt && done(row) === (state.status === "complete")) && matchesAccPic(row) && matchesTaxPic(row) && (!query || [row.clientName, row.groupName, row.subjectType, row.accountingPic, row.taxPic, row.notes, row.ntpe, row.progress, ...state.customColumns.map(col => row[col.field])].join(" ").toLowerCase().includes(query))).sort(compareRows);
     renderAccountingPicProgress(all);
     $("metric-total").textContent = all.length; $("metric-outside").textContent = taxMode ? `${all.filter(row => row.subjectType === "Individual").length} individual / ${all.filter(row => row.subjectType === "Corporate").length} corporate` : `${all.filter(row => row.outside).length} outside-contract`;
     $("metric-open").textContent = all.filter(row => !done(row)).length; $("metric-done").textContent = all.filter(done).length;
     $("incomplete-count").textContent = all.filter(row => !done(row)).length; $("complete-count").textContent = all.filter(done).length;
+    $("deleted-count").textContent = yearRows(true).filter(row => row.deletedAt).length;
+    $("empty-generate").hidden = state.status === "deleted";
+    $("empty-state").querySelector("strong").textContent = state.status === "deleted" ? "No deleted rows." : "A clear sheet, ready to work.";
+    $("empty-state").querySelector("p").textContent = state.status === "deleted" ? "Deleted annual work appears here and can be restored from its row-number menu." : `No ${taxMode ? "SPT subjects" : "clients"} match this year, status, and filter.`;
     const coverageControls = ["all", "summary"].includes(state.view) ? controls : controls.filter(control => control.field === state.view);
     const total = all.length * coverageControls.reduce((sum, control) => sum + controlItems(control).length, 0); const checked = all.reduce((sum, row) => sum + coverageControls.reduce((n, control) => n + row[control.field].length, 0), 0);
     const percent = total ? Math.round(checked / total * 100) : 0;
@@ -290,6 +298,7 @@
       $("outside-button").disabled ||= state.year === 0;
     }
     $("add-client-button").disabled = $("generate-button").disabled && $("outside-button").disabled;
+    $("export-button").disabled = state.status === "deleted" || liveMode && (!liveReady || liveBusy);
     if ($("add-client-button").disabled) closeAddClientMenu();
     $("fullscreen-button").href = fullScreenUrl();
     document.querySelectorAll("[data-sheet-team]").forEach(link => {
@@ -298,6 +307,7 @@
     });
     $("control-description").textContent = taxMode ? state.view === "summary" ? "One row per SPT subject. Click a milestone strip for its checklist; linked companies are references, not new Client Master allocations." : state.view === "filing" || state.view === "all" ? "Enter the tax payable amount (0 for nil), payment date / NTPN when payable, and filing date / NTPE before marking Reported or Done." : `${coverageControls[0].title}: click or drag to mark individual milestones. Progress does not automatically check them.` : "Click a segmented bar to adjust its slider (0-12 months from January); move away to restore the segments. NTPE marks Done and moves the row to Complete. Clearing NTPE restores its previous status.";
     $("control-description").title = $("control-description").textContent;
+    if (state.status === "deleted") { $("control-description").textContent = "Deleted rows are read-only. Click a row number and choose Restore Row to return it to the sheet. Client Master and annual history are unchanged."; $("control-description").title = $("control-description").textContent; }
     const table = $("annual-grid");
     table.setAttribute("aria-rowcount", visible.length + 2); table.setAttribute("aria-colcount", columns.length + 1);
     let groups = `<th class="row-number"></th><th class="client-column" data-header-group="identity">Annual work / ${state.year || "Year not set"}</th><th colspan="${3 + (liveMode && state.year === 0 ? 1 : 0)}" data-header-group="ownership">Ownership &amp; progress</th>`;
@@ -322,7 +332,7 @@
     table.style.width = `${tableWidth}px`; table.style.minWidth = `${tableWidth}px`;
     colgroup.innerHTML = widths.map(width => `<col style="width:${width}px">`).join("");
     const lockIcon = `<span class="lock-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg></span>`;
-    table.querySelector("tbody").innerHTML = visible.map((row, r) => `<tr class="${ownsRow(row) && !isLeadership() ? "row-owned" : ""}"><th class="row-number" scope="row">${r + 1}</th>${columns.map((col, c) => {
+    table.querySelector("tbody").innerHTML = visible.map((row, r) => `<tr class="${ownsRow(row) && !isLeadership() ? "row-owned" : ""}"><th class="row-number" scope="row"><button type="button" class="row-number-action" data-row-actions="${escape(row.id)}" aria-label="Actions for row ${r + 1}: ${escape(row.clientName)}" aria-haspopup="menu" aria-expanded="false" ${liveMode && (!liveReady || liveBusy) ? "disabled" : ""}>${r + 1}</button></th>${columns.map((col, c) => {
       const value = valueAt(row, col); let content = escape(value);
       const editable = canEdit(row, col);
       const statusClass = done(row) ? "done" : ["Review", "Equalization", "Meeting"].includes(row.progress) ? "reviewing" : row.progress !== "Data Request" ? "processing" : "";
@@ -440,6 +450,55 @@
     return true;
   }
   const table = $("annual-grid");
+  function closeRowMenu(focus = false) {
+    const previous = rowMenuId; rowMenuId = "";
+    $("row-actions-menu").hidden = true;
+    document.querySelectorAll("[data-row-actions][aria-expanded=true]").forEach(button => button.setAttribute("aria-expanded", "false"));
+    if (focus && previous) [...document.querySelectorAll("[data-row-actions]")].find(button => button.dataset.rowActions === previous)?.focus({ preventScroll: true });
+  }
+  function openRowMenu(trigger) {
+    if (!finishEdit(true) || liveMode && (!liveReady || liveBusy)) return;
+    const row = state.rows.find(item => item.id === trigger.dataset.rowActions), index = visible.findIndex(item => item.id === row?.id);
+    if (!row || index < 0) return;
+    if (rowMenuId === row.id) { closeRowMenu(true); return; }
+    closeRowMenu(); select(index, 0); rowMenuId = row.id;
+    const menu = $("row-actions-menu"), button = $("manage-row-button"), restore = !!row.deletedAt;
+    button.innerHTML = restore ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></svg>Restore Row' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg>Delete Row';
+    button.classList.toggle("is-delete", !restore); button.disabled = !canManageRow(row);
+    button.title = button.disabled ? `Only the assigned ${taxMode ? "Tax" : "ACC"} PIC or leadership can ${restore ? "restore" : "delete"} this row.` : "";
+    trigger.setAttribute("aria-expanded", "true"); menu.hidden = false;
+    const rect = trigger.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(rect.right + 5, window.innerWidth - 188))}px`;
+    menu.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - 56))}px`;
+    if (!button.disabled) button.focus({ preventScroll: true });
+  }
+  $("manage-row-button").addEventListener("click", () => {
+    const row = state.rows.find(item => item.id === rowMenuId);
+    if (!row || !canManageRow(row)) return;
+    closeRowMenu();
+    const snapshot = clone(row);
+    if (row.deletedAt) { manageSheetRow(snapshot, true); return; }
+    pendingRowDeletion = snapshot;
+    $("delete-row-name").textContent = `${row.clientName} / ${row.year || "Year not set"}`;
+    $("delete-row-dialog").showModal();
+  });
+  $("confirm-delete-row").addEventListener("click", () => {
+    if (!pendingRowDeletion || !$("delete-row-dialog").open) return;
+    const row = pendingRowDeletion; pendingRowDeletion = null; $("delete-row-dialog").close(); manageSheetRow(row, false);
+  });
+  function manageSheetRow(snapshot, restore) {
+    if (!canManageRow(snapshot)) return;
+    if (liveMode) { saveLive(() => window.AnnualSheetLive.manageRow(snapshot, restore), restore ? "Restored annual row" : "Deleted annual row; recover it from Deleted"); return; }
+    change(restore ? "Restored annual row" : "Deleted annual row", () => {
+      const row = state.rows.find(item => item.id === snapshot.id);
+      row.deletedAt = restore ? "" : new Date().toISOString(); row.deletedByProfileId = restore ? "" : state.actorId;
+    });
+  }
+  document.addEventListener("pointerdown", event => { if (!event.target.closest("#row-actions-menu,[data-row-actions]")) closeRowMenu(); });
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && rowMenuId) { event.preventDefault(); closeRowMenu(true); } });
+  $("row-actions-menu").addEventListener("keydown", event => { if (event.key === "Tab") closeRowMenu(); });
+  document.addEventListener("scroll", () => closeRowMenu(), true);
+  window.addEventListener("resize", () => closeRowMenu());
   document.addEventListener("pointerdown", event => { if (!event.target.closest(".range-control")) closeRangeEditor(); });
   table.addEventListener("pointerout", event => {
     const control = event.target.closest(".range-control");
@@ -499,6 +558,8 @@
     (restoreSliderFocus ? selectedCell?.querySelector("[data-grid-range]") : selectedCell)?.focus({ preventScroll: true });
   });
   table.addEventListener("click", (event) => {
+    const rowAction = event.target.closest("[data-row-actions]");
+    if (rowAction) { openRowMenu(rowAction); return; }
     const rangeButton = event.target.closest("[data-edit-range]");
     if (rangeButton) { const cell = rangeButton.closest("td"); openRangeEditor(Number(cell.dataset.r), Number(cell.dataset.c), event.detail === 0); return; }
     const heading = event.target.closest("[data-sort-col]");
@@ -513,6 +574,8 @@
     changeChecklistView(button.dataset.openControl, button.dataset.rowId);
   });
   table.addEventListener("keydown", (event) => {
+    const rowAction = event.target.closest("[data-row-actions]");
+    if (rowAction) { if (["Enter", " ", "ArrowDown"].includes(event.key)) { event.preventDefault(); openRowMenu(rowAction); } return; }
     if (editor) { if (event.key === "Escape") { event.preventDefault(); finishEdit(false); getCell(state.selection.r, state.selection.c)?.focus(); } else if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); const { r, c } = editor; if (finishEdit(true)) event.key === "Tab" ? tabMove(r, c, event.shiftKey) : select(r + (event.shiftKey ? -1 : 1), c, true); } return; }
     const { r, c } = state.selection; const row = visible[r], col = columns[c]; if (!row || !col) return;
     if (event.target.matches("[data-grid-range]")) {
@@ -549,7 +612,7 @@
     else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && ["text", "number"].includes(col.type)) { event.preventDefault(); startEdit(event.key); }
   });
   document.addEventListener("keydown", (event) => {
-    if (editor || event.target.closest("input,select,textarea") || document.querySelector("dialog[open]")) return;
+    if (editor || event.target.closest?.("input,select,textarea") || document.querySelector("dialog[open]")) return;
     if ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(event.key.toLowerCase())) { event.preventDefault(); event.key.toLowerCase() === "y" || event.shiftKey ? redo() : undo(); }
   });
   table.addEventListener("copy", (event) => {
@@ -637,10 +700,23 @@
   $("fullscreen-button").addEventListener("click", guardFullScreenNavigation);
   document.querySelectorAll("[data-sheet-team]").forEach(link => link.addEventListener("click", guardFullScreenNavigation));
   const generationKey = row => taxMode ? row.subjectId : row.clientId;
-  const generationCandidates = () => (taxMode ? taxConfig.priorCandidates(state) : master).filter(client => (taxMode || client.active && client.accountingPic) && matchesAccPic(client) && matchesTaxPic(client) && (isLeadership() || staffId(taxMode ? client.taxPic : client.accountingPic, taxMode ? "tax" : "acc") === state.actorId));
-  function showGeneration() {
+  const generationCandidates = () => (taxMode ? taxConfig.priorCandidates(state) : master).filter(client => (taxMode || client.active && client.accountingPic) && matchesAccPic(client) && matchesTaxPic(client) && (isLeadership() || (taxMode ? client.taxPicId || staffId(client.taxPic, "tax") : client.accountingPicId || staffId(client.accountingPic)) === state.actorId));
+  async function showGeneration() {
     closeAddClientMenu();
     if (liveMode && (!liveReady || liveBusy || state.year === 0)) return;
+    if (generationLoading) return;
+    if (liveMode && !taxMode) {
+      generationLoading = true; $("generate-button").disabled = true; $("candidate-list").textContent = "Loading eligible clients...";
+      $("candidate-summary").textContent = "Checking current Client Master assignments"; $("confirm-generate").disabled = true; $("candidate-all").disabled = true;
+      $("generate-year").textContent = state.year; $("generate-dialog").showModal();
+      const epoch = liveEpoch, year = state.year;
+      try {
+        const candidates = await window.AnnualSheetLive.loadClients();
+        if (epoch !== liveEpoch || year !== state.year || !$("generate-dialog").open) return;
+        master.splice(0, master.length, ...candidates.map(client => ({ ...client, accountingPic: liveRoster.find(person => person.id === client.accountingPicId)?.name || client.accountingPic, taxPic: liveRoster.find(person => person.id === client.taxPicId)?.name || client.taxPic })));
+      } catch (error) { if ([401, 403, 409].includes(error.status)) clearLiveAccess(); else { $("candidate-list").textContent = error.message; $("candidate-summary").textContent = "Close and retry Generate Clients."; } return; }
+      finally { generationLoading = false; $("generate-button").disabled = liveBusy || !liveReady || state.year === 0; }
+    }
     $("generate-year").textContent = state.year;
     const existing = new Set(yearRows().map(generationKey).filter(Boolean));
     const eligible = generationCandidates();
@@ -648,7 +724,7 @@
     const remaining = eligible.filter(client => !existing.has(client.clientId)).length;
     $("candidate-summary").textContent = `${remaining} available / ${eligible.length - remaining} already in sheet`;
     $("candidate-all").checked = remaining > 0 && !taxMode; $("candidate-all").indeterminate = false; $("candidate-all").disabled = !remaining; $("confirm-generate").disabled = !remaining || taxMode;
-    $("generate-dialog").showModal();
+    if (!$("generate-dialog").open) $("generate-dialog").showModal();
   }
   $("generate-button").addEventListener("click", showGeneration); $("empty-generate").addEventListener("click", showGeneration);
   $("candidate-all").addEventListener("change", event => { $("candidate-list").querySelectorAll("input:not(:disabled)").forEach(input => { input.checked = event.target.checked; }); $("confirm-generate").disabled = !event.target.checked; });
@@ -707,7 +783,7 @@
   }
   function buildExportWorkbook(XLSX, snapshot) {
     if (taxMode) return taxConfig.buildWorkbook(XLSX, snapshot);
-    const rows = [...snapshot.rows].sort((a, b) => a.clientName.localeCompare(b.clientName));
+    const rows = snapshot.rows.filter(row => !row.deletedAt).sort((a, b) => a.clientName.localeCompare(b.clientName));
     const custom = snapshot.customColumns;
     const completed = rows.filter(done).length;
     const scope = `All ${rows.length} annual client(s): ${rows.length - completed} incomplete, ${completed} complete. Search and PIC filters are not applied.`;
@@ -764,8 +840,11 @@
     } catch (error) { notify(error instanceof Error ? error.message : "Excel export failed. Please retry."); }
     finally { button.disabled = false; button.innerHTML = original; }
   });
-  $("reset-demo").addEventListener("click", () => { if (liveMode) { if (!liveBusy && finishEdit(true)) loadLive(); return; } finishEdit(false); state.rows = seed(); state.customColumns = []; state.history = []; state.future = []; state.year = 2025; state.status = "incomplete"; state.pic = ""; state.taxPic = ""; state.search = ""; state.sort = { field: "clientName", type: "text", title: taxMode ? "SPT subject" : "Client", direction: "asc" }; state.selection = { r: 0, c: 0 }; state.range = null; $("year-select").value = "2025"; $("pic-filter").value = ""; $("tax-pic-filter").value = ""; $("search").value = ""; render(); $("save-status").textContent = "Demo reset to sample data."; });
-  function applyLiveContext(data) {
+  $("reset-demo").addEventListener("click", () => { if (liveMode) { if (!liveBusy && finishEdit(true)) loadLive(true); return; } finishEdit(false); state.rows = seed(); state.customColumns = []; state.history = []; state.future = []; state.year = 2025; state.status = "incomplete"; state.pic = ""; state.taxPic = ""; state.search = ""; state.sort = { field: "clientName", type: "text", title: taxMode ? "SPT subject" : "Client", direction: "asc" }; state.selection = { r: 0, c: 0 }; state.range = null; $("year-select").value = "2025"; $("pic-filter").value = ""; $("tax-pic-filter").value = ""; $("search").value = ""; render(); $("save-status").textContent = "Demo reset to sample data."; });
+  const liveSnapshot = data => JSON.stringify({ actor: data.actor, staff: data.staff, rows: data.rows, columns: data.columns });
+  function applyLiveContext(data, checkedAt = Date.now()) {
+    lastRefreshAt = checkedAt;
+    lastLiveSnapshot = liveSnapshot(data);
     const firstLoad = !liveReady;
     liveRoster = data.staff;
     actors.splice(0, actors.length, data.actor); state.actorId = data.actor.id;
@@ -787,26 +866,55 @@
   }
   async function saveLive(operation, label) {
     if (liveBusy || !liveReady) return;
+    liveEpoch++; deferredRefresh = null; window.AnnualSheetLive.cancelLoad();
     liveBusy = true; render(); $("save-status").textContent = "Saving to database...";
     try { applyLiveContext(await operation()); $("save-status").textContent = `${label}. Saved to database.`; }
     catch (error) {
-      try { applyLiveContext(await window.AnnualSheetLive.load()); } catch { /* Keep the last confirmed server data; never claim an unconfirmed save. */ }
+      try { applyLiveContext(await window.AnnualSheetLive.load()); } catch (refreshError) { if ([401, 403, 409].includes(refreshError.status)) clearLiveAccess(); }
       $("save-status").textContent = `Save not confirmed: ${error.message}`; notify(`Save not confirmed: ${error.message} The sheet shows the last confirmed database data.`);
     } finally { liveBusy = false; render(); }
   }
-  async function loadLive() {
-    if (liveBusy) return;
-    liveBusy = true; render();
+  function interactingWithSheet() {
+    return editor || drag || activeRange || rowMenuId || !$("add-client-menu").hidden || document.querySelector("dialog[open]") || document.activeElement?.matches("input,select,textarea");
+  }
+  function clearLiveAccess() {
+    liveEpoch++; deferredRefresh = null; liveReady = false; window.AnnualSheetLive?.clearAccess();
+    finishEdit(false); document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
+    state.rows = []; state.customColumns = []; state.actorId = ""; liveRoster = []; actors.splice(0); master.splice(0); render();
+    $("sheet-loading").hidden = false; $("sheet-loading").textContent = "Your access or account changed. Reload the dashboard to reconnect.";
+  }
+  function applyDeferredRefresh() {
+    if (!deferredRefresh) return;
+    if (deferredRefresh.epoch !== liveEpoch) { deferredRefresh = null; return; }
+    if (liveBusy || interactingWithSheet()) return;
+    const { data, checkedAt } = deferredRefresh; deferredRefresh = null; applyLiveContext(data, checkedAt); render();
+    $("save-status").textContent = "Connected. Latest database changes loaded.";
+    if (Date.now() - checkedAt >= 30000) loadLive();
+  }
+  function loadLive(force = false) {
+    if (liveBusy) return Promise.resolve();
+    if (refreshPromise) return refreshPromise;
+    if (liveReady && !force && Date.now() - lastRefreshAt < 30000) return Promise.resolve();
+    lastRefreshAt = Date.now();
+    const epoch = liveEpoch, initial = !liveReady;
     const overlay = $("sheet-loading"); overlay.hidden = liveReady;
-    try {
-      if (!window.AnnualSheetLive) throw new Error("Annual workspace transport could not be loaded. Reload the page.");
-      applyLiveContext(await window.AnnualSheetLive.load());
-      overlay.hidden = true; $("save-status").textContent = "Connected. Changes are confirmed by the database before appearing here.";
-    } catch (error) {
-      overlay.textContent = error.message + " ";
-      const retry = document.createElement("button"); retry.className = "button primary"; retry.textContent = "Retry"; retry.onclick = loadLive; overlay.append(retry);
-      $("save-status").textContent = `Annual workspace unavailable: ${error.message}`;
-    } finally { liveBusy = false; render(); }
+    const pending = Promise.resolve().then(async () => {
+      try {
+        if (!window.AnnualSheetLive) throw new Error("Annual workspace transport could not be loaded. Reload the page.");
+        const data = await window.AnnualSheetLive.load();
+        if (!data || epoch !== liveEpoch || liveBusy) return;
+        if (!initial && liveSnapshot(data) === lastLiveSnapshot) return;
+        if (!initial && interactingWithSheet()) { deferredRefresh = { data, epoch, checkedAt: Date.now() }; return; }
+        applyLiveContext(data); render(); overlay.hidden = true;
+        $("save-status").textContent = "Connected. Changes are confirmed by the database before appearing here.";
+      } catch (error) {
+        if (epoch !== liveEpoch || error.name === "AbortError") return;
+        if ([401, 403, 409].includes(error.status)) { clearLiveAccess(); return; }
+        if (initial) { overlay.textContent = error.message + " "; const retry = document.createElement("button"); retry.className = "button primary"; retry.textContent = "Retry"; retry.onclick = () => loadLive(true); overlay.append(retry); }
+        $("save-status").textContent = `Refresh unavailable: ${error.message}${liveReady ? " Last confirmed data remains available." : ""}`;
+      }
+    }).finally(() => { if (refreshPromise === pending) refreshPromise = null; });
+    refreshPromise = pending; return pending;
   }
   window.addEventListener("resize", () => { if (!editor) render(); });
   window.AnnualSheetDemo = { state, transition, parseValue, canEdit, buildExportWorkbook, accountingPicProgress, accountingControlCoverage, get columns() { return columns; }, get visible() { return visible; } };
@@ -823,12 +931,13 @@
     document.querySelector(".demo-label").hidden = true;
     document.querySelector(".access-toolbar").hidden = true;
     document.querySelectorAll("#help-panel small").forEach(node => { node.textContent = node.textContent.replace(/Demo only; no database changes\.|Demo changes last until you reload this page\./g, "Changes are saved securely to the shared annual workspace."); });
-    const refresh = document.createElement("button"); refresh.className = "text-button"; refresh.textContent = "Refresh"; refresh.addEventListener("click", () => { if (!editor && !liveBusy) loadLive(); });
+    const refresh = document.createElement("button"); refresh.className = "text-button"; refresh.textContent = "Refresh"; refresh.addEventListener("click", () => { if (!editor && !liveBusy) loadLive(true); });
     document.querySelector(".filter-toolbar .tools").prepend(refresh);
     window.addEventListener("message", event => { if (event.origin === location.origin && event.source === window.parent && event.data?.type === "annual-sheet:refresh" && !editor && !liveBusy) loadLive(); });
     const refreshIfIdle = () => { if (!document.hidden && !editor && !liveBusy) loadLive(); };
     window.addEventListener("focus", refreshIfIdle);
     document.addEventListener("visibilitychange", refreshIfIdle);
+    for (const event of ["focusout", "pointerup", "click", "keyup"]) document.addEventListener(event, () => { Promise.resolve().then(applyDeferredRefresh); });
     window.addEventListener("beforeunload", event => { if (liveBusy) { event.preventDefault(); event.returnValue = ""; } });
     loadLive();
   }
