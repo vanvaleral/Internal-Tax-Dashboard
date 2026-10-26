@@ -1,0 +1,8 @@
+.annual-integration-preview .annual-integrated-control{width:100%;max-width:var(--workspace-width);min-width:0}
+.annual-integration-preview .annual-integrated-frame{display:block;width:100%;height:max(660px,calc(100dvh - 255px));border:0;background:transparent;border-radius:14px}
+.annual-integration-preview .annual-integrated-control[hidden]{display:none!important}
+.annual-integration-preview .annual-preview-note{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:10px 15px;border:1px solid #c8dbd6;border-radius:9px;background:#edf7f3;color:#527369;font-size:11px;line-height:1.5}
+.annual-integration-preview .annual-preview-note a{color:#087f8d;font-weight:700;white-space:nowrap;text-decoration:none}
+.annual-integration-preview .annual-preview-label{font-size:9px;letter-spacing:1.2px;font-weight:700;color:#087f8d}
+.annual-integration-preview .annual-integrated-heading{margin-bottom:10px}
+@media(max-width:700px){.annual-integration-preview .annual-preview-note{align-items:flex-start;font-size:10px;padding:8px 10px;gap:8px}.annual-integration-preview .annual-integrated-frame{height:max(760px,calc(100dvh - 230px))}.annual-integration-preview .annual-preview-label{font-size:8px}.annual-integration-preview .annual-integrated-heading .toolbar{row-gap:9px}}

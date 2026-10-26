@@ -79,7 +79,7 @@ export function mergeWorkspace(scope: string, current: any, incoming: any, allow
         if (!leadership && scope !== "monthly_compliance" && previous.annualWorkId) {
           for (const field of ["accountingPicProfileId", "taxPicProfileId", "reportPicProfileId", "accountingPic", "taxPic", "reportPic"]) candidate[field] = previous[field];
         }
-      } else if (!leadership) {
+      } else if (!leadership && scope === "monthly_compliance") {
         for (const field of identityFields.filter(field => /ProfileId|_profile_id|Snapshot|generated/.test(field))) delete candidate[field];
       }
       if (index >= 0) rows[index] = candidate;

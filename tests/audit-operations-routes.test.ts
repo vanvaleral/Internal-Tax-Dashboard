@@ -17,13 +17,14 @@ function fixture(role = "staff") {
   return { route, db, a, b };
 }
 
-test("F01 actual annual PUT preserves another PIC's records", async () => {
+test("F01 obsolete annual PUT cannot overwrite another PIC's records", async () => {
   const { route, db, a } = fixture();
   const response = await route.PUT(request({ scope: "annual_tax", version: 1, payload: [{ ...a, notes: "changed" }] }));
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 409);
   assert.equal(db.tables.operational_workspace_state[0].payload.length, 2);
-  assert.equal(response.body.data.payload.length, 1);
-  assert.equal(response.body.data.payload[0].serviceFee, undefined);
+  assert.equal(response.body.code, "ANNUAL_SHEET_REQUIRED");
+  assert.equal(db.tables.operational_workspace_state[0].payload[0].notes, "");
+  assert.equal(JSON.stringify(response.body).includes("serviceFee"), false);
 });
 
 test("F02 GET, PUT and version-conflict responses never return another staff's client or fees", async () => {

@@ -38,7 +38,7 @@ test("annual outside-contract work uses independent IDs and PIC scope", () => {
   assert.match(demo, /if \(row\.annualWorkId\) return;/);
 });
 
-test("annual work accepts a directory-backed PIC without creating a Client Master row", async () => {
+test("legacy whole-workspace annual writes are blocked in favor of validated field saves", async () => {
   const db = mockDatabase({
     operational_workspace_state: [{ scope: "annual_accounting", version: 1, payload: [] }],
     client_master: [],
@@ -51,11 +51,11 @@ test("annual work accepts a directory-backed PIC without creating a Client Maste
   });
   const row = { id: "annual-acc-1", annualWorkId: "11111111-1111-4111-8111-111111111111", clientName: "Outside contract", accountingPic: "Cemari", accountingPicProfileId: "acc-1", taxPic: "", taxPicProfileId: null };
   const rejected = await route.PUT(request({ scope: "annual_accounting", version: 1, payload: [{ ...row, accountingPic: "Wrong" }] }));
-  assert.equal(rejected.status, 400);
+  assert.equal(rejected.status, 409);
   const saved = await route.PUT(request({ scope: "annual_accounting", version: 1, payload: [row] }));
-  assert.equal(saved.status, 200);
+  assert.equal(saved.status, 409);
   assert.equal(db.tables.client_master.length, 0);
-  assert.equal(db.tables.operational_workspace_state[0].payload[0].annualWorkId, row.annualWorkId);
+  assert.equal(db.tables.operational_workspace_state[0].payload.length, 0);
 });
 
 test("claims are listed by ID, reopened without overwriting, and snapshotted before print", () => {
@@ -102,11 +102,15 @@ test("only leadership can reassign an existing case to active staff", async () =
     "@/lib/notifications": {},
     "@/lib/operational-rules": { calculateHimbauanDueDate: () => null }
   });
-  const body = { id: "case-uuid", version: "v1", action: "assign-pic", taxPicProfileId: "tax-new", accountingPicProfileId: "acc-new" };
+  const body = { id: "case-uuid", version: "v1", action: "assign-pic", picType: "tax", profileId: "tax-new" };
   const staffRoute = loadRoute("app/api/cases/route.ts", bindings("staff", "tax-old"));
   assert.equal((await staffRoute.PATCH(request(body))).status, 403);
+  const adminRoute = loadRoute("app/api/cases/route.ts", bindings("admin", "admin"));
+  assert.equal((await adminRoute.PATCH(request(body))).status, 403);
   const leaderRoute = loadRoute("app/api/cases/route.ts", bindings("supervisor", "supervisor"));
   assert.equal((await leaderRoute.PATCH(request(body))).status, 200);
   assert.equal(db.tables.tax_cases[0].tax_pic_profile_id, "tax-new");
+  assert.equal(db.tables.tax_cases[0].accounting_pic_profile_id, "acc-old");
+  assert.equal((await leaderRoute.PATCH(request({ ...body, version: db.tables.tax_cases[0].updated_at, picType: "accounting", profileId: "acc-new" }))).status, 200);
   assert.equal(db.tables.tax_cases[0].accounting_pic_profile_id, "acc-new");
 });

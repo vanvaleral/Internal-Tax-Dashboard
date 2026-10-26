@@ -93,6 +93,46 @@ export async function POST(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   const body = await request.json().catch(() => ({}));
+  if (["preview-annual-accounting", "generate-annual-accounting"].includes(String(body.action || ""))) {
+    const year = Number(body.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) return NextResponse.json({ error: "Choose a valid annual tax year." }, { status: 400 });
+    const { data: assignedClients, error: clientsError } = await actor.admin.from("client_master")
+      .select("id, client_code, legal_name, company_form, accounting_pic_name, accounting_pic_profile_id, tax_pic_name, tax_pic_profile_id")
+      .eq("status", "Active").order("legal_name");
+    if (clientsError) return NextResponse.json({ error: clientsError.message }, { status: 500 });
+    const eligible = (assignedClients || []).filter(client => client.accounting_pic_profile_id && (isLeadership(actor.profile.role) || client.accounting_pic_profile_id === actor.profile.id));
+    const { data: current, error: currentError } = await actor.admin.from("operational_workspace_state")
+      .select("payload, version").eq("scope", "annual_accounting").maybeSingle();
+    if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
+    const rows = Array.isArray(current?.payload) ? current.payload as Record<string, any>[] : [];
+    const existing = new Set(rows.filter(row => Number(row.taxYear) === year && row.clientId).map(row => String(row.clientId)));
+    const candidates = eligible.filter(client => !existing.has(String(client.id)));
+    if (body.action === "preview-annual-accounting") return NextResponse.json({ year, assigned: eligible.length, alreadyGenerated: eligible.length - candidates.length, clients: candidates.map(client => ({ id: client.id, name: client.legal_name, accountingPic: client.accounting_pic_name || "", taxPic: client.tax_pic_name || "" })) });
+    if (!candidates.length) return NextResponse.json({ year, created: 0, alreadyGenerated: eligible.length });
+    const created = candidates.map(client => {
+      const annualWorkId = crypto.randomUUID();
+      return {
+        id: `annual-acc-${annualWorkId}`, annualWorkId, clientId: client.id, clientName: client.legal_name,
+        taxYear: year, contractType: "Contract", priority: 2, accountingStatus: "NIHIL", progress: "Data Request",
+        result: "-", risk: "Watch", businessType: client.company_form || "Badan", assist: "-",
+        accountingPic: client.accounting_pic_name || "", accountingPicProfileId: client.accounting_pic_profile_id,
+        taxPic: client.tax_pic_name || "", taxPicProfileId: client.tax_pic_profile_id,
+        notes: "", isNew: false, deadline: "-", lapor: "-", ntpe: "-", paymentAmount: "", paymentDate: "",
+        paymentNtpn: "", reported: false, technicalAdminMonths: [], dataMonths: [], reportPreparationMonths: [], changeLog: []
+      };
+    });
+    const nextVersion = (current?.version || 0) + 1;
+    const nextState = { scope: "annual_accounting", payload: [...rows, ...created], version: nextVersion, updated_by_profile_id: actor.profile.id, updated_at: new Date().toISOString() };
+    const save = current
+      ? await actor.admin.from("operational_workspace_state").update(nextState).eq("scope", "annual_accounting").eq("version", current.version).select("scope, payload, version, updated_at").maybeSingle()
+      : await actor.admin.from("operational_workspace_state").insert(nextState).select("scope, payload, version, updated_at").maybeSingle();
+    if (save.error?.code === "23505" || !save.data && !save.error) return NextResponse.json({ error: "Annual work changed in another session. Review the updated list and retry.", code: "VERSION_CONFLICT" }, { status: 409 });
+    if (save.error) return NextResponse.json({ error: save.error.message }, { status: 500 });
+    if (!save.data) return NextResponse.json({ error: "Annual work was not saved." }, { status: 500 });
+    await actor.admin.from("operational_workspace_audit").insert({ scope: "annual_accounting", version: nextVersion, actor_profile_id: actor.profile.id, action: `generated_year:${year}:${created.length}` });
+    const allowed = new Set(eligible.flatMap(client => [client.id, client.client_code, client.legal_name]));
+    return NextResponse.json({ data: { ...save.data, payload: scopedWorkspace("annual_accounting", save.data.payload, allowed, actor.profile.id, isLeadership(actor.profile.role)) }, year, created: created.length, alreadyGenerated: eligible.length - created.length });
+  }
   const period = periodDetails(body.period);
   if (!period || !["preview-monthly-period", "generate-monthly-period"].includes(String(body.action || ""))) {
     return NextResponse.json({ error: "A valid monthly period is required." }, { status: 400 });
@@ -182,6 +222,7 @@ export async function PUT(request: Request) {
   const scope = String(body.scope || "");
   const version = Number(body.version || 0);
   if (!scopes.has(scope) || !body.payload || typeof body.payload !== "object") return NextResponse.json({ error: "A valid scope and payload are required." }, { status: 400 });
+  if (scope !== "monthly_compliance") return NextResponse.json({ error: "Annual work now uses field-level saves. Reload and use the annual control sheet.", code: "ANNUAL_SHEET_REQUIRED" }, { status: 409 });
   const { data: current, error: currentError } = await actor.admin.from("operational_workspace_state").select("payload, version").eq("scope", scope).maybeSingle();
   if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
   let allowed = new Set<string>();

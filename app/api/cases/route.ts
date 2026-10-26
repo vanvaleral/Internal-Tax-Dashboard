@@ -158,18 +158,19 @@ export async function PATCH(request: Request) {
     if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
     if (body.version !== existing.updated_at) return NextResponse.json({ error: "This case changed in another session. Reload before saving.", code: "VERSION_CONFLICT" }, { status: 409 });
     if (body.action === "assign-pic") {
-      if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can reassign a case PIC." }, { status: 403 });
-      const taxId = String(body.taxPicProfileId || "");
-      const accountingId = String(body.accountingPicProfileId || "");
-      if (!taxId && !accountingId) return NextResponse.json({ error: "Choose at least one case PIC." }, { status: 400 });
+      if (!["leader", "supervisor", "partner"].includes(String(actor.profile.role).toLowerCase())) return NextResponse.json({ error: "Only a leader, supervisor or partner can reassign a case PIC." }, { status: 403 });
+      const picType = String(body.picType || "");
+      if (!["tax", "accounting"].includes(picType)) return NextResponse.json({ error: "Choose the Tax or Accounting PIC field." }, { status: 400 });
+      const profileId = String(body.profileId || "");
+      const taxId = picType === "tax" ? profileId : String(existing.tax_pic_profile_id || "");
+      const accountingId = picType === "accounting" ? profileId : String(existing.accounting_pic_profile_id || "");
+      if (!taxId && !accountingId) return NextResponse.json({ error: "A case must retain at least one PIC." }, { status: 400 });
       const { data: staff, error: staffError } = await actor.admin.from("staff_profiles").select("id, full_name, display_name, team_division, directory_active").in("id", [taxId, accountingId].filter(Boolean));
       if (staffError) return NextResponse.json({ error: staffError.message }, { status: 500 });
-      const taxPic = taxId ? (staff || []).find((person: any) => person.id === taxId && person.directory_active !== false && person.team_division === "Tax Team") : null;
-      const accountingPic = accountingId ? (staff || []).find((person: any) => person.id === accountingId && person.directory_active !== false && person.team_division === "Accounting Team") : null;
-      if ((taxId && !taxPic) || (accountingId && !accountingPic)) return NextResponse.json({ error: "Choose active PICs from the correct teams." }, { status: 400 });
+      const selectedPic = profileId ? (staff || []).find((person: any) => person.id === profileId && person.directory_active !== false && person.team_division === (picType === "tax" ? "Tax Team" : "Accounting Team")) : null;
+      if (profileId && !selectedPic) return NextResponse.json({ error: "Choose an active PIC from the correct team." }, { status: 400 });
       const { data, error } = await actor.admin.from("tax_cases").update({
-        tax_pic_profile_id: taxId || null, tax_pic_name: taxPic?.display_name || taxPic?.full_name || null,
-        accounting_pic_profile_id: accountingId || null, accounting_pic_name: accountingPic?.display_name || accountingPic?.full_name || null,
+        ...(picType === "tax" ? { tax_pic_profile_id: profileId || null, tax_pic_name: selectedPic?.display_name || selectedPic?.full_name || null } : { accounting_pic_profile_id: profileId || null, accounting_pic_name: selectedPic?.display_name || selectedPic?.full_name || null }),
         updated_by_profile_id: actor.profile.id
       }).eq("id", id).eq("updated_at", body.version).select("*").maybeSingle();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });

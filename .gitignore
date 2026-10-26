@@ -5,3 +5,4 @@ dev-server.log
 dev-server-error.log
 .npm-cache/
 tsconfig.tsbuildinfo
+supabase/.temp/

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { randomUUID } from "node:crypto";
 import ts from "typescript";
 
 export function loadRoute(file: string, bindings: Record<string, any>) {
@@ -9,7 +10,7 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
     if (name === "next/server") return { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200 }) }, after: () => {} };
     if (name in bindings) return bindings[name];
     throw new Error(`Unmocked route dependency ${name}`);
-  }, URL, Date, Set, Map, structuredClone, console };
+  }, URL, Date, Set, Map, structuredClone, console, crypto: { randomUUID } };
   vm.runInNewContext(compiled, context, { filename: file });
   return context.exports;
 }

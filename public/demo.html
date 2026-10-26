@@ -3662,9 +3662,18 @@
   <link rel="stylesheet" href="client-overview.css" />
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
+  <script src="annual-sheet-dashboard.js"></script>
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
+    const IS_ANNUAL_SHEET_PREVIEW = IS_OFFLINE_DEMO && new URLSearchParams(window.location.search).get("annualAccountingPreview") === "1";
+    if (IS_ANNUAL_SHEET_PREVIEW) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script"); script.src = "annual-accounting-dashboard-preview.js";
+        script.onload = resolve; script.onerror = () => reject(new Error("Annual Accounting preview could not be loaded."));
+        document.head.append(script);
+      });
+    }
     const startupOverlay = document.getElementById("app-loading-overlay");
     if (IS_OFFLINE_DEMO) startupOverlay?.classList.remove("visible", "initial-load");
     function safeHtml(markup) {
@@ -3673,7 +3682,9 @@
     // Resolve identity before reading any private cache or binding save handlers.
     let bootstrapProfile;
     if (location.protocol === "file:") {
-      bootstrapProfile = { user: { id: "offline-preview" }, profile: { role: "staff" } };
+      bootstrapProfile = IS_ANNUAL_SHEET_PREVIEW
+        ? { user: { id: "annual-integration-preview" }, profile: { id: "supervisor-demo", role: "supervisor", display_name: "Ivan", team_division: "Accounting Team" } }
+        : { user: { id: "offline-preview" }, profile: { role: "staff" } };
     } else {
       try {
         const response = await fetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } });
@@ -3776,6 +3787,7 @@
     let latestStaffClaimCode = "";
     let latestStaffClaimFor = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
+    const canReassignCasePic = () => ["leader", "supervisor", "partner"].includes(String(state.role || "").toLowerCase());
     const canImportClientMaster = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
@@ -3800,8 +3812,10 @@
     const DEMO_STORAGE_KEY = `tax-practice-v2:${bootstrapProfile.user.id}`;
     const FAME_ANNOUNCEMENT_STORAGE_KEY = `tax-practice-wall-of-fame-seen-v2:${bootstrapProfile.user.id}`;
     // Never adopt an unowned legacy cache into the currently signed-in account.
-    window.localStorage.removeItem("tax-practice-demo-v1");
-    window.localStorage.removeItem("tax-practice-wall-of-fame-seen-v1");
+    if (!IS_ANNUAL_SHEET_PREVIEW) {
+      window.localStorage.removeItem("tax-practice-demo-v1");
+      window.localStorage.removeItem("tax-practice-wall-of-fame-seen-v1");
+    }
     const RECOGNITION_PRESENTATION_BY_PIC = {
       Ivan: "viking",
       Cemari: "shieldmaiden",
@@ -3830,7 +3844,7 @@
       }
     }
 
-    const persistedDemoState = loadPersistedDemoState();
+    const persistedDemoState = IS_ANNUAL_SHEET_PREVIEW ? null : loadPersistedDemoState();
 
     function restoreCollection(key, fallback) {
       // Client master is server-authoritative. Never resurrect an older browser
@@ -4477,6 +4491,8 @@
       annualPlanAccounting: [],
       annualPlanTax: [],
       annualPlanYear: new Date().getFullYear() - 1,
+      annualStatusTab: "incomplete",
+      annualGenerationPreview: null,
       annualPlanExpanded: "",
       expandedAnnualAccountingId: "",
       casesTab: persistedDemoState?.ui?.casesTab || "active",
@@ -4595,6 +4611,15 @@
     state.selectedPic = bootstrapProfile.profile.display_name || bootstrapProfile.profile.full_name || state.selectedPic;
     state.username = bootstrapProfile.profile.username || "";
     state.teamDivision = bootstrapProfile.profile.team_division || state.teamDivision;
+    if (IS_ANNUAL_SHEET_PREVIEW) {
+      state.currentView = "matrix-view"; state.operationsMode = "annual"; state.annualTeam = "accounting";
+      state.appearance.accent = "#087f8d";
+      window.AnnualDashboardPreview.configure((person) => {
+        state.role = person.role; state.selectedPic = person.name; state.teamDivision = person.team;
+        Object.assign(bootstrapProfile.profile, { id: person.id, role: person.role, display_name: person.name, team_division: person.team });
+        renderShellChrome();
+      });
+    }
     state.myWork.forEach(task => { task.saving = false; });
     applyAppearance();
     if (state.activeMonthlyPeriod && state.monthlyProgress[state.activeMonthlyPeriod]) {
@@ -5674,7 +5699,9 @@
           row.notes,
           row.accountingStatus
         ].join(" ").toLowerCase().includes(query);
-        return matchesQuery;
+        const matchesYear = Number(row.taxYear || new Date().getFullYear() - 1) === Number(state.annualPlanYear);
+        const done = ["Reported", "Done"].includes(row.progress);
+        return matchesQuery && matchesYear && (state.annualStatusTab === "complete" ? done : !done);
       }));
     }
 
@@ -5692,7 +5719,9 @@
           row.notes,
           row.kurangBayar
         ].join(" ").toLowerCase().includes(query);
-        return matchesQuery;
+        const matchesYear = Number(row.taxYear || new Date().getFullYear() - 1) === Number(state.annualPlanYear);
+        const done = Boolean(row.reported || row.notes === "Done");
+        return matchesQuery && matchesYear && (state.annualStatusTab === "complete" ? done : !done);
       }));
     }
 
@@ -5883,7 +5912,7 @@
         annualWorkId,
         clientId: "",
         clientName: name,
-        taxYear: new Date().getFullYear() - 1,
+        taxYear: state.annualPlanYear,
         contractType: "Lepas",
         priority: 2,
         accountingStatus: "NIHIL",
@@ -7537,6 +7566,14 @@
     }
 
     function renderMatrix() {
+      if (IS_ANNUAL_SHEET_PREVIEW && state.operationsMode === "annual") {
+        window.AnnualDashboardPreview.render(document.getElementById("matrix-view"), state);
+        return;
+      }
+      if (!IS_OFFLINE_DEMO && state.operationsMode === "annual" && window.AnnualDashboardSheets) {
+        window.AnnualDashboardSheets.render(document.getElementById("matrix-view"), state);
+        return;
+      }
       const list = visibleClients();
       const deletableMonthlyRows = list.filter(canDeleteMonthlyRow);
       const selectedMonthlyRows = new Set(state.monthlyDeleteSelection);
@@ -7964,21 +8001,18 @@
 
               <div class="toolbar compact-toolbar">
                 <div class="toolbar-left">
+                  <label class="subline" for="annual-tax-year">Tax year</label>
+                  <select id="annual-tax-year" class="field" aria-label="Annual tax year">${Array.from(new Set([state.annualPlanYear, ...annualAccountingRows.map(row => Number(row.taxYear)).filter(Boolean), ...annualTaxRows.map(row => Number(row.taxYear)).filter(Boolean), new Date().getFullYear() - 1, new Date().getFullYear()])).sort((a, b) => b - a).map(year => `<option value="${year}" ${year === Number(state.annualPlanYear) ? "selected" : ""}>${year}</option>`).join("")}</select>
+                  <div class="inline-controls" role="tablist" aria-label="Annual status"><button type="button" role="tab" aria-selected="${state.annualStatusTab === "incomplete"}" class="${state.annualStatusTab === "incomplete" ? "solid-btn" : "ghost-btn"}" data-annual-status="incomplete">Incomplete</button><button type="button" role="tab" aria-selected="${state.annualStatusTab === "complete"}" class="${state.annualStatusTab === "complete" ? "solid-btn" : "ghost-btn"}" data-annual-status="complete">Complete</button></div>
                   <input id="query-input" class="filter-input" type="text" placeholder="Search client, PIC, notes, status" value="${state.filters.query}" />
                 </div>
                 <div class="toolbar-right">
-                  ${state.annualTeam === "accounting" ? `<button class="ghost-btn" data-add-annual-accounting="yes">Add Annual Client</button>` : ``}
+                  ${state.annualTeam === "accounting" ? `<button class="ghost-btn" data-preview-annual-accounting="yes">Generate Clients</button><button class="ghost-btn" data-add-annual-accounting="yes">Add Outside-Contract Work</button>` : `<input id="annual-tax-subject-name" class="field" placeholder="SPT subject name" aria-label="SPT subject name" /><select id="annual-tax-linked-client" class="field" aria-label="Linked client"><option value="">No linked client</option>${activeClientMasterRecords().map(client => `<option value="${escapeAttr(client.id)}">${escapeHtml(client.name)}</option>`).join("")}</select>${hasLeadershipAccess() ? `<select id="annual-tax-new-pic" class="field" aria-label="Tax PIC"><option value="">Select Tax PIC</option>${taxPicOptions.map(person => `<option value="${escapeAttr(person.id)}">${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>` : ""}<button class="ghost-btn" data-add-annual-tax="yes">Add SPT Subject</button>`}
                   <button class="ghost-btn" data-switch-view="dashboard-view">Open Management</button>
                 </div>
               </div>
 
               <details class="annual-legacy-sheet" open><summary>Annual control sheet</summary>
-
-              <div class="matrix-ops-guide">
-                <span><strong>Annual mode</strong> = separate control sheet from monthly compliance</span>
-                <span><strong>1 client</strong> = 1 row</span>
-                <span><strong>Goal</strong> = preserve old Excel scanning speed without mixing accounting and tax annual workflows</span>
-              </div>
 
               <datalist id="annual-client-options">
                 ${clients.map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}
@@ -8289,6 +8323,7 @@
             </section>
           ` : ``}
         </div>
+        ${state.annualGenerationPreview ? `<div class="client-editor-backdrop" role="presentation"><section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Annual generation preview"><div class="client-editor-head"><div><div class="eyebrow">Annual Accounting · ${state.annualGenerationPreview.year}</div><h3>Generate ${state.annualGenerationPreview.clients.length} client(s)</h3><p class="subline">Active clients with an ACC PIC only. ${state.annualGenerationPreview.alreadyGenerated} already generated for this year. Existing work will not be duplicated.</p></div><button class="ghost-btn" data-cancel-annual-generation="yes">Close</button></div><div class="generation-preview-table"><table><thead><tr><th>No.</th><th>Client</th><th>ACC PIC</th><th>Tax PIC</th></tr></thead><tbody>${state.annualGenerationPreview.clients.map((client, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(client.name)}</td><td>${escapeHtml(client.accountingPic || "-")}</td><td>${escapeHtml(client.taxPic || "-")}</td></tr>`).join("") || `<tr><td colspan="4">No new clients to generate.</td></tr>`}</tbody></table></div><div class="client-editor-actions"><button class="ghost-btn" data-cancel-annual-generation="yes">Cancel</button><button class="solid-btn" data-confirm-annual-generation="yes" ${state.annualGenerationPreview.clients.length ? "" : "disabled"}>Generate annual work</button></div></section></div>` : ""}
         ${state.monthlyGenerationPreview ? `<div class="client-editor-backdrop" role="presentation"><section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Monthly generation preview"><div class="client-editor-head"><div><div class="eyebrow">Monthly Compliance</div><h3>Generate ${escapeHtml(state.monthlyGenerationPreview.period)}</h3><p class="subline">Review ${state.monthlyGenerationPreview.clients.length} client(s) assigned to ${escapeHtml(state.monthlyGenerationPreview.taxPic || "the selected Tax PIC")}. PIC assignments are preserved as a historical snapshot.</p></div><button class="ghost-btn" data-cancel-monthly-generation="yes">Close</button></div><div class="generation-preview-table"><table><thead><tr><th>No.</th><th>Client</th><th>Tax PIC</th><th>ACC PIC</th></tr></thead><tbody>${state.monthlyGenerationPreview.clients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(client.name || "Untitled client")}</strong></td><td>${escapeHtml(client.taxPic || state.monthlyGenerationPreview.taxPic || "-")}</td><td>${escapeHtml(client.accountingPic || client.accPic || "-")}</td></tr>`).join("")}</tbody></table></div><div class="client-editor-actions"><button class="ghost-btn" data-cancel-monthly-generation="yes">Cancel</button><button class="solid-btn" data-confirm-monthly-generation="yes">Generate ${state.monthlyGenerationPreview.clients.length} clients</button></div></section></div>` : ""}
       `);
     }
@@ -8307,13 +8342,22 @@
       const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">${deleteIcon()}</button>`;
       const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${item.id.startsWith("case-") ? `<div class="empty-state">Save this Himbauan first, then add progress updates.</div>` : expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed linked tasks yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress</div><div class="case-progress-list">${expandedProgress.progressEntries.map((entry) => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName)} · ${entry.createdAt ? new Date(entry.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${item.id}">Add</button></div></div></div>` : `<div class="subline">Loading progress...</div>`}</td></tr>` : "";
-      const caseActionButtons = (item) => `<div class="inline-controls">${hasLeadershipAccess() && !item.id.startsWith("case-") ? `<button class="tiny-btn" data-reassign-case="${item.id}" title="Reassign case PIC without changing Client Master">PIC</button>` : ""}${deleteCaseButton(item)}</div>`;
+      const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
+      const casePicCell = (item, type) => {
+        const isTax = type === "tax";
+        const currentName = isTax ? item.taxPic : item.accountingPic;
+        const currentId = isTax ? item.taxPicProfileId : item.accountingPicProfileId;
+        if (!canReassignCasePic() || item.id.startsWith("case-")) return `<span class="case-inline-readonly">${escapeHtml(currentName || "-")}</span>`;
+        const division = isTax ? "Tax Team" : "Accounting Team";
+        const people = staffDirectory.filter((person) => person.directory_active !== false && person.team_division === division);
+        return `<select class="inline-select" data-case-pic-select="${escapeAttr(item.id)}" data-pic-type="${type}" aria-label="${division} case PIC"><option value="" ${!currentId ? "selected" : ""}>Unassigned</option>${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === currentId ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
+      };
       const himbauanRows = caseWindow.rows.map((item, index) => {
         const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr class="case-main-row" data-keyboard-row="case" data-toggle-himbauan-progress="${item.id}" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${item.taxPic || "-"}</td><td data-case-pic-acc="${item.id}">${item.accountingPic || "-"}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`;
+        return `<tr class="case-main-row" data-keyboard-row="case" data-toggle-himbauan-progress="${item.id}" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${casePicCell(item, "tax")}</td><td data-case-pic-acc="${item.id}">${casePicCell(item, "accounting")}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`;
       }).join("") || `<tr><td colspan="13"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
       const pemeriksaanRows = caseWindow.rows.map((item, index) => {
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}"><span class="case-inline-readonly">${item.taxPic || "-"}</span></td><td data-case-pic-acc="${item.id}"><span class="case-inline-readonly">${item.accountingPic || "-"}</span></td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>`;
+        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}">${casePicCell(item, "tax")}</td><td data-case-pic-acc="${item.id}">${casePicCell(item, "accounting")}</td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>`;
       }).join("") || `<tr><td colspan="13"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
 
       root.innerHTML = safeHtml(`
@@ -8990,6 +9034,10 @@
       } catch (error) { console.warn("[operations] shared load failed", error); return false; }
     }
 
+    if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.configure(team => {
+      loadSharedOperationalWorkspaces(true, team === "tax" ? "annual_tax" : "annual_accounting");
+    }, bootstrapProfile.user.id);
+
     async function saveClientToDatabase(client, { showLoading = true } = {}) {
       const response = await appFetch("/api/clients", {
         method: "POST",
@@ -9187,8 +9235,11 @@
       record.taxPic = linkedClient?.taxPic || "";
       record.accountingPic = linkedClient?.accountingPic || "";
       const escapedId = window.CSS?.escape ? window.CSS.escape(record.id) : record.id;
-      document.querySelectorAll(`[data-case-pic-tax="${escapedId}"]`).forEach((cell) => { cell.textContent = record.taxPic || "-"; });
-      document.querySelectorAll(`[data-case-pic-acc="${escapedId}"]`).forEach((cell) => { cell.textContent = record.accountingPic || "-"; });
+      document.querySelectorAll(`[data-case-pic-tax="${escapedId}"], [data-case-pic-acc="${escapedId}"]`).forEach((cell) => {
+        const select = cell.querySelector("select");
+        if (select) select.value = cell.hasAttribute("data-case-pic-tax") ? record.taxPicProfileId || "" : record.accountingPicProfileId || "";
+        else cell.textContent = cell.hasAttribute("data-case-pic-tax") ? record.taxPic || "-" : record.accountingPic || "-";
+      });
       return linkedClient;
     }
 
@@ -9830,6 +9881,7 @@
     }
 
     function persistDemoState() {
+      if (IS_ANNUAL_SHEET_PREVIEW) return;
       try {
         window.localStorage.setItem(
           DEMO_STORAGE_KEY,
@@ -10024,6 +10076,8 @@
       applyViewVisibility(viewId);
       renderShellChrome();
       restoreVirtualTableScrollPositions();
+      if (IS_ANNUAL_SHEET_PREVIEW) window.AnnualDashboardPreview.syncVisibility(state);
+      if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.syncVisibility(state);
       if (viewId === "my-work-view") loadSharedMyWork(true);
       if (viewId === "client-view") {
         if (!casesLoadedFromDatabase) loadSharedCases(true);
@@ -10148,11 +10202,11 @@
 
     function syncBrowserHistory(mode = "replace") {
       const method = mode === "push" ? "pushState" : "replaceState";
-      window.history[method](historySnapshot(), "", window.location.pathname);
+      window.history[method](historySnapshot(), "", window.location.pathname + (IS_ANNUAL_SHEET_PREVIEW ? window.location.search : ""));
     }
 
     function commitUi(mode = "push") {
-      if (state.currentView === "matrix-view" && state.operationsMode === "annual") queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
+      if (state.currentView === "matrix-view" && state.operationsMode === "annual" && (IS_OFFLINE_DEMO || !window.AnnualDashboardSheets)) queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
       rerender();
       persistDemoState();
       syncBrowserHistory(mode);
@@ -10220,6 +10274,8 @@
       restoreVirtualTableScrollPositions();
       restoreActiveEditor(activeEditor);
       if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+      if (IS_ANNUAL_SHEET_PREVIEW) window.AnnualDashboardPreview.syncVisibility(state);
+      if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.syncVisibility(state);
     }
 
     document.addEventListener("keydown", (event) => {
@@ -10421,7 +10477,6 @@
       const newCaseTrigger = target.closest("[data-new-case]");
       const selectCaseTrigger = target.closest("[data-select-case]");
       const saveCaseTrigger = target.closest("[data-save-case]");
-      const reassignCaseTrigger = target.closest("[data-reassign-case]");
       const deleteCaseTrigger = target.closest("[data-delete-case]");
       const restoreCaseTrigger = target.closest("[data-restore-case]");
       const toggleCaseTrashTrigger = target.closest("[data-toggle-case-trash]");
@@ -10715,6 +10770,58 @@
         return;
       }
 
+      if (target.closest("[data-annual-status]")) {
+        state.annualStatusTab = target.closest("[data-annual-status]").getAttribute("data-annual-status");
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+      if (target.closest("[data-cancel-annual-generation]")) {
+        state.annualGenerationPreview = null;
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+      if (target.closest("[data-preview-annual-accounting]")) {
+        try {
+          const response = await appFetch("/api/operations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "preview-annual-accounting", year: state.annualPlanYear }) }, "Checking annual clients...");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Annual preview failed.");
+          state.annualGenerationPreview = result;
+          commitWorkspaceNavigation("replace");
+        } catch (error) { window.alert(error instanceof Error ? error.message : "Annual preview failed."); }
+        return;
+      }
+      if (target.closest("[data-confirm-annual-generation]")) {
+        const button = target.closest("[data-confirm-annual-generation]");
+        button.disabled = true;
+        try {
+          const response = await appFetch("/api/operations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generate-annual-accounting", year: state.annualPlanYear }) }, "Generating annual work...");
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || "Annual generation failed.");
+          state.annualGenerationPreview = null;
+          await loadSharedOperationalWorkspaces(false, "annual_accounting");
+          commitWorkspaceNavigation("replace");
+        } catch (error) { button.disabled = false; window.alert(error instanceof Error ? error.message : "Annual generation failed."); }
+        return;
+      }
+      if (target.closest("[data-add-annual-tax]")) {
+        const name = document.getElementById("annual-tax-subject-name")?.value.trim();
+        const linkedClientId = document.getElementById("annual-tax-linked-client")?.value || "";
+        if (!name) { window.alert("Enter the SPT subject name first."); return; }
+        if (!bootstrapProfile.profile?.id) { window.alert("Sign in before creating annual tax work."); return; }
+        const linked = activeClientMasterRecords().find(client => client.id === linkedClientId);
+        const selectedPicId = document.getElementById("annual-tax-new-pic")?.value || "";
+        const selectedPic = taxPicOptions.find(person => person.id === selectedPicId);
+        const taxPic = selectedPic ? selectedPic.display_name || selectedPic.full_name : state.teamDivision === "Tax Team" ? state.selectedPic : "";
+        const taxPicProfileId = selectedPic?.id || (state.teamDivision === "Tax Team" ? bootstrapProfile.profile.id : null);
+        if (!taxPicProfileId) { window.alert("Assign an active Tax PIC to this SPT subject first."); return; }
+        const annualWorkId = crypto.randomUUID();
+        annualTaxRows.unshift({ id: `annual-tax-${annualWorkId}`, annualWorkId, clientId: linkedClientId, clientName: name, groupName: linked?.name || "Independent", taxYear: state.annualPlanYear, reportPic: "", reportPicProfileId: null, taxPic, taxPicProfileId, status: "Pencatatan", previousSpt: false, lifestyleAnalysis: false, assetReview: false, clientMeeting: false, finish: false, meeting: false, spt: false, bayar: false, laporCount: "0", kurangBayar: "", ntpe: "", notes: "", reported: false, paymentAmount: "", paymentDate: "", paymentNtpn: "", changeLog: [] });
+        state.annualTeam = "tax";
+        state.annualStatusTab = "incomplete";
+        commitUi("push");
+        return;
+      }
+
       if (casesTabTrigger) {
         state.casesTab = casesTabTrigger.getAttribute("data-cases-tab");
         const visible = hasLeadershipAccess()
@@ -10799,33 +10906,6 @@
       if (selectCaseTrigger) {
         state.selectedCaseId = selectCaseTrigger.getAttribute("data-select-case");
         commitUi("replace");
-        return;
-      }
-
-      if (reassignCaseTrigger) {
-        const record = taxCases.find((item) => item.id === reassignCaseTrigger.getAttribute("data-reassign-case"));
-        if (!record || !hasLeadershipAccess()) return;
-        const choose = (division, current) => {
-          const people = staffDirectory.filter((person) => person.directory_active !== false && person.team_division === division);
-          const input = window.prompt(`${division} case PIC (blank to leave unassigned):\n${people.map((person) => person.display_name || person.full_name).join(", ")}`, current || "");
-          if (input === null) return null;
-          if (!input.trim()) return { id: "", name: "" };
-          const matches = people.filter((person) => [person.display_name, person.full_name].some((name) => String(name || "").trim().toLowerCase() === input.trim().toLowerCase()));
-          if (matches.length !== 1) throw new Error(`Choose one unambiguous active ${division} PIC from the list.`);
-          const match = matches[0];
-          return { id: match.id, name: match.display_name || match.full_name };
-        };
-        try {
-          const tax = choose("Tax Team", record.taxPic);
-          if (!tax) return;
-          const accounting = choose("Accounting Team", record.accountingPic);
-          if (!accounting) return;
-          const response = await appFetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: record.id, version: record.version, action: "assign-pic", taxPicProfileId: tax.id, accountingPicProfileId: accounting.id }) }, "Saving case PIC...");
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(result.error || "Case PIC could not be saved.");
-          Object.assign(record, databaseCaseToDemo(result.data));
-          renderCases();
-        } catch (error) { window.alert(error instanceof Error ? error.message : "Case PIC could not be saved."); }
         return;
       }
 
@@ -12033,6 +12113,23 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+      if (target instanceof HTMLSelectElement && target.id === "annual-tax-year") {
+        state.annualPlanYear = Number(target.value);
+        state.expandedAnnualAccountingId = "";
+        commitWorkspaceNavigation("replace");
+        return;
+      }
+      if (target instanceof HTMLSelectElement && target.matches("[data-case-pic-select]")) {
+        const record = taxCases.find((item) => item.id === target.getAttribute("data-case-pic-select"));
+        const picType = target.getAttribute("data-pic-type");
+        if (!record || !canReassignCasePic() || !["tax", "accounting"].includes(picType)) return;
+        const previous = picType === "tax" ? record.taxPicProfileId : record.accountingPicProfileId;
+        target.disabled = true;
+        appFetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: record.id, version: record.version, action: "assign-pic", picType, profileId: target.value }) }, "Saving case PIC...")
+          .then(async (response) => { const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || "Case PIC could not be saved."); Object.assign(record, databaseCaseToDemo(result.data)); renderCases(); })
+          .catch((error) => { target.value = previous || ""; target.disabled = false; window.alert(error instanceof Error ? error.message : "Case PIC could not be saved."); });
+        return;
+      }
       if (target instanceof HTMLSelectElement && target.id === "client-sort-mobile") {
         state.sorts.clients = { key: target.value, dir: "asc" };
         commitUi("replace");
@@ -12739,7 +12836,7 @@
     // The authenticated profile request already reached Supabase successfully.
     // Reflect that immediately while the broader schema health audit runs.
     if (window.location.protocol === "file:") {
-      databaseHealthStatus = { text: "Database: demo mode", className: "database-status-chip is-demo", title: "Local demo data is active." };
+      databaseHealthStatus = { text: IS_ANNUAL_SHEET_PREVIEW ? "Preview: sample data" : "Database: demo mode", className: "database-status-chip is-demo", title: "Local demo data is active." };
     } else {
       databaseHealthStatus = { text: "Database: loading", className: "database-status-chip is-warning", title: "Loading the current workspace." };
     }

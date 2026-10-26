@@ -1,0 +1,5 @@
+.annual-sheets-enabled .annual-sheet-container{width:100%;max-width:var(--workspace-width);min-width:0}
+.annual-sheets-enabled .annual-sheet-container[hidden]{display:none!important}
+.annual-sheets-enabled .annual-sheet-frame{display:block;width:100%;height:max(580px,calc(100dvh - 235px));border:0;background:transparent;border-radius:12px}
+.annual-sheet-heading{margin-bottom:10px}
+.annual-sheet-connected{font-size:11px;color:var(--muted)}
