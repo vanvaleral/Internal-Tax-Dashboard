@@ -89,16 +89,26 @@ of a specific live load time; deployed latency must be measured separately.
 
 ## Bulk Entry And Individual Subjects
 
-**Add Client > Insert / Paste Rows** opens a draft grid for either team. Insert
-blank rows or paste Excel values into a cell; paste expands the grid up to 250
-rows. Column order is shown in the grid. Use values without a header row, ISO
-dates (YYYY-MM-DD) and numbers without thousands separators. Month counts fill
-January onward; Tax checklist counts fill milestones left to right. Quoted tabs,
-quotes and multiline cells are parsed as single cells. Enter / Shift+Enter move
-down/up a draft column; Tab moves across fields. Closing the draft grid retains
-its rows in memory for that user/year until saved, cleared or reloaded. Access
-changes clear both draft memory and inputs. Existing sheet paste still
-edits only its selected visible range and cannot bypass locked cells.
+The footer **Add [number] more rows at the bottom** appends editable Draft rows
+directly to the same table for either team, sharing its column headings and widths.
+There is no separate insertion popup. Type in the cells, use their native PIC and
+Progress dropdowns, or paste Excel values starting in a Draft cell. Paste follows
+the currently visible columns and expands the drafts up to 250 rows per year.
+Use values without a header row, ISO dates (YYYY-MM-DD) and numbers without
+thousands separators. Month counts fill January onward; Tax checklist counts fill
+milestones left to right. Individually checked Tax milestones retain their exact
+positions across views. Quoted tabs, quotes and multiline cells are parsed as
+single cells. Enter / Shift+Enter move down/up; Tab / Shift+Tab move across fields,
+appending a blank row at the end when needed, up to the same limit.
+
+**Save new rows** validates and persists the named drafts; ordinary saved cells
+retain their existing save mechanism. The formula bar is read-only for Draft cells
+so its previous saved selection cannot accidentally be edited. Drafts remain in
+memory for their user/year when switching views or years, until saved, explicitly
+cleared or reloaded. Live pages warn before closing with meaningful unsaved drafts.
+Access changes clear both draft memory and inputs. Blank templates do not trigger
+this warning. Drafts do not appear in totals or Excel exports. Existing saved-cell
+paste still edits only its selected visible range and cannot bypass locked cells.
 
 Blank drafts are never persisted or counted. Named rows are validated as one
 batch, then confirmed with one POST. Invalid data, duplicates, unauthorized PIC

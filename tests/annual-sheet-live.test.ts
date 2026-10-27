@@ -339,22 +339,66 @@ test("annual API only permits assignment to active operational PICs while retain
 test("live bulk rows stay drafts until a single confirmed POST, preserving row data and keeping failures out of the grid", async () => {
   const d = await openRefreshFixture({ stylesReady: true });
   try {
-    d.w.document.getElementById("bulk-add-button").click();
+    d.w.document.getElementById("add-annual-rows").click();
     assert.equal(d.api.state.rows.length, 1);
-    const input = (r: number, field: string, value: string) => { const node = d.w.document.querySelector(`#bulk-rows-grid input[data-r="${r}"][data-field="${field}"]`); node.value = value; node.dispatchEvent(new d.w.Event("input", { bubbles: true })); };
+    const input = (r: number, field: string, value: string) => { const node = d.w.document.querySelector(`#annual-draft-rows [data-draft-r="${r}"][data-field="${field}"]`); node.value = value; node.dispatchEvent(new d.w.Event("input", { bubbles: true })); };
     input(0, "clientName", "External Imported Client"); input(0, "dataMonths", "7"); input(0, "notes", "Excel import note");
-    d.w.document.getElementById("bulk-save-rows").click(); await d.tick(); await d.tick();
+    d.w.document.getElementById("save-new-rows").click(); await d.tick(); await d.tick();
     const imported = d.api.state.rows.find((row: any) => row.clientName === "External Imported Client");
     assert.ok(imported); assert.equal(imported.dataMonths.length, 7); assert.equal(imported.accountingPicId, "acc-1");
     assert.equal(imported.clientId, ""); assert.equal(d.db.tables.client_master.length, 1);
     assert.equal(d.requests.filter(url => url.startsWith("POST")).length, 1);
-    assert.equal(d.w.document.getElementById("bulk-rows-dialog").open, false);
-    d.w.document.getElementById("bulk-add-button").click(); input(0, "clientName", "Invalid Import"); input(0, "dataMonths", "15");
+    assert.equal(d.w.document.getElementById("bulk-rows-dialog"), null);
+    input(0, "clientName", "Invalid Import"); input(0, "dataMonths", "15");
     const count = d.api.state.rows.length;
-    d.w.document.getElementById("bulk-save-rows").click(); await d.tick();
+    d.w.document.getElementById("save-new-rows").click(); await d.tick();
     assert.equal(d.api.state.rows.length, count); assert.equal(d.requests.filter(url => url.startsWith("POST")).length, 1);
-    assert.equal(d.w.document.getElementById("bulk-rows-dialog").open, true);
-    assert.match(d.w.document.getElementById("bulk-rows-error").textContent, /Row 1/);
+    assert.ok(d.w.document.querySelector("#annual-draft-rows [data-draft-r='0']"));
+    assert.match(d.w.document.getElementById("new-rows-error").textContent, /New row 1/);
+  } finally { d.dom.window.close(); }
+});
+
+test("inline save retains its original year while candidate validation is pending and locks competing writes", async () => {
+  const d = await openRefreshFixture({ stylesReady: true });
+  try {
+    const doc = d.w.document, year = d.api.state.year;
+    doc.getElementById("annual-row-count").value = "1"; doc.getElementById("add-annual-rows").click();
+    const name = doc.querySelector('#annual-draft-rows [data-field="clientName"]');
+    name.value = "Original year draft"; name.dispatchEvent(new d.w.Event("input", { bubbles: true }));
+    const transport = d.w.AnnualSheetLive, original = transport.loadClients.bind(transport);
+    let release!: () => void;
+    transport.loadClients = async () => { await new Promise<void>(resolve => { release = resolve; }); return original(); };
+    doc.getElementById("save-new-rows").click();
+    assert.equal(doc.getElementById("add-annual-rows").disabled, true);
+    assert.equal(doc.getElementById("generate-button").disabled, true);
+    assert.equal(doc.getElementById("outside-button").disabled, true);
+    assert.equal(doc.getElementById("undo-button").disabled, true);
+    d.api.state.year = year - 1; d.w.dispatchEvent(new d.w.Event("resize"));
+    assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 0);
+    release(); await d.tick(); await d.tick();
+    const imported = d.api.state.rows.find((row: any) => row.clientName === "Original year draft");
+    assert.equal(imported?.year, year); assert.equal(d.api.state.year, year - 1);
+    assert.equal(d.requests.filter(url => url.startsWith("POST")).length, 1);
+    d.api.state.year = year; d.w.dispatchEvent(new d.w.Event("resize"));
+    assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 0);
+  } finally { d.dom.window.close(); }
+});
+
+test("live unsaved-row warning ignores blank templates and access loss clears private draft cells", async () => {
+  const d = await openRefreshFixture({ stylesReady: true });
+  try {
+    const doc = d.w.document;
+    const closeAttempt = () => { const event = new d.w.Event("beforeunload", { cancelable: true }); d.w.dispatchEvent(event); return event.defaultPrevented; };
+    doc.getElementById("add-annual-rows").click();
+    assert.equal(closeAttempt(), false);
+    const name = doc.querySelector('#annual-draft-rows [data-field="clientName"]');
+    name.value = "Private unfinished name"; name.dispatchEvent(new d.w.Event("input", { bubbles: true }));
+    assert.equal(closeAttempt(), true);
+    d.fail(403); d.advance(); d.focus(); await d.tick();
+    assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 0);
+    assert.equal(doc.getElementById("add-annual-rows").disabled, true);
+    assert.equal(doc.body.innerHTML.includes("Private unfinished name"), false);
+    assert.equal(closeAttempt(), false);
   } finally { d.dom.window.close(); }
 });
 

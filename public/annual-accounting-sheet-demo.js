@@ -98,9 +98,9 @@
   const actorAccName = () => accPics.find(name => staffId(name) === state.actorId) || "";
   const actorTaxName = () => taxPics.find(name => staffId(name, "tax") === state.actorId) || "";
   const ownsRow = (row) => (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId || row.assistantIds.includes(state.actorId);
-  const canManageRow = row => row && (!liveMode ? isLeadership() || (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId : liveReady && !liveBusy && row.canManageRow);
+  const canManageRow = row => row && !bulkSaving && (!liveMode ? isLeadership() || (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId : liveReady && !liveBusy && row.canManageRow);
   function canEdit(row, col) {
-    if (liveMode && (!liveReady || liveBusy)) return false;
+    if (bulkSaving || liveMode && (!liveReady || liveBusy)) return false;
     if (!row || row.deletedAt || !col || col.type === "summary") return false;
     if (taxMode && ["clientName", "subjectType", "groupName"].includes(col.field)) return isLeadership();
     if (col.field === "clientName") return isLeadership() && row.outside;
@@ -128,11 +128,13 @@
     $("save-status").textContent = `${label}. Demo only; no database changes.`;
   }
   function undo() {
+    if (bulkSaving) return;
     if (liveMode) { if (!editor && !liveBusy && window.AnnualSheetLive.canUndo) saveLive(() => window.AnnualSheetLive.undo(), "Undone"); return; }
     if (editor || !state.history.length) return;
     const previous = state.history.pop(); state.future.push({ rows: clone(state.rows), customColumns: clone(state.customColumns), label: previous.label }); state.rows = previous.rows; state.customColumns = previous.customColumns; state.range = null; render(); notify(`Undone: ${previous.label}`);
   }
   function redo() {
+    if (bulkSaving) return;
     if (liveMode) { if (!editor && !liveBusy && window.AnnualSheetLive.canRedo) saveLive(() => window.AnnualSheetLive.redo(), "Redone"); return; }
     if (editor || !state.future.length) return;
     const next = state.future.pop(); state.history.push({ rows: clone(state.rows), customColumns: clone(state.customColumns), label: next.label }); state.rows = next.rows; state.customColumns = next.customColumns; state.range = null; render(); notify(`Redone: ${next.label}`);
@@ -338,15 +340,15 @@
     $("coverage-number").textContent = `${percent}%`; $("coverage-fill").style.width = `${percent}%`; $("coverage-caption").textContent = `${checked} of ${total} ${taxMode ? "milestones" : "month cells"} checked`;
     document.querySelectorAll("[data-view]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.view === state.view)));
     document.querySelectorAll("[data-status]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.status === state.status)));
-    $("undo-button").disabled = liveMode ? liveBusy || !window.AnnualSheetLive?.canUndo : !state.history.length; $("redo-button").disabled = liveMode ? liveBusy || !window.AnnualSheetLive?.canRedo : !state.future.length;
+    $("undo-button").disabled = bulkSaving || (liveMode ? liveBusy || !window.AnnualSheetLive?.canUndo : !state.history.length); $("redo-button").disabled = bulkSaving || (liveMode ? liveBusy || !window.AnnualSheetLive?.canRedo : !state.future.length);
     $("visible-count").textContent = `${visible.length} ${taxMode ? "subject" : "client"}${visible.length === 1 ? "" : "s"} shown`;
     $("sort-status").textContent = `${state.sort.group ? state.sort.group.title + " / " : ""}${state.sort.title} ${state.sort.direction === "asc" ? "\u2191" : "\u2193"}`;
     $("sort-status").title = "Click a column heading to sort. Click again to reverse.";
     $("access-description").textContent = isLeadership() ? `Edit all work; manage PIC assignments${taxMode ? ", subject identities," : ""} and deadlines.${taxMode ? "" : " Client Master names stay locked."}` : `${actor()?.name || "Loading"}: edit your own ${taxMode ? "Tax" : "ACC"} work and assigned assistance only. PIC and deadline cells stay locked.`;
-    $("outside-button").disabled = !isLeadership() && !(taxMode ? actorTaxName() : actorAccName());
-    $("bulk-add-button").disabled = $("outside-button").disabled || !state.year || liveMode && (!liveReady || liveBusy);
+    $("outside-button").disabled = bulkSaving || !isLeadership() && !(taxMode ? actorTaxName() : actorAccName());
+    $("generate-button").disabled = $("empty-generate").disabled = bulkSaving || generationLoading || state.year === 0;
     if (liveMode) {
-      for (const id of ["generate-button", "empty-generate", "export-button"]) $(id).disabled = !liveReady || liveBusy;
+      for (const id of ["generate-button", "empty-generate", "export-button"]) $(id).disabled ||= !liveReady || liveBusy;
       $("outside-button").disabled ||= !liveReady || liveBusy;
       $("generate-button").disabled ||= state.year === 0;
       $("outside-button").disabled ||= state.year === 0;
@@ -403,8 +405,9 @@
     syncRangeEditor();
     $("empty-state").hidden = !!visible.length; table.hidden = !visible.length;
     if (visible.length) { const selectedIndex = visible.findIndex(row => row.id === selectedRowId); state.selection.r = selectedIndex >= 0 ? selectedIndex : Math.min(state.selection.r, visible.length - 1); state.selection.c = Math.min(state.selection.c, columns.length - 1); }
+    renderDrafts();
     paintSelection();
-    if (restoreGridFocus && visible.length) getCell(state.selection.r, state.selection.c)?.focus({ preventScroll: true });
+    if (restoreGridFocus && visible.length && !activeDraftCell) getCell(state.selection.r, state.selection.c)?.focus({ preventScroll: true });
     scroller.scrollTop = scrollPosition.top; scroller.scrollLeft = scrollPosition.left;
     if (embeddedPreview && !liveMode) sendPreviewState();
   }
@@ -441,6 +444,7 @@
   }
   function paintSelection() {
     document.querySelectorAll(".cell.selected, .cell.in-range").forEach(cell => { cell.classList.remove("selected", "in-range"); cell.tabIndex = -1; cell.setAttribute("aria-selected", "false"); });
+    if (paintDraftSelection()) return;
     const { r, c } = state.selection; const row = visible[r]; const col = columns[c];
     if (!row || !col) { $("cell-value").value = ""; $("cell-value").disabled = true; $("cell-address").textContent = "-"; return; }
     const cell = getCell(r, c); cell.classList.add("selected"); cell.tabIndex = 0; cell.setAttribute("aria-selected", "true");
@@ -450,7 +454,7 @@
     if (state.range) { const range = state.range; for (let rr = Math.min(range.r1, range.r2); rr <= Math.max(range.r1, range.r2); rr++) for (let cc = Math.min(range.c1, range.c2); cc <= Math.max(range.c1, range.c2); cc++) getCell(rr, cc)?.classList.add("in-range"); count = (Math.abs(range.r2 - range.r1) + 1) * (Math.abs(range.c2 - range.c1) + 1); }
     $("selection-count").textContent = `${count} cell${count === 1 ? "" : "s"} selected`;
   }
-  function select(r, c, focus = false) { state.selection = { r: Math.max(0, Math.min(r, visible.length - 1)), c: Math.max(0, Math.min(c, columns.length - 1)) }; state.range = null; paintSelection(); if (focus) getCell(state.selection.r, state.selection.c)?.focus({ preventScroll: false }); }
+  function select(r, c, focus = false) { activeDraftCell = null; state.selection = { r: Math.max(0, Math.min(r, visible.length - 1)), c: Math.max(0, Math.min(c, columns.length - 1)) }; state.range = null; paintSelection(); if (focus) getCell(state.selection.r, state.selection.c)?.focus({ preventScroll: false }); }
   function changeChecklistView(nextView, rowId = "") {
     if (!finishEdit(true)) return;
     const scroller = $("grid-scroll"), previousView = state.view, previousColumn = columns[state.selection.c];
@@ -628,6 +632,7 @@
     changeChecklistView(button.dataset.openControl, button.dataset.rowId);
   });
   table.addEventListener("keydown", (event) => {
+    if (event.target.closest("[data-draft-r]")) return;
     const rowAction = event.target.closest("[data-row-actions]");
     if (rowAction) { if (["Enter", " ", "ArrowDown"].includes(event.key)) { event.preventDefault(); openRowMenu(rowAction); } return; }
     if (editor) { if (event.key === "Escape") { event.preventDefault(); finishEdit(false); getCell(state.selection.r, state.selection.c)?.focus(); } else if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); const { r, c } = editor; if (finishEdit(true)) event.key === "Tab" ? tabMove(r, c, event.shiftKey) : select(r + (event.shiftKey ? -1 : 1), c, true); } return; }
@@ -670,96 +675,165 @@
     if ((event.ctrlKey || event.metaKey) && ["z", "y"].includes(event.key.toLowerCase())) { event.preventDefault(); event.key.toLowerCase() === "y" || event.shiftKey ? redo() : undo(); }
   });
   table.addEventListener("copy", (event) => {
+    if (event.target.closest("[data-draft-r]")) return;
     if (editor) return; const { r, c } = state.selection; const range = state.range || { r1: r, r2: r, c1: c, c2: c }; const lines = [];
     for (let rr = Math.min(range.r1, range.r2); rr <= Math.max(range.r1, range.r2); rr++) { const cells = []; for (let cc = Math.min(range.c1, range.c2); cc <= Math.max(range.c1, range.c2); cc++) cells.push(String(valueAt(visible[rr], columns[cc])).replace(/[\t\r\n]/g, " ")); lines.push(cells.join("\t")); }
     event.preventDefault(); event.clipboardData.setData("text/plain", lines.join("\n")); notify("Selection copied. Paste into Excel or another cell.");
   });
   table.addEventListener("paste", (event) => {
+    if (event.target.closest("[data-draft-r]")) return;
     if (editor) return; event.preventDefault();
     const source = event.clipboardData.getData("text/plain"); if (!source) return;
     const { r, c } = state.selection; const edits = [];
     try {
       const data = clipboardRows(source);
-      if (r + data.length > visible.length || data.some(line => c + line.length > columns.length)) throw new Error("Paste exceeds the visible sheet. Use Add Client > Insert / Paste Rows to add new annual rows.");
+      if (r + data.length > visible.length || data.some(line => c + line.length > columns.length)) throw new Error("Paste exceeds the saved rows. Add blank rows at the bottom, then paste into a Draft cell.");
       data.forEach((line, dr) => line.forEach((value, dc) => edits.push({ row: visible[r + dr], col: columns[c + dc], value: parseValue(columns[c + dc], value) })));
       applyEdits(`Pasted ${edits.length} cell(s)`, edits);
     } catch (error) { notify(`${error.message} Nothing was pasted.`); }
   });
-  let bulkDrafts = [], bulkColumns = [], bulkSaving = false, bulkDraftOwner = "";
-  const bulkButton = document.createElement("button"); bulkButton.id = "bulk-add-button"; bulkButton.type = "button"; bulkButton.textContent = "Insert / Paste Rows";
-  $("add-client-menu").append(bulkButton);
+  let bulkDrafts = [], bulkColumns = [], bulkSaving = false, bulkDraftOwner = "", activeDraftCell = null;
+  const draftSets = new Map();
   const bulkIdentity = value => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
   const bulkDefaults = () => bulkColumns.map(col => col.field === "subjectType" ? "Individual" : col.field === "progress" ? "Data Request" : col.field === "taxPic" ? actorTaxName() : col.field === "accountingPic" ? actorAccName() : "");
-  const newDraft = () => ({ id: liveMode ? crypto.randomUUID() : `demo-bulk-${++counter}`, cells: bulkDefaults() });
+  const newDraft = () => { const defaults = bulkDefaults(); return { id: liveMode ? crypto.randomUUID() : `demo-draft-${++counter}`, defaults, cells: [...defaults], checks: {} }; };
+  const canAddRows = () => !!state.year && (isLeadership() || !!(taxMode ? actorTaxName() : actorAccName())) && !bulkSaving && (!liveMode || liveReady && !liveBusy);
+  function activateDrafts() {
+    const owner = `${state.actorId}:${state.year}`;
+    const saved = draftSets.get(owner);
+    bulkDraftOwner = owner; bulkDrafts = saved?.rows || []; bulkColumns = saved?.columns || [];
+    const previous = bulkColumns;
+    const definitions = (taxMode ? taxConfig.buildColumns("summary", state.customColumns, accPics, taxPics) : buildColumns("summary")).filter(col => col.field !== "year");
+    if (taxMode) definitions.push({ field: "paymentDate", title: "Payment date", type: "date" }, { field: "paymentNtpn", title: "NTPN", type: "text" }, { field: "filingDate", title: "Filing date", type: "date" }, { field: "recordMethod", title: "Method", type: "select", options: ["Pencatatan", "Pembukuan"] });
+    bulkColumns = definitions;
+    const defaults = bulkDefaults();
+    bulkDrafts.forEach(draft => {
+      draft.cells = definitions.map((col, c) => { const old = previous.findIndex(item => item.field === col.field); return old < 0 || bulkIdentity(draft.cells[old]) === bulkIdentity(draft.defaults?.[old]) ? defaults[c] : draft.cells[old]; });
+      draft.defaults = [...defaults];
+    });
+    // Confirmed IDs retire drafts even when a previous save response was interrupted.
+    const confirmed = new Set(state.rows.map(row => row.id)); bulkDrafts = bulkDrafts.filter(draft => !confirmed.has(draft.id));
+    const set = { rows: bulkDrafts, columns: bulkColumns, error: saved?.error || "" };
+    draftSets.set(owner, set); return set;
+  }
+  const meaningfulDraft = (draft, definitions) => draft.cells.some((value, c) => String(value || "").trim() && (definitions[c].field === "clientName" || bulkIdentity(value) !== bulkIdentity(draft.defaults?.[c])));
+  const hasUnsavedDrafts = () => [...draftSets.values()].some(set => set.rows.some(draft => meaningfulDraft(draft, set.columns)));
+  function updateDraftControls() {
+    const set = draftSets.get(bulkDraftOwner), count = bulkDrafts.filter(draft => String(draft.cells[0] || "").trim()).length;
+    $("inline-row-controls").hidden = state.status === "deleted";
+    $("add-annual-rows").disabled = !canAddRows(); $("annual-row-count").disabled = !canAddRows();
+    $("save-new-rows").hidden = !bulkDrafts.length; $("clear-new-rows").hidden = !bulkDrafts.length;
+    $("save-new-rows").disabled = !canAddRows() || !count; $("clear-new-rows").disabled = bulkSaving || liveBusy;
+    $("new-rows-status").textContent = bulkSaving ? "Checking and saving new rows..." : bulkDrafts.length ? `${count} named / ${bulkDrafts.length} new rows. Drafts are not saved or counted yet.` : "Up to 250 new rows at a time.";
+    $("new-rows-error").textContent = set?.error || ""; $("new-rows-error").hidden = !set?.error;
+  }
+  function draftChecks(draft, field) {
+    if (draft.checks[field]) return draft.checks[field];
+    const c = bulkColumns.findIndex(col => col.field === field), match = String(draft.cells[c] || "").match(/^(\d+)(?:\/3)?$/);
+    return match && Number(match[1]) <= 3 ? Array.from({ length: Number(match[1]) }, (_, i) => i) : [];
+  }
   function renderDrafts() {
-    const grid = $("bulk-rows-grid");
-    grid.querySelector("thead").innerHTML = `<tr><th>No.</th>${bulkColumns.map(col => `<th>${escape(col.title)}${["range", "summary"].includes(col.type) ? ` (0-${col.type === "range" ? 12 : 3})` : ""}</th>`).join("")}</tr>`;
-    grid.querySelector("tbody").innerHTML = bulkDrafts.map((draft, r) => `<tr><td>${r + 1}</td>${bulkColumns.map((col, c) => `<td><input data-r="${r}" data-c="${c}" data-field="${col.field}" aria-label="Row ${r + 1}: ${escape(col.title)}" value="${escape(draft.cells[c])}" autocomplete="off" ${col.type === "select" ? `list="bulk-options-${col.field}"` : ""} /></td>`).join("")}</tr>`).join("");
-    $("bulk-rows-dialog").querySelectorAll("datalist").forEach(node => node.remove());
-    for (const col of bulkColumns.filter(col => col.type === "select")) {
-      const list = document.createElement("datalist"); list.id = `bulk-options-${col.field}`;
-      list.innerHTML = col.options.map(value => `<option value="${escape(value)}"></option>`).join(""); $("bulk-rows-dialog").append(list);
+    const focused = document.activeElement?.closest("[data-draft-r]"), focus = focused && { owner: bulkDraftOwner, id: bulkDrafts[Number(focused.dataset.draftR)]?.id, c: Number(focused.dataset.draftC), start: focused.selectionStart, end: focused.selectionEnd };
+    activateDrafts();
+    let body = $("annual-draft-rows"); if (!body) { body = document.createElement("tbody"); body.id = "annual-draft-rows"; table.append(body); }
+    const rows = state.status === "incomplete" ? bulkDrafts : [];
+    body.innerHTML = rows.map((draft, r) => `<tr class="annual-draft-row"><th class="row-number" scope="row" title="New row ${r + 1}, not saved">${visible.length + r + 1}<small>Draft</small></th>${columns.map((col, c) => {
+      const index = bulkColumns.findIndex(item => item.field === col.field), value = draft.cells[index] || "";
+      const attrs = `class="annual-draft-input" data-draft-r="${r}" data-draft-c="${c}" data-field="${col.field}" aria-label="New row ${r + 1}: ${escape(col.title)}" ${bulkSaving || liveMode && (!liveReady || liveBusy) ? "disabled" : ""}`;
+      let input;
+      if (col.type === "select") {
+        const selected = col.options.find(option => bulkIdentity(option) === bulkIdentity(value));
+        input = `<select ${attrs}><option value="">Choose ${escape(col.title)}</option>${col.options.filter(Boolean).map(option => `<option value="${escape(option)}" ${selected === option ? "selected" : ""}>${escape(option)}</option>`).join("")}${value && selected === undefined ? `<option value="${escape(value)}" selected disabled>${escape(value)} (unavailable)</option>` : ""}</select>`;
+      } else if (col.type === "check") input = `<input ${attrs} type="checkbox" ${draftChecks(draft, col.field).includes(col.month) ? "checked" : ""} />`;
+      else input = `<input ${attrs} value="${escape(value)}" autocomplete="off" placeholder="${col.field === "clientName" ? taxMode ? "New SPT subject" : "New client / engagement" : col.type === "range" ? "0-12" : col.type === "summary" ? "0-3" : col.type === "date" ? "YYYY-MM-DD" : ""}" />`;
+      return `<td class="cell annual-draft-cell ${col.frozen ? "client-column" : ""}" role="gridcell"><div class="cell-content">${input}</div></td>`;
+    }).join("")}</tr>`).join("");
+    table.hidden = !visible.length && !rows.length; $("empty-state").hidden = !!(visible.length || rows.length);
+    table.setAttribute("aria-rowcount", visible.length + rows.length + 2); updateDraftControls();
+    if (focus?.owner === bulkDraftOwner && !bulkSaving) {
+      const r = bulkDrafts.findIndex(draft => draft.id === focus.id), input = body.querySelector(`[data-draft-r="${r}"][data-draft-c="${focus.c}"]`);
+      input?.focus({ preventScroll: true }); if (input?.tagName === "INPUT" && input.type !== "checkbox" && focus.start !== null) input.setSelectionRange(focus.start, focus.end);
     }
-    $("bulk-rows-count").textContent = `${bulkDrafts.length} draft rows / 250 max`;
   }
-  function showBulkRows() {
-    closeAddClientMenu();
-    if (!finishEdit(true) || liveMode && (!liveReady || liveBusy) || !state.year) return;
-    if (!isLeadership() && !(taxMode ? actorTaxName() : actorAccName())) { notify("Only the corresponding team PIC or leadership can add annual rows."); return; }
-    bulkColumns = (taxMode ? taxConfig.buildColumns("summary", state.customColumns, accPics, taxPics) : buildColumns("summary")).filter(col => col.field !== "year");
-    if (taxMode) bulkColumns.push({ field: "paymentDate", title: "Payment date", type: "date" }, { field: "paymentNtpn", title: "NTPN", type: "text" }, { field: "filingDate", title: "Filing date", type: "date" }, { field: "recordMethod", title: "Method", type: "select", options: ["Pencatatan", "Pembukuan"] });
-    const owner = `${state.actorId}:${state.year}:${bulkColumns.map(col => col.field).join(",")}`;
-    if (bulkDrafts.length && owner !== bulkDraftOwner && bulkDrafts.some(row => row.cells[0].trim()) && !window.confirm("Discard the draft rows for the previous year or view?")) return;
-    if (!bulkDrafts.length || owner !== bulkDraftOwner) bulkDrafts = Array.from({ length: 10 }, newDraft);
-    bulkDraftOwner = owner; $("bulk-rows-year").textContent = state.year; $("bulk-rows-error").hidden = true;
-    $("bulk-rows-hint").textContent = `Copy values only (no headers). Dates: YYYY-MM-DD; amounts: numbers without thousands separators. ${taxMode ? "Checklist counts mark milestones from left to right." : "Month counts start from January; exact Client Master names link to eligible clients, otherwise rows are annual-only external work."} ${isLeadership() ? "Use active PIC names." : "Your PIC is automatic. Other assignments and deadlines remain leadership-only."}`;
-    renderDrafts(); $("bulk-rows-dialog").showModal();
-    $("bulk-rows-grid").querySelector("input")?.focus();
-    warmGenerationCandidates();
+  function paintDraftSelection() {
+    if (!activeDraftCell) return false;
+    const r = bulkDrafts.findIndex(draft => draft.id === activeDraftCell.id), c = activeDraftCell.c;
+    if (activeDraftCell.owner !== bulkDraftOwner || state.status !== "incomplete" || r < 0 || !columns[c]) { activeDraftCell = null; return false; }
+    const draft = bulkDrafts[r], col = columns[c], index = bulkColumns.findIndex(item => item.field === col.field);
+    $("cell-address").textContent = `${colLetter(c)}${visible.length + r + 1}`;
+    $("cell-value").value = col.type === "check" ? draftChecks(draft, col.field).includes(col.month) ? "TRUE" : "FALSE" : draft.cells[index] || "";
+    $("cell-value").disabled = true; $("cell-context").textContent = "Draft: edit in the cell, then Save new rows."; return true;
   }
-  bulkButton.addEventListener("click", showBulkRows);
-  $("bulk-insert-rows").addEventListener("click", () => {
-    const count = Number($("bulk-row-count").value);
-    if (!Number.isInteger(count) || count < 1 || bulkDrafts.length + count > 250) { $("bulk-rows-error").textContent = "Insert 1-250 rows, with at most 250 total drafts."; $("bulk-rows-error").hidden = false; return; }
-    bulkDrafts.push(...Array.from({ length: count }, newDraft)); renderDrafts();
+  function focusDraft(r, c) { table.querySelector(`[data-draft-r="${r}"][data-draft-c="${c}"]`)?.focus(); }
+  function writeDraftValue(draft, col, value) {
+    const index = bulkColumns.findIndex(item => item.field === col.field); if (index < 0) throw new Error("This column cannot be used for a new row.");
+    if (col.type === "check") {
+      const checked = new Set(draftChecks(draft, col.field)); value ? checked.add(col.month) : checked.delete(col.month);
+      draft.checks[col.field] = [...checked].sort((a, b) => a - b); draft.cells[index] = `${checked.size}/3`;
+    } else { draft.cells[index] = String(value); delete draft.checks[col.field]; }
+  }
+  $("add-annual-rows").addEventListener("click", () => {
+    if (!finishEdit(true) || !canAddRows()) return;
+    activateDrafts(); const count = Number($("annual-row-count").value), set = draftSets.get(bulkDraftOwner), start = bulkDrafts.length;
+    if (!Number.isInteger(count) || count < 1 || start + count > 250) { set.error = "Add 1-250 rows, with at most 250 unsaved new rows for this year."; updateDraftControls(); return; }
+    state.status = "incomplete"; bulkDrafts.push(...Array.from({ length: count }, newDraft)); set.error = "";
+    render(); $("grid-scroll").scrollTop = $("grid-scroll").scrollHeight; focusDraft(start, 0); warmGenerationCandidates();
   });
-  $("bulk-clear-rows").addEventListener("click", () => { if (bulkDrafts.some(row => row.cells[0].trim()) && !window.confirm("Discard the unsaved draft rows?")) return; bulkDrafts = [newDraft()]; renderDrafts(); $("bulk-rows-error").hidden = true; });
-  $("bulk-rows-grid").addEventListener("input", event => { const input = event.target.closest("input[data-r]"); if (input) bulkDrafts[Number(input.dataset.r)].cells[Number(input.dataset.c)] = input.value; });
-  $("bulk-rows-grid").addEventListener("keydown", event => {
-    const input = event.target.closest("input[data-r]"); if (!input || event.key !== "Enter") return;
-    event.preventDefault(); const r = Number(input.dataset.r) + (event.shiftKey ? -1 : 1), c = Number(input.dataset.c);
-    if (r < 0 || r >= 250) return;
-    if (r >= bulkDrafts.length) { bulkDrafts.push(newDraft()); renderDrafts(); }
-    $("bulk-rows-grid").querySelector(`input[data-r="${r}"][data-c="${c}"]`)?.focus();
+  $("clear-new-rows").addEventListener("click", () => {
+    if (bulkSaving || liveBusy || bulkDrafts.some(draft => meaningfulDraft(draft, bulkColumns)) && !window.confirm("Discard the unsaved new rows?")) return;
+    draftSets.delete(bulkDraftOwner); bulkDrafts = []; activeDraftCell = null; render();
   });
-  $("bulk-rows-grid").addEventListener("paste", event => {
-    const input = event.target.closest("input[data-r]"); if (!input) return;
+  table.addEventListener("focusin", event => {
+    const input = event.target.closest("[data-draft-r]"); if (!input) return;
+    activeDraftCell = { owner: bulkDraftOwner, id: bulkDrafts[Number(input.dataset.draftR)].id, c: Number(input.dataset.draftC) }; paintSelection();
+  });
+  const updateDraftInput = event => {
+    const input = event.target.closest("[data-draft-r]"); if (!input || bulkSaving) return;
+    const col = columns[Number(input.dataset.draftC)], draft = bulkDrafts[Number(input.dataset.draftR)];
+    if (col.type === "check" && event.type !== "change") return;
+    writeDraftValue(draft, col, col.type === "check" ? input.checked : input.value); draftSets.get(bulkDraftOwner).error = ""; updateDraftControls(); paintDraftSelection();
+  };
+  table.addEventListener("input", updateDraftInput); table.addEventListener("change", updateDraftInput);
+  table.addEventListener("keydown", event => {
+    const input = event.target.closest("[data-draft-r]"); if (!input || !["Enter", "Tab"].includes(event.key)) return;
+    let r = Number(input.dataset.draftR), c = Number(input.dataset.draftC);
+    if (event.key === "Enter") r += event.shiftKey ? -1 : 1;
+    else { c += event.shiftKey ? -1 : 1; if (c < 0) { c = columns.length - 1; r--; } if (c >= columns.length) { c = 0; r++; } }
+    if (r < 0 || r >= 250) { if (event.key === "Enter") event.preventDefault(); return; }
     event.preventDefault();
-    try {
-      const data = clipboardRows(event.clipboardData.getData("text/plain")), r = Number(input.dataset.r), c = Number(input.dataset.c);
-      if (r + data.length > 250 || data.some(line => c + line.length > bulkColumns.length)) throw new Error("Paste exceeds 250 rows or the draft columns. Start at the matching column.");
-      while (bulkDrafts.length < r + data.length) bulkDrafts.push(newDraft());
-      data.forEach((line, dr) => line.forEach((value, dc) => { bulkDrafts[r + dr].cells[c + dc] = value; }));
-      renderDrafts(); $("bulk-rows-grid").querySelector(`input[data-r="${r}"][data-c="${c}"]`)?.focus(); $("bulk-rows-error").hidden = true;
-    } catch (error) { $("bulk-rows-error").textContent = error.message; $("bulk-rows-error").hidden = false; }
+    if (r >= bulkDrafts.length) { bulkDrafts.push(newDraft()); renderDrafts(); }
+    focusDraft(r, c);
   });
-  function buildBulkRows() {
-    const output = [], seen = new Set(), defaults = bulkDefaults(); let alreadyConfirmed = 0;
-    bulkDrafts.forEach((draft, index) => {
+  table.addEventListener("paste", event => {
+    const input = event.target.closest("[data-draft-r]"); if (!input) return;
+    event.preventDefault();
+    if (bulkSaving || liveBusy) return;
+    try {
+      const data = clipboardRows(event.clipboardData.getData("text/plain")), r = Number(input.dataset.draftR), c = Number(input.dataset.draftC);
+      if (r + data.length > 250 || data.some(line => c + line.length > columns.length)) throw new Error("Paste exceeds 250 new rows or the visible columns. Start at the matching column.");
+      data.forEach(line => line.forEach((value, dc) => { if (columns[c + dc].type === "check") parseValue(columns[c + dc], value); }));
+      while (bulkDrafts.length < r + data.length) bulkDrafts.push(newDraft());
+      data.forEach((line, dr) => line.forEach((value, dc) => { const col = columns[c + dc]; writeDraftValue(bulkDrafts[r + dr], col, col.type === "check" ? parseValue(col, value) : value); }));
+      draftSets.get(bulkDraftOwner).error = ""; renderDrafts(); focusDraft(r, c);
+    } catch (error) { draftSets.get(bulkDraftOwner).error = error.message; updateDraftControls(); }
+  });
+  function buildBulkRows(drafts, definitions, year) {
+    const output = [], seen = new Set(); let alreadyConfirmed = 0;
+    drafts.forEach((draft, index) => {
       try {
         if (!draft.cells[0].trim()) {
-          if (draft.cells.some((value, c) => value.trim() && value !== defaults[c])) throw new Error("A client / subject name is required.");
+          if (meaningfulDraft(draft, definitions)) throw new Error("A client / subject name is required.");
           return;
         }
         // Retry the same draft IDs without editing a batch that was already confirmed.
         if (state.rows.some(row => row.id === draft.id)) { alreadyConfirmed++; return; }
         const values = {}, initialValues = {};
-        bulkColumns.forEach((col, c) => {
+        definitions.forEach((col, c) => {
           const text = draft.cells[c]; if (!text.trim()) return;
           if (col.type === "summary" || col.type === "range") {
             const max = col.type === "range" ? 12 : 3, match = text.trim().match(/^(\d+)(?:\/(\d+))?$/);
             if (!match || Number(match[1]) > max || match[2] && Number(match[2]) !== max) throw new Error(`${col.title} must be 0-${max}.`);
-            values[col.field] = Array.from({ length: Number(match[1]) }, (_, i) => i);
+            values[col.field] = draft.checks[col.field] || Array.from({ length: Number(match[1]) }, (_, i) => i);
           } else values[col.field] = parseValue(col, text);
           if (!["clientName", "accountingPic", "taxPic", "subjectType", "groupName"].includes(col.field)) initialValues[col.field] = values[col.field];
         });
@@ -769,7 +843,7 @@
         const own = taxMode ? actorTaxName() : actorAccName();
         if (!isLeadership() && (taxMode ? values.taxPic && values.taxPic !== own || values.accountingPic && values.accountingPic !== candidate?.accountingPic : values.accountingPic && values.accountingPic !== own || values.taxPic && values.taxPic !== candidate?.taxPic)) throw new Error("You can add only your own work; other PIC assignments require leadership.");
         if (!isLeadership() && values.deadline) throw new Error("Only leadership can set an internal deadline.");
-        const row = createRow({ name, accountingPic: values.accountingPic || (!taxMode ? own : ""), taxPic: values.taxPic || (taxMode ? own : ""), subjectType: values.subjectType || "Individual", groupName: values.groupName || "", ...(candidate || {}) }, state.year, !candidate);
+        const row = createRow({ name, accountingPic: values.accountingPic || (!taxMode ? own : ""), taxPic: values.taxPic || (taxMode ? own : ""), subjectType: values.subjectType || "Individual", groupName: values.groupName || "", ...(candidate || {}) }, year, !candidate);
         row.id = draft.id; if (!candidate && taxMode) row.subjectId = draft.id;
         if (!(taxMode ? row.taxPic : row.accountingPic)) throw new Error(`Choose an active ${taxMode ? "Tax" : "ACC"} PIC.`);
         if (!taxMode && initialValues.progress) transition(row, initialValues.progress);
@@ -777,35 +851,37 @@
         if (!taxMode && row.ntpe) { row.progressBeforeNtpe = row.progress; row.progress = "Done"; }
         if (taxMode && ["Reported", "Done"].includes(row.progress)) { const error = taxConfig.completionError(row); if (error) throw new Error(error); }
         const key = `${bulkIdentity(row.clientName)}|${taxMode ? row.subjectType + "|" + bulkIdentity(row.groupName) : ""}`;
-        if (seen.has(key) || yearRows().some(existing => existing.id !== row.id && `${bulkIdentity(existing.clientName)}|${taxMode ? existing.subjectType + "|" + bulkIdentity(existing.groupName) : ""}` === key)) throw new Error("This annual client / subject already exists in this year or batch.");
+        if (seen.has(key) || state.rows.some(existing => !existing.deletedAt && existing.year === year && existing.id !== row.id && `${bulkIdentity(existing.clientName)}|${taxMode ? existing.subjectType + "|" + bulkIdentity(existing.groupName) : ""}` === key)) throw new Error("This annual client / subject already exists in this year or batch.");
         seen.add(key); output.push(row);
-      } catch (error) { throw new Error(`Row ${index + 1}: ${error.message}`); }
+      } catch (error) { throw new Error(`New row ${index + 1}: ${error.message}`); }
     });
     if (!output.length && !alreadyConfirmed) throw new Error("Enter or paste at least one named row.");
     return output;
   }
-  $("bulk-save-rows").addEventListener("click", async () => {
-    if (bulkSaving || liveBusy) return;
-    const dialog = $("bulk-rows-dialog"), error = $("bulk-rows-error"); error.hidden = true;
-    bulkSaving = true; dialog.querySelectorAll("input,button").forEach(node => { node.disabled = true; });
+  $("save-new-rows").addEventListener("click", async () => {
+    if (bulkSaving || liveBusy || !finishEdit(true) || liveBusy) return;
+    const owner = bulkDraftOwner, year = state.year, actorId = state.actorId, source = draftSets.get(owner), drafts = clone(bulkDrafts), definitions = clone(bulkColumns);
+    source.error = ""; bulkSaving = true; render();
     try {
       if (liveMode) {
         const candidates = await window.AnnualSheetLive.loadClients();
         master.splice(0, master.length, ...candidates.map(client => ({ ...client, accountingPic: liveRoster.find(person => person.id === client.accountingPicId)?.name || client.accountingPic, taxPic: liveRoster.find(person => person.id === client.taxPicId)?.name || client.taxPic })));
       }
-      const rows = buildBulkRows(), label = rows.length ? `Added ${rows.length} annual row(s)` : "Previously saved annual rows confirmed (no changes reapplied)";
+      if (state.actorId !== actorId) throw new Error("Your account changed. Reload before saving new rows.");
+      const rows = buildBulkRows(drafts, definitions, year), label = rows.length ? `Added ${rows.length} annual row(s) for ${year}` : "Previously saved annual rows confirmed (no changes reapplied)";
       let saved = true;
       if (liveMode && rows.length) {
         const before = { rows: clone(state.rows), customColumns: clone(state.customColumns) };
         saved = await saveLive(() => window.AnnualSheetLive.commit(before, { rows: [...before.rows, ...rows], customColumns: before.customColumns }, label), label);
       } else if (!liveMode && rows.length) change(label, () => { state.rows.push(...rows.map(({ initialValues, ...row }) => row)); });
       if (!saved) throw new Error("The save was not confirmed. Drafts are retained here; review the last confirmed sheet before retrying.");
-      state.status = "incomplete"; state.search = ""; state.pic = ""; state.taxPic = "";
-      $("search").value = ""; $("pic-filter").value = ""; $("tax-pic-filter").value = ""; bulkDrafts = []; bulkDraftOwner = ""; dialog.close(); render(); notify(`${label}. ${liveMode ? "Saved to database." : "Demo only."}`);
-    } catch (failure) { if ([401, 403, 409].includes(failure.status)) clearLiveAccess(); error.textContent = failure.message; error.hidden = false; }
-    finally { bulkSaving = false; dialog.querySelectorAll("input,button").forEach(node => { node.disabled = false; }); }
+      const confirmed = new Set(state.rows.map(row => row.id)); source.rows = source.rows.filter(draft => !confirmed.has(draft.id)); source.error = ""; draftSets.set(owner, source);
+      if (state.year === year) { state.status = "incomplete"; state.search = ""; state.pic = ""; state.taxPic = ""; $("search").value = ""; $("pic-filter").value = ""; $("tax-pic-filter").value = ""; }
+      notify(`${label}. ${liveMode ? "Saved to database." : "Demo only."}`);
+    } catch (failure) { if ([401, 403, 409].includes(failure.status)) clearLiveAccess(); else if (draftSets.has(owner)) draftSets.get(owner).error = failure.message; }
+    finally { bulkSaving = false; render(); if (directoryRefreshPending) applyDeferredRefresh(); }
   });
-  $("bulk-rows-dialog").addEventListener("cancel", event => { if (bulkSaving) event.preventDefault(); });
+  $("cell-value").addEventListener("keydown", event => { if (activeDraftCell) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);
   $("cell-value").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); const row = visible[state.selection.r], col = columns[state.selection.c]; try { const value = parseValue(col, event.target.value); change(`Updated ${col.title}`, () => writeValue(row, col, value)); getCell(state.selection.r, state.selection.c)?.focus(); } catch (error) { notify(error.message); } } else if (event.key === "Escape") { paintSelection(); getCell(state.selection.r, state.selection.c)?.focus(); } });
   $("actor-select").innerHTML = actors.map(person => `<option value="${person.id}">${escape(person.name)}</option>`).join("");
   function setActor(id) {
@@ -899,6 +975,7 @@
   }
   async function showGeneration(force = false) {
     closeAddClientMenu();
+    if (bulkSaving) return;
     if (liveMode && (!liveReady || liveBusy || state.year === 0)) return;
     if (generationLoading) return;
     if (liveMode) {
@@ -934,6 +1011,7 @@
   });
   $("outside-button").addEventListener("click", () => {
     closeAddClientMenu();
+    if (bulkSaving) return;
     if (taxMode) { showTaxSubjectForm(); return; }
     if (!isLeadership() && !actorAccName()) { notify("Only an ACC PIC or leadership can add annual accounting work."); return; }
     const form = $("outside-form"); form.reset();
@@ -1081,14 +1159,13 @@
     } finally { liveBusy = false; render(); if (directoryRefreshPending) applyDeferredRefresh(); }
   }
   function interactingWithSheet() {
-    return editor || drag || activeRange || rowMenuId || !$("add-client-menu").hidden || document.querySelector("dialog[open]") || document.hasFocus() && document.activeElement?.matches("input,select,textarea");
+    return bulkSaving || editor || drag || activeRange || rowMenuId || !$("add-client-menu").hidden || document.querySelector("dialog[open]") || document.hasFocus() && document.activeElement?.matches("input,select,textarea");
   }
   function clearLiveAccess() {
     liveEpoch++; deferredRefresh = null; directoryRefreshPending = false; liveReady = false; window.AnnualSheetLive?.clearAccess();
     finishEdit(false); document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
+    draftSets.clear(); bulkDrafts = []; bulkColumns = []; bulkDraftOwner = ""; activeDraftCell = null;
     state.rows = []; state.customColumns = []; state.actorId = ""; liveRoster = []; actors.splice(0); master.splice(0); render();
-    bulkDrafts = []; bulkDraftOwner = ""; $("bulk-rows-grid").querySelectorAll("thead,tbody").forEach(node => node.replaceChildren());
-    $("bulk-rows-dialog").querySelectorAll("datalist").forEach(node => node.remove());
     $("sheet-loading").hidden = false; $("sheet-loading").textContent = "Your access or account changed. Reload the dashboard to reconnect.";
   }
   function applyDeferredRefresh() {
@@ -1184,7 +1261,7 @@
     window.addEventListener("focus", refreshIfIdle);
     document.addEventListener("visibilitychange", refreshIfIdle);
     for (const event of ["focusout", "pointerup", "click", "keyup"]) document.addEventListener(event, () => { Promise.resolve().then(applyDeferredRefresh); });
-    window.addEventListener("beforeunload", event => { if (liveBusy) { event.preventDefault(); event.returnValue = ""; } });
+    window.addEventListener("beforeunload", event => { if (liveBusy || bulkSaving || hasUnsavedDrafts()) { event.preventDefault(); event.returnValue = ""; } });
     loadLive();
   }
 })();

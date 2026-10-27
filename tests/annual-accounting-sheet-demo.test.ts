@@ -37,12 +37,13 @@ test("both annual teams insert blank drafts, expand Excel paste, handle quoted m
     try {
       d.actAs(team === "accounting" ? "acc-cemari" : "tax-bagus");
       const count = d.api.state.rows.length, doc = d.w.document;
-      doc.getElementById("bulk-add-button").click();
+      doc.getElementById("add-annual-rows").click();
       assert.equal(d.api.state.rows.length, count, "blank rows must not enter the operational sheet");
-      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 10);
-      doc.getElementById("bulk-row-count").value = "5"; doc.getElementById("bulk-insert-rows").click();
-      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 15);
-      const fields = Array.from(doc.querySelectorAll('#bulk-rows-grid input[data-r="0"]'), (node: any) => node.dataset.field);
+      assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 10);
+      assert.equal(doc.getElementById("bulk-rows-dialog"), null, "new rows use the actual sheet, not a popup");
+      doc.getElementById("annual-row-count").value = "5"; doc.getElementById("add-annual-rows").click();
+      assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 15);
+      const fields = Array.from(doc.querySelectorAll('#annual-draft-rows [data-draft-r="0"]'), (node: any) => node.dataset.field);
       const values = Array.from({ length: 17 }, (_, r) => {
         const row = Object.fromEntries(fields.map(field => [field, ""]));
         Object.assign(row, { clientName: `New Annual ${team} ${r}`, accountingPic: team === "accounting" ? "cemari" : "", taxPic: team === "tax" ? "BAGUS" : "", progress: team === "accounting" ? "In Process" : "Data Request", notes: r === 0 ? 'Line one\nLine two "quoted"' : "Imported" });
@@ -51,19 +52,20 @@ test("both annual teams insert blank drafts, expand Excel paste, handle quoted m
         return fields.map(field => /[\t\n"]/.test(row[field]) ? `"${row[field].replace(/"/g, '""')}"` : row[field]).join("\t");
       }).join("\r\n") + "\r\n";
       const paste = new d.w.Event("paste", { bubbles: true, cancelable: true }); Object.defineProperty(paste, "clipboardData", { value: { getData: () => values } });
-      doc.querySelector('#bulk-rows-grid input[data-r="0"][data-c="0"]').dispatchEvent(paste);
-      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 17);
+      doc.querySelector('#annual-draft-rows [data-draft-r="0"][data-draft-c="0"]').dispatchEvent(paste);
+      assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 17);
       assert.equal(d.api.state.rows.length, count);
-      doc.querySelector('[data-close="bulk-rows-dialog"]').click();
-      doc.getElementById("bulk-add-button").click();
-      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 17, "closing a draft preview should not discard its pasted rows");
-      const firstCell = doc.querySelector('#bulk-rows-grid input[data-r="0"][data-c="0"]');
+      const year = doc.getElementById("year-select"); year.value = "2024"; year.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+      assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 0);
+      year.value = "2025"; year.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+      assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 17, "changing years retains unsaved rows in their original year");
+      const firstCell = doc.querySelector('#annual-draft-rows [data-draft-r="0"][data-draft-c="0"]');
       firstCell.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-      assert.equal(doc.activeElement.dataset.r, "1");
+      assert.equal(doc.activeElement.dataset.draftR, "1");
       doc.activeElement.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
-      assert.equal(doc.activeElement.dataset.r, "0");
-      doc.getElementById("bulk-save-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
-      assert.equal(doc.getElementById("bulk-rows-dialog").open, false, doc.getElementById("bulk-rows-error").textContent);
+      assert.equal(doc.activeElement.dataset.draftR, "0");
+      doc.getElementById("save-new-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(doc.getElementById("new-rows-error").hidden, true, doc.getElementById("new-rows-error").textContent);
       const imported = d.api.state.rows.filter((row: any) => row.clientName.startsWith(`New Annual ${team}`));
       assert.equal(imported.length, 17); assert.equal(new Set(imported.map((row: any) => row.id)).size, 17);
       assert.equal(imported[0].notes, 'Line one\nLine two "quoted"');
@@ -78,17 +80,77 @@ test("bulk drafts reject invalid values, cross-PIC assignments and oversized pas
   const d = loadDemo();
   try {
     d.actAs("acc-cemari"); const doc = d.w.document, before = JSON.stringify(d.api.state.rows);
-    doc.getElementById("bulk-add-button").click();
-    const input = (field: string, value: string) => { const node = doc.querySelector(`#bulk-rows-grid input[data-r="0"][data-field="${field}"]`); node.value = value; node.dispatchEvent(new d.w.Event("input", { bubbles: true })); };
+    doc.getElementById("add-annual-rows").click();
+    const input = (field: string, value: string) => { const node = doc.querySelector(`#annual-draft-rows [data-draft-r="0"][data-field="${field}"]`); node.value = value; node.dispatchEvent(new d.w.Event("input", { bubbles: true })); };
     input("clientName", "External draft"); input("accountingPic", "Ivan");
-    doc.getElementById("bulk-save-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
-    assert.match(doc.getElementById("bulk-rows-error").textContent, /own work/); assert.equal(JSON.stringify(d.api.state.rows), before);
+    doc.getElementById("save-new-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(doc.getElementById("new-rows-error").textContent, /own work/); assert.equal(JSON.stringify(d.api.state.rows), before);
     input("accountingPic", "Cemari"); input("dataMonths", "13");
-    doc.getElementById("bulk-save-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
-    assert.match(doc.getElementById("bulk-rows-error").textContent, /0-12/); assert.equal(JSON.stringify(d.api.state.rows), before);
+    doc.getElementById("save-new-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(doc.getElementById("new-rows-error").textContent, /0-12/); assert.equal(JSON.stringify(d.api.state.rows), before);
     const paste = new d.w.Event("paste", { bubbles: true, cancelable: true }); Object.defineProperty(paste, "clipboardData", { value: { getData: () => Array.from({ length: 251 }, () => "External").join("\n") } });
-    doc.querySelector('#bulk-rows-grid input[data-r="0"][data-c="0"]').dispatchEvent(paste);
-    assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 10); assert.equal(JSON.stringify(d.api.state.rows), before);
+    doc.querySelector('#annual-draft-rows [data-draft-r="0"][data-draft-c="0"]').dispatchEvent(paste);
+    assert.equal(doc.querySelectorAll("#annual-draft-rows tr").length, 10); assert.equal(JSON.stringify(d.api.state.rows), before);
+  } finally { d.dom.window.close(); }
+});
+
+test("inline rows share the real grid, keep saved selections and totals isolated, and work on an empty year", async () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = loadDemo(team);
+    try {
+      d.actAs(team === "accounting" ? "acc-cemari" : "tax-bagus");
+      const doc = d.w.document, before = JSON.stringify(d.api.state.rows);
+      const metrics = doc.getElementById("metric-total").textContent;
+      doc.getElementById("add-annual-rows").click();
+      const body = doc.getElementById("annual-draft-rows"), table = doc.getElementById("annual-grid");
+      assert.equal(body.parentElement, table);
+      assert.equal(body.firstElementChild.children.length, table.querySelector("thead tr:last-child").children.length);
+      const name = body.querySelector('[data-draft-r="0"][data-field="clientName"]');
+      const style = doc.createElement("style"); style.textContent = readFileSync(new URL("../public/annual-accounting-sheet-demo.css", import.meta.url), "utf8"); doc.head.append(style);
+      assert.equal(d.w.getComputedStyle(name).position, "static", "draft fields must not inherit the floating saved-cell editor");
+      assert.equal(d.w.getComputedStyle(name).borderTopWidth, "0px");
+      const exit = new d.w.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }); name.dispatchEvent(exit);
+      assert.equal(exit.defaultPrevented, false, "Shift+Tab from the first draft must not trap keyboard focus");
+      name.value = "Typed without popup"; name.dispatchEvent(new d.w.Event("input", { bubbles: true })); name.focus();
+      assert.equal(doc.getElementById("cell-value").disabled, true);
+      doc.getElementById("cell-value").value = "Do not overwrite a saved name";
+      doc.getElementById("cell-value").dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      assert.equal(JSON.stringify(d.api.state.rows), before);
+      assert.equal(doc.getElementById("metric-total").textContent, metrics);
+      const workbook = d.api.buildExportWorkbook(XLSX, { year: 2025, rows: d.api.state.rows.filter((row: any) => row.year === 2025), customColumns: [] });
+      assert.equal(JSON.stringify(workbook.Sheets).includes("Typed without popup"), false);
+      d.api.state.year = 2023; d.w.dispatchEvent(new d.w.Event("resize"));
+      doc.getElementById("annual-row-count").value = "1"; doc.getElementById("add-annual-rows").click();
+      assert.equal(d.api.visible.length, 0); assert.equal(table.hidden, false); assert.equal(doc.getElementById("empty-state").hidden, true);
+      const emptyName = doc.querySelector('#annual-draft-rows [data-field="clientName"]');
+      emptyName.value = "First annual entry"; emptyName.dispatchEvent(new d.w.Event("input", { bubbles: true }));
+      doc.getElementById("save-new-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(d.api.state.rows.find((row: any) => row.clientName === "First annual entry")?.year, 2023);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("Tax draft checkbox positions survive view changes and save without becoming prefix checks", async () => {
+  const d = loadDemo("tax");
+  try {
+    d.actAs("tax-bagus");
+    const doc = d.w.document;
+    doc.getElementById("annual-row-count").value = "1"; doc.getElementById("add-annual-rows").click();
+    const name = doc.querySelector('#annual-draft-rows [data-field="clientName"]');
+    name.value = "Nil return exact milestones"; name.dispatchEvent(new d.w.Event("input", { bubbles: true }));
+    doc.querySelector('[data-view="filing"]').click();
+    for (const month of [0, 2]) {
+      const c = d.api.columns.findIndex((col: any) => col.field === "filing" && col.month === month);
+      doc.querySelector(`#annual-draft-rows [data-draft-c="${c}"]`).click();
+    }
+    doc.querySelector('[data-view="summary"]').click();
+    assert.equal(doc.querySelector('#annual-draft-rows [data-field="filing"]').value, "2/3");
+    doc.querySelector('[data-view="all"]').click();
+    const checks = [...doc.querySelectorAll('#annual-draft-rows [data-field="filing"]')].map((node: any) => node.checked);
+    assert.deepEqual(checks, [true, false, true]);
+    doc.getElementById("save-new-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(doc.getElementById("new-rows-error").hidden, true, doc.getElementById("new-rows-error").textContent);
+    assert.deepEqual(Array.from(d.api.state.rows.find((row: any) => row.clientName === "Nil return exact milestones").filing), [0, 2]);
   } finally { d.dom.window.close(); }
 });
 
