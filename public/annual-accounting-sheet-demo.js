@@ -3,6 +3,7 @@
   "use strict";
   const pageParams = new URLSearchParams(location.search);
   const fullScreenMode = pageParams.get("fullscreen") === "1";
+  let sheetAppearance = { theme: pageParams.get("theme") === "dark" ? "dark" : "light", accent: /^#[0-9a-f]{6}$/i.test(pageParams.get("accent") || "") ? pageParams.get("accent").toLowerCase() : "#087f8d" };
   const liveMode = new URLSearchParams(location.search).get("live") === "1";
   let liveRoster = [], liveReady = false, liveBusy = false;
   let liveEpoch = 0, lastRefreshAt = 0, refreshPromise = null, deferredRefresh = null, lastLiveSnapshot = "", generationLoading = false;
@@ -938,6 +939,7 @@
   function fullScreenUrl(team = taxMode ? "tax" : "accounting") {
     const url = new URL("./annual-accounting-sheet-demo.html", location.href), params = url.searchParams;
     params.set("fullscreen", "1"); if (team === "tax") params.set("team", "tax");
+    params.set("theme", sheetAppearance.theme); params.set("accent", sheetAppearance.accent);
     if (liveMode) { params.set("live", "1"); if (pageParams.get("account")) params.set("account", pageParams.get("account")); }
     params.set("year", state.year); params.set("status", state.status);
     for (const [key, value] of [["pic", state.pic], ["taxPic", state.taxPic], ["search", state.search]]) if (value) params.set(key, value);
@@ -946,6 +948,19 @@
       if (state.sort.month !== undefined) params.set("month", state.sort.month);
     }
     return url.href;
+  }
+  function applySheetAppearance(value) {
+    if (!["light", "dark"].includes(value?.theme) || !/^#[0-9a-f]{6}$/i.test(value?.accent || "")) return;
+    sheetAppearance = { theme: value.theme, accent: value.accent.toLowerCase() };
+    const root = document.documentElement, dark = value.theme === "dark", accent = sheetAppearance.accent;
+    const channels = [1, 3, 5].map(index => { const channel = parseInt(accent.slice(index, index + 2), 16) / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; });
+    root.classList.toggle("sheet-theme-dark", dark); root.style.setProperty("color-scheme", dark ? "dark" : "light");
+    root.style.setProperty("--cyan", accent);
+    root.style.setProperty("--sheet-button-ink", channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722 > .179 ? "#142b2f" : "#ffffff");
+    root.style.setProperty("--cyan-soft", dark ? `color-mix(in srgb, ${accent} 20%, #182a2e)` : accent === "#087f8d" ? "#e7f4f3" : `color-mix(in srgb, ${accent} 10%, white)`);
+    root.style.setProperty("--sheet-accent-ink", dark ? `color-mix(in srgb, ${accent} 32%, white)` : `color-mix(in srgb, ${accent} 84%, black)`);
+    $("fullscreen-button").href = fullScreenUrl();
+    document.querySelectorAll("[data-sheet-team]").forEach(link => { link.href = fullScreenUrl(link.dataset.sheetTeam); });
   }
   function guardFullScreenNavigation(event) {
     if (!finishEdit(true) || liveBusy || liveMode && !liveReady) { event.preventDefault(); notify("Wait for the current database save to finish before opening another annual sheet."); return; }
@@ -1225,6 +1240,11 @@
   }
   window.addEventListener("sheet-styles-ready", finishSheetStartup);
   window.addEventListener("sheet-styles-error", sheetStylesFailed);
+  applySheetAppearance(sheetAppearance);
+  window.addEventListener("message", event => {
+    if (!embeddedPreview || event.source !== window.parent || event.origin !== location.origin || event.data?.type !== "annual-sheet:appearance") return;
+    applySheetAppearance(event.data.appearance);
+  });
   render();
   if ($("sheet-styles").dataset.failed === "true") sheetStylesFailed();
   else finishSheetStartup();

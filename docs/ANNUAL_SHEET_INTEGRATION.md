@@ -25,6 +25,13 @@ and the account binding are carried over; embedded mode and demo actor switching
 are not. Navigation waits for active saves, and visible idle sheets refresh when
 the user returns to the tab. No browser fullscreen permission is required.
 
+Stable annual frames are outside the replaceable menu panels to preserve draft
+cells. The central view-visibility step hides/shows them before rendering the
+destination workspace, including mobile normalization and history-driven renders.
+An inline hidden-container rule works even before the optional annual stylesheet
+loads. Leaving Operations or returning to Monthly hides both teams without
+destroying their frames; delayed readiness/appearance messages cannot reopen them.
+
 ## Loading And Refresh
 
 The Next shell, dashboard HTML and annual sheets use the same small CSS-only cyan
@@ -86,6 +93,41 @@ No role or write authorization is cached server-side. Every save still authentic
 and validates current PIC ownership and field baselines, and only appears in the
 sheet after database confirmation. Automatic refresh throttling is not a guarantee
 of a specific live load time; deployed latency must be measured separately.
+
+## Idle Annual Preload
+
+Once the dashboard's initial data is confirmed and its remaining startup requests
+settle, it schedules a low-priority preload for the signed-in user's Accounting or
+Tax team. It waits for document load and browser idle time (a 1.5-second deferred
+fallback where idle callbacks are unavailable). Unknown teams are not guessed.
+Mobile widths up to 900px, data-saving/2G connections, devices reporting at most
+2 GB memory and hidden pages skip automatic preloading. Foreground annual
+navigation cancels a scheduled preload; opening the other team discards unused
+prefetched data instead of loading both teams in the background.
+
+Only script/style prefetch hints and one account-bound `GET /api/annual-sheet`
+request with `part=sheet` run. Hints do not execute scripts, and no hidden sheet
+iframe, grid DOM or Client Master generation query is created. The existing API
+still authenticates the user and filters authorized rows on every request. No
+server/CDN, local-storage or cross-tab data cache is introduced.
+
+The dashboard retains one authenticated snapshot in memory for at most 30 seconds
+after receipt. Only its registered same-origin embedded sheet, with the exact
+account and team binding, may consume it once. Opening during the request shares
+that pending read. The normal transport owns subsequent reads, save baselines,
+undo and permission-checked writes; it fences cancelled/older responses just as
+for direct reads. An expired/missing/failed preload falls back to the sheet's
+ordinary authenticated loading and retry path. Full-screen tabs perform their own
+authenticated data read, though the browser may reuse prefetched static assets.
+
+Account changes and successful logout clear cached data and remove old sheet
+frames. Directory/access notifications, hidden/page-history transitions, resource
+constraints and confirmed annual saves invalidate unused snapshots. Speculative
+requests time out after eight seconds, and background failures are silent, with
+no retry loop or global loading overlay. Once consumed/expired, no periodic annual
+prefetch polling occurs. Server-side authorization and database schema are unchanged;
+no migration is needed. Actual time saved depends on the browser/network and on
+whether the user opens the sheet before the short-lived snapshot expires.
 
 ## Bulk Entry And Individual Subjects
 

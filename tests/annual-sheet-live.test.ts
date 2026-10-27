@@ -618,7 +618,7 @@ test("production dashboard keeps live frames stable, ignores untrusted messages 
     let saves = 0; api.configure(() => saves++);
     const state = { currentView: "matrix-view", operationsMode: "annual", annualTeam: "accounting", role: "staff" };
     api.render(root, state);
-    const frame = w.document.querySelector("iframe"); assert.match(frame.src, /embedded=1&live=1$/);
+    const frame = w.document.querySelector("iframe"); assert.match(frame.src, /embedded=1&live=1&theme=light&accent=%23087f8d$/);
     const loading = frame.parentElement.querySelector(".annual-sheet-loading");
     assert.ok(loading, "show a cover before the iframe HTML arrives");
     const mounted = { type: "annual-sheet:mounted", team: "accounting" };

@@ -7,19 +7,21 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <style>
     :root {
-      --canvas: #f2f0ea;
+      --canvas: #f0f2ee;
       --panel: rgba(255, 255, 255, 0.9);
       --panel-solid: #ffffff;
-      --ink: #182630;
-      --muted: #62717d;
-      --line: #d8d4ca;
-      --accent: #0f766e;
-      --accent-soft: #d9f1ed;
-      --accent-strong: #1e3a8a;
-      --my-work-start: #5068b8;
-      --my-work-end: #8498e8;
-      --points-start: #172554;
-      --points-end: #2563eb;
+      --ink: #20323b;
+      --muted: #72818a;
+      --line: #dbe2e3;
+      --accent: #087f8d;
+      --accent-soft: #e7f4f3;
+      --accent-strong: #066b77;
+      --accent-contrast: #ffffff;
+      --header-surface: #e8eeeb;
+      --my-work-start: #076873;
+      --my-work-end: #57a8b1;
+      --points-start: #032b30;
+      --points-end: #087f8d;
       --my-work-image: none;
       --my-work-overlay-start: rgba(31, 55, 145, .58);
       --my-work-overlay-end: rgba(95, 120, 220, .34);
@@ -27,19 +29,20 @@
       --warning-soft: #fdf1da;
       --danger: #be123c;
       --danger-soft: #ffe1ea;
-      --neutral-soft: #edf1f5;
+      --neutral-soft: #edf3f1;
       --shadow: 0 10px 24px rgba(24, 38, 48, 0.08);
       --workspace-width: 1320px;
     }
 
     body.theme-dark {
-      --canvas: #111827;
-      --panel: rgba(24, 33, 48, 0.92);
-      --panel-solid: #182130;
+      --canvas: #111f22;
+      --panel: rgba(24, 42, 46, 0.94);
+      --panel-solid: #182a2e;
       --ink: #edf2f7;
       --muted: #aab7c8;
-      --line: #344154;
-      --neutral-soft: #273447;
+      --line: #354b4e;
+      --neutral-soft: #223b3d;
+      --header-surface: #223b3d;
       --shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
       background: var(--canvas);
     }
@@ -57,7 +60,7 @@
       min-height: 100vh;
       font-family: "Segoe UI", Arial, sans-serif;
       color: var(--ink);
-      background: var(--canvas);
+      background: radial-gradient(ellipse at 80% 0, rgba(228, 238, 234, .53), transparent 55%), var(--canvas);
     }
 
     button,
@@ -208,15 +211,15 @@
       padding: 11px 13px;
       border-radius: 15px;
       background: transparent;
-      color: #4c5a68;
+      color: var(--ink);
       font-size: 13px;
       font-weight: 700;
       text-align: left;
     }
 
     .nav-btn.active {
-      background: var(--accent-strong);
-      color: white;
+      background: var(--accent);
+      color: var(--accent-contrast);
     }
 
     .mobile-nav-only {
@@ -418,6 +421,11 @@
     }
 
     .hidden {
+      display: none !important;
+    }
+
+    .annual-sheet-container[hidden],
+    .annual-integrated-control[hidden] {
       display: none !important;
     }
 
@@ -1650,22 +1658,22 @@
     .ghost-btn,
     .tiny-btn,
     .matrix-action {
-      background: #eef2f6;
-      color: #42515e;
+      background: var(--neutral-soft);
+      color: var(--ink);
     }
 
     .solid-btn {
-      background: var(--accent-strong);
-      color: white;
+      background: var(--accent);
+      color: var(--accent-contrast);
     }
 
-    .solid-btn.danger { background: #b42318; }
+    .solid-btn.danger { background: #b42318; color:#fff; }
     .delete-icon { width:16px; height:16px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
     .solid-btn .delete-icon { margin-right:6px; vertical-align:-3px; }
 
     .settings-btn { display:grid; width:30px; height:30px; padding:0; place-items:center; font-size:17px; }
     .appearance-settings-backdrop { position:fixed; z-index:90; inset:0; background:rgba(12, 20, 32, .24); }
-    .appearance-settings { position:fixed; z-index:91; top:74px; right:24px; width:min(330px, calc(100vw - 32px)); padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--panel-solid); box-shadow:0 20px 48px rgba(0,0,0,.2); }
+    .appearance-settings { position:fixed; z-index:91; top:74px; right:24px; width:min(330px, calc(100vw - 32px)); max-height:calc(100dvh - 96px); overflow:auto; padding:16px; border:1px solid var(--line); border-radius:16px; background:var(--panel-solid); box-shadow:0 20px 48px rgba(0,0,0,.2); }
     .appearance-settings-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
     .appearance-theme-options, .appearance-swatches { display:flex; gap:8px; flex-wrap:wrap; }
     .appearance-choice { min-width:88px; padding:9px 11px; border:1px solid var(--line); border-radius:10px; background:var(--neutral-soft); color:var(--ink); font-size:12px; font-weight:700; }
@@ -1691,7 +1699,7 @@
     body.theme-dark textarea { color:var(--ink); background-color:var(--panel-solid); border-color:var(--line); }
     body.theme-dark .ghost-btn,
     body.theme-dark .tiny-btn,
-    body.theme-dark .matrix-action { color:var(--ink); background:#273447; }
+    body.theme-dark .matrix-action { color:var(--ink); background:var(--neutral-soft); }
 
     .logout-btn {
       border-color: #efb5b5;
@@ -1760,7 +1768,7 @@
       position: sticky;
       top: 0;
       z-index: 1;
-      background: #f5f4f0;
+      background: var(--header-surface);
       border-bottom: 1px solid var(--line);
       padding: 10px 8px;
       font-size: 10px;
@@ -1859,7 +1867,7 @@
     .operations-matrix thead th:nth-child(2),
     .operations-matrix thead th:nth-child(3) {
       z-index: 4;
-      background: #f5f4f0;
+      background: var(--header-surface);
     }
 
     .operations-matrix > tbody > tr.main-row:hover td:nth-child(1),
@@ -3562,11 +3570,24 @@
     .annual-checklist-cell.is-checked { background:#d6eee3; color:#176447; }
     .annual-checklist-cell:focus-visible { outline:2px solid #2056a4; outline-offset:-2px; }
     .annual-checklist-hint { margin:5px 0 0; color:#6b7b83; font-size:10px; }
+    .my-work-row.is-complete { background:color-mix(in srgb, var(--accent) 18%, #20323b); color:#e2eeea; }
+    .my-work-row.is-complete strong { color:#cfdfdb; }
+    .my-work-row.is-complete .subline { color:#b8cfca; }
+    .my-work-tabs { background:rgba(20, 45, 43, .28); }
+    .my-work-section-toggle,.my-work-archive-month { background:rgba(17, 44, 42, .42); }
+    .my-work-composer { background:rgba(235, 246, 241, .82); color:var(--ink); }
+    .my-work-title-input { color:var(--ink); }
+    .my-work-action-card { background:var(--panel-solid); border-color:var(--line); color:var(--ink); }
+    button.my-work-action-card:hover:not(:disabled),button.my-work-action-card:focus-visible:not(:disabled) { background:var(--accent-soft); }
+    .my-work-assignee-chip { color:var(--accent-strong); background:var(--accent-soft); }
+    body.theme-dark th { color:var(--ink); }
+    body.theme-dark .my-work-composer { background:var(--neutral-soft); }
+    body.theme-dark .operations-matrix>tbody>tr.main-row>td { background:var(--panel-solid); }
     @media(max-width:700px) { .annual-plan-grid { grid-template-columns:1fr; } .annual-plan-head { display:block; } }
     @media(max-width:700px) { .annual-compact-table summary { grid-template-columns:16px minmax(0,1fr) 72px; } .annual-compact-table summary .annual-compact-extra { display:none; } .annual-months { grid-template-columns:repeat(6,minmax(0,1fr)); } }
   </style>
   <style>
-    .app-loading-overlay.initial-load{z-index:1100;background:rgba(242,240,234,.78);backdrop-filter:blur(10px)}
+    .app-loading-overlay.initial-load{z-index:1100;background:rgba(240,242,238,.78);backdrop-filter:blur(10px)}
     .app-loading-overlay:not(.visible){display:none}
     .app-loading-card{display:grid;justify-items:center;gap:14px;background:transparent;box-shadow:none;color:#35575d;font-size:13px;font-weight:400}
     .app-loading-card strong{font-weight:400}
@@ -4491,7 +4512,7 @@
       role: "staff",
       appearance: {
         theme: persistedDemoState?.ui?.appearance?.theme === "dark" ? "dark" : "light",
-        accent: /^#[0-9a-f]{6}$/i.test(persistedDemoState?.ui?.appearance?.accent || "") ? persistedDemoState.ui.appearance.accent : "#2563eb",
+        accent: /^#[0-9a-f]{6}$/i.test(persistedDemoState?.ui?.appearance?.accent || "") ? persistedDemoState.ui.appearance.accent : "#087f8d",
         myWorkBackground: String(persistedDemoState?.ui?.appearance?.myWorkBackground || "").startsWith("data:image/") ? persistedDemoState.ui.appearance.myWorkBackground : ""
       },
       appearanceSettingsOpen: false,
@@ -6144,25 +6165,30 @@
     }
 
     function blendHex(hex, target, amount) {
-      const source = String(hex || "#2563eb").replace("#", "");
+      const source = String(hex || "#087f8d").replace("#", "");
       const rgb = [0, 2, 4].map((index) => parseInt(source.slice(index, index + 2), 16));
       const blended = rgb.map((value, index) => Math.round(value + (target[index] - value) * amount));
       return `#${blended.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
     }
 
     function hexToRgba(hex, alpha) {
-      const source = String(hex || "#2563eb").replace("#", "");
+      const source = String(hex || "#087f8d").replace("#", "");
       const channels = [0, 2, 4].map((index) => parseInt(source.slice(index, index + 2), 16));
       return `rgba(${channels.join(", ")}, ${alpha})`;
     }
 
     function applyAppearance() {
-      const accent = state.appearance.accent;
+      const accent = /^#[0-9a-f]{6}$/i.test(state.appearance.accent) ? state.appearance.accent : "#087f8d";
+      state.appearance.accent = accent;
+      const dark = state.appearance.theme === "dark";
       const root = document.documentElement;
-      document.body.classList.toggle("theme-dark", state.appearance.theme === "dark");
+      document.body.classList.toggle("theme-dark", dark);
+      root.style.setProperty("color-scheme", dark ? "dark" : "light");
+      const channels = [1, 3, 5].map(index => { const value = parseInt(accent.slice(index, index + 2), 16) / 255; return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; });
+      root.style.setProperty("--accent-contrast", channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722 > .179 ? "#142b2f" : "#ffffff");
       root.style.setProperty("--accent", accent);
-      root.style.setProperty("--accent-soft", blendHex(accent, [255, 255, 255], state.appearance.theme === "dark" ? 0.16 : 0.86));
-      root.style.setProperty("--accent-strong", blendHex(accent, [0, 0, 0], state.appearance.theme === "dark" ? 0.18 : 0.36));
+      root.style.setProperty("--accent-soft", dark ? blendHex(accent, [24, 42, 46], .8) : accent.toLowerCase() === "#087f8d" ? "#e7f4f3" : blendHex(accent, [255, 255, 255], .9));
+      root.style.setProperty("--accent-strong", dark ? blendHex(accent, [255, 255, 255], .68) : blendHex(accent, [0, 0, 0], .16));
       root.style.setProperty("--my-work-start", blendHex(accent, [0, 0, 0], state.appearance.theme === "dark" ? 0.3 : 0.18));
       root.style.setProperty("--my-work-end", blendHex(accent, [255, 255, 255], state.appearance.theme === "dark" ? 0.08 : 0.32));
       root.style.setProperty("--my-work-overlay-start", hexToRgba(blendHex(accent, [0, 0, 0], state.appearance.theme === "dark" ? 0.42 : 0.2), .64));
@@ -6170,6 +6196,7 @@
       root.style.setProperty("--points-start", blendHex(accent, [0, 0, 0], 0.66));
       root.style.setProperty("--points-end", accent);
       root.style.setProperty("--my-work-image", state.appearance.myWorkBackground ? `url("${state.appearance.myWorkBackground.replace(/"/g, "")}")` : "none");
+      window.AnnualDashboardSheets?.setAppearance?.({ theme: dark ? "dark" : "light", accent });
     }
 
     const pushNotificationState = {
@@ -6252,7 +6279,7 @@
         root.innerHTML = safeHtml("");
         return;
       }
-      const presets = ["#2563eb", "#0f766e", "#c2410c", "#be185d", "#6d28d9"];
+      const presets = ["#087f8d", "#2563eb", "#0f766e", "#c2410c", "#be185d", "#6d28d9"];
       root.innerHTML = safeHtml(`
         <div class="appearance-settings-backdrop" data-close-appearance-settings="yes"></div>
         <section class="appearance-settings" role="dialog" aria-modal="true" aria-label="Appearance settings">
@@ -6260,8 +6287,9 @@
           <div class="eyebrow" style="margin-bottom:8px;">Theme</div>
           <div class="appearance-theme-options"><button class="appearance-choice ${state.appearance.theme === "light" ? "active" : ""}" data-set-theme="light">Light</button><button class="appearance-choice ${state.appearance.theme === "dark" ? "active" : ""}" data-set-theme="dark">Dark</button></div>
           <div class="eyebrow" style="margin:16px 0 8px;">Accent color</div>
-          <div class="appearance-swatches">${presets.map((color) => `<button class="appearance-swatch ${state.appearance.accent.toLowerCase() === color ? "active" : ""}" style="--swatch:${color}" data-set-accent="${color}" aria-label="Use ${color} accent"></button>`).join("")}</div>
+          <div class="appearance-swatches">${presets.map((color) => `<button class="appearance-swatch ${state.appearance.accent.toLowerCase() === color ? "active" : ""}" style="--swatch:${color}" data-set-accent="${color}" title="${color === "#087f8d" ? "Annual Green (default)" : color}" aria-label="Use ${color === "#087f8d" ? "Annual Green default" : color} accent"></button>`).join("")}</div>
           <label class="appearance-custom"><span>Custom color</span><input id="appearance-custom-color" type="color" value="${escapeAttr(state.appearance.accent)}" /></label>
+          <button class="appearance-choice" style="margin-top:12px;width:100%" data-restore-annual-green="yes">Restore Annual Green</button>
           <div class="appearance-background"><div class="eyebrow">My Work background</div><button class="appearance-upload" data-select-my-work-background="yes">Upload image</button><div class="subline">${state.appearance.myWorkBackground ? "Image applied" : "PNG, JPG, or WebP up to 1.5 MB"}</div>${state.appearance.myWorkBackground ? `<button class="ghost-btn" data-clear-my-work-background="yes">Remove background image</button>` : ""}</div>
           <div class="appearance-background"><div class="eyebrow">Notifications</div><div class="section-title"><div><strong>Browser push</strong><div class="subline">${escapeHtml(pushNotificationState.message || "Checking notification availability...")}</div></div><button class="${pushNotificationState.enabled ? "solid-btn" : "ghost-btn"}" data-toggle-push-notifications="yes" ${!pushNotificationState.supported || !pushNotificationState.configured || pushNotificationState.loading ? "disabled" : ""}>${pushNotificationState.loading ? "Checking..." : pushNotificationState.enabled ? "On" : "Off"}</button></div></div>
         </section>`);
@@ -10080,6 +10108,9 @@
       document.querySelectorAll(".view").forEach((view) => {
         view.classList.toggle("hidden", view.id !== viewId);
       });
+      // Stable annual frames sit outside .view panels so draft cells survive navigation.
+      if (IS_ANNUAL_SHEET_PREVIEW) window.AnnualDashboardPreview.syncVisibility(state);
+      if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.syncVisibility(state);
     }
 
     const MOBILE_WORKSPACE_VIEWS = new Set(["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view", "announcement-view"]);
@@ -10123,12 +10154,10 @@
       }
       if (viewId === "my-work-view" && state.currentView !== "my-work-view") state.myWorkDetailOpen = false;
       state.currentView = viewId;
-      renderActiveView();
       applyViewVisibility(viewId);
+      renderActiveView();
       renderShellChrome();
       restoreVirtualTableScrollPositions();
-      if (IS_ANNUAL_SHEET_PREVIEW) window.AnnualDashboardPreview.syncVisibility(state);
-      if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.syncVisibility(state);
       if (viewId === "my-work-view") loadSharedMyWork(true);
       if (viewId === "client-view") {
         if (!casesLoadedFromDatabase) loadSharedCases(true);
@@ -10310,8 +10339,9 @@
       const activeEditor = activeEditorSnapshot();
       const scrollY = window.scrollY;
       captureVirtualTableScrollPositions();
-      renderActiveView();
+      normalizeMobileWorkspaceView();
       applyViewVisibility(state.currentView);
+      renderActiveView();
       renderShellChrome();
       renderNotesPopup();
       renderAnnualActionPopup();
@@ -10325,8 +10355,6 @@
       restoreVirtualTableScrollPositions();
       restoreActiveEditor(activeEditor);
       if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
-      if (IS_ANNUAL_SHEET_PREVIEW) window.AnnualDashboardPreview.syncVisibility(state);
-      if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.syncVisibility(state);
     }
 
     document.addEventListener("keydown", (event) => {
@@ -10563,6 +10591,7 @@
       const closeAppearanceSettingsTrigger = target.closest("[data-close-appearance-settings]");
       const themeTrigger = target.closest("[data-set-theme]");
       const accentTrigger = target.closest("[data-set-accent]");
+      const restoreAnnualGreenTrigger = target.closest("[data-restore-annual-green]");
       const clearMyWorkBackgroundTrigger = target.closest("[data-clear-my-work-background]");
       const selectMyWorkBackgroundTrigger = target.closest("[data-select-my-work-background]");
       const togglePushNotificationsTrigger = target.closest("[data-toggle-push-notifications]");
@@ -10590,6 +10619,7 @@
         try {
           const response = await appFetch("/api/auth/logout", { method: "POST" }, "Signing out...");
           if (!response.ok) throw new Error("Unable to sign out.");
+          window.AnnualDashboardSheets?.clear();
           window.localStorage.removeItem(DEMO_STORAGE_KEY);
           window.localStorage.removeItem(FAME_ANNOUNCEMENT_STORAGE_KEY);
           for (const key of Object.keys(localStorage)) if (key.startsWith(`lmats-claim-v2:${bootstrapProfile.user.id}:`)) localStorage.removeItem(key);
@@ -10605,7 +10635,8 @@
       if (openAppearanceSettingsTrigger) { state.appearanceSettingsOpen = true; renderAppearanceSettings(); loadPushNotificationState(); return; }
       if (closeAppearanceSettingsTrigger && (target === closeAppearanceSettingsTrigger || closeAppearanceSettingsTrigger.tagName === "BUTTON")) { state.appearanceSettingsOpen = false; renderAppearanceSettings(); return; }
       if (themeTrigger) { state.appearance.theme = themeTrigger.getAttribute("data-set-theme") === "dark" ? "dark" : "light"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
-      if (accentTrigger) { state.appearance.accent = accentTrigger.getAttribute("data-set-accent") || "#2563eb"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
+      if (accentTrigger) { state.appearance.accent = accentTrigger.getAttribute("data-set-accent") || "#087f8d"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
+      if (restoreAnnualGreenTrigger) { state.appearance.theme = "light"; state.appearance.accent = "#087f8d"; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
       if (selectMyWorkBackgroundTrigger) { document.getElementById("appearance-my-work-background")?.click(); return; }
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
       if (togglePushNotificationsTrigger) { await togglePushNotifications(); return; }
@@ -12937,7 +12968,7 @@
       if (initialView === "client-view") remainingLoads.push(loadSharedMyWork(true));
       remainingLoads.push(loadStaffDirectory(true));
       remainingLoads.push(loadSharedAnnouncements(true));
-      Promise.allSettled(remainingLoads);
+      Promise.allSettled(remainingLoads).then(() => window.AnnualDashboardSheets?.preload(state.teamDivision));
     }
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
     scheduleBackgroundLoad(() => refreshDatabaseStatus(true));

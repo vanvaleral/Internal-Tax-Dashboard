@@ -6,6 +6,9 @@
 
 :root {
   color-scheme: light;
+  --canvas: #f0f2ee;
+  --accent: #087f8d;
+  --accent-strong: #066b77;
 }
 
 * {
@@ -20,10 +23,9 @@ body {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 32%),
-    radial-gradient(circle at top right, rgba(217, 119, 6, 0.12), transparent 26%),
-    #f4f3ef;
-  color: #13222c;
+    radial-gradient(ellipse at 80% 0, rgba(228, 238, 234, .53), transparent 55%),
+    var(--canvas);
+  color: #20323b;
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -48,7 +50,7 @@ button {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(circle at 15% 10%, rgba(37, 99, 235, .18), transparent 32%), #eef3f7;
+  background: radial-gradient(circle at 15% 10%, rgba(8, 127, 141, .1), transparent 40%), var(--canvas);
 }
 
 .auth-card {
@@ -100,7 +102,7 @@ button {
   width: 16px;
   min-height: 16px;
   margin: 0;
-  accent-color: #162b38;
+  accent-color: var(--accent);
 }
 
 .password-field {
@@ -121,7 +123,7 @@ button {
   padding: 0 7px;
   border: 0;
   background: transparent;
-  color: #315f94;
+  color: var(--accent-strong);
   font-size: 11px;
   font-weight: 800;
   transform: translateY(-50%);
@@ -147,7 +149,7 @@ button {
   min-height: 44px;
   border: 0;
   border-radius: 10px;
-  background: #162b38;
+  background: var(--accent);
   color: white;
   cursor: pointer;
   font-weight: 700;
@@ -163,7 +165,7 @@ button {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #315f94;
+  color: var(--accent-strong);
   cursor: pointer;
   font: inherit;
   font-size: 12px;

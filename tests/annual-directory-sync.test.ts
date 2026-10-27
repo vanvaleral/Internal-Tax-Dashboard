@@ -81,12 +81,12 @@ test("annual parent retains dirty directory notices until each stable frame is r
     const state = { currentView: "matrix-view", operationsMode: "annual", annualTeam: "accounting" };
     api.render(root, state);
     const acc = w.document.querySelector("iframe"), accMessages: any[] = [], taxMessages: any[] = [];
-    acc.contentWindow.postMessage = (message: any) => accMessages.push(message);
+    acc.contentWindow.postMessage = (message: any) => { if (message.type === "annual-sheet:directory-changed") accMessages.push(message); };
     api.directoryChanged("before-ready"); assert.equal(accMessages.length, 0);
     const ready = (frame: any, team: string) => w.dispatchEvent(new w.MessageEvent("message", { origin: "http://localhost", source: frame.contentWindow, data: { type: "annual-sheet:state", team } }));
     ready(acc, "accounting"); assert.equal(accMessages[0].token, "before-ready");
     api.render(root, { ...state, annualTeam: "tax" });
-    const tax = w.document.querySelectorAll("iframe")[1]; tax.contentWindow.postMessage = (message: any) => taxMessages.push(message); ready(tax, "tax");
+    const tax = w.document.querySelectorAll("iframe")[1]; tax.contentWindow.postMessage = (message: any) => { if (message.type === "annual-sheet:directory-changed") taxMessages.push(message); }; ready(tax, "tax");
     api.directoryChanged("directory-change"); assert.equal(taxMessages.at(-1).token, "directory-change");
     assert.equal(accMessages.length, 1, "hidden frames need not refetch immediately");
     api.syncVisibility(state);

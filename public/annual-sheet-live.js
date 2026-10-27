@@ -6,20 +6,33 @@
   const expectedUserId = new URLSearchParams(location.search).get("account") || "";
   let context = null, undoStack = [], redoStack = [], revision = 0, readPromise = null, readController = null, clientsPromise = null;
   let clientsCache = null, clientsCheckedAt = 0, clientsEpoch = 0, clientsController = null;
+  let initialRead = true;
   const equal = (a, b) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
   function cancelLoad() { revision++; readController?.abort(); readController = null; readPromise = null; }
   async function request(body, options = {}) {
     if (body) cancelLoad();
     const boundUser = context?.userId || expectedUserId;
-    const response = await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}`}`, {
+    let preloaded = null;
+    if (!body && !options.clients && initialRead) {
+      initialRead = false;
+      // Only a known same-origin embedded frame can consume the parent's server-read snapshot.
+      if (boundUser && new URLSearchParams(location.search).get("embedded") === "1" && window.parent !== window) {
+        let take;
+        try { if (window.parent.location.origin === location.origin) take = window.parent.AnnualDashboardSheets?.takePreload; } catch { /* Cross-origin parents cannot provide data. */ }
+        if (typeof take === "function") preloaded = await take(team, boundUser, window);
+      }
+    }
+    if (options.readRevision !== undefined && options.readRevision !== revision) return null;
+    if (options.signal?.aborted) throw new DOMException("Annual read cancelled.", "AbortError");
+    const response = preloaded ? null : await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}`}`, {
       method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
       headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(boundUser ? { "x-workspace-user": boundUser } : {}) },
       ...(body ? { body: JSON.stringify({ ...body, team }) } : {}),
       ...(options.signal ? { signal: options.signal } : {})
     });
-    const data = await response.json().catch(() => ({}));
+    const data = preloaded || await response.json().catch(() => ({}));
     if (options.readRevision !== undefined && options.readRevision !== revision) return null;
-    if (!response.ok || boundUser && data.userId && data.userId !== boundUser) { clientsCache = null; const error = new Error(data.error || (response.ok ? "Annual workspace access changed. Reload and retry." : "Annual request failed. Please retry.")); error.status = response.ok ? 409 : response.status; throw error; }
+    if (response && !response.ok || boundUser && data.userId && data.userId !== boundUser) { clientsCache = null; const error = new Error(data.error || (!response || response.ok ? "Annual workspace access changed. Reload and retry." : "Annual request failed. Please retry.")); error.status = !response || response.ok ? 409 : response.status; throw error; }
     if (options.clients) return data.clients || [];
     context = data;
     if (window.parent !== window) window.parent.postMessage({ type: "annual-sheet:state", team, year: data.rows?.[0]?.year || 0, version: data.version, saved: !!body }, location.origin);
@@ -92,6 +105,6 @@
     undoStack = []; redoStack = []; return result;
   }
   function invalidateClients() { clientsEpoch++; clientsController?.abort(); clientsController = null; clientsPromise = null; clientsCache = null; }
-  function clearAccess() { cancelLoad(); invalidateClients(); context = null; undoStack = []; redoStack = []; }
+  function clearAccess() { cancelLoad(); invalidateClients(); initialRead = false; context = null; undoStack = []; redoStack = []; }
   window.AnnualSheetLive = { load, cancelLoad, clearAccess, invalidateClients, loadClients, commit, manageRow, undo: () => replay(false), redo: () => replay(true), get canUndo() { return !!undoStack.length; }, get canRedo() { return !!redoStack.length; }, get context() { return context; } };
 })();
