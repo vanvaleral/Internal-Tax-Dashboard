@@ -4534,7 +4534,7 @@
       annualGenerationPreview: null,
       annualPlanExpanded: "",
       expandedAnnualAccountingId: "",
-      casesTab: persistedDemoState?.ui?.casesTab || "active",
+      casesTab: persistedDemoState?.ui?.casesTab || "himbauan",
       selectedCaseId: persistedDemoState?.ui?.selectedCaseId || taxCases[0]?.id || "",
       clientManagementTab: persistedDemoState?.ui?.clientManagementTab || "active",
       activeProposalId: persistedDemoState?.ui?.activeProposalId || proposals[0]?.id || "",
@@ -4805,6 +4805,7 @@
           }
         },
         cases: {
+          himbauan: ["Cases / Himbauan", "Cases Workspace", "Track Himbauan correspondence, PIC ownership, and case progress."],
           active: ["Cases / Active Cases", "Cases Workspace", "Non-recurring tax work uses case queues and milestone progression, not the recurring compliance matrix."],
           sp2dk: ["Cases / SP2DK", "Cases Workspace", "Focused case lane for SP2DK handling and follow-through."],
           pemeriksaan: ["Cases / Pemeriksaan", "Cases Workspace", "Inspection-oriented view with clearer ownership and stage visibility."],
@@ -4834,22 +4835,23 @@
         client: ["Clients / Client Detail", "Client Detail Workspace", "Compact client timeline and grouped obligation history for drill-down without leaving the workspace model."]
       };
 
+      const tabMeta = (map, key, fallback) => Array.isArray(map[key]) ? map[key] : map[fallback];
       if (state.currentView === "matrix-view") {
         const [breadcrumb, label, note] = state.operationsMode === "monthly"
-          ? maps.operations.monthly[state.operationsTab]
-          : maps.operations.annual[state.annualTeam];
+          ? tabMeta(maps.operations.monthly, state.operationsTab, "active")
+          : tabMeta(maps.operations.annual, state.annualTeam, "accounting");
         return { breadcrumb, label, note };
       }
       if (state.currentView === "cases-view") {
-        const [breadcrumb, label, note] = maps.cases[state.casesTab];
+        const [breadcrumb, label, note] = tabMeta(maps.cases, state.casesTab, "himbauan");
         return { breadcrumb, label, note };
       }
       if (state.currentView === "client-management-view") {
-        const [breadcrumb, label, note] = maps.clients[state.clientManagementTab];
+        const [breadcrumb, label, note] = tabMeta(maps.clients, state.clientManagementTab, "active");
         return { breadcrumb, label, note };
       }
       if (state.currentView === "dashboard-view") {
-        const [breadcrumb, label, note] = maps.management[state.managementTab];
+        const [breadcrumb, label, note] = tabMeta(maps.management, state.managementTab, "overview");
         return { breadcrumb, label, note };
       }
       if (state.currentView === "allocation-view") {
@@ -4870,7 +4872,7 @@
       }
       const activeClient = selectedClient();
       const [_, label, note] = maps.client;
-      const breadcrumb = `Clients / ${activeClient.name}`;
+      const breadcrumb = `Clients / ${activeClient?.name || "Client unavailable"}`;
       return { breadcrumb, label, note };
     }
 
@@ -10115,7 +10117,22 @@
 
     const MOBILE_WORKSPACE_VIEWS = new Set(["my-work-view", "cases-view", "client-management-view", "client-view", "profile-view", "announcement-view"]);
 
+    function normalizeWorkspaceNavigation() {
+      const choices = {
+        currentView: ["matrix-view", "cases-view", "my-work-view", "announcement-view", "client-management-view", "dashboard-view", "allocation-view", "profile-view", "client-view"],
+        operationsMode: ["monthly", "annual"],
+        operationsTab: ["active", "history", "claim", "archive"],
+        annualTeam: ["accounting", "tax"],
+        casesTab: ["himbauan", "pemeriksaan"],
+        clientManagementTab: ["active", "inactive", "proposal", "contracts"],
+        managementTab: ["overview", "trends", "portfolio", "workload", "recognition", "report", "announcements", "access"]
+      };
+      // Repair navigation only, never discard preferences, drafts or confirmed business data.
+      for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
+    }
+
     function normalizeMobileWorkspaceView() {
+      normalizeWorkspaceNavigation();
       if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)) {
         state.currentView = "my-work-view";
         state.clientManagementTab = "active";
@@ -10154,6 +10171,8 @@
       }
       if (viewId === "my-work-view" && state.currentView !== "my-work-view") state.myWorkDetailOpen = false;
       state.currentView = viewId;
+      normalizeWorkspaceNavigation();
+      viewId = state.currentView;
       applyViewVisibility(viewId);
       renderActiveView();
       renderShellChrome();
@@ -10278,6 +10297,7 @@
         ...state.sorts,
         ...(snapshot.sorts || {})
       };
+      normalizeWorkspaceNavigation();
     }
 
     function syncBrowserHistory(mode = "replace") {
@@ -12929,6 +12949,7 @@
     if (IS_OFFLINE_DEMO) {
       renderDatabaseSyncStatus();
     } else {
+      normalizeMobileWorkspaceView();
       const initialView = state.currentView;
       const initialLoads = [loadSharedClients(true)];
       const initialOperationScope = initialView === "matrix-view" ? "monthly_compliance"

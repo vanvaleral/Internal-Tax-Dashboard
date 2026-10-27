@@ -77,3 +77,18 @@ Should remain an exception/oversight workspace, not an operational editing page.
 - keyboard efficiency should improve over time
 - form-heavy repeated actions should be minimized
 - visual status semantics should remain obvious and consistent
+
+## Saved Navigation Compatibility
+
+The header metadata must include every visible submenu, including Cases > Himbauan.
+Missing metadata must fall back to a valid heading rather than throw during data
+loading. Startup, navigation and browser-history restoration normalize retired or
+invalid view/tab values without clearing the account's browser storage, appearance,
+allocation drafts, pending work or database records. Empty authorized client lists
+show Client unavailable rather than crashing a saved Client Detail route.
+
+The October 2026 Himbauan startup regression reproduced even with successful API
+responses: the data loader caught a header-render exception and reported it as a
+database-loading failure. Integration tests now run authenticated startup with saved
+navigation, including Himbauan, invalid submenu keys and Back/Forward snapshots.
+This compatibility fix requires no database migration or browser-data reset.
