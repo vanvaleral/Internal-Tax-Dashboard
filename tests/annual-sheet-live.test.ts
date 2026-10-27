@@ -45,10 +45,87 @@ test("initial annual load skips Client Master and lazy generation reads only cur
   assert.equal(legacy.body.clients.length, 1, "older open tabs must retain their legacy initial candidates until reloaded");
 });
 
-async function openRefreshFixture({ holdInitial = false, stylesReady = false } = {}) {
+test("annual Tax candidates include only active Individual clients for the current Tax PIC, not corporate directors or inactive clients", async () => {
+  const { route, db } = setup({ ...staff[2], role: "staff" });
+  db.tables.client_master = [
+    { id: "person-1", legal_name: "Individual Taxpayer", company_form: "Individual", status: "Active", tax_pic_profile_id: "tax-1", tax_pic_name: "REAL TAX", accounting_pic_profile_id: "acc-1", accounting_pic_name: "REAL ACC" },
+    { id: "person-2", legal_name: "Other PIC Individual", company_form: "Individual", status: "Active", tax_pic_profile_id: "other-tax" },
+    { id: "person-3", legal_name: "Inactive Individual", company_form: "Individual", status: "Inactive", tax_pic_profile_id: "tax-1" },
+    { id: "corporate-1", legal_name: "Company Without Prefix", company_form: "PT", status: "Active", tax_pic_profile_id: "tax-1" },
+    { id: "unassigned", legal_name: "Unassigned Person", company_form: "Individual", status: "Active" }
+  ];
+  const result = await route.GET(request({}, "?team=tax&part=clients"));
+  assert.equal(result.status, 200);
+  assert.deepEqual(Array.from(result.body.clients, (client: any) => client.sourceClientId), ["person-1"]);
+  const source = result.body.clients[0], clientsBefore = JSON.stringify(db.tables.client_master);
+  const generate = (year: number, id: string) => route.POST(request({ team: "tax", action: "commit", creates: [{ ...source, id, clientName: "Spoofed name", subjectType: "Corporate", taxPic: "Other Tax", year }], edits: [] }));
+  const first = await generate(2025, "22222222-2222-4222-8222-222222222222");
+  assert.equal(first.status, 200); assert.equal(first.body.rows[0].clientName, "Individual Taxpayer");
+  assert.equal(first.body.rows[0].taxPic, "Real Tax"); assert.equal(first.body.rows[0].subjectType, "Individual");
+  assert.equal(first.body.rows[0].sourceClientId, "person-1");
+  const next = await generate(2026, "33333333-3333-4333-8333-333333333333");
+  assert.equal(next.status, 200); assert.equal(next.body.rows[0].subjectId, next.body.rows[1].subjectId);
+  assert.notEqual(next.body.rows[0].id, next.body.rows[1].id);
+  assert.equal((await generate(2025, "44444444-4444-4444-8444-444444444444")).body.rows.length, 2);
+  assert.equal(JSON.stringify(db.tables.client_master), clientsBefore, "annual subjects must not affect allocations");
+  db.tables.client_master[0].tax_pic_profile_id = "other-tax";
+  assert.equal((await generate(2027, "55555555-5555-4555-8555-555555555555")).status, 403, "cached previews never authorize a stale assignment");
+});
+
+test("bulk annual creation validates all initial controls/evidence before one atomic write and preserves unique request IDs", async () => {
   const { route, db } = setup();
-  const dom = new JSDOM(readFileSync(new URL("../public/annual-accounting-sheet-demo.html", import.meta.url), "utf8"), { runScripts: "outside-only", url: "http://localhost/annual-accounting-sheet-demo.html?live=1&account=auth-user-1" });
+  const make = (id: string, name: string, initialValues: any) => ({ id, clientName: name, year: 2025, accountingPic: "Real Acc", taxPic: "", initialValues });
+  const body = { team: "accounting", action: "commit", edits: [], creates: [
+    make("22222222-2222-4222-8222-222222222222", "External One", { technicalAdminMonths: [0, 1], dataMonths: [0, 1, 2], reportPreparationMonths: [0], paymentValue: 0, notes: "Imported note" }),
+    make("33333333-3333-4333-8333-333333333333", "External Two", { technicalAdminMonths: [12] })
+  ] };
+  const before = JSON.stringify(db.tables.operational_workspace_state);
+  assert.equal((await route.POST(request(body))).status, 400);
+  assert.equal(JSON.stringify(db.tables.operational_workspace_state), before, "no partial batch writes");
+  body.creates[1].initialValues = { progress: "Review", ntpe: "BPE-2" };
+  body.creates[0].initialValues.progress = "In Process";
+  let workspaceReads = 0; const from = db.from.bind(db); db.from = table => { if (table === "operational_workspace_state") workspaceReads++; return from(table); };
+  const saved = await route.POST(request(body));
+  assert.equal(saved.status, 200); assert.equal(workspaceReads, 2, "one parallel read and one CAS write, without an extra sequential read");
+  const rows = db.tables.operational_workspace_state[0].payload;
+  assert.equal(rows.length, 3); assert.deepEqual(rows[1].dataMonths, [0, 1, 2]); assert.equal(rows[1].paymentAmount, 0);
+  assert.equal(rows[2].progress, "Done"); assert.equal(rows[2].ntpe, "BPE-2");
+  assert.equal(rows[2].progressBeforeNtpe, "Review", "imported NTPE must retain the imported stage for reopening");
+  const audit = JSON.stringify(rows);
+  assert.equal((await route.POST(request(body))).status, 200);
+  assert.equal(JSON.stringify(db.tables.operational_workspace_state[0].payload), audit, "retrying draft IDs cannot duplicate rows or audit entries");
+  const bad = make("44444444-4444-4444-8444-444444444444", "Third", { taxPic: "Real Tax" });
+  assert.equal((await route.POST(request({ ...body, creates: [bad] }))).status, 400);
+});
+
+test("bulk Tax returns reject incomplete filing evidence and apply valid milestone/payment fields together", async () => {
+  const { route, db } = setup({ ...staff[2], role: "staff" });
+  const body = { team: "tax", action: "commit", edits: [], creates: [{ id: "22222222-2222-4222-8222-222222222222", clientName: "External Taxpayer", subjectType: "Individual", year: 2025, taxPic: "Real Tax", initialValues: { progress: "Done", payableAmount: 0, filing: [0, 2], filingDate: "2026-03-20", ntpe: "" } }] };
+  assert.equal((await route.POST(request(body))).status, 400);
+  assert.equal(db.tables.operational_workspace_state.some((row: any) => row.scope === "annual_tax"), false);
+  body.creates[0].initialValues.ntpe = "BPE-1";
+  const result = await route.POST(request(body));
+  assert.equal(result.status, 200); assert.equal(result.body.rows[0].progress, "Done");
+  assert.deepEqual(Array.from(result.body.rows[0].filing), [0, 2]);
+  assert.equal(result.body.rows[0].taxPicId, "tax-1");
+});
+
+async function openRefreshFixture({ holdInitial = false, stylesReady = false, team = "accounting", directoryChannel = false, leadership = false } = {}) {
+  const supervisor = { id: "supervisor", display_name: "Supervisor", role: "supervisor", team_division: "Accounting Team", directory_active: true };
+  const { route, db } = setup(leadership ? supervisor : team === "tax" ? { ...staff[2], role: "staff" } : actor);
+  if (leadership) db.tables.staff_profiles.push(supervisor);
+  db.tables.operational_workspace_state[0].scope = rules.annualScope(team as rules.AnnualTeam);
+  const dom = new JSDOM(readFileSync(new URL("../public/annual-accounting-sheet-demo.html", import.meta.url), "utf8"), { runScripts: "outside-only", url: `http://localhost/annual-accounting-sheet-demo.html?live=1&account=auth-user-1&team=${team}` });
   const w = dom.window as any;
+  const channels: any[] = [];
+  if (directoryChannel) w.BroadcastChannel = class {
+    listeners: any[] = []; closed = false;
+    name: string;
+    constructor(name: string) { this.name = name; channels.push(this); }
+    addEventListener(_type: string, listener: any) { this.listeners.push(listener); }
+    emit(token: string) { if (!this.closed) this.listeners.forEach(listener => listener({ data: { type: "staff-directory:changed", token } })); }
+    close() { this.closed = true; }
+  };
   w.matchMedia = () => ({ matches: false }); w.structuredClone = structuredClone;
   w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   w.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
@@ -65,6 +142,7 @@ async function openRefreshFixture({ holdInitial = false, stylesReady = false } =
     if (options.method === "GET" && failure) return { ok: false, status: failure, json: async () => ({ error: "Refresh failed" }) };
     return { ok: result.status < 400, status: result.status, json: async () => structuredClone(result.body) };
   };
+  if (team === "tax") w.eval(readFileSync(new URL("../public/annual-tax-sheet-config.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/annual-sheet-live.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/annual-accounting-sheet-demo.js", import.meta.url), "utf8"));
   const tick = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -72,7 +150,7 @@ async function openRefreshFixture({ holdInitial = false, stylesReady = false } =
   const api = w.AnnualSheetDemo, notes = api.columns.findIndex((col: any) => col.field === "notes");
   const cell = () => w.document.querySelector(`td[data-r="0"][data-c="${notes}"]`);
   const choose = () => { cell().dispatchEvent(new w.MouseEvent("pointerdown", { bubbles: true, button: 0 })); w.document.dispatchEvent(new w.MouseEvent("pointerup", { bubbles: true })); };
-  return { dom, w, db, api, tick, cell, choose, requests,
+  return { dom, w, db, api, tick, cell, choose, requests, channels,
     advance() { clock += 31000; }, hold() { holdRead = true; }, release() { releaseRead!(); }, fail(status: number) { failure = status; },
     focus() { w.dispatchEvent(new w.Event("focus")); w.document.dispatchEvent(new w.Event("visibilitychange")); }
   };
@@ -85,16 +163,198 @@ test("annual startup waits for confirmed data and stylesheet readiness without a
     assert.equal(d.api.state.rows.length, 1, "database data has arrived");
     assert.equal(root.classList.contains("sheet-booting"), true, "do not expose an unstyled sheet");
     assert.equal(overlay.hidden, false);
+    assert.equal(d.w.getComputedStyle(root).overflow, "hidden", "initial loading must not create a page scrollbar");
     const styles = d.w.document.getElementById("sheet-styles");
     d.w.Function(styles.getAttribute("onload")).call(styles);
     assert.equal(styles.media, "all");
     assert.equal(root.classList.contains("sheet-booting"), false);
     assert.equal(overlay.hidden, true, "no timer or animation is required to unlock");
+    assert.notEqual(d.w.getComputedStyle(root).overflow, "hidden", "release the loading-only overflow lock when ready");
     d.advance(); d.focus(); await d.tick();
     assert.equal(overlay.hidden, true, "background refresh must not bring back a loading screen");
     d.advance(); d.fail(403); d.focus(); await d.tick();
     d.w.dispatchEvent(new d.w.Event("sheet-styles-ready"));
     assert.equal(overlay.hidden, false, "stylesheet events cannot clear an access error");
+  } finally { d.dom.window.close(); }
+});
+
+test("live Tax generation merges individual Master clients with matching legacy subjects and preserves their historical IDs", async () => {
+  const d = await openRefreshFixture({ team: "tax", stylesReady: true });
+  try {
+    const old = structuredClone(d.api.state.rows[0]);
+    d.api.state.year = 2026;
+    d.w.document.getElementById("generate-button").click(); await d.tick();
+    const candidates = d.w.document.querySelectorAll("#candidate-list input");
+    assert.equal(candidates.length, 1, "a referenced individual and its prior-year return are one candidate, not two");
+    assert.equal(candidates[0].checked, false, "Tax generation remains a deliberate selection");
+    candidates[0].checked = true; candidates[0].dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    d.w.document.getElementById("confirm-generate").click(); await d.tick();
+    const current = d.api.state.rows.find((row: any) => row.year === 2026);
+    assert.ok(current); assert.equal(current.subjectId, old.subjectId); assert.notEqual(current.id, old.id);
+    assert.equal(current.sourceClientId, "client-1"); assert.equal(current.taxPicId, "tax-1");
+    assert.equal(JSON.stringify(d.api.state.rows.find((row: any) => row.id === old.id)), JSON.stringify(old));
+  } finally { d.dom.window.close(); }
+});
+
+test("generation candidates are coalesced, reused briefly in memory, refreshed explicitly and discarded on access change", async () => {
+  const d = await openRefreshFixture();
+  try {
+    const transport = d.w.AnnualSheetLive, reads = () => d.requests.filter(url => url.includes("part=clients")).length;
+    const first = transport.loadClients(), same = transport.loadClients();
+    assert.equal(first, same); assert.equal(reads(), 1);
+    (await first)[0].name = "Do not mutate the cache";
+    assert.equal((await transport.loadClients())[0].name, "Actual Client"); assert.equal(reads(), 1);
+    await transport.loadClients(true); assert.equal(reads(), 2);
+    d.advance(); await transport.loadClients(); assert.equal(reads(), 2);
+    d.advance(); await transport.loadClients(); assert.equal(reads(), 3);
+    transport.clearAccess(); await transport.loadClients(); assert.equal(reads(), 4);
+    const fetch = d.w.fetch; let release: (() => void) | undefined;
+    d.w.fetch = async (...args: any[]) => { const result = await fetch(...args); await new Promise<void>(resolve => { release = resolve; }); return result; };
+    const pending = transport.loadClients(true); await d.tick(); transport.clearAccess(); release!();
+    await assert.rejects(pending, /access changed/);
+    assert.equal(transport.context, null, "late candidate responses must not resurrect the cleared account");
+  } finally { d.dom.window.close(); }
+});
+
+test("PIC Access notifications refresh annual names, current teams and overview without caching old PICs or rewriting history", async () => {
+  const d = await openRefreshFixture({ stylesReady: true });
+  try {
+    const doc = d.w.document, payload = JSON.stringify(d.db.tables.operational_workspace_state[0].payload);
+    doc.getElementById("pic-filter").value = "Real Acc"; doc.getElementById("pic-filter").dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    const notify = (token: string, origin = "http://localhost") => d.w.dispatchEvent(new d.w.MessageEvent("message", { origin, source: d.w.parent, data: { type: "annual-sheet:directory-changed", token } }));
+    await d.w.AnnualSheetLive.loadClients();
+    const reads = d.requests.length;
+    d.db.tables.staff_profiles[0].display_name = "Renamed ACC";
+    d.db.tables.staff_profiles[1].directory_active = false;
+    d.db.tables.staff_profiles.push({ id: "new-acc", display_name: "New ACC", team_division: "Accounting Team", role: "staff", directory_active: true }, { id: "partner-acc", display_name: "Partner ACC", team_division: "Accounting Team", role: "partner", directory_active: true }, { id: "unknown-access", display_name: "No active flag", team_division: "Accounting Team" });
+    notify("untrusted", "https://evil.example"); await d.tick(); assert.equal(d.requests.length, reads);
+    notify("directory-1"); await d.tick();
+    assert.equal(d.requests.length, reads + 1, "known changes bypass the 30-second read throttle");
+    const names = Array.from(doc.getElementById("pic-filter").options, (option: any) => option.value);
+    assert.ok(names.includes("Renamed ACC")); assert.ok(names.includes("New ACC"));
+    for (const removed of ["Real Acc", "Other Acc", "Partner ACC", "No active flag"]) assert.equal(names.includes(removed), false, removed);
+    assert.equal(d.api.state.pic, "Renamed ACC", "a selected person stays selected by profile ID after a rename");
+    let groups = Array.from(d.api.accountingPicProgress(d.api.state.rows)) as any[];
+    assert.equal(groups.find(group => group.name === "Renamed ACC").total, 1);
+    assert.equal(groups.some(group => group.name === "Other Acc"), false);
+    notify("directory-1"); await d.tick(); assert.equal(d.requests.length, reads + 1, "duplicate parent/channel notices are coalesced");
+    await d.w.AnnualSheetLive.loadClients(); assert.equal(d.requests.length, reads + 2, "the generation preview cache was invalidated");
+    d.db.tables.staff_profiles[0].team_division = "Tax Team";
+    notify("directory-2"); await d.tick();
+    groups = Array.from(d.api.accountingPicProgress(d.api.state.rows)) as any[];
+    assert.equal(groups.find(group => group.id === "__former__").total, 1);
+    assert.equal(groups.some(group => group.name === "Renamed ACC"), false, "a moved PIC is not listed as a current Accounting team member");
+    assert.ok(Array.from(doc.getElementById("tax-pic-filter").options, (option: any) => option.value).includes("Renamed ACC"));
+    assert.equal(groups.reduce((sum, group) => sum + group.total, 0), 1, "historical work must not disappear from totals");
+    assert.equal(d.api.visible.length, 1, "the Former / Other filter still shows the original work");
+    assert.equal(JSON.stringify(d.db.tables.operational_workspace_state[0].payload), payload);
+    assert.equal(d.requests.some(url => url.startsWith("POST")), false, "directory refreshes do not save annual work");
+  } finally { d.dom.window.close(); }
+});
+
+test("Tax overview follows PIC Access and preserves former owners and zero-work members without broadening staff visibility", async () => {
+  const d = await openRefreshFixture({ stylesReady: true, team: "tax", leadership: true });
+  try {
+    const doc = d.w.document, before = JSON.stringify(d.db.tables.operational_workspace_state[0].payload);
+    d.db.tables.staff_profiles[2].directory_active = false;
+    d.db.tables.staff_profiles.push({ id: "new-tax", display_name: "New Tax PIC", team_division: "Tax Team", role: "staff", directory_active: true });
+    d.w.dispatchEvent(new d.w.MessageEvent("message", { origin: "http://localhost", source: d.w.parent, data: { type: "annual-sheet:directory-changed", token: "tax-roster" } }));
+    await d.tick();
+    const groups = Array.from(d.api.taxPicProgress(d.api.state.rows)) as any[];
+    assert.equal(groups.find(group => group.id === "__former__").total, 1);
+    assert.equal(groups.find(group => group.id === "new-tax").total, 0);
+    assert.equal(groups.some(group => group.id === "tax-1"), false);
+    doc.querySelector('[data-pic-progress-id="__former__"]').click();
+    assert.equal(d.api.state.taxPic, "__former__"); assert.equal(d.api.visible.length, 1);
+    assert.equal(JSON.stringify(d.db.tables.operational_workspace_state[0].payload), before);
+    assert.equal(d.requests.some(request => request.startsWith("POST")), false);
+    assert.match(doc.getElementById("team-control-scope").textContent, /All Tax PICs/);
+  } finally { d.dom.window.close(); }
+  const own = await openRefreshFixture({ stylesReady: true, team: "tax" });
+  try {
+    own.db.tables.operational_workspace_state[0].payload.push({ ...raw(), id: "private-tax-row", taxPicProfileId: "other-tax", accountingPicProfileId: "acc-2" });
+    own.advance(); own.focus(); await own.tick();
+    assert.equal(own.api.state.rows.length, 1);
+    assert.equal(Array.from(own.api.taxPicProgress(own.api.state.rows)).reduce((total: number, group: any) => total + group.total, 0), 1);
+    assert.match(own.w.document.getElementById("team-control-scope").textContent, /Accessible Tax work/);
+  } finally { own.dom.window.close(); }
+});
+
+test("directory changes during editing wait safely, then refresh immediately without losing the confirmed save", async () => {
+  const d = await openRefreshFixture({ stylesReady: true });
+  try {
+    d.choose(); d.cell().dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "F2", bubbles: true }));
+    const input = d.cell().querySelector("input"); input.value = "Typing during directory change";
+    d.db.tables.staff_profiles[1].display_name = "Renamed Other ACC";
+    d.w.dispatchEvent(new d.w.MessageEvent("message", { origin: "http://localhost", source: d.w.parent, data: { type: "annual-sheet:directory-changed", token: "editing-change" } }));
+    await d.tick(); assert.equal(d.cell().querySelector("input"), input);
+    input.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await d.tick(); await d.tick();
+    assert.equal(d.api.state.rows[0].notes, "Typing during directory change");
+    assert.ok(Array.from(d.w.document.getElementById("pic-filter").options, (option: any) => option.value).includes("Renamed Other ACC"));
+  } finally { d.dom.window.close(); }
+});
+
+test("full-screen tabs receive directory changes across tabs and reconnect after browser-history restoration", async () => {
+  const d = await openRefreshFixture({ stylesReady: true, directoryChannel: true });
+  try {
+    assert.equal(d.channels[0].name, "tax-dashboard:staff-directory");
+    d.db.tables.staff_profiles[1].display_name = "Updated in another tab";
+    d.channels[0].emit("cross-tab-1"); await d.tick();
+    const options = () => Array.from(d.w.document.getElementById("pic-filter").options, (option: any) => option.value);
+    assert.ok(options().includes("Updated in another tab"));
+    assert.equal(d.w.document.getElementById("sheet-loading").hidden, true, "directory refreshes never restart the initial loader");
+    d.w.dispatchEvent(new d.w.Event("pagehide")); assert.equal(d.channels[0].closed, true);
+    d.db.tables.staff_profiles[1].display_name = "Updated while away";
+    const restored = new d.w.Event("pageshow"); Object.defineProperty(restored, "persisted", { value: true }); d.w.dispatchEvent(restored);
+    await d.tick();
+    assert.equal(d.channels.length, 2); assert.ok(options().includes("Updated while away"));
+  } finally { d.dom.window.close(); }
+});
+
+test("a directory notification arriving during an older read triggers a fresh read rather than retaining a stale roster", async () => {
+  const d = await openRefreshFixture({ stylesReady: true });
+  try {
+    d.advance(); d.hold(); d.focus(); await d.tick();
+    d.db.tables.staff_profiles[1].display_name = "Newer directory value";
+    d.w.dispatchEvent(new d.w.MessageEvent("message", { origin: "http://localhost", source: d.w.parent, data: { type: "annual-sheet:directory-changed", token: "during-read" } }));
+    d.release(); await d.tick(); await d.tick();
+    assert.ok(Array.from(d.w.document.getElementById("pic-filter").options, (option: any) => option.value).includes("Newer directory value"));
+    assert.equal(d.requests.length, 3, "initial read, older held read, then a fresh directory read");
+  } finally { d.dom.window.close(); }
+});
+
+test("annual API only permits assignment to active operational PICs while retaining historical people for display", async () => {
+  const { route, db } = setup({ ...actor, role: "leader" });
+  db.tables.staff_profiles.push({ id: "partner-acc", display_name: "Partner ACC", team_division: "Accounting Team", directory_active: true, role: "partner" });
+  const result = await route.POST(request({ team: "accounting", action: "commit", creates: [], edits: [{ id: "existing-work", changes: { accountingPic: "Partner ACC" }, before: { accountingPic: "Real Acc" } }] }));
+  assert.equal(result.status, 400);
+  db.tables.staff_profiles[0].directory_active = false;
+  const data = await route.GET(request({}, "?team=accounting&part=sheet"));
+  assert.equal(data.status, 200); assert.equal(data.body.rows[0].accountingPicId, "acc-1");
+  assert.equal(data.body.rows[0].accountingPic, "Real Acc");
+  assert.equal(data.body.staff.some((person: any) => person.id === "acc-1"), false);
+});
+
+test("live bulk rows stay drafts until a single confirmed POST, preserving row data and keeping failures out of the grid", async () => {
+  const d = await openRefreshFixture({ stylesReady: true });
+  try {
+    d.w.document.getElementById("bulk-add-button").click();
+    assert.equal(d.api.state.rows.length, 1);
+    const input = (r: number, field: string, value: string) => { const node = d.w.document.querySelector(`#bulk-rows-grid input[data-r="${r}"][data-field="${field}"]`); node.value = value; node.dispatchEvent(new d.w.Event("input", { bubbles: true })); };
+    input(0, "clientName", "External Imported Client"); input(0, "dataMonths", "7"); input(0, "notes", "Excel import note");
+    d.w.document.getElementById("bulk-save-rows").click(); await d.tick(); await d.tick();
+    const imported = d.api.state.rows.find((row: any) => row.clientName === "External Imported Client");
+    assert.ok(imported); assert.equal(imported.dataMonths.length, 7); assert.equal(imported.accountingPicId, "acc-1");
+    assert.equal(imported.clientId, ""); assert.equal(d.db.tables.client_master.length, 1);
+    assert.equal(d.requests.filter(url => url.startsWith("POST")).length, 1);
+    assert.equal(d.w.document.getElementById("bulk-rows-dialog").open, false);
+    d.w.document.getElementById("bulk-add-button").click(); input(0, "clientName", "Invalid Import"); input(0, "dataMonths", "15");
+    const count = d.api.state.rows.length;
+    d.w.document.getElementById("bulk-save-rows").click(); await d.tick();
+    assert.equal(d.api.state.rows.length, count); assert.equal(d.requests.filter(url => url.startsWith("POST")).length, 1);
+    assert.equal(d.w.document.getElementById("bulk-rows-dialog").open, true);
+    assert.match(d.w.document.getElementById("bulk-rows-error").textContent, /Row 1/);
   } finally { d.dom.window.close(); }
 });
 

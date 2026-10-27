@@ -66,7 +66,7 @@
   function priorCandidates(state) {
     const latest = new Map();
     state.rows.filter(row => !row.deletedAt && row.year < state.year).forEach(row => { const previous = latest.get(row.subjectId); if (!previous || previous.year < row.year) latest.set(row.subjectId, row); });
-    return [...latest.values()].map(row => ({ clientId: row.subjectId, subjectId: row.subjectId, linkedClientId: row.clientId, name: row.clientName, subjectType: row.subjectType, groupName: row.groupName, recordMethod: row.recordMethod, taxPic: row.taxPic, accountingPic: row.accountingPic }));
+    return [...latest.values()].map(row => ({ clientId: row.subjectId, subjectId: row.subjectId, sourceClientId: row.sourceClientId || "", linkedClientId: row.clientId, name: row.clientName, subjectType: row.subjectType, groupName: row.groupName, recordMethod: row.recordMethod, taxPic: row.taxPic, accountingPic: row.accountingPic }));
   }
   function configureUI(document) {
     const byId = id => document.getElementById(id);
@@ -74,7 +74,7 @@
     document.documentElement.classList.add("tax-sheet");
     document.querySelector("h1").innerHTML = 'Annual tax<span class="title-dot">.</span>';
     document.querySelector(".metric > span").textContent = "SPT subjects";
-    byId("generate-button").title = "Review prior-year SPT subjects before adding them to this year";
+    byId("generate-button").title = "Review individual clients and prior-year SPT subjects for this year";
     byId("outside-button").title = "Add an external SPT subject to this annual sheet";
     byId("annual-grid").setAttribute("aria-label", "Editable annual tax return control");
     byId("search").placeholder = "Find SPT subject, group, PIC, note...";
@@ -85,7 +85,7 @@
     byId("help-panel").querySelector("small:last-child").textContent = "One row is one SPT subject, not one client. Review prior-year suggestions before adding them to a new year. Reported / Done requires filing evidence; positive tax payable also requires payment evidence. No stage change auto-checks the milestones. Dates use YYYY-MM-DD.";
     byId("generate-dialog").querySelector(".eyebrow").textContent = "ANNUAL TAX";
     byId("generate-dialog").querySelector("h2").innerHTML = 'Review subjects for <span id="generate-year"></span>.';
-    byId("generate-dialog").querySelector(".dialog-head p").textContent = "Choose prior-year SPT subjects deliberately. Multiple directors of the same client remain separate. New-year milestones start blank.";
+    byId("generate-dialog").querySelector(".dialog-head p").textContent = "Review active Individual clients assigned to the Tax PIC and prior-year SPT subjects. Directors not in Client Master are added separately. New-year milestones start blank.";
     byId("confirm-generate").textContent = "Add selected subjects";
     byId("empty-generate").textContent = "Review prior-year subjects";
     byId("empty-state").querySelector("p").textContent = "No SPT subjects match this year, status, and filter.";

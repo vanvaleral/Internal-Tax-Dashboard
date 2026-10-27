@@ -10,7 +10,8 @@ are hidden and cannot change the authenticated actor.
 
 Accounting retains Summary only, click-to-edit segmented month bars, payment
 value, NTPE auto-completion and a cyan Team Overview collapsed by default. Tax
-retains separate subject-based milestone views and filing/payment evidence gates.
+retains separate subject-based milestone views and filing/payment evidence gates,
+with the same collapsed-by-default Team Overview available across its views.
 Both support PIC filtering, sorting, shared custom columns, year/status filters,
 batch generation and selected-year Excel export. Staff exports include only rows
 they are authorized to read; they are not firm-wide exports.
@@ -34,6 +35,12 @@ authenticated initial data are ready, with no minimum animation time or exit
 delay. Style/data failures stay visible rather than exposing sample or unstyled
 content. No migration is required for this loading change.
 
+While `sheet-booting` is present, critical inline CSS clips document overflow on
+html/body. The hidden, not-yet-styled workbook cannot briefly create a page scrollbar
+before the asynchronous sheet styles arrive. Removing the boot class restores the
+normal embedded/full-screen/standalone scrolling rules; native grid scrolling and
+the small-viewport overflow fallback are unchanged.
+
 An iframe parent covers the navigation gap, then hands over to the child's own
 initial loader using a source/origin-checked mounted message. A status handshake
 also handles listeners installed after that first message. Iframe `load` alone
@@ -43,16 +50,26 @@ do not restore the initial loader.
 Reviewed public UI assets (exact paths in `lib/public-ui-assets.ts`) skip Supabase
 middleware calls on GET/HEAD, avoiding repeated session/profile round trips for
 CSS, data-free JavaScript and the favicon. HTML pages, renderers with embedded
-client/staff demo fixtures, downloads and all data/API routes still pass through
-the existing authentication, active-staff and account checks.
+client/staff demo fixtures and downloads still pass through the existing
+middleware checks. Only the exact `/api/annual-sheet` path delegates authentication
+to its handler, which runs `currentActor(request)` for GET and POST: verified user,
+current active-staff profile, account binding, then per-row permissions. Other
+APIs retain middleware checks. Neither client headers nor a cached actor grant
+access. Annual saves read the workspace, staff and columns concurrently, then
+write through the same compare-and-swap check; retries reread current state.
 There is no generic file-extension bypass and no cached authorization. This is
 consistent with the [Supabase SSR guidance](https://supabase.com/docs/guides/auth/server-side/creating-a-client?queryGroups=framework&framework=nextjs)
 to avoid running session middleware on routes that do not access Supabase.
 
 Initial loading still waits for authenticated database data and never shows demo
-records. Client Master candidates are fetched only when Accounting's Generate
-Clients dialog is opened; Tax does not query Client Master for its subject sheet.
-Candidate reads are rechecked for the current active ACC assignments. API responses
+records. Generation candidates warm in the browser's idle time (where supported)
+or when Add Client is opened, without blocking startup. Requests are coalesced and
+their preview results cached in memory for at most 60 seconds, never local storage.
+**Refresh list** bypasses that cache; access changes discard it, including late
+responses. Every creation rechecks current Client Master ownership on the server.
+Accounting lists active ACC assignments. Tax combines active Individual clients
+assigned to the Tax PIC with its existing prior-year SPT suggestions; it does not
+infer directors from corporate clients. API responses
 include Server-Timing for authentication and data-query duration, to help separate
 application/database time from browser/network/platform startup time.
 
@@ -70,6 +87,43 @@ and validates current PIC ownership and field baselines, and only appears in the
 sheet after database confirmation. Automatic refresh throttling is not a guarantee
 of a specific live load time; deployed latency must be measured separately.
 
+## Bulk Entry And Individual Subjects
+
+**Add Client > Insert / Paste Rows** opens a draft grid for either team. Insert
+blank rows or paste Excel values into a cell; paste expands the grid up to 250
+rows. Column order is shown in the grid. Use values without a header row, ISO
+dates (YYYY-MM-DD) and numbers without thousands separators. Month counts fill
+January onward; Tax checklist counts fill milestones left to right. Quoted tabs,
+quotes and multiline cells are parsed as single cells. Enter / Shift+Enter move
+down/up a draft column; Tab moves across fields. Closing the draft grid retains
+its rows in memory for that user/year until saved, cleared or reloaded. Access
+changes clear both draft memory and inputs. Existing sheet paste still
+edits only its selected visible range and cannot bypass locked cells.
+
+Blank drafts are never persisted or counted. Named rows are validated as one
+batch, then confirmed with one POST. Invalid data, duplicates, unauthorized PIC
+assignments/deadlines or incomplete Tax filing evidence reject the whole batch.
+Accounting names matching one eligible Client Master candidate link to that client;
+other names create annual-only external work. Individual Tax names can link to
+their eligible Master candidate; other subjects remain annual-only. Neither flow
+writes Client Master or adds a PIC portfolio allocation. The primary PIC is required
+for bulk work. Staff can create their own work, not assign it to another PIC.
+
+Stable UUID request IDs support retry without duplicates. Initial values use the
+existing field validation, completion rules and before/after audit events inside
+the atomic workspace write. Explicit imported month counts are applied after
+stage defaults so they are not silently replaced by automatic checks. Accounting
+NTPE is applied after the imported stage, retaining that stage for reopening.
+A late successful save discovered on retry is not
+reapplied as an edit to confirmed data. Drafts are not cached across reloads.
+
+An Individual Master candidate stores `sourceClientId` and a stable `subjectId`
+inside its annual JSON row, plus a separate unique work ID for each year. Current
+Master PIC assignments are snapshotted when generating a new year; earlier work
+and historical PICs are not rewritten. Outside directors and people remain separate
+subjects. No SQL migration is needed: these are additive keys in the existing
+workspace payload, with operational history preserved.
+
 Clicking a spreadsheet row number opens **Delete Row**. Deletion requires a
 confirmation and is available only to that team's primary PIC or leadership;
 assistance permission alone does not allow deletion. This is a recoverable delete:
@@ -83,6 +137,43 @@ Deleting/restoring clears cell undo history; use Deleted/Restore for recovery.
 No additional migration or automatic permanent purge is required.
 
 ## Persistence And Permissions
+
+Annual operational PIC choices follow Management > PIC Access: currently active
+directory profiles in the corresponding team, excluding Partners as operational
+assignees (Partners retain leadership permissions). The API includes role metadata
+and validates these same rules on assignment writes. Inactive profiles remain
+available server-side for resolving historical row IDs/names, not as new choices.
+
+Directory loads and PIC Access edits rebuild the main operational lists and send
+a change token to existing annual frames and same-origin full-screen tabs. No
+staff names, claim codes or permission data are broadcast. The receiving sheet
+invalidates its generation-preview cache and fetches authenticated data, bypassing
+only the normal 30-second refresh throttle for that known change. Duplicate notices
+are coalesced. Changes during edits/saves are queued without replacing the editor,
+and a notice received during an older read triggers a fresh read afterward.
+Browser-history restoration reconnects the cross-tab listener and refreshes it.
+Confirmed staff create/update/restore/archive responses invalidate annual views
+before reloading the full directory, so a failed follow-up list read cannot leave
+annual sheets unaware of a successful change. Unconfirmed changes send no notice.
+Directory read revisions also prevent an older background/access-list response
+from undoing a newer confirmed directory change in the dashboard.
+
+Team overview membership uses active Accounting or Tax profile IDs for the sheet,
+including members with zero assigned work. Renamed members stay grouped by their profile ID. Work
+assigned to inactive, Partner, unknown or other-team identities is retained under
+**Former / Other PICs**, with a matching filter; it is not added back as a current
+team member or silently excluded from totals. Historical row assignments and audit
+records are not rewritten by these refreshes. No migration is needed.
+
+Tax overview shows each primary Tax PIC's finished/total SPT subjects, remaining
+subjects and completion percentage, sorted by lowest completion first. Clicking a
+PIC toggles the Tax PIC filter (not the Accounting filter). Whole-year figures
+stay independent of status/search/PIC filters and milestone view: Complete uses
+the existing evidence-gated completion rule, while Documents, Preparation and
+Filing & Payment count checked milestones out of their configured items per subject
+(currently three each). Assistants do not double-count an owner's subject. The
+same embedded panel is reused without an extra request or duplicate summary strip.
+Staff see only authorized subjects with an explicit accessible-work scope label.
 
 - Existing `operational_workspace_state` arrays remain authoritative. IDs and
   unknown legacy fields are preserved. No annual rows are deleted or replaced by

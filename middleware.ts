@@ -11,6 +11,8 @@ type CookieMutation = {
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
   if (isPublicUiAsset(request.nextUrl.pathname, request.method)) return response;
+  // This exact handler verifies the user, active staff, account binding and PIC on every request.
+  if (request.nextUrl.pathname === "/api/annual-sheet") return response;
   // The handler authenticates this exact scheduler route with CRON_SECRET.
   if (["/api/maintenance/purge-deleted", "/api/maintenance/deliver-notifications"].includes(request.nextUrl.pathname)) return response;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

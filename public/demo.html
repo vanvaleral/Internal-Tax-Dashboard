@@ -3800,6 +3800,8 @@
     let SUPERVISORS = ["Raka"];
     let staffDirectoryLoaded = false;
     let staffDirectory = [];
+    let staffDirectoryRevision = 0;
+    let annualDirectorySignature = "", annualDirectoryChannel;
     let latestStaffClaimCode = "";
     let latestStaffClaimFor = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
@@ -9542,16 +9544,49 @@
       }
     }
 
+    function syncOperationalPicLists(staff) {
+      const active = staff.filter(person => person.directory_active !== false);
+      const names = people => [...new Set(people.map(person => person.display_name || person.full_name).filter(Boolean))];
+      const operational = active.filter(person => String(person.role || "staff").toLowerCase() !== "partner");
+      ACC_PICS = names(operational.filter(person => person.team_division === "Accounting Team"));
+      TAX_PICS = names(operational.filter(person => person.team_division === "Tax Team"));
+      ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
+      PARTNERS = names(active.filter(person => person.role === "partner"));
+      SUPERVISORS = names(active.filter(person => person.role === "supervisor"));
+    }
+
+    function notifyAnnualDirectoryChanged(staff) {
+      const signature = JSON.stringify(staff.map(person => [person.id, person.full_name || "", person.display_name || "", person.team_division, person.role, person.directory_active !== false]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+      if (signature === annualDirectorySignature) return;
+      annualDirectorySignature = signature;
+      const token = crypto.randomUUID();
+      window.AnnualDashboardSheets?.directoryChanged(token);
+      if (!IS_OFFLINE_DEMO && typeof BroadcastChannel !== "undefined") {
+        annualDirectoryChannel ||= new BroadcastChannel("tax-dashboard:staff-directory");
+        annualDirectoryChannel.postMessage({ type: "staff-directory:changed", token });
+      }
+    }
+
+    function acceptStaffAccessChange(change) {
+      if (!change?.id) return;
+      staffDirectoryRevision++;
+      const existing = staffDirectory.find(person => person.id === change.id);
+      staffDirectory = [...staffDirectory.filter(person => person.id !== change.id), { ...existing, ...change }];
+      syncOperationalPicLists(staffDirectory);
+      notifyAnnualDirectoryChanged(staffDirectory);
+    }
+
     async function loadStaffDirectory(background = false) {
+      const revision = ++staffDirectoryRevision;
       try {
         const response = await appFetch("/api/staff", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading staff directory...");
         if (!response.ok) return false;
         const result = await response.json();
+        if (revision !== staffDirectoryRevision) return false;
         const staff = Array.isArray(result.staff) ? result.staff : [];
         if (!staff.length) return false;
         staffDirectory = staff;
         const picName = (item) => item.display_name || item.full_name;
-        const names = (items) => [...new Set(items.map(picName).filter(Boolean))];
         const canonicalPic = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
         const aliases = new Map(staff.flatMap((item) => [
           [canonicalPic(item.full_name), picName(item)],
@@ -9604,13 +9639,9 @@
           draft.nextAccPic = normalizePic(draft.nextAccPic);
           draft.nextTaxPic = normalizePic(draft.nextTaxPic);
         });
-        // Partners supervise the portfolio but are not operational PIC choices.
-        ACC_PICS = names(staff.filter((item) => item.team_division === "Accounting Team" && item.role !== "partner"));
-        TAX_PICS = names(staff.filter((item) => item.team_division === "Tax Team" && item.role !== "partner"));
-        ALL_PICS = [...new Set([...ACC_PICS, ...TAX_PICS])];
-        PARTNERS = names(staff.filter((item) => item.role === "partner"));
-        SUPERVISORS = names(staff.filter((item) => item.role === "supervisor"));
+        syncOperationalPicLists(staff);
         staffDirectoryLoaded = true;
+        notifyAnnualDirectoryChanged(staff);
         rerender();
         return true;
       } catch (error) {
@@ -9621,11 +9652,15 @@
     }
 
     async function loadStaffAccessDirectory() {
+      const revision = ++staffDirectoryRevision;
       try {
         const response = await appFetch("/api/staff?includeInactive=1", { cache: "no-store", headers: { Accept: "application/json" } });
         const result = await response.json().catch(() => ({}));
+        if (revision !== staffDirectoryRevision) return;
         if (!response.ok) throw new Error(result.error || "Staff directory could not be loaded.");
         staffDirectory = Array.isArray(result.staff) ? result.staff : [];
+        syncOperationalPicLists(staffDirectory);
+        notifyAnnualDirectoryChanged(staffDirectory);
         rerender();
       } catch (error) {
         console.warn("[staff access] request failed", error);
@@ -11152,6 +11187,7 @@
           if (!response.ok) throw new Error(result.error || "Staff profile could not be created.");
           latestStaffClaimCode = result.claimCode || "";
           latestStaffClaimFor = displayName;
+          acceptStaffAccessChange(result.staff);
           await loadStaffAccessDirectory();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Staff profile could not be created.");
@@ -11202,6 +11238,7 @@
           const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || "Staff access could not be saved.");
+          acceptStaffAccessChange(result.staff);
           await loadStaffAccessDirectory();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Staff access could not be saved.");
@@ -11216,6 +11253,7 @@
           const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Accept: "application/json" } });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || "Staff profile could not be archived.");
+          acceptStaffAccessChange({ id, directory_active: false });
           await loadStaffAccessDirectory();
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Staff profile could not be archived.");

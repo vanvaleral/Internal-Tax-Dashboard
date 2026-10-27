@@ -23,11 +23,13 @@ export function isLeadership(role: string | null | undefined) {
   return ["leader", "supervisor", "partner", "admin"].includes(String(role || "").toLowerCase());
 }
 
-export async function currentActor(): Promise<CurrentActor | { error: string; status: 401 | 403 | 503 }> {
+export async function currentActor(request?: Request): Promise<CurrentActor | { error: string; status: 401 | 403 | 409 | 503 }> {
   const session = await createClient();
   if (!session) return { error: "Database is not configured.", status: 503 };
   const { data: { user } } = await session.auth.getUser();
   if (!user) return { error: "Authentication is required.", status: 401 };
+  const expectedUser = request?.headers.get("x-workspace-user");
+  if (expectedUser && expectedUser !== user.id) return { error: "The signed-in account changed. Reload before continuing.", status: 409 };
 
   const admin = createAdminClient();
   if (!admin) return { error: "Server database access is not configured.", status: 503 };

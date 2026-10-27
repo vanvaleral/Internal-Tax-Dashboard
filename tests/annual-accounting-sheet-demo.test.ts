@@ -31,6 +31,67 @@ function loadDemo(team = "accounting", search = "") {
   return { dom, w, api, cell, choose, key, actAs, paste };
 }
 
+test("both annual teams insert blank drafts, expand Excel paste, handle quoted multiline cells and save only named rows", async () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = loadDemo(team);
+    try {
+      d.actAs(team === "accounting" ? "acc-cemari" : "tax-bagus");
+      const count = d.api.state.rows.length, doc = d.w.document;
+      doc.getElementById("bulk-add-button").click();
+      assert.equal(d.api.state.rows.length, count, "blank rows must not enter the operational sheet");
+      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 10);
+      doc.getElementById("bulk-row-count").value = "5"; doc.getElementById("bulk-insert-rows").click();
+      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 15);
+      const fields = Array.from(doc.querySelectorAll('#bulk-rows-grid input[data-r="0"]'), (node: any) => node.dataset.field);
+      const values = Array.from({ length: 17 }, (_, r) => {
+        const row = Object.fromEntries(fields.map(field => [field, ""]));
+        Object.assign(row, { clientName: `New Annual ${team} ${r}`, accountingPic: team === "accounting" ? "cemari" : "", taxPic: team === "tax" ? "BAGUS" : "", progress: team === "accounting" ? "In Process" : "Data Request", notes: r === 0 ? 'Line one\nLine two "quoted"' : "Imported" });
+        if (team === "tax") Object.assign(row, { subjectType: "Individual", documents: "2/3", payableAmount: "0" });
+        else Object.assign(row, { technicalAdminMonths: "4", dataMonths: "8", reportPreparationMonths: "2", paymentValue: "0" });
+        return fields.map(field => /[\t\n"]/.test(row[field]) ? `"${row[field].replace(/"/g, '""')}"` : row[field]).join("\t");
+      }).join("\r\n") + "\r\n";
+      const paste = new d.w.Event("paste", { bubbles: true, cancelable: true }); Object.defineProperty(paste, "clipboardData", { value: { getData: () => values } });
+      doc.querySelector('#bulk-rows-grid input[data-r="0"][data-c="0"]').dispatchEvent(paste);
+      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 17);
+      assert.equal(d.api.state.rows.length, count);
+      doc.querySelector('[data-close="bulk-rows-dialog"]').click();
+      doc.getElementById("bulk-add-button").click();
+      assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 17, "closing a draft preview should not discard its pasted rows");
+      const firstCell = doc.querySelector('#bulk-rows-grid input[data-r="0"][data-c="0"]');
+      firstCell.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      assert.equal(doc.activeElement.dataset.r, "1");
+      doc.activeElement.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
+      assert.equal(doc.activeElement.dataset.r, "0");
+      doc.getElementById("bulk-save-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(doc.getElementById("bulk-rows-dialog").open, false, doc.getElementById("bulk-rows-error").textContent);
+      const imported = d.api.state.rows.filter((row: any) => row.clientName.startsWith(`New Annual ${team}`));
+      assert.equal(imported.length, 17); assert.equal(new Set(imported.map((row: any) => row.id)).size, 17);
+      assert.equal(imported[0].notes, 'Line one\nLine two "quoted"');
+      assert.equal(team === "tax" ? imported[0].taxPicId : imported[0].accountingPicId, team === "tax" ? "tax-bagus" : "acc-cemari");
+      assert.equal(team === "tax" ? imported[0].payableAmount : imported[0].paymentValue, 0);
+      assert.equal(team === "tax" ? imported[0].documents.length : imported[0].dataMonths.length, team === "tax" ? 2 : 8);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("bulk drafts reject invalid values, cross-PIC assignments and oversized paste without changing the existing sheet", async () => {
+  const d = loadDemo();
+  try {
+    d.actAs("acc-cemari"); const doc = d.w.document, before = JSON.stringify(d.api.state.rows);
+    doc.getElementById("bulk-add-button").click();
+    const input = (field: string, value: string) => { const node = doc.querySelector(`#bulk-rows-grid input[data-r="0"][data-field="${field}"]`); node.value = value; node.dispatchEvent(new d.w.Event("input", { bubbles: true })); };
+    input("clientName", "External draft"); input("accountingPic", "Ivan");
+    doc.getElementById("bulk-save-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(doc.getElementById("bulk-rows-error").textContent, /own work/); assert.equal(JSON.stringify(d.api.state.rows), before);
+    input("accountingPic", "Cemari"); input("dataMonths", "13");
+    doc.getElementById("bulk-save-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.match(doc.getElementById("bulk-rows-error").textContent, /0-12/); assert.equal(JSON.stringify(d.api.state.rows), before);
+    const paste = new d.w.Event("paste", { bubbles: true, cancelable: true }); Object.defineProperty(paste, "clipboardData", { value: { getData: () => Array.from({ length: 251 }, () => "External").join("\n") } });
+    doc.querySelector('#bulk-rows-grid input[data-r="0"][data-c="0"]').dispatchEvent(paste);
+    assert.equal(doc.querySelectorAll("#bulk-rows-grid tbody tr").length, 10); assert.equal(JSON.stringify(d.api.state.rows), before);
+  } finally { d.dom.window.close(); }
+});
+
 test("Add Client dropdown retains generation and external-work actions for both annual teams", () => {
   for (const team of ["accounting", "tax"]) {
     const d = loadDemo(team);
@@ -461,6 +522,59 @@ test("Accounting PIC progress counts each owner once, includes outside work, and
     assert.deepEqual(teamCoverage.map(control => control.percent), [66.1, 87.5, 72]);
     assert.ok(teamCoverage.every(control => control.total === 168));
     assert.ok(Array.from(d.api.accountingControlCoverage([])).every((control: any) => control.percent === null));
+  } finally { d.dom.window.close(); }
+});
+
+test("Tax team overview counts subjects by primary Tax PIC, uses milestone denominators and does not double-count assistants", () => {
+  const d = loadDemo("tax");
+  try {
+    const rows = d.api.state.rows.filter((row: any) => row.year === 2025), groups = Array.from(d.api.taxPicProgress(rows)) as any[];
+    assert.equal(groups.length, 7); assert.equal(groups.reduce((sum, group) => sum + group.total, 0), 10);
+    assert.equal(groups.reduce((sum, group) => sum + group.completed, 0), 2);
+    const bagus = groups.find(group => group.id === "tax-bagus");
+    assert.equal(bagus.total, 3, "assisting Dinar's return is not another primary assignment");
+    assert.equal(bagus.completed, 2); assert.equal(bagus.remaining, 1); assert.equal(bagus.percent, 66.7);
+    assert.equal(groups.find(group => group.name === "Okta").total, 1);
+    const coverage = Array.from(d.api.taxControlCoverage(rows)) as any[];
+    for (const control of coverage) {
+      assert.equal(control.total, 30, "three milestones per subject, not twelve accounting months");
+      const checked = rows.reduce((sum: number, row: any) => sum + row[control.field].length, 0);
+      assert.equal(control.checked, checked); assert.equal(control.percent, Math.round(checked / 30 * 1000) / 10);
+    }
+    const incompleteEvidence = { ...rows[0], progress: "Done", filing: [], ntpe: "", historicalCompletion: false };
+    assert.equal(Array.from(d.api.taxPicProgress([incompleteEvidence])).find((group: any) => group.id === "tax-bagus").completed, 0);
+    assert.ok(Array.from(d.api.taxPicProgress([])).every((group: any) => group.total === 0 && group.percent === null));
+    assert.ok(Array.from(d.api.taxControlCoverage([])).every((control: any) => control.percent === null));
+  } finally { d.dom.window.close(); }
+});
+
+test("Tax overview is collapsed by default, filters Tax PICs and retains full-year metrics across all milestone views", () => {
+  const d = loadDemo("tax");
+  try {
+    const doc = d.w.document, board = doc.getElementById("accounting-pic-progress"), content = doc.getElementById("pic-progress-content");
+    assert.equal(board.hidden, false); assert.equal(content.hidden, true); assert.equal(doc.getElementById("annual-overview").hidden, true);
+    assert.match(doc.getElementById("pic-progress-totals").textContent, /10 SPT subjects/);
+    assert.equal(doc.querySelector(".pic-progress-table").getAttribute("aria-label"), "Tax PIC completion");
+    assert.equal(doc.querySelector("[data-team-complete]").textContent, "20%");
+    const coverage = ["documents", "preparation", "filing"].map(field => doc.querySelector(`[data-team-control-coverage="${field}"]`).textContent);
+    doc.getElementById("toggle-pic-progress").click(); assert.equal(content.hidden, false);
+    const bagus = () => doc.querySelector('[data-pic-progress-id="tax-bagus"]');
+    bagus().click();
+    assert.equal(d.api.state.taxPic, "Bagus"); assert.equal(d.api.state.pic, "");
+    assert.equal(doc.getElementById("tax-pic-filter").value, "Bagus"); assert.equal(d.api.visible.length, 1);
+    assert.equal(bagus().getAttribute("aria-selected"), "true");
+    for (const view of ["documents", "preparation", "filing", "all", "summary"]) {
+      doc.querySelector(`[data-view="${view}"]`).click();
+      assert.equal(doc.getElementById("accounting-pic-progress"), board); assert.equal(board.hidden, false); assert.equal(content.hidden, false);
+      assert.equal(doc.querySelector("[data-team-complete]").textContent, "20%");
+      assert.deepEqual(["documents", "preparation", "filing"].map(field => doc.querySelector(`[data-team-control-coverage="${field}"]`).textContent), coverage);
+    }
+    bagus().dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    assert.equal(d.api.state.taxPic, ""); assert.equal(d.api.visible.length, 8);
+    doc.getElementById("toggle-pic-progress").click(); assert.equal(content.hidden, true);
+    const year = doc.getElementById("year-select"); year.value = "2024"; year.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    assert.equal(doc.querySelector("[data-team-complete]").textContent, "100%");
+    assert.match(doc.getElementById("pic-progress-totals").textContent, /4 SPT subjects/);
   } finally { d.dom.window.close(); }
 });
 

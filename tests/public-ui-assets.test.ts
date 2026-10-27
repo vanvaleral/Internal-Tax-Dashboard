@@ -17,7 +17,7 @@ test("only reviewed public UI assets bypass auth; data, HTML and extension-looka
   }
 });
 
-test("middleware does zero Supabase calls for UI assets but retains auth, active-staff and account checks on pages and APIs", async () => {
+test("middleware delegates only the self-authenticating annual API and retains checks on other pages and APIs", async () => {
   let clients = 0, authReads = 0, profileReads = 0, user: any = null, active = true;
   const source = readFileSync(new URL("../middleware.ts", import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
@@ -38,15 +38,17 @@ test("middleware does zero Supabase calls for UI assets but retains auth, active
   const run = (path: string, workspaceUser = "") => context.exports.middleware({ method: "GET", nextUrl: new URL(`https://test.local${path}`), url: `https://test.local${path}`, headers: { get: () => workspaceUser }, cookies: { getAll: () => [] } });
   assert.equal((await run("/annual-sheet-live.js")).status, 200);
   assert.equal((await run("/favicon.svg")).status, 200);
+  assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
   assert.equal(clients, 0); assert.equal(authReads, 0); assert.equal(profileReads, 0);
   assert.equal((await run("/demo.html")).status, 307);
-  assert.equal((await run("/api/annual-sheet")).status, 401);
+  assert.equal((await run("/api/clients")).status, 401);
+  assert.equal((await run("/api/annual-sheet/extra")).status, 401);
   assert.equal((await run("/api/profile.css")).status, 401);
   user = { id: "current-account" }; active = false;
-  assert.equal((await run("/api/annual-sheet")).status, 403);
+  assert.equal((await run("/api/clients")).status, 403);
   assert.equal((await run("/annual-accounting-sheet-demo.html")).status, 307);
   active = true;
-  assert.equal((await run("/api/annual-sheet", "different-account")).status, 409);
-  assert.equal((await run("/api/annual-sheet", "current-account")).status, 200);
+  assert.equal((await run("/api/clients", "different-account")).status, 409);
+  assert.equal((await run("/api/clients", "current-account")).status, 200);
   assert.ok(authReads > 0); assert.ok(profileReads > 0);
 });

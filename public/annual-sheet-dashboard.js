@@ -19,13 +19,22 @@
     frame.style.cssText = "display:block;width:100%;height:max(580px,calc(100dvh - 235px));border:0";
     frame.addEventListener("load", () => frame.contentWindow.postMessage({ type: "workspace:status" }, location.origin));
     section.append(frame, loading); document.querySelector("main.main").append(section);
-    const sheet = { frame, section, loading, activated: false }; sheets.set(team, sheet); return sheet;
+    const sheet = { frame, section, loading, activated: false, ready: false, directoryToken: "" }; sheets.set(team, sheet); return sheet;
+  }
+  function refreshDirectory(sheet) {
+    if (!sheet.directoryToken || !sheet.ready || sheet.section.hidden) return;
+    sheet.frame.contentWindow.postMessage({ type: "annual-sheet:directory-changed", token: sheet.directoryToken }, location.origin);
+    sheet.directoryToken = "";
+  }
+  function directoryChanged(token) {
+    for (const sheet of sheets.values()) { sheet.directoryToken = token; refreshDirectory(sheet); }
   }
   function syncVisibility(state) {
     for (const [team, sheet] of sheets) {
       const show = state.currentView === "matrix-view" && state.operationsMode === "annual" && (state.annualTeam === "tax" ? "tax" : "accounting") === team;
-      if (show && sheet.section.hidden && sheet.activated) sheet.frame.contentWindow.postMessage({ type: "annual-sheet:refresh" }, location.origin);
+      if (show && sheet.section.hidden && sheet.activated && !sheet.directoryToken) sheet.frame.contentWindow.postMessage({ type: "annual-sheet:refresh" }, location.origin);
       sheet.section.hidden = !show;
+      if (show) refreshDirectory(sheet);
       if (show) sheet.activated = true;
     }
   }
@@ -41,7 +50,7 @@
     const sheet = sheets.get(event.data.team);
     if (!sheet || event.source !== sheet.frame.contentWindow) return;
     if (event.data.type === "annual-sheet:mounted") sheet.loading.remove();
-    else if (event.data.saved) onSaved(event.data.team);
+    else { sheet.ready = true; refreshDirectory(sheet); if (event.data.saved) onSaved(event.data.team); }
   });
-  window.AnnualDashboardSheets = { render, syncVisibility, configure(callback, userId = "") { onSaved = callback; expectedUserId = userId; } };
+  window.AnnualDashboardSheets = { render, syncVisibility, directoryChanged, configure(callback, userId = "") { onSaved = callback; expectedUserId = userId; } };
 })();
