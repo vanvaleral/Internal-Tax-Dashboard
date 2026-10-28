@@ -9678,9 +9678,27 @@
     });
     document.addEventListener("paste", event => {
       if (!event.target.matches?.("[data-case-sheet-field]")) return;
-      if (/[\t\r\n]/.test(event.clipboardData?.getData("text/plain") || "")) {
+      const cell = event.target;
+      const pasted = event.clipboardData?.getData("text/plain") || "";
+      const text = cell.type === "date" ? pasted.trim() : pasted;
+      if (/\t/.test(pasted) || /[\r\n]/.test(text)) {
         event.preventDefault();
         caseSheetMessage("Paste one cell at a time. Multi-cell paste is not yet supported for Cases.", true);
+        return;
+      }
+      if (cell.type === "date") {
+        event.preventDefault();
+        if (cell.disabled || cell.readOnly) return;
+        const local = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+        const value = local ? `${local[3]}-${local[2].padStart(2, "0")}-${local[1].padStart(2, "0")}` : text;
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 ? new Date(`${value}T00:00:00Z`) : null;
+        if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+          caseSheetMessage("Date not pasted. Use a valid DD/MM/YYYY or YYYY-MM-DD date.", true);
+          return;
+        }
+        cell.value = value;
+        cell.dispatchEvent(new Event("input", { bubbles: true }));
+        caseSheetMessage("Date inserted. Leave the cell to save.");
       }
     });
     document.addEventListener("click", event => {

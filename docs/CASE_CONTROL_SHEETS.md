@@ -50,6 +50,11 @@ come from the existing appearance settings rather than a separate fixed palette.
   fields entered before selecting a client are explicitly marked as draft only.
 - Multi-cell paste is rejected without modifying records. Single-cell paste is
   supported; this is not a full Excel replacement.
+- Date cells accept pasted `dd/mm/yyyy` dates (also `d/m/yyyy` and ISO
+  `yyyy-mm-dd`), including a trailing Excel line break. Valid dates are converted
+  to ISO for storage and save when leaving the cell. Impossible dates leave the
+  current value unchanged and show an inline error. Native date display follows
+  the browser locale; due-date calculations are unchanged.
 
 ## Persistence And Authorization
 

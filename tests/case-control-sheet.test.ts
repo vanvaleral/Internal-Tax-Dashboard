@@ -39,6 +39,9 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       if (fail) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
       const previous = rows.find(row => row.id === body.id) || dbCase("saved-new", body.case?.clientName, "tax-a", "acc-a");
       const data = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
+      for (const [field, column] of [["letterDate", "letter_date"], ["receivedDate", "received_date"], ["completionDate", "completion_date"], ["sphpDate", "sph_p_date"]]) {
+        if (body.case?.[field] !== undefined) data[column] = body.case[field];
+      }
       if (body.action === "assign-pic") data[`${body.picType}_pic_profile_id`] = body.profileId;
       return { ok: true, status: 200, json: async () => ({ data }) };
     }
@@ -62,6 +65,57 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
 
 const field = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-id="${id}"][data-case-sheet-field="${name}"]`);
 const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-row]")].map((row: any) => row.dataset.caseSheetRow);
+
+test("case date paste converts day-first dates and saves ISO values in both sheets and layouts", async () => {
+  for (const query of ["", "?casesFullscreen=1&account=auth-user-1"]) {
+    const d = await dashboard("supervisor", {}, false, query);
+    try {
+      for (const [tab, id, name, source, expected] of [
+        ["himbauan", "saved-a", "letterDate", "05/11/2026", "2026-11-05"],
+        ["himbauan", "saved-a", "receivedDate", " 6/11/2026\r\n", "2026-11-06"],
+        ["himbauan", "saved-a", "completionDate", "29/02/2028", "2028-02-29"],
+        ["pemeriksaan", "saved-d", "letterDate", "2026-12-31", "2026-12-31"],
+        ["pemeriksaan", "saved-d", "receivedDate", "04/03/2026", "2026-03-04"],
+        ["pemeriksaan", "saved-d", "sphpDate", "31/12/2026", "2026-12-31"]
+      ]) {
+        d.w.document.querySelector(`[data-cases-tab="${tab}"]`).click();
+        const cell = field(d, id, name), before = d.writes.length;
+        const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
+        Object.defineProperty(event, "clipboardData", { value:{ getData: () => source } });
+        cell.dispatchEvent(event);
+        assert.equal(event.defaultPrevented, true); assert.equal(cell.value, expected);
+        assert.equal(d.writes.length, before);
+        cell.dispatchEvent(new d.w.FocusEvent("focusout", { bubbles:true })); await tick();
+        assert.equal(d.writes.length, before + 1);
+        assert.equal(d.writes.at(-1).case[name], expected);
+        assert.equal(field(d, id, name).value, expected);
+        assert.equal(d.api.getRows().find((row: any) => row.id === id)[name], expected);
+      }
+      assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("invalid, multi-cell and locked date pastes never change an existing date or save", async () => {
+  const d = await dashboard();
+  try {
+    const cell = field(d, "saved-a", "letterDate"); cell.value = "2026-10-01";
+    for (const source of ["31/02/2026", "29/02/2026", "31/04/2026", "00/11/2026", "01/13/2026", "01/01/0000", "2026-02-30", "not a date", "", "05/11/2026\t06/11/2026", "\t05/11/2026", "05/11/2026\t", "05/11/2026\n06/11/2026"]) {
+      const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
+      Object.defineProperty(event, "clipboardData", { value:{ getData: () => source } });
+      cell.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, true); assert.equal(cell.value, "2026-10-01", source);
+      assert.match(d.w.document.getElementById("case-sheet-status").textContent, /valid.*date|one cell/);
+    }
+    for (const lock of ["readOnly", "disabled"]) {
+      cell[lock] = true;
+      const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
+      Object.defineProperty(event, "clipboardData", { value:{ getData: () => "05/11/2026" } });
+      cell.dispatchEvent(event); assert.equal(cell.value, "2026-10-01"); cell[lock] = false;
+    }
+    assert.equal(d.writes.length, 0); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
 
 test("expanded case details are viewport-sized and remain wrapped after progress refresh in dashboard and full-screen layouts", async () => {
   assert.match(html, /container:case-sheet-viewport \/ inline-size/);
