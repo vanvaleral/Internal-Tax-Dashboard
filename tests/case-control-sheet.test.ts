@@ -9,7 +9,8 @@ const tick = async () => { await new Promise(resolve => setImmediate(resolve)); 
 const dbCase = (id: string, name: string, tax: string, acc: string, category = "Himbauan"): Record<string, any> => ({
   id, client_id: "master-1", client_name: name, case_type: category, case_category: category,
   tax_pic_profile_id: tax, accounting_pic_profile_id: acc, tax_pic_name: tax, accounting_pic_name: acc,
-  letter_number: id, subject: "Original", updated_at: "v1", due_date: "2026-11-20"
+  letter_number: id, subject: "Original", updated_at: "v1", due_date: "2026-11-20",
+  created_at: `2026-10-${id === "saved-a" ? "01" : id === "saved-b" ? "02" : "03"}T00:00:00Z`
 });
 
 async function dashboard(role = "supervisor", savedUi = {}, offline = false, query = "", expectBlocked = false) {
@@ -31,18 +32,20 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
   const rows = [dbCase("saved-a", "Alpha", "tax-a", "acc-a"), dbCase("saved-b", "Beta", "tax-b", "acc-a"), dbCase("saved-c", "Gamma", "tax-a", "acc-b"), dbCase("saved-d", "Delta", "tax-a", "acc-a", "Pemeriksaan")];
   let hold: ((value: any) => void) | undefined;
-  let delay = false, fail = false;
+  let delay = false, fail = false, failId = "", created = 0;
   w.fetch = async (url: string, init: any = {}) => {
     if (init.method && init.method !== "GET") {
       const body = JSON.parse(init.body); writes.push(body);
       if (delay) await new Promise(resolve => { hold = resolve; });
-      if (fail) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
-      const previous = rows.find(row => row.id === body.id) || dbCase("saved-new", body.case?.clientName, "tax-a", "acc-a");
+      if (fail || failId && body.id === failId) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
+      const previous = rows.find(row => row.id === body.id) || (body.id ? dbCase(body.id, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory) : { ...dbCase(++created === 1 ? "saved-new" : `saved-new-${created}`, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory), created_at:new Date().toISOString() });
       const data: Record<string, any> = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
       for (const [field, column] of [["letterDate", "letter_date"], ["receivedDate", "received_date"], ["completionDate", "completion_date"], ["sphpDate", "sph_p_date"]]) {
         if (body.case?.[field] !== undefined) data[column] = body.case[field];
       }
-      if (body.action === "assign-pic") data[`${body.picType}_pic_profile_id`] = body.profileId;
+      for (const [field, column] of [["notes", "notes"], ["taxYear", "tax_year"], ["inspectorPic", "inspector_pic"], ["completionNotes", "completion_notes"]]) if (body.case?.[field] !== undefined) data[column] = body.case[field];
+      if (body.action === "assign-pic") { data[`${body.picType}_pic_profile_id`] = body.profileId; data[`${body.picType}_pic_name`] = body.profileId; }
+      const stored = rows.find(row => row.id === data.id); if (stored) Object.assign(stored, data); else rows.push(data);
       return { ok: true, status: 200, json: async () => ({ data }) };
     }
     reads.push(url);
@@ -56,15 +59,213 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js"));
   // Expose closure references in the test source only, never in the served dashboard.
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress };\n    })().catch(error =>");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__casesTest;
   if (!expectBlocked) assert.ok(api, warnings.join("\n") || w.document.body.textContent.slice(-500));
-  return { dom, w, api, rows, writes, reads, warnings, delay: () => { delay = true; }, fail: () => { fail = true; }, release: () => { delay = false; hold?.(null); } };
+  return { dom, w, api, rows, writes, reads, warnings, delay: () => { delay = true; }, fail: () => { fail = true; }, failCase: (id: string) => { failId = id; }, release: () => { delay = false; hold?.(null); } };
 }
 
 const field = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-id="${id}"][data-case-sheet-field="${name}"]`);
 const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-row]")].map((row: any) => row.dataset.caseSheetRow);
+const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
+const copyRange = (d: any, td: any) => {
+  let copied = ""; const event = new d.w.Event("copy", { bubbles:true, cancelable:true });
+  Object.defineProperty(event, "clipboardData", { value:{ setData: (_type: string, value: string) => { copied = value; } } });
+  td.dispatchEvent(event); assert.equal(event.defaultPrevented, true); return copied;
+};
+
+test("Cases default to creation order and retain earlier numbers through name sorts, filters, saves and reloads", async () => {
+  const d = await dashboard("supervisor", { caseSheetSort:{ key:"clientName", direction:"asc" } });
+  try {
+    d.rows[0].client_name = "Zulu"; d.rows[1].client_name = "Alpha"; d.rows[2].client_name = "Middle";
+    await d.api.loadSharedCases(); d.api.renderCases();
+    const numbers = () => Object.fromEntries([...d.w.document.querySelectorAll("[data-case-sheet-row]")].map((row: any) => [row.dataset.caseSheetRow, row.querySelector(".case-sheet-row-toggle > span").textContent]));
+    assert.equal(d.api.state.caseSheetSort.key, "createdAt");
+    assert.deepEqual(visible(d), ["saved-a", "saved-b", "saved-c"]);
+    assert.deepEqual(numbers(), { "saved-a":"1", "saved-b":"2", "saved-c":"3" });
+    d.w.document.querySelector('[data-case-sheet-sort="clientName"]').click();
+    assert.deepEqual(visible(d), ["saved-b", "saved-c", "saved-a"]);
+    assert.deepEqual(numbers(), { "saved-b":"2", "saved-c":"3", "saved-a":"1" });
+    const filter = d.w.document.getElementById("case-tax-filter"); filter.value = "tax-a"; filter.dispatchEvent(new d.w.Event("change", { bubbles:true }));
+    assert.deepEqual(numbers(), { "saved-c":"3", "saved-a":"1" });
+    d.w.document.querySelector("[data-case-sheet-reset]").click();
+    const cell = field(d, "saved-a", "subject"); cell.value = "Latest update"; await d.api.saveCaseSheetCell(cell);
+    await d.api.loadSharedCases(); d.api.renderCases();
+    assert.deepEqual(visible(d), ["saved-a", "saved-b", "saved-c"]);
+    assert.deepEqual(numbers(), { "saved-a":"1", "saved-b":"2", "saved-c":"3" });
+    d.w.document.querySelector("[data-new-case]").click();
+    const draft = d.api.getRows().find((row: any) => row.id.startsWith("case-"));
+    assert.equal(visible(d).at(-1), draft.id);
+    assert.equal(numbers()[draft.id], "4");
+    assert.equal(JSON.parse(d.w.localStorage.getItem("tax-practice-v2:auth-user-1")).ui.caseSheetSortVersion, 2);
+  } finally { d.dom.window.close(); }
+});
+
+test("range selection supports drag, Shift+click, keyboard extension and day-first Excel copying", async () => {
+  const d = await dashboard("supervisor", {}, false, "?casesFullscreen=1&account=auth-user-1");
+  try {
+    d.rows[0].letter_date = "2026-11-05"; d.rows[1].letter_date = "2026-11-06";
+    await d.api.loadSharedCases(); d.api.renderCases();
+    const start = gridCell(d, "saved-a", "letterNumber"), end = gridCell(d, "saved-b", "letterDate");
+    start.dispatchEvent(new d.w.MouseEvent("pointerdown", { button:0, bubbles:true }));
+    end.dispatchEvent(new d.w.MouseEvent("pointermove", { bubbles:true, cancelable:true }));
+    end.dispatchEvent(new d.w.MouseEvent("pointerup", { bubbles:true }));
+    assert.equal(d.w.document.querySelectorAll('[aria-selected="true"]').length, 4);
+    assert.equal(copyRange(d, start), "saved-a\t05/11/2026\r\nsaved-b\t06/11/2026");
+    d.api.clearCaseSheetRange();
+    start.dispatchEvent(new d.w.MouseEvent("pointerdown", { button:0, bubbles:true }));
+    start.dispatchEvent(new d.w.MouseEvent("pointerup", { bubbles:true }));
+    end.dispatchEvent(new d.w.MouseEvent("pointerdown", { button:0, shiftKey:true, bubbles:true }));
+    assert.equal(d.w.document.querySelectorAll('[aria-selected="true"]').length, 4);
+    d.api.clearCaseSheetRange();
+    field(d, "saved-a", "letterNumber").focus();
+    field(d, "saved-a", "letterNumber").dispatchEvent(new d.w.KeyboardEvent("keydown", { key:"ArrowRight", shiftKey:true, bubbles:true, cancelable:true }));
+    assert.equal(copyRange(d, start), "saved-a\t05/11/2026");
+    assert.equal(d.writes.length, 0); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("explicit column sort preferences survive reload while No. restores creation order", async () => {
+  const d = await dashboard("supervisor", { caseSheetSortVersion:2, caseSheetSort:{ key:"clientName", direction:"desc" } });
+  try {
+    assert.deepEqual(visible(d), ["saved-c", "saved-b", "saved-a"]);
+    d.w.document.querySelector('[data-case-sheet-sort="createdAt"]').click();
+    assert.deepEqual(visible(d), ["saved-a", "saved-b", "saved-c"]);
+    d.w.document.querySelector('[data-case-sheet-sort="createdAt"]').click();
+    assert.deepEqual(visible(d), ["saved-c", "saved-b", "saved-a"]);
+    assert.deepEqual([...d.w.document.querySelectorAll(".case-sheet-row-toggle > span:first-child")].map((span: any) => span.textContent), ["3", "2", "1"]);
+  } finally { d.dom.window.close(); }
+});
+
+test("bulk paste saves date rectangles as one version-checked ordinary-field update per row", async () => {
+  for (const tab of ["himbauan", "pemeriksaan"]) {
+    const d = await dashboard("supervisor", {}, false, "?casesFullscreen=1&account=auth-user-1");
+    try {
+      if (tab === "pemeriksaan") { d.rows[0].case_category = "Pemeriksaan"; d.rows[1].case_category = "Pemeriksaan"; await d.api.loadSharedCases(); }
+      d.w.document.querySelector(`[data-cases-tab="${tab}"]`).click();
+      await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "letterDate"), "05/11/2026\t06/11/2026\r\n2026-12-04\t5/12/2026\r\n");
+      assert.equal(d.writes.length, 2);
+      assert.deepEqual(d.writes.map((write: any) => [write.id, write.case.letterDate, write.case.receivedDate, write.version]), [
+        ["saved-a", "2026-11-05", "2026-11-06", "v1"], ["saved-b", "2026-12-04", "2026-12-05", "v1"]
+      ]);
+      assert.equal(field(d, "saved-a", "letterDate").value, "05/11/2026");
+      assert.equal(field(d, "saved-b", "receivedDate").value, "05/12/2026");
+      assert.match(d.w.document.getElementById("case-sheet-status").textContent, /2 row\(s\) saved/);
+      assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("bulk validation rejects the entire range before any save if a date, shape or protected field is invalid", async () => {
+  const d = await dashboard();
+  try {
+    const dates = gridCell(d, "saved-a", "letterDate");
+    for (const source of ["05/11/2026\t06/11/2026\n31/02/2026\t07/11/2026", '"unfinished', "one\ttwo\nthree", Array(251).fill("05/11/2026").join("\n")]) {
+      await d.api.pasteCaseSheetRange(dates, source);
+      assert.equal(d.writes.length, 0); assert.equal(field(d, "saved-a", "letterDate").value, "");
+      assert.match(d.w.document.getElementById("case-sheet-status").textContent, /Nothing was pasted/);
+    }
+    await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "clientName"), "Another client\tnew letter");
+    assert.equal(d.writes.length, 0);
+    await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "subject"), "New subject\t01/01/2027");
+    assert.equal(d.writes.length, 0); assert.equal(field(d, "saved-a", "subject").value, "Original");
+    await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "notes"), "One\tToo many");
+    assert.equal(d.writes.length, 0);
+  } finally { d.dom.window.close(); }
+});
+
+test("scalar range fill and quoted multiline Excel cells preserve dates, text and copy round trips", async () => {
+  const d = await dashboard();
+  try {
+    const start = gridCell(d, "saved-a", "letterDate"), end = gridCell(d, "saved-b", "receivedDate");
+    d.api.selectCaseSheetRange(start); d.api.selectCaseSheetRange(end, true);
+    await d.api.pasteCaseSheetRange(start, "5/11/2026");
+    assert.equal(d.writes.length, 2);
+    assert.equal(field(d, "saved-b", "receivedDate").value, "05/11/2026");
+    d.api.clearCaseSheetRange();
+    const note = gridCell(d, "saved-a", "notes");
+    await d.api.pasteCaseSheetRange(note, '"Line one\nLine ""two""\twith tab"');
+    assert.equal(d.writes.at(-1).case.notes, 'Line one\nLine "two"\twith tab');
+    d.api.selectCaseSheetRange(note);
+    assert.equal(copyRange(d, note), '"Line one\nLine ""two""\twith tab"');
+    const before = d.writes.length;
+    await d.api.pasteCaseSheetRange(note, copyRange(d, note));
+    assert.equal(d.writes.length, before);
+  } finally { d.dom.window.close(); }
+});
+
+test("bulk saves retain only confirmed data, bound concurrency and report row conflicts without hiding successful writes", async () => {
+  const d = await dashboard();
+  try {
+    d.delay();
+    const saving = d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "letterDate"), "05/11/2026\t06/11/2026"); await tick();
+    assert.ok(d.w.document.querySelector(".case-sheet").hasAttribute("inert"));
+    const leaving = new d.w.Event("beforeunload", { cancelable:true }); d.w.dispatchEvent(leaving); assert.equal(leaving.defaultPrevented, true);
+    await d.api.saveCaseSheetCell(field(d, "saved-b", "subject")); assert.equal(d.writes.length, 1);
+    const record = d.api.getRows().find((row: any) => row.id === "saved-a");
+    assert.equal(record.letterDate, ""); assert.equal(record.receivedDate, "");
+    assert.equal(field(d, "saved-a", "letterDate").value, "05/11/2026");
+    const reads = d.reads.length; await d.api.loadSharedCases(true); assert.equal(d.reads.length, reads);
+    d.release(); await saving; assert.equal(record.letterDate, "2026-11-05");
+    assert.equal(d.w.document.querySelector(".case-sheet").hasAttribute("inert"), false);
+    d.failCase("saved-b");
+    await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "letterDate"), "07/11/2026\n08/11/2026");
+    assert.equal(record.letterDate, "2026-11-07"); assert.equal(field(d, "saved-b", "letterDate").value, "");
+    assert.match(d.w.document.getElementById("case-sheet-status").textContent, /1 row\(s\) saved; 1 incomplete: Beta/);
+  } finally { d.dom.window.close(); }
+});
+
+test("leadership bulk PIC paste resolves directory names while staff cannot overwrite ownership", async () => {
+  for (const role of ["supervisor", "staff"]) {
+    const d = await dashboard(role);
+    try {
+      await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "taxPicProfileId"), "tax-b\tacc-b");
+      if (role === "staff") { assert.equal(d.writes.length, 0); assert.match(d.w.document.getElementById("case-sheet-status").textContent, /leadership/); }
+      else { assert.equal(d.writes.length, 2); assert.equal(d.writes[0].action, "assign-pic"); assert.equal(d.writes[1].version, "v2"); assert.equal(d.api.getRows()[0].accountingPicProfileId, "acc-b"); }
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("bulk creation appends valid Client Master rows and preserves combined dates and text through server identity replacement", async () => {
+  const d = await dashboard();
+  try {
+    d.w.document.querySelector("[data-new-case]").click();
+    const draft = d.api.getRows().find((row: any) => row.id.startsWith("case-"));
+    const start = gridCell(d, draft.id, "clientName");
+    d.delay();
+    const saving = d.api.pasteCaseSheetRange(start, "Alpha\t111\t05/11/2026\t06/11/2026\tFirst\nAlpha\t222\t07/11/2026\t08/11/2026\tSecond"); await tick();
+    assert.equal(d.writes.length, 1, "new cases are created in paste order, not concurrently");
+    d.release(); await saving;
+    assert.equal(d.writes.length, 2);
+    assert.ok(d.writes.every((write: any) => !write.id && write.case.clientId === "master-1"));
+    assert.equal(field(d, "saved-new", "letterDate").value, "05/11/2026");
+    assert.equal(field(d, "saved-new-2", "subject").value, "Second");
+    assert.equal(d.api.getRows().filter((row: any) => row.id.startsWith("case-")).length, 0);
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("bulk paste uses no more than two concurrent case writes and copy/paste of an unchanged complete row is a no-op", async () => {
+  const d = await dashboard();
+  try {
+    const fetch = d.w.fetch; let active = 0, maximum = 0;
+    d.w.fetch = async (url: string, init: any = {}) => {
+      if (!init.method || init.method === "GET") return fetch(url, init);
+      active++; maximum = Math.max(maximum, active);
+      await new Promise(resolve => setImmediate(resolve));
+      try { return await fetch(url, init); } finally { active--; }
+    };
+    await d.api.pasteCaseSheetRange(gridCell(d, "saved-a", "letterDate"), "05/11/2026\n06/11/2026\n07/11/2026");
+    assert.equal(maximum, 2); assert.equal(d.writes.length, 3);
+    const start = gridCell(d, "saved-a", "clientName"), end = gridCell(d, "saved-a", "notes");
+    d.api.selectCaseSheetRange(start); d.api.selectCaseSheetRange(end, true);
+    const copied = copyRange(d, start), before = d.writes.length;
+    await d.api.pasteCaseSheetRange(start, copied);
+    assert.equal(d.writes.length, before);
+    assert.match(d.w.document.getElementById("case-sheet-status").textContent, /already match/);
+  } finally { d.dom.window.close(); }
+});
 
 test("case date paste converts day-first dates and saves ISO values in both sheets and layouts", async () => {
   for (const query of ["", "?casesFullscreen=1&account=auth-user-1"]) {
@@ -102,7 +303,7 @@ test("invalid, multi-cell and locked date pastes never change an existing date o
   const d = await dashboard();
   try {
     const cell = field(d, "saved-a", "letterDate"); cell.value = "01/10/2026";
-    for (const source of ["31/02/2026", "29/02/2026", "31/04/2026", "00/11/2026", "01/13/2026", "01/01/0000", "2026-02-30", "not a date", "", "05/11/2026\t06/11/2026", "\t05/11/2026", "05/11/2026\t", "05/11/2026\n06/11/2026"]) {
+    for (const source of ["31/02/2026", "29/02/2026", "31/04/2026", "00/11/2026", "01/13/2026", "01/01/0000", "2026-02-30", "not a date", ""]) {
       const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
       Object.defineProperty(event, "clipboardData", { value:{ getData: () => source } });
       cell.dispatchEvent(event);
@@ -428,6 +629,8 @@ test("Cases retains both original column sets, simultaneous PIC filters, header 
     }
     assert.deepEqual(visible(d), ["saved-a"]);
     d.w.document.querySelector("[data-case-sheet-reset]").click();
+    d.w.document.querySelector('[data-case-sheet-sort="clientName"]').click();
+    assert.deepEqual(visible(d), ["saved-a", "saved-b", "saved-c"]);
     d.w.document.querySelector('[data-case-sheet-sort="clientName"]').click();
     assert.deepEqual(visible(d), ["saved-c", "saved-b", "saved-a"]);
     assert.equal(d.w.document.querySelector('[aria-sort="descending"]').textContent.trim().startsWith("Wajib Pajak"), true);

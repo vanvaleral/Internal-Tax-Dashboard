@@ -28,8 +28,14 @@ come from the existing appearance settings rather than a separate fixed palette.
   Double-click a header border to reset that column. A focused border supports
   Left/Right (8px), Shift+Left/Right (24px), and Home (reset). Escape or pointer
   cancellation abandons an unfinished drag. Filter Reset does not erase widths.
-- Search, ACC PIC and Tax PIC filters combine. Reset clears all three and returns
-  sorting to Wajib Pajak ascending. Column headers toggle ascending/descending.
+- Search, ACC PIC and Tax PIC filters combine. Default/Reset order is oldest
+  created case first, not Wajib Pajak alphabetical order. No. sorts by creation
+  order; other column headers toggle ascending/descending. Numbers are creation
+  ranks in the accessible category, calculated before filters/sorting, so name
+  sorting and filters do not renumber records. They are not permanent database
+  IDs and can close gaps after archival. Existing created_at values are retained
+  on saves; new rows are appended. Legacy automatic name-sort preferences reset
+  once; subsequent explicit sorts remain saved.
 - Row numbers open progress below the row, including completed linked My Work
   tasks. Editing cells does not expand progress.
 - The expanded panel combines stage/PIC/due-date context, existing notes,
@@ -46,10 +52,21 @@ come from the existing appearance settings rather than a separate fixed palette.
   The table itself retains native scrolling and adjustable column widths.
 - Enter/Shift+Enter move vertically; Tab/Shift+Tab move between cells. Native PIC
   dropdown arrows remain native. Escape cancels an uncommitted cell edit.
+- Drag across cells, Shift+click, or Shift+Arrow to select a rectangular range.
+  Ctrl+C copies it as Excel-compatible tab-separated text, with day-first dates
+  and escaped multiline/quoted cells. Native copying of selected text within a
+  single editor still works. Escape from a range returns to its cell editor.
 - Saved client links are read-only. New rows must select a Client Master client;
   fields entered before selecting a client are explicitly marked as draft only.
-- Multi-cell paste is rejected without modifying records. Single-cell paste is
-  supported; this is not a full Excel replacement.
+- Ctrl+V pastes rectangular ranges of up to 250 rows, starting at the selection's
+  top-left. One value fills the selected rectangle. Paste validates all dates,
+  bounds, client links and PIC permissions before editing anything. Unchanged
+  read-only values may round-trip; changed saved client links and derived fields
+  are rejected. Leadership can paste unambiguous active directory PIC names/IDs;
+  ordinary staff cannot reassign ownership. A case must retain at least one PIC.
+  Additional new rows can be appended when pasting from Wajib Pajak on an
+  unfiltered sheet, provided each has a valid Client Master client. No new master
+  clients are created by a case paste.
 - Visible date cells and Jatuh Tempo always display `dd/mm/yyyy`, independent of
   browser locale. Text editors accept typed/pasted `dd/mm/yyyy` dates (also
   `d/m/yyyy` and ISO `yyyy-mm-dd`), including a trailing Excel line break. Valid
@@ -76,6 +93,17 @@ published to the operational record before server confirmation. Failed edits
 revert to the confirmed value and show an inline error, without a silent local
 business-data fallback. A version conflict requires refreshing before retrying;
 it never overwrites another user's update.
+
+Bulk paste uses the same save queues, combining ordinary fields into one request
+per row and using the existing leadership-only PIC endpoint for assignments.
+Only two rows save concurrently; new-case creation is serialized to retain input
+order. The grid is temporarily non-editable and background case reads pause during
+a batch, preventing intervening edits from being overwritten by queued paste.
+Closing/reloading the page during a batch triggers the browser's unsaved-work
+warning.
+Writes are not one cross-row transaction: a conflict can leave other rows saved;
+the summary identifies incomplete rows, keeps successful writes and reverts only
+failed edits. New drafts with failed creation remain drafts, not saved records.
 
 Background refreshes preserve draft/pending records. Responses to reads started
 before an intervening edit are ignored to avoid replacing newly saved values.

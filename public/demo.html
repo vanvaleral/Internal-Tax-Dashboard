@@ -1683,6 +1683,9 @@
     body.case-column-resizing, body.case-column-resizing * { cursor:col-resize !important; user-select:none !important; }
     .case-sheet .case-inline-field, .case-sheet .inline-select { display:block; width:100%; min-width:0; height:35px; border-radius:0; margin:0; font-size:12px; padding:6px 9px; background:transparent; color:var(--ink); border:1px solid transparent; text-overflow:ellipsis; }
     .case-sheet .case-inline-field:focus, .case-sheet .inline-select:focus { outline:2px solid var(--accent); outline-offset:-2px; background:var(--panel-solid); }
+    .case-sheet td.case-range-selected { background:var(--accent-soft); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+    .case-sheet td.case-range-anchor { outline:2px solid var(--accent); outline-offset:-2px; }
+    body.case-range-dragging .case-sheet { user-select:none; }
     .case-sheet-date { display:flex; align-items:center; position:relative; }
     .case-sheet-date .case-inline-field { flex:1; min-width:0; padding-right:2px; }
     .case-sheet-date button { display:grid; place-items:center; flex:0 0 24px; height:29px; padding:4px; border:0; background:transparent; color:var(--muted); cursor:pointer; }
@@ -1693,6 +1696,7 @@
     .case-sheet .case-inline-readonly { padding:6px 9px; display:block; font-size:12px; overflow:hidden; text-overflow:ellipsis; }
     .case-sheet-row-toggle { display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:35px; border:0; background:transparent; color:var(--muted); font:inherit; font-size:11px; font-variant-numeric:tabular-nums; cursor:pointer; }
     .case-sheet thead th:first-child { text-align:center; padding:0; }
+    .case-sheet thead th:first-child .case-sheet-sort { justify-content:center; padding:0; }
     .case-sheet-row-toggle { position:relative; padding:0 11px; }
     .case-sheet-row-toggle > span:first-child { width:100%; text-align:center; }
     .case-sheet-row-toggle > span[aria-hidden] { position:absolute; right:3px; font-size:8px; }
@@ -4718,7 +4722,7 @@
       caseSearch: persistedDemoState?.ui?.caseSearch || "",
       caseAccFilter: persistedDemoState?.ui?.caseAccFilter || "all",
       caseTaxFilter: persistedDemoState?.ui?.caseTaxFilter || "all",
-      caseSheetSort: persistedDemoState?.ui?.caseSheetSort || { key: "clientName", direction: "asc" },
+      caseSheetSort: persistedDemoState?.ui?.caseSheetSortVersion === 2 ? persistedDemoState.ui.caseSheetSort || { key: "createdAt", direction: "asc" } : { key: "createdAt", direction: "asc" },
       caseColumnWidths: persistedDemoState?.ui?.caseColumnWidths || {},
       profileTab: persistedDemoState?.ui?.profileTab || "profile",
       myWork: myWorkDemoMode ? createMyWorkDemoTasks() : IS_OFFLINE_DEMO && Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
@@ -5107,6 +5111,7 @@
     function createCaseRecord() {
       return {
         id: `case-${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
         clientId: "",
         clientName: "",
         caseType: "Himbauan",
@@ -8534,6 +8539,11 @@
       const caseQuery = state.caseSearch.trim().toLowerCase();
       const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
       const categoryCases = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category);
+      const addedOrder = [...categoryCases].sort((a, b) => {
+        const x = a.createdAt || "", y = b.createdAt || "";
+        return (Date.parse(x) || 0) - (Date.parse(y) || 0) || x.localeCompare(y) || categoryCases.indexOf(a) - categoryCases.indexOf(b);
+      });
+      const caseNumbers = new Map(addedOrder.map((item, index) => [item.id, index + 1]));
       const casePicKey = (item, type) => {
         if (item[`${type}PicProfileId`]) return String(item[`${type}PicProfileId`]).toLowerCase();
         const name = String(item[`${type}Pic`] || "").trim().toLowerCase();
@@ -8548,12 +8558,12 @@
         ? [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["dueDate", "Jatuh Tempo", "derived"], ["deadline", "Deadline", "derived"], ["completionDate", "Tgl Selesai", "date"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["notes", "Note"]]
         : [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["taxYear", "Tahun Pajak"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["inspectorPic", "PIC Pemeriksa"], ["sphpDate", "Tgl SPHP", "date"], ["completionNotes", "Penyelesaian"]];
       const sort = state.caseSheetSort;
-      if (columns.some(([key]) => key === sort.key)) caseList.sort((a, b) => {
-        if (a.id.startsWith("case-") !== b.id.startsWith("case-")) return a.id.startsWith("case-") ? -1 : 1;
+      if (sort.key === "createdAt") caseList.sort((a, b) => (caseNumbers.get(a.id) - caseNumbers.get(b.id)) * (sort.direction === "desc" ? -1 : 1));
+      else if (columns.some(([key]) => key === sort.key)) caseList.sort((a, b) => {
         const key = sort.key === "deadline" ? "dueDate" : sort.key;
         const x = String(a[key] || ""), y = String(b[key] || "");
-        if (!x || !y) return x ? -1 : y ? 1 : 0;
-        return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" }) * (sort.direction === "desc" ? -1 : 1);
+        if (!x || !y) return x ? -1 : y ? 1 : caseNumbers.get(a.id) - caseNumbers.get(b.id);
+        return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" }) * (sort.direction === "desc" ? -1 : 1) || caseNumbers.get(a.id) - caseNumbers.get(b.id);
       });
       const picOptions = (type, selected) => {
         const entries = new Map([["unassigned", "Unassigned"]]);
@@ -8588,7 +8598,7 @@
         const field = isTax ? "taxPicProfileId" : "accountingPicProfileId";
         return `<select class="inline-select" data-case-sheet-id="${escapeAttr(item.id)}" data-case-sheet-field="${field}" aria-label="${division} case PIC" ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""}><option value="">Unassigned</option>${currentId && !people.some(person => person.id === currentId) ? `<option value="${escapeAttr(currentId)}" selected>${escapeHtml(currentName || "Historical PIC")}</option>` : ""}${!currentId && currentName ? `<option value="legacy" selected disabled>${escapeHtml(currentName)}</option>` : ""}${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === caseSheetValue(item, field) ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
       };
-      const sheetRows = caseWindow.rows.map((item, index) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${index + 1}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
+      const sheetRows = caseWindow.rows.map((item) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${caseNumbers.get(item.id)}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td data-case-grid-field="${type === "pic" ? `${field}ProfileId` : field}" role="gridcell" tabindex="-1" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
 
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-cases">
@@ -8605,16 +8615,18 @@
               </div>
             </div>
             <div class="toolbar case-sheet-tools"><label class="case-search-wrap">${toolIcon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}<input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Find client, letter, or note..." aria-label="Search cases" /></label><div class="case-filter-pair"><select id="case-acc-filter" class="filter-input" aria-label="Filter ACC PIC">${picOptions("accounting", state.caseAccFilter)}</select><select id="case-tax-filter" class="filter-input" aria-label="Filter Tax PIC">${picOptions("tax", state.caseTaxFilter)}</select></div><button class="ghost-btn case-reset" data-case-sheet-reset="yes">${toolIcon('<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>')}Reset</button><span class="case-filter-result"><strong>${caseList.length}</strong> of ${categoryCases.length} cases</span></div>
-            <div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col">No.</th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+            <div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" role="grid" aria-multiselectable="true" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col" aria-sort="${sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="createdAt" title="Sort by date added">No.</button></th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
               ${sheetRows}
             </tbody></table></div>
-            <div class="case-sheet-footer"><span>${caseList.length} / ${categoryCases.length} cases · Enter: next row · Tab: next cell · Row number: progress</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
+            <div class="case-sheet-footer"><span>${caseList.length} / ${categoryCases.length} cases · Drag / Shift+click: select range · Ctrl+C / V: copy / paste · No.: date added</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
           </section>
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Archived Cases</h3><p>Archived cases retain their task links and progress history. They can be restored later.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · archived ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No archived cases.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${activeClientMasterRecords().map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
       applyCaseColumnWidths(root);
+      clearCaseSheetRange();
+      updateCaseSheetBusy();
       const fullScreenLink = root.querySelector("[data-case-fullscreen]");
       if (fullScreenLink) { fullScreenLink.target = "_blank"; fullScreenLink.rel = "noopener noreferrer"; }
     }
@@ -9196,6 +9208,7 @@
         taxPicProfileId: row.tax_pic_profile_id || "",
         accountingPicProfileId: row.accounting_pic_profile_id || "",
         version: row.updated_at || "",
+        createdAt: row.created_at || "",
         stage: row.stage,
         priority: row.priority,
         dueDate: row.due_date || "",
@@ -9294,6 +9307,7 @@
     }
 
     async function loadSharedCases(background = false) {
+      if (caseSheetBulkSaving) return true;
       try {
         const revision = caseSheetWriteRevision;
         const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared cases...");
@@ -9469,6 +9483,7 @@
     const caseSheetPending = new WeakMap();
     let caseSheetWriteRevision = 0;
     let caseSheetStatus = "Changes save to the database when you leave a cell.";
+    let caseSheetRange = null, caseSheetRangeDrag = null, caseSheetBulkSaving = false;
     const caseDefaultColumnWidths = { _number:44, _actions:38, clientName:220, letterNumber:110, subject:150, letterDate:118, receivedDate:118, dueDate:118, completionDate:118, sphpDate:118, deadline:88, taxYear:88, taxPic:104, accountingPic:104, inspectorPic:130, notes:160, completionNotes:160 };
     let caseColumnDrag = null;
 
@@ -9601,7 +9616,7 @@
       if (status) { status.textContent = message; status.dataset.error = String(error); }
     }
 
-    function refreshCaseSheetRecord(record, previousId = record.id, confirmedField = "") {
+    function refreshCaseSheetRecord(record, previousId = record.id, confirmedFields = []) {
       document.querySelectorAll("[data-case-sheet-row]").forEach(row => {
         if (row.dataset.caseSheetRow !== previousId) return;
         row.dataset.caseSheetRow = record.id;
@@ -9610,7 +9625,7 @@
           const pending = caseSheetPending.get(record)?.values.has(cell.dataset.caseSheetField);
           cell.disabled = Boolean(pending);
           cell.toggleAttribute("data-saving", Boolean(pending));
-          if (cell.dataset.caseSheetField === confirmedField || cell !== document.activeElement || pending) cell.value = caseSheetDisplayValue(record, cell.dataset.caseSheetField);
+          if (confirmedFields.includes(cell.dataset.caseSheetField) || cell !== document.activeElement || pending) cell.value = caseSheetDisplayValue(record, cell.dataset.caseSheetField);
           if (cell.hasAttribute("data-case-sheet-date")) {
             const wrap = cell.closest(".case-sheet-date");
             wrap.querySelector("button").disabled = Boolean(pending);
@@ -9631,6 +9646,7 @@
     }
 
     function saveCaseSheetCell(cell) {
+      if (caseSheetBulkSaving) return;
       const record = taxCases.find(item => item.id === cell.dataset.caseSheetId);
       const field = cell.dataset.caseSheetField;
       if (!record || cell.disabled || cell.readOnly) return;
@@ -9650,9 +9666,14 @@
         caseSheetMessage("Draft only. Choose a Client Master client to save this row.");
         return;
       }
+      return saveCaseSheetPatch(record, { [field]: value });
+    }
+
+    function saveCaseSheetPatch(record, changes) {
+      const fields = Object.keys(changes), field = fields[0], value = changes[field];
       let pending = caseSheetPending.get(record);
       if (!pending) { pending = { values: new Map(), count: 0, queue: Promise.resolve() }; caseSheetPending.set(record, pending); }
-      pending.values.set(field, value); pending.count++;
+      fields.forEach(key => pending.values.set(key, changes[key])); pending.count++;
       caseSheetWriteRevision++;
       refreshCaseSheetRecord(record);
       caseSheetMessage("Saving changes...");
@@ -9661,7 +9682,7 @@
         const previousId = record.id;
         try {
           const draft = structuredClone(record);
-          draft[field] = value;
+          Object.assign(draft, changes);
           let saved;
           if (field.endsWith("PicProfileId")) {
             if (!canReassignCasePic()) throw new Error("Only leadership can reassign a case PIC.");
@@ -9670,8 +9691,8 @@
             if (!response.ok) throw new Error(result.error || "PIC could not be saved.");
             saved = databaseCaseToDemo(result.data);
           } else {
-            if (field === "clientName") {
-              const client = findCaseClient({ clientName: value });
+            if (Object.hasOwn(changes, "clientName")) {
+              const client = findCaseClient({ clientName: changes.clientName });
               if (!client || (!IS_OFFLINE_DEMO && !client.databaseId)) throw new Error("Choose a valid client from Client Master.");
               Object.assign(draft, { clientId: client.id, databaseClientId: client.databaseId, taxPic: client.taxPic || "", accountingPic: client.accountingPic || "" });
             }
@@ -9681,14 +9702,16 @@
           caseSheetWriteRevision++;
           if (state.selectedCaseId === previousId) state.selectedCaseId = record.id;
           if (state.expandedHimbauanId === previousId) state.expandedHimbauanId = record.id;
-          caseSheetMessage(IS_OFFLINE_DEMO ? "Demo updated. No database changes." : "Saved to database.");
+          caseSheetMessage(caseSheetBulkSaving ? "Saving pasted rows..." : IS_OFFLINE_DEMO ? "Demo updated. No database changes." : "Saved to database.");
+          return true;
         } catch (error) {
           // This editor rolls back failed writes; there is no local change to retry globally.
           clearSyncFailure(`Case ${record.clientName || (field === "clientName" ? value : "new row")}`);
           caseSheetMessage(`Not saved: ${error instanceof Error ? error.message : "Please retry."} Your previous database value is retained.`, true);
+          return false;
         } finally {
-          pending.values.delete(field); pending.count--;
-          refreshCaseSheetRecord(record, previousId, field);
+          fields.forEach(key => pending.values.delete(key)); pending.count--;
+          refreshCaseSheetRecord(record, previousId, fields);
           if (previousId.startsWith("case-") && !record.id.startsWith("case-")) {
             const editor = activeEditorSnapshot();
             const rawValue = editor?.sheet ? document.activeElement.value : null;
@@ -9722,26 +9745,223 @@
         renderCases(); persistDemoState();
       }
     });
-    document.addEventListener("paste", event => {
-      if (!event.target.matches?.("[data-case-sheet-field]")) return;
-      const cell = event.target;
-      const pasted = event.clipboardData?.getData("text/plain") || "";
-      const text = cell.hasAttribute("data-case-sheet-date") ? pasted.trim() : pasted;
-      if (/\t/.test(pasted) || /[\r\n]/.test(text)) {
-        event.preventDefault();
-        caseSheetMessage("Paste one cell at a time. Multi-cell paste is not yet supported for Cases.", true);
-        return;
+    function caseGridRows(table) {
+      return [...table.querySelectorAll("[data-case-sheet-row]")].map(row => [...row.querySelectorAll("[data-case-grid-field]")]);
+    }
+
+    function updateCaseSheetBusy() {
+      document.querySelectorAll(".case-sheet").forEach(table => {
+        table.toggleAttribute("inert", caseSheetBulkSaving);
+        table.setAttribute("aria-busy", String(caseSheetBulkSaving));
+      });
+    }
+    window.addEventListener("beforeunload", event => {
+      if (caseSheetBulkSaving) { event.preventDefault(); event.returnValue = ""; }
+    });
+
+    function clearCaseSheetRange() {
+      document.querySelectorAll(".case-range-selected, .case-range-anchor").forEach(cell => {
+        cell.classList.remove("case-range-selected", "case-range-anchor"); cell.setAttribute("aria-selected", "false");
+      });
+      caseSheetRange = null; caseSheetRangeDrag = null;
+      document.body.classList.remove("case-range-dragging");
+    }
+
+    function caseRangeBounds(fallback) {
+      const table = fallback.closest(".case-sheet"), rows = caseGridRows(table);
+      const range = caseSheetRange?.anchor.isConnected && caseSheetRange.anchor.closest("table") === table ? caseSheetRange : { anchor:fallback, focus:fallback };
+      const point = cell => { const r = rows.findIndex(row => row.includes(cell)); return { r, c:rows[r]?.indexOf(cell) ?? -1 }; };
+      const a = point(range.anchor), b = point(range.focus);
+      return { table, rows, r0:Math.min(a.r, b.r), r1:Math.max(a.r, b.r), c0:Math.min(a.c, b.c), c1:Math.max(a.c, b.c), end:b };
+    }
+
+    function selectCaseSheetRange(cell, extend = false) {
+      if (!extend || !caseSheetRange?.anchor.isConnected || caseSheetRange.anchor.closest("table") !== cell.closest("table")) clearCaseSheetRange();
+      caseSheetRange = { anchor:caseSheetRange?.anchor || cell, focus:cell };
+      const bounds = caseRangeBounds(cell);
+      bounds.table.querySelectorAll("[data-case-grid-field]").forEach(td => {
+        td.classList.remove("case-range-selected", "case-range-anchor"); td.setAttribute("aria-selected", "false");
+      });
+      for (let r = bounds.r0; r <= bounds.r1; r++) for (let c = bounds.c0; c <= bounds.c1; c++) {
+        bounds.rows[r][c].classList.add("case-range-selected"); bounds.rows[r][c].setAttribute("aria-selected", "true");
       }
+      caseSheetRange.anchor.classList.add("case-range-anchor");
+    }
+
+    function caseGridDisplay(td) {
+      const input = td.querySelector("[data-case-sheet-field]");
+      if (input?.tagName === "SELECT") return input.selectedOptions[0]?.textContent || "";
+      if (input === document.activeElement) return input.value;
+      const record = taxCases.find(row => row.id === td.closest("[data-case-sheet-row]").dataset.caseSheetRow);
+      return input && record ? String(caseSheetDisplayValue(record, td.dataset.caseGridField)) : td.textContent.trim();
+    }
+
+    document.addEventListener("pointerdown", event => {
+      const td = event.target.closest?.("[data-case-grid-field]");
+      if (!td) { if (!event.target.closest?.(".case-sheet")) clearCaseSheetRange(); return; }
+      if (event.button !== undefined && event.button !== 0 || event.target.closest("button, [data-case-date-picker]")) return;
+      selectCaseSheetRange(td, event.shiftKey);
+      caseSheetRangeDrag = event.pointerType === "touch" ? null : { pointerId:event.pointerId, table:td.closest("table") };
+      if (event.shiftKey || !event.target.matches("input, select")) { event.preventDefault(); td.focus({ preventScroll:true }); }
+    });
+    document.addEventListener("pointermove", event => {
+      if (!caseSheetRangeDrag || caseSheetRangeDrag.pointerId !== event.pointerId) return;
+      const td = event.target.closest?.("[data-case-grid-field]");
+      if (!td || td.closest("table") !== caseSheetRangeDrag.table || td === caseSheetRange?.focus) return;
+      event.preventDefault(); selectCaseSheetRange(td, true);
+      document.body.classList.add("case-range-dragging"); window.getSelection()?.removeAllRanges();
+    });
+    document.addEventListener("pointerup", event => {
+      if (caseSheetRangeDrag?.pointerId !== event.pointerId) return;
+      if (document.body.classList.contains("case-range-dragging")) { event.preventDefault(); caseSheetRange?.anchor.focus({ preventScroll:true }); }
+      caseSheetRangeDrag = null; document.body.classList.remove("case-range-dragging");
+    });
+    document.addEventListener("pointercancel", () => { caseSheetRangeDrag = null; document.body.classList.remove("case-range-dragging"); });
+    document.addEventListener("focusin", event => {
+      const td = event.target.closest?.("[data-case-grid-field]");
+      if (td && !caseSheetRangeDrag && (!caseSheetRange || !td.classList.contains("case-range-selected"))) selectCaseSheetRange(td);
+    });
+    document.addEventListener("keydown", event => {
+      const td = event.target.closest?.("[data-case-grid-field]");
+      if (!td) return;
+      if (event.key === "Escape" && event.target === td) {
+        clearCaseSheetRange(); td.querySelector("[data-case-sheet-field]")?.focus(); event.preventDefault(); return;
+      }
+      if (!event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const bounds = caseRangeBounds(td), { r, c } = bounds.end;
+      const next = bounds.rows[r + (event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0)]?.[c + (event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0)];
+      event.preventDefault();
+      if (next) { if (!caseSheetRange) selectCaseSheetRange(td); selectCaseSheetRange(next, true); caseSheetRange.anchor.focus({ preventScroll:true }); next.scrollIntoView({ block:"nearest", inline:"nearest" }); }
+    });
+    document.addEventListener("copy", event => {
+      const td = event.target.closest?.("[data-case-grid-field]");
+      if (!td || !event.clipboardData) return;
+      const bounds = caseRangeBounds(td), input = event.target;
+      if (bounds.r0 === bounds.r1 && bounds.c0 === bounds.c1 && input.tagName === "INPUT" && input.selectionStart !== input.selectionEnd) return;
+      const encode = value => /[\t\r\n"]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+      const lines = [];
+      for (let r = bounds.r0; r <= bounds.r1; r++) lines.push(bounds.rows[r].slice(bounds.c0, bounds.c1 + 1).map(cell => encode(caseGridDisplay(cell))).join("\t"));
+      event.preventDefault(); event.clipboardData.setData("text/plain", lines.join("\r\n"));
+      caseSheetMessage(`Copied ${bounds.r1 - bounds.r0 + 1} row(s), ${bounds.c1 - bounds.c0 + 1} column(s).`);
+    });
+
+    function parseCaseSheetClipboard(source) {
+      if (source.length > 1000000) throw new Error("Use up to 250 rows per paste.");
+      const text = source.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const rows = []; let row = [], value = "", quoted = false, closed = false;
+      for (let i = 0; i <= text.length; i++) {
+        const ch = i === text.length ? "\n" : text[i];
+        if (quoted) {
+          if (i === text.length) throw new Error("An Excel cell has an unfinished quote.");
+          if (ch === '"' && text[i + 1] === '"') { value += '"'; i++; }
+          else if (ch === '"') { quoted = false; closed = true; } else value += ch;
+        } else if (ch === '"' && !value && !closed) quoted = true;
+        else if (ch === "\t" || ch === "\n") {
+          row.push(value); value = ""; closed = false;
+          if (row.length > 12) throw new Error("Paste has too many columns.");
+          if (ch === "\n") { rows.push(row); row = []; if (rows.length > 251) throw new Error("Use up to 250 rows per paste."); }
+        } else { if (closed) throw new Error("Unexpected text after an Excel cell quote."); value += ch; }
+      }
+      if (text.endsWith("\n") && rows.at(-1)?.length === 1 && rows.at(-1)[0] === "") rows.pop();
+      if (rows.length > 250 || rows.some(line => line.length !== rows[0].length)) throw new Error("Paste a rectangular range of up to 250 rows.");
+      return rows;
+    }
+
+    async function pasteCaseSheetRange(td, source) {
+      let plans, additions;
+      try {
+        if (caseSheetBulkSaving || taxCases.some(row => caseSheetPending.get(row)?.count)) throw new Error("Wait for current case saves to finish.");
+        const bounds = caseRangeBounds(td), data = parseCaseSheetClipboard(source);
+        if (data.length === 1 && data[0].length === 1 && (bounds.r1 > bounds.r0 || bounds.c1 > bounds.c0)) {
+          const scalar = data[0][0]; data.length = 0;
+          for (let r = bounds.r0; r <= bounds.r1; r++) data.push(Array(bounds.c1 - bounds.c0 + 1).fill(scalar));
+        }
+        if (data.length > 250) throw new Error("Use up to 250 rows per paste.");
+        const template = bounds.rows[0];
+        if (bounds.c0 + data[0].length > template.length) throw new Error("Paste exceeds the last sheet column.");
+        plans = []; additions = [];
+        for (let i = 0; i < data.length; i++) {
+          const cells = bounds.rows[bounds.r0 + i];
+          let record = cells ? taxCases.find(row => row.id === cells[0].closest("[data-case-sheet-row]").dataset.caseSheetRow) : null;
+          if (!record) {
+            if (bounds.c0 !== 0 || state.caseSearch || state.caseAccFilter !== "all" || state.caseTaxFilter !== "all") throw new Error("New rows must start with Wajib Pajak and use an unfiltered sheet.");
+            record = createCaseRecord(); record.caseCategory = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan"; record.caseType = record.caseCategory;
+            additions.push(record);
+          }
+          const changes = {}, pics = [];
+          for (let j = 0; j < data[i].length; j++) {
+            const cell = (cells || template)[bounds.c0 + j], field = cell.dataset.caseGridField, raw = data[i][j].trim();
+            const editor = cell.querySelector("[data-case-sheet-field]"), current = String(caseSheetValue(record, field));
+            if (cells && !editor && raw === caseGridDisplay(cell).trim()) continue;
+            if (field === "clientName") {
+              if (raw === String(record.clientName || "")) continue;
+              if (!record.id.startsWith("case-")) throw new Error("Saved Wajib Pajak links are read-only.");
+              const client = findCaseClient({ clientName:raw });
+              if (!client || !IS_OFFLINE_DEMO && !client.databaseId) throw new Error(`Row ${i + 1}: choose a valid Client Master client.`);
+              changes.clientName = client.name;
+            } else if (field.endsWith("PicProfileId")) {
+              if (cells && editor?.value === current && raw === caseGridDisplay(cell).trim()) continue;
+              if (!canReassignCasePic() || record.id.startsWith("case-")) throw new Error("Only leadership can change saved case PICs.");
+              const division = field === "taxPicProfileId" ? "Tax Team" : "Accounting Team";
+              const matches = staffDirectory.filter(person => person.directory_active !== false && person.team_division === division && [person.id, person.display_name, person.full_name].some(value => value && String(value).toLowerCase() === raw.toLowerCase()));
+              const value = !raw || raw.toLowerCase() === "unassigned" ? "" : matches.length === 1 ? matches[0].id : null;
+              if (value === null) throw new Error(`Row ${i + 1}: PIC name is unknown or ambiguous.`);
+              if (value !== current) pics.push([field, value]);
+            } else if (!editor || editor.readOnly || editor.disabled) throw new Error(`Row ${i + 1}: ${field} is read-only or saving.`);
+            else {
+              const value = editor.hasAttribute("data-case-sheet-date") ? parseCaseSheetDate(raw) : raw;
+              if (value === null) throw new Error(`Row ${i + 1}: use a valid DD/MM/YYYY date.`);
+              if (value !== current) changes[field] = value;
+            }
+          }
+          if (record.id.startsWith("case-") && !changes.clientName && !record.clientName) throw new Error(`Row ${i + 1}: choose Wajib Pajak before pasting other fields.`);
+          if (pics.length && !(["taxPicProfileId", "accountingPicProfileId"].some(field => (pics.find(([key]) => key === field)?.[1] ?? record[field])))) throw new Error(`Row ${i + 1}: retain at least one PIC.`);
+          if (Object.keys(changes).length || pics.length) plans.push({ record, changes, pics });
+        }
+      } catch (error) { caseSheetMessage(`${error.message} Nothing was pasted.`, true); return; }
+      if (!plans.length) { caseSheetMessage("The pasted values already match the sheet."); return; }
+      caseSheetBulkSaving = true;
+      updateCaseSheetBusy();
+      let cursor = 0, saved = 0, creationQueue = Promise.resolve(); const failed = [];
+      try {
+        taxCases.push(...additions);
+        if (additions.length) renderCases();
+        // Bound concurrency; each row keeps its existing version-checked save queue.
+        const applyPlan = async plan => {
+          let ok = true;
+          if (Object.keys(plan.changes).length) ok = await saveCaseSheetPatch(plan.record, plan.changes);
+          for (const [field, value] of [...plan.pics].sort((a, b) => Number(!a[1]) - Number(!b[1]))) {
+            if (!ok) break;
+            ok = await saveCaseSheetPatch(plan.record, { [field]:value });
+          }
+          if (ok) saved++; else failed.push(plan.record.clientName || "New case");
+        };
+        const worker = async () => {
+          while (cursor < plans.length) {
+            const plan = plans[cursor++];
+            // Preserve input order for newly created cases, whose timestamps set their numbers.
+            if (plan.record.id.startsWith("case-")) { creationQueue = creationQueue.then(() => applyPlan(plan)); await creationQueue; }
+            else await applyPlan(plan);
+          }
+        };
+        await Promise.all([worker(), worker()]);
+      } finally { caseSheetBulkSaving = false; updateCaseSheetBusy(); }
+      caseSheetMessage(failed.length ? `${saved} row(s) saved; ${failed.length} incomplete: ${failed.join(", ")}. Successful changes are retained; failed edits reverted. Refresh before retrying conflicts.` : `${saved} row(s) ${IS_OFFLINE_DEMO ? "updated in demo (no database writes)" : "saved to database"}.`, Boolean(failed.length));
+    }
+
+    document.addEventListener("paste", event => {
+      const td = event.target.closest?.("[data-case-grid-field]");
+      if (!td || !event.clipboardData) return;
+      const source = event.clipboardData.getData("text/plain"), cell = event.target;
+      const bounds = caseRangeBounds(td);
+      const multi = /\t/.test(source) || /[\r\n]/.test(source.trim()) || bounds.r1 > bounds.r0 || bounds.c1 > bounds.c0 || cell === td || cell.tagName === "SELECT";
+      if (multi) { event.preventDefault(); void pasteCaseSheetRange(td, source).catch(error => caseSheetMessage(`Paste stopped: ${error.message}. Review saved rows before retrying.`, true)); return; }
       if (cell.hasAttribute("data-case-sheet-date")) {
         event.preventDefault();
         if (cell.disabled || cell.readOnly) return;
-        const value = parseCaseSheetDate(text);
-        if (!value) {
-          caseSheetMessage("Date not pasted. Use a valid DD/MM/YYYY or YYYY-MM-DD date.", true);
-          return;
-        }
-        cell.value = formatIsoToDisplayDate(value);
-        cell.dispatchEvent(new Event("input", { bubbles: true }));
+        const value = parseCaseSheetDate(source.trim());
+        if (!value) { caseSheetMessage("Date not pasted. Use a valid DD/MM/YYYY or YYYY-MM-DD date.", true); return; }
+        cell.value = formatIsoToDisplayDate(value); cell.dispatchEvent(new Event("input", { bubbles:true }));
         caseSheetMessage("Date inserted. Leave the cell to save.");
       }
     });
@@ -9760,7 +9980,7 @@
       if (fullscreen) {
         const active = document.activeElement;
         if (active?.matches?.("input[data-case-sheet-field]")) saveCaseSheetCell(active);
-        if (taxCases.some(record => caseSheetPending.get(record)?.count)) {
+        if (caseSheetBulkSaving || taxCases.some(record => caseSheetPending.get(record)?.count)) {
           event.preventDefault(); caseSheetMessage("Wait for the current case save to finish, then open Full Screen.", true); return;
         }
         if (!IS_OFFLINE_DEMO && taxCases.some(record => record.id.startsWith("case-"))) {
@@ -9782,7 +10002,7 @@
       if (!sort && !reset) return;
       if (reset) {
         state.caseSearch = ""; state.caseAccFilter = "all"; state.caseTaxFilter = "all";
-        state.caseSheetSort = { key: "clientName", direction: "asc" };
+        state.caseSheetSort = { key: "createdAt", direction: "asc" };
       } else {
         const key = sort.dataset.caseSheetSort;
         state.caseSheetSort = { key, direction: state.caseSheetSort.key === key && state.caseSheetSort.direction === "asc" ? "desc" : "asc" };
@@ -9790,6 +10010,7 @@
       renderCases(); persistDemoState();
     });
     document.addEventListener("keydown", event => {
+      if (event.defaultPrevented) return;
       const cell = event.target.closest?.("[data-case-sheet-field]");
       if (!cell) return;
       if (cell.hasAttribute("data-case-sheet-date") && event.altKey && event.key === "ArrowDown") {
@@ -10571,6 +10792,7 @@
               caseAccFilter: state.caseAccFilter,
               caseTaxFilter: state.caseTaxFilter,
               caseSheetSort: state.caseSheetSort,
+              caseSheetSortVersion: 2,
               caseColumnWidths: state.caseColumnWidths,
               profileTab: state.profileTab,
               myWork: myWorkDemoMode ? [] : state.myWork,
@@ -10847,7 +11069,7 @@
       state.caseSearch = snapshot.caseSearch ?? state.caseSearch;
       state.caseAccFilter = snapshot.caseAccFilter || "all";
       state.caseTaxFilter = snapshot.caseTaxFilter || "all";
-      state.caseSheetSort = snapshot.caseSheetSort || { key: "clientName", direction: "asc" };
+      state.caseSheetSort = snapshot.caseSheetSort || { key: "createdAt", direction: "asc" };
       state.selectedCaseId = snapshot.selectedCaseId || state.selectedCaseId;
       state.clientManagementTab = snapshot.clientManagementTab || state.clientManagementTab;
       state.activeProposalId = snapshot.activeProposalId || state.activeProposalId;
@@ -11563,7 +11785,7 @@
         const record = createCaseRecord();
         record.caseCategory = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
         record.caseType = record.caseCategory;
-        taxCases.unshift(record);
+        taxCases.push(record);
         state.casesTab = record.caseCategory === "Pemeriksaan" ? "pemeriksaan" : "himbauan";
         state.selectedCaseId = record.id;
         commitUi("push");
