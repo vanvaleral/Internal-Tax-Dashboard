@@ -50,11 +50,17 @@ come from the existing appearance settings rather than a separate fixed palette.
   fields entered before selecting a client are explicitly marked as draft only.
 - Multi-cell paste is rejected without modifying records. Single-cell paste is
   supported; this is not a full Excel replacement.
-- Date cells accept pasted `dd/mm/yyyy` dates (also `d/m/yyyy` and ISO
-  `yyyy-mm-dd`), including a trailing Excel line break. Valid dates are converted
-  to ISO for storage and save when leaving the cell. Impossible dates leave the
-  current value unchanged and show an inline error. Native date display follows
-  the browser locale; due-date calculations are unchanged.
+- Visible date cells and Jatuh Tempo always display `dd/mm/yyyy`, independent of
+  browser locale. Text editors accept typed/pasted `dd/mm/yyyy` dates (also
+  `d/m/yyyy` and ISO `yyyy-mm-dd`), including a trailing Excel line break. Valid
+  dates are normalized for display, converted to ISO for storage and save when
+  leaving the cell. Invalid pastes leave the editor unchanged; invalid typed
+  dates revert to the previous saved date on blur with an inline error. Empty
+  text clears an editable date. Calendar buttons retain native date selection,
+  with selections immediately saved and displayed in day-first format;
+  Alt+Down opens the focused date cell's calendar. Escape,
+  pending saves, refreshes and conflict rollbacks retain the same day-first
+  display; due-date calculations and chronological sorting are unchanged.
 
 ## Persistence And Authorization
 

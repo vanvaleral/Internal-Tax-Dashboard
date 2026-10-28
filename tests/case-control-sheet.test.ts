@@ -6,7 +6,7 @@ import { JSDOM, VirtualConsole } from "jsdom";
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const html = read("public/demo.html");
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve)); };
-const dbCase = (id: string, name: string, tax: string, acc: string, category = "Himbauan") => ({
+const dbCase = (id: string, name: string, tax: string, acc: string, category = "Himbauan"): Record<string, any> => ({
   id, client_id: "master-1", client_name: name, case_type: category, case_category: category,
   tax_pic_profile_id: tax, accounting_pic_profile_id: acc, tax_pic_name: tax, accounting_pic_name: acc,
   letter_number: id, subject: "Original", updated_at: "v1", due_date: "2026-11-20"
@@ -38,7 +38,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       if (delay) await new Promise(resolve => { hold = resolve; });
       if (fail) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
       const previous = rows.find(row => row.id === body.id) || dbCase("saved-new", body.case?.clientName, "tax-a", "acc-a");
-      const data = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
+      const data: Record<string, any> = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
       for (const [field, column] of [["letterDate", "letter_date"], ["receivedDate", "received_date"], ["completionDate", "completion_date"], ["sphpDate", "sph_p_date"]]) {
         if (body.case?.[field] !== undefined) data[column] = body.case[field];
       }
@@ -80,15 +80,17 @@ test("case date paste converts day-first dates and saves ISO values in both shee
       ]) {
         d.w.document.querySelector(`[data-cases-tab="${tab}"]`).click();
         const cell = field(d, id, name), before = d.writes.length;
+        const display = expected.split("-").reverse().join("/");
+        assert.equal(cell.type, "text"); assert.equal(cell.placeholder, "dd/mm/yyyy");
         const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
         Object.defineProperty(event, "clipboardData", { value:{ getData: () => source } });
         cell.dispatchEvent(event);
-        assert.equal(event.defaultPrevented, true); assert.equal(cell.value, expected);
+        assert.equal(event.defaultPrevented, true); assert.equal(cell.value, display);
         assert.equal(d.writes.length, before);
         cell.dispatchEvent(new d.w.FocusEvent("focusout", { bubbles:true })); await tick();
         assert.equal(d.writes.length, before + 1);
         assert.equal(d.writes.at(-1).case[name], expected);
-        assert.equal(field(d, id, name).value, expected);
+        assert.equal(field(d, id, name).value, display);
         assert.equal(d.api.getRows().find((row: any) => row.id === id)[name], expected);
       }
       assert.deepEqual(d.warnings, []);
@@ -99,21 +101,78 @@ test("case date paste converts day-first dates and saves ISO values in both shee
 test("invalid, multi-cell and locked date pastes never change an existing date or save", async () => {
   const d = await dashboard();
   try {
-    const cell = field(d, "saved-a", "letterDate"); cell.value = "2026-10-01";
+    const cell = field(d, "saved-a", "letterDate"); cell.value = "01/10/2026";
     for (const source of ["31/02/2026", "29/02/2026", "31/04/2026", "00/11/2026", "01/13/2026", "01/01/0000", "2026-02-30", "not a date", "", "05/11/2026\t06/11/2026", "\t05/11/2026", "05/11/2026\t", "05/11/2026\n06/11/2026"]) {
       const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
       Object.defineProperty(event, "clipboardData", { value:{ getData: () => source } });
       cell.dispatchEvent(event);
-      assert.equal(event.defaultPrevented, true); assert.equal(cell.value, "2026-10-01", source);
+      assert.equal(event.defaultPrevented, true); assert.equal(cell.value, "01/10/2026", source);
       assert.match(d.w.document.getElementById("case-sheet-status").textContent, /valid.*date|one cell/);
     }
     for (const lock of ["readOnly", "disabled"]) {
       cell[lock] = true;
       const event = new d.w.Event("paste", { bubbles:true, cancelable:true });
       Object.defineProperty(event, "clipboardData", { value:{ getData: () => "05/11/2026" } });
-      cell.dispatchEvent(event); assert.equal(cell.value, "2026-10-01"); cell[lock] = false;
+      cell.dispatchEvent(event); assert.equal(cell.value, "01/10/2026"); cell[lock] = false;
     }
     assert.equal(d.writes.length, 0); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("typed Cases dates render day-first through save, refresh, Escape, invalid edits and clearing", async () => {
+  const d = await dashboard();
+  try {
+    d.rows[0].letter_date = "2026-11-05";
+    await d.api.loadSharedCases(); d.api.renderCases();
+    let cell = field(d, "saved-a", "letterDate");
+    assert.equal(cell.value, "05/11/2026");
+    assert.equal(d.w.document.querySelector('[data-case-derived="dueDate"]').textContent, "20/11/2026");
+    cell.value = "5/11/2026"; await d.api.saveCaseSheetCell(cell);
+    assert.equal(cell.value, "05/11/2026"); assert.equal(d.writes.length, 0);
+    cell.value = "12/03/2027"; d.delay();
+    const save = d.api.saveCaseSheetCell(cell); await tick();
+    assert.equal(cell.value, "12/03/2027"); assert.equal(cell.disabled, true);
+    assert.equal(cell.closest(".case-sheet-date").querySelector("button").disabled, true);
+    assert.equal(d.api.getRows()[0].letterDate, "2026-11-05");
+    d.release(); await save;
+    assert.equal(d.writes.at(-1).case.letterDate, "2027-03-12");
+    assert.equal(cell.value, "12/03/2027"); assert.equal(cell.disabled, false);
+    d.rows[0].letter_date = "2027-03-12";
+    await d.api.loadSharedCases(); d.api.renderCases(); cell = field(d, "saved-a", "letterDate");
+    assert.equal(cell.value, "12/03/2027");
+    cell.value = "21/04/2027";
+    cell.dispatchEvent(new d.w.KeyboardEvent("keydown", { key:"Escape", bubbles:true }));
+    assert.equal(cell.value, "12/03/2027");
+    const before = d.writes.length;
+    for (const value of ["31/02/2027", "11/23/2027", "12/03/27", "partial"]) {
+      cell.value = value; await d.api.saveCaseSheetCell(cell);
+      assert.equal(cell.value, "12/03/2027"); assert.equal(d.writes.length, before);
+      assert.match(d.w.document.getElementById("case-sheet-status").textContent, /Date not saved/);
+    }
+    cell.value = ""; await d.api.saveCaseSheetCell(cell);
+    assert.equal(d.writes.at(-1).case.letterDate, ""); assert.equal(cell.value, "");
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("Cases calendar selection and failed saves retain fixed day-first display", async () => {
+  const d = await dashboard("supervisor", {}, false, "?casesFullscreen=1&account=auth-user-1");
+  try {
+    const cell = field(d, "saved-a", "receivedDate"), wrap = cell.closest(".case-sheet-date");
+    const picker = wrap.querySelector("[data-case-date-picker]"); let opened = false;
+    picker.showPicker = () => { opened = true; };
+    wrap.querySelector("button").click(); assert.equal(opened, true);
+    assert.equal(d.w.document.activeElement, cell); opened = false;
+    cell.dispatchEvent(new d.w.KeyboardEvent("keydown", { key:"ArrowDown", altKey:true, bubbles:true, cancelable:true }));
+    assert.equal(opened, true);
+    picker.value = "2026-12-04";
+    picker.dispatchEvent(new d.w.Event("change", { bubbles:true })); await tick();
+    assert.equal(d.writes.at(-1).case.receivedDate, "2026-12-04");
+    assert.equal(cell.value, "04/12/2026"); assert.equal(picker.value, "2026-12-04");
+    d.fail(); cell.value = "05/12/2026"; await d.api.saveCaseSheetCell(cell);
+    assert.equal(cell.value, "04/12/2026"); assert.equal(picker.value, "2026-12-04");
+    assert.match(d.w.document.getElementById("case-sheet-status").textContent, /Not saved/);
+    assert.deepEqual(d.warnings, []);
   } finally { d.dom.window.close(); }
 });
 

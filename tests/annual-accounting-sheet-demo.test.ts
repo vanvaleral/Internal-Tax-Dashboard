@@ -604,7 +604,7 @@ test("Tax team overview counts subjects by primary Tax PIC, uses milestone denom
       assert.equal(control.checked, checked); assert.equal(control.percent, Math.round(checked / 30 * 1000) / 10);
     }
     const incompleteEvidence = { ...rows[0], progress: "Done", filing: [], ntpe: "", historicalCompletion: false };
-    assert.equal(Array.from(d.api.taxPicProgress([incompleteEvidence])).find((group: any) => group.id === "tax-bagus").completed, 0);
+    assert.equal(Array.from<{ id: string; completed: number }>(d.api.taxPicProgress([incompleteEvidence])).find(group => group.id === "tax-bagus")?.completed, 0);
     assert.ok(Array.from(d.api.taxPicProgress([])).every((group: any) => group.total === 0 && group.percent === null));
     assert.ok(Array.from(d.api.taxControlCoverage([])).every((control: any) => control.percent === null));
   } finally { d.dom.window.close(); }

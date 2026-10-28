@@ -1683,6 +1683,12 @@
     body.case-column-resizing, body.case-column-resizing * { cursor:col-resize !important; user-select:none !important; }
     .case-sheet .case-inline-field, .case-sheet .inline-select { display:block; width:100%; min-width:0; height:35px; border-radius:0; margin:0; font-size:12px; padding:6px 9px; background:transparent; color:var(--ink); border:1px solid transparent; text-overflow:ellipsis; }
     .case-sheet .case-inline-field:focus, .case-sheet .inline-select:focus { outline:2px solid var(--accent); outline-offset:-2px; background:var(--panel-solid); }
+    .case-sheet-date { display:flex; align-items:center; position:relative; }
+    .case-sheet-date .case-inline-field { flex:1; min-width:0; padding-right:2px; }
+    .case-sheet-date button { display:grid; place-items:center; flex:0 0 24px; height:29px; padding:4px; border:0; background:transparent; color:var(--muted); cursor:pointer; }
+    .case-sheet-date button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+    .case-sheet-date button svg { width:14px; height:14px; }
+    .case-sheet-date-picker { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
     .case-sheet [readonly] { cursor:default; }
     .case-sheet .case-inline-readonly { padding:6px 9px; display:block; font-size:12px; overflow:hidden; text-overflow:ellipsis; }
     .case-sheet-row-toggle { display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:35px; border:0; background:transparent; color:var(--muted); font:inherit; font-size:11px; font-variant-numeric:tabular-nums; cursor:pointer; }
@@ -8563,7 +8569,12 @@
       const columnGroup = (field) => ["taxPic", "accountingPic", "inspectorPic"].includes(field) ? "ownership" : ["dueDate", "deadline", "completionDate", "taxYear", "sphpDate", "completionNotes"].includes(field) ? "tracking" : "reference";
       const groupStart = (index) => index > 0 && columnGroup(columns[index][0]) !== columnGroup(columns[index - 1][0]);
       const categoryCount = (name) => scopedCases.filter(item => (item.caseCategory || "Himbauan") === name).length;
-      const inlineCaseInput = (item, field, type = "text") => `<input class="case-inline-field ${field === "clientName" ? "case-client-field" : ""}" data-case-sheet-id="${item.id}" data-case-sheet-field="${field}" aria-label="${escapeAttr(columns.find(([key]) => key === field)?.[1] || field)}: ${escapeAttr(item.clientName || "New case")}" type="${type}" value="${escapeAttr(caseSheetValue(item, field))}" ${field === "clientName" ? (item.id.startsWith("case-") ? 'list="case-client-options" placeholder="Choose a client to save"' : 'readonly title="Client linkage is retained for case history"') : ""} ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""} />`;
+      const inlineCaseInput = (item, field, type = "text") => {
+        const date = type === "date", saving = caseSheetPending.get(item)?.values.has(field);
+        const label = `${columns.find(([key]) => key === field)?.[1] || field}: ${item.clientName || "New case"}`;
+        const input = `<input class="case-inline-field ${field === "clientName" ? "case-client-field" : ""}" data-case-sheet-id="${item.id}" data-case-sheet-field="${field}" aria-label="${escapeAttr(label)}" type="text" value="${escapeAttr(caseSheetDisplayValue(item, field))}" ${date ? 'data-case-sheet-date placeholder="dd/mm/yyyy" title="DD/MM/YYYY"' : ""} ${field === "clientName" ? (item.id.startsWith("case-") ? 'list="case-client-options" placeholder="Choose a client to save"' : 'readonly title="Client linkage is retained for case history"') : ""} ${saving ? 'disabled data-saving="true"' : ""} />`;
+        return date ? `<div class="case-sheet-date">${input}<button type="button" data-case-open-date aria-label="Choose date for ${escapeAttr(label)}" ${saving ? "disabled" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button><input type="date" class="case-sheet-date-picker" data-case-date-picker tabindex="-1" aria-label="Calendar: ${escapeAttr(label)}" value="${escapeAttr(caseSheetValue(item, field))}" ${saving ? "disabled" : ""} /></div>` : input;
+      };
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" ${caseSheetPending.get(item)?.count ? "disabled" : ""} aria-label="Archive case ${escapeAttr(item.clientName)}" title="Archive case">${deleteIcon()}</button>`;
       const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${renderCaseProgressPanel(item, expandedProgress)}</td></tr>` : "";
       const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
@@ -8577,7 +8588,7 @@
         const field = isTax ? "taxPicProfileId" : "accountingPicProfileId";
         return `<select class="inline-select" data-case-sheet-id="${escapeAttr(item.id)}" data-case-sheet-field="${field}" aria-label="${division} case PIC" ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""}><option value="">Unassigned</option>${currentId && !people.some(person => person.id === currentId) ? `<option value="${escapeAttr(currentId)}" selected>${escapeHtml(currentName || "Historical PIC")}</option>` : ""}${!currentId && currentName ? `<option value="legacy" selected disabled>${escapeHtml(currentName)}</option>` : ""}${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === caseSheetValue(item, field) ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
       };
-      const sheetRows = caseWindow.rows.map((item, index) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${index + 1}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(item.dueDate || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
+      const sheetRows = caseWindow.rows.map((item, index) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${index + 1}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
 
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-cases">
@@ -9571,6 +9582,19 @@
       return caseSheetPending.get(record)?.values.get(field) ?? record[field] ?? "";
     }
 
+    function caseSheetDisplayValue(record, field) {
+      const value = caseSheetValue(record, field);
+      return ["letterDate", "receivedDate", "completionDate", "sphpDate"].includes(field) ? formatIsoToDisplayDate(value) : value;
+    }
+
+    function parseCaseSheetDate(text) {
+      if (!text) return "";
+      const local = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+      const value = local ? `${local[3]}-${local[2].padStart(2, "0")}-${local[1].padStart(2, "0")}` : text;
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 ? new Date(`${value}T00:00:00Z`) : null;
+      return date && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+    }
+
     function caseSheetMessage(message, error = false) {
       caseSheetStatus = message;
       const status = document.getElementById("case-sheet-status");
@@ -9586,7 +9610,13 @@
           const pending = caseSheetPending.get(record)?.values.has(cell.dataset.caseSheetField);
           cell.disabled = Boolean(pending);
           cell.toggleAttribute("data-saving", Boolean(pending));
-          if (cell.dataset.caseSheetField === confirmedField || cell !== document.activeElement || pending) cell.value = caseSheetValue(record, cell.dataset.caseSheetField);
+          if (cell.dataset.caseSheetField === confirmedField || cell !== document.activeElement || pending) cell.value = caseSheetDisplayValue(record, cell.dataset.caseSheetField);
+          if (cell.hasAttribute("data-case-sheet-date")) {
+            const wrap = cell.closest(".case-sheet-date");
+            wrap.querySelector("button").disabled = Boolean(pending);
+            const picker = wrap.querySelector("[data-case-date-picker]");
+            picker.disabled = Boolean(pending); picker.value = caseSheetValue(record, cell.dataset.caseSheetField);
+          }
           if (cell.dataset.caseSheetField === "clientName") cell.readOnly = !record.id.startsWith("case-");
         });
         const toggle = row.querySelector("[data-toggle-himbauan-progress]");
@@ -9595,7 +9625,7 @@
         if (archive) { archive.dataset.deleteCase = record.id; archive.disabled = Boolean(caseSheetPending.get(record)?.count); }
         const due = row.querySelector('[data-case-derived="dueDate"]');
         const deadline = row.querySelector('[data-case-derived="deadline"]');
-        if (due) due.textContent = record.dueDate || "-";
+        if (due) due.textContent = formatIsoToDisplayDate(record.dueDate) || "-";
         if (deadline) deadline.textContent = record.dueDate ? `${Math.ceil((new Date(`${record.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-";
       });
     }
@@ -9603,8 +9633,18 @@
     function saveCaseSheetCell(cell) {
       const record = taxCases.find(item => item.id === cell.dataset.caseSheetId);
       const field = cell.dataset.caseSheetField;
-      const value = cell.value.trim();
-      if (!record || cell.disabled || cell.readOnly || value === String(caseSheetValue(record, field))) return;
+      if (!record || cell.disabled || cell.readOnly) return;
+      let value = cell.value.trim();
+      if (cell.hasAttribute("data-case-sheet-date")) {
+        value = parseCaseSheetDate(value);
+        if (value === null) {
+          cell.value = caseSheetDisplayValue(record, field);
+          caseSheetMessage("Date not saved. Use a valid DD/MM/YYYY date. Your previous database value is retained.", true);
+          return;
+        }
+        cell.value = formatIsoToDisplayDate(value);
+      }
+      if (value === String(caseSheetValue(record, field))) return;
       if (record.id.startsWith("case-") && field !== "clientName" && !record.clientName && !caseSheetPending.get(record)?.count) {
         record[field] = value;
         caseSheetMessage("Draft only. Choose a Client Master client to save this row.");
@@ -9670,6 +9710,12 @@
     });
     document.addEventListener("change", event => {
       const target = event.target;
+      if (target.matches?.("[data-case-date-picker]")) {
+        const cell = target.closest(".case-sheet-date").querySelector("[data-case-sheet-date]");
+        if (target.disabled || cell.disabled || cell.readOnly) return;
+        cell.value = formatIsoToDisplayDate(target.value);
+        saveCaseSheetCell(cell);
+      }
       if (target.matches?.("select[data-case-sheet-field]")) saveCaseSheetCell(target);
       if (target.id === "case-acc-filter" || target.id === "case-tax-filter") {
         state[target.id === "case-acc-filter" ? "caseAccFilter" : "caseTaxFilter"] = target.value;
@@ -9680,28 +9726,36 @@
       if (!event.target.matches?.("[data-case-sheet-field]")) return;
       const cell = event.target;
       const pasted = event.clipboardData?.getData("text/plain") || "";
-      const text = cell.type === "date" ? pasted.trim() : pasted;
+      const text = cell.hasAttribute("data-case-sheet-date") ? pasted.trim() : pasted;
       if (/\t/.test(pasted) || /[\r\n]/.test(text)) {
         event.preventDefault();
         caseSheetMessage("Paste one cell at a time. Multi-cell paste is not yet supported for Cases.", true);
         return;
       }
-      if (cell.type === "date") {
+      if (cell.hasAttribute("data-case-sheet-date")) {
         event.preventDefault();
         if (cell.disabled || cell.readOnly) return;
-        const local = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
-        const value = local ? `${local[3]}-${local[2].padStart(2, "0")}-${local[1].padStart(2, "0")}` : text;
-        const date = /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 ? new Date(`${value}T00:00:00Z`) : null;
-        if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+        const value = parseCaseSheetDate(text);
+        if (!value) {
           caseSheetMessage("Date not pasted. Use a valid DD/MM/YYYY or YYYY-MM-DD date.", true);
           return;
         }
-        cell.value = value;
+        cell.value = formatIsoToDisplayDate(value);
         cell.dispatchEvent(new Event("input", { bubbles: true }));
         caseSheetMessage("Date inserted. Leave the cell to save.");
       }
     });
     document.addEventListener("click", event => {
+      const dateButton = event.target.closest?.("[data-case-open-date]");
+      if (dateButton) {
+        const wrap = dateButton.closest(".case-sheet-date"), cell = wrap.querySelector("[data-case-sheet-date]");
+        if (dateButton.disabled || cell.disabled || cell.readOnly) return;
+        const picker = wrap.querySelector("[data-case-date-picker]");
+        picker.value = parseCaseSheetDate(cell.value.trim()) || "";
+        cell.focus({ preventScroll: true });
+        if (typeof picker.showPicker === "function") picker.showPicker(); else picker.click();
+        return;
+      }
       const fullscreen = event.target.closest?.("[data-case-fullscreen]");
       if (fullscreen) {
         const active = document.activeElement;
@@ -9738,9 +9792,12 @@
     document.addEventListener("keydown", event => {
       const cell = event.target.closest?.("[data-case-sheet-field]");
       if (!cell) return;
+      if (cell.hasAttribute("data-case-sheet-date") && event.altKey && event.key === "ArrowDown") {
+        event.preventDefault(); cell.closest(".case-sheet-date").querySelector("[data-case-open-date]").click(); return;
+      }
       if (event.key === "Escape") {
         const record = taxCases.find(item => item.id === cell.dataset.caseSheetId);
-        if (record) cell.value = caseSheetValue(record, cell.dataset.caseSheetField);
+        if (record) cell.value = caseSheetDisplayValue(record, cell.dataset.caseSheetField);
         return;
       }
       if (!["Enter", "Tab", "ArrowUp", "ArrowDown"].includes(event.key)) return;
