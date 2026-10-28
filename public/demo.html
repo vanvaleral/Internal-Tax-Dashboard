@@ -1632,6 +1632,94 @@
       width: 130px;
     }
 
+    .case-sheet-panel { padding:0; overflow:hidden; border-radius:16px; }
+    .case-sheet-nav { padding:12px 14px; margin:0; gap:12px; border-bottom:1px solid var(--line); background:var(--panel-solid); }
+    .case-sheet-nav .workspace-tabs { padding:3px; gap:3px; border:1px solid var(--line); border-radius:11px; background:var(--neutral-soft); }
+    .case-sheet-nav .workspace-tabs button { display:flex; align-items:center; gap:9px; min-height:34px; padding:6px 13px; font-size:12px; border-radius:8px; }
+    .case-tab-count { padding:1px 6px; border-radius:5px; font-size:10px; font-variant-numeric:tabular-nums; background:color-mix(in srgb, currentColor 12%, transparent); }
+    .case-sheet-nav .toolbar-right { gap:8px; }
+    .case-sheet-nav .toolbar-right button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; }
+    .case-tool-icon { width:15px; height:15px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .case-sheet-panel .case-sheet-tools { padding:11px 14px; margin:0; gap:9px; border-bottom:1px solid var(--line); flex-wrap:wrap; background:color-mix(in srgb, var(--neutral-soft) 38%, var(--panel-solid)); }
+    .case-search-wrap { display:flex; flex:1 1 230px; align-items:center; gap:8px; max-width:390px; padding:0 10px; height:34px; border:1px solid var(--line); border-radius:8px; background:var(--panel-solid); color:var(--muted); }
+    .case-search-wrap:focus-within { outline:2px solid var(--accent); outline-offset:1px; }
+    .case-search-wrap input.filter-input { flex:1; width:100%; min-width:0; border:0; outline:0; background:transparent; padding:0; height:30px; font-size:12px; }
+    .case-filter-pair { display:flex; align-items:center; gap:8px; }
+    .case-sheet-tools .case-filter-pair select { width:146px; height:34px; margin:0; border-radius:8px; background:var(--panel-solid); font-size:12px; }
+    .case-sheet-tools .case-reset { display:inline-flex; align-items:center; gap:5px; background:transparent; color:var(--muted); font-weight:500; }
+    .case-filter-result { margin-left:auto; white-space:nowrap; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .case-filter-result strong { color:var(--ink); }
+    .workspace-cases .toolbar.case-sheet-tools { flex-wrap:wrap; }
+    .case-sheet-panel .table-wrap { border:0; border-radius:0; max-height:calc(100svh - 270px); min-height:180px; scrollbar-color:var(--line) transparent; container:case-sheet-viewport / inline-size; }
+    .case-sheet { border-collapse:separate; border-spacing:0; min-width:1590px; table-layout:fixed; width:100%; }
+    .case-sheet .case-col-number { width:44px; }
+    .case-sheet .case-col-clientName { width:220px; }
+    .case-sheet .case-col-letterNumber { width:110px; }
+    .case-sheet .case-col-subject { width:150px; }
+    .case-sheet .case-col-letterDate, .case-sheet .case-col-receivedDate, .case-sheet .case-col-dueDate, .case-sheet .case-col-completionDate, .case-sheet .case-col-sphpDate { width:118px; }
+    .case-sheet .case-col-deadline, .case-sheet .case-col-taxYear { width:88px; }
+    .case-sheet .case-col-taxPic, .case-sheet .case-col-accountingPic { width:104px; }
+    .case-sheet .case-col-inspectorPic { width:130px; }
+    .case-sheet .case-col-notes, .case-sheet .case-col-completionNotes { width:160px; }
+    .case-sheet .case-col-actions { width:38px; }
+    .case-sheet th, .case-sheet td { padding:0; height:36px; border-right:1px solid color-mix(in srgb, var(--line) 60%, transparent); border-bottom:1px solid var(--line); }
+    .case-sheet th { background:var(--neutral-soft); text-transform:none; letter-spacing:0; font-size:11px; font-weight:650; border-bottom:1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); }
+    .case-sheet th[data-case-column-group="tracking"] { background:color-mix(in srgb, var(--accent-soft) 65%, var(--panel-solid)); }
+    .case-sheet th[data-case-column-group="ownership"] { background:var(--accent-soft); }
+    .case-sheet [data-case-group-start] { border-left:1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); }
+    .case-sheet th:first-child, .case-sheet td:first-child { position:sticky; left:0; z-index:2; background:var(--neutral-soft); }
+    .case-sheet th:nth-child(2), .case-sheet td:nth-child(2) { position:sticky; left:var(--case-number-width, 44px); z-index:2; background:var(--panel-solid); box-shadow:2px 0 0 var(--line); }
+    .case-sheet thead th { position:sticky; top:0; z-index:3; }
+    .case-sheet thead th:nth-child(-n+2) { z-index:4; background:var(--accent-soft); }
+    .case-sheet .sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+    .case-sheet-sort { display:flex; align-items:center; justify-content:space-between; gap:5px; width:100%; height:36px; padding:0 9px; border:0; background:transparent; color:var(--ink); font:inherit; cursor:pointer; }
+    .case-sheet-sort span { color:var(--muted); opacity:.5; font-size:12px; }
+    .case-sheet th:not([aria-sort="none"]) .case-sheet-sort span { color:var(--accent); opacity:1; }
+    .case-sheet-sort:hover { background:color-mix(in srgb, var(--accent) 7%, transparent); }
+    .case-sheet-column-resize { position:absolute; top:0; right:-3px; bottom:0; width:8px; z-index:6; cursor:col-resize; touch-action:none; }
+    .case-sheet-column-resize:hover, .case-sheet-column-resize:focus-visible { background:color-mix(in srgb, var(--accent) 25%, transparent); outline:0; }
+    .case-sheet-column-resize::after { content:""; position:absolute; top:9px; bottom:9px; left:3px; width:2px; border-radius:2px; background:var(--accent); opacity:0; }
+    .case-sheet-column-resize:hover::after, .case-sheet-column-resize:focus-visible::after { opacity:1; }
+    body.case-column-resizing, body.case-column-resizing * { cursor:col-resize !important; user-select:none !important; }
+    .case-sheet .case-inline-field, .case-sheet .inline-select { display:block; width:100%; min-width:0; height:35px; border-radius:0; margin:0; font-size:12px; padding:6px 9px; background:transparent; color:var(--ink); border:1px solid transparent; text-overflow:ellipsis; }
+    .case-sheet .case-inline-field:focus, .case-sheet .inline-select:focus { outline:2px solid var(--accent); outline-offset:-2px; background:var(--panel-solid); }
+    .case-sheet [readonly] { cursor:default; }
+    .case-sheet .case-inline-readonly { padding:6px 9px; display:block; font-size:12px; overflow:hidden; text-overflow:ellipsis; }
+    .case-sheet-row-toggle { display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:35px; border:0; background:transparent; color:var(--muted); font:inherit; font-size:11px; font-variant-numeric:tabular-nums; cursor:pointer; }
+    .case-sheet thead th:first-child { text-align:center; padding:0; }
+    .case-sheet-row-toggle { position:relative; padding:0 11px; }
+    .case-sheet-row-toggle > span:first-child { width:100%; text-align:center; }
+    .case-sheet-row-toggle > span[aria-hidden] { position:absolute; right:3px; font-size:8px; }
+    .case-sheet-row-toggle[aria-expanded="true"] { color:var(--accent); background:var(--accent-soft); }
+    .case-sheet-row-toggle:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+    .case-sheet .case-main-row:focus-within td { background:color-mix(in srgb, var(--accent-soft) 50%, var(--panel-solid)); }
+    .case-sheet .case-main-row[data-case-draft="true"] td { background:color-mix(in srgb, var(--accent-soft) 45%, var(--panel-solid)); }
+    .case-sheet .case-main-row[data-case-draft="true"] td:nth-child(2) { box-shadow:inset 3px 0 var(--accent), 2px 0 var(--line); }
+    .case-sheet .case-main-row .danger-icon-btn { opacity:.35; width:30px; min-width:30px; margin:auto; }
+    .case-sheet .case-main-row:hover .danger-icon-btn, .case-sheet .case-main-row:focus-within .danger-icon-btn { opacity:1; }
+    .case-sheet td:has([data-saving]) { box-shadow:inset 0 -2px var(--accent); }
+    .case-sheet .case-progress-inline td { position:static; background:var(--panel-solid); padding:0; }
+    .case-progress-viewport { position:sticky; left:0; width:min(100%, calc(100cqw - 1px)); box-sizing:border-box; padding:14px; white-space:normal; overflow-wrap:anywhere; }
+    .case-progress-viewport .case-progress-grid > div, .case-progress-viewport .list-item > div, .case-progress-viewport .list-item > strong { min-width:0; }
+    .case-progress-viewport .list-item { white-space:normal; overflow-wrap:anywhere; }
+    .case-progress-viewport .list-item .pill { flex-shrink:0; }
+    .case-progress-viewport .case-progress-entry input { min-width:0; width:100%; }
+    @container case-sheet-viewport (max-width:720px) { .case-progress-viewport .case-progress-grid { grid-template-columns:minmax(0,1fr); } .case-progress-viewport { padding:10px; } }
+    .case-sheet .case-progress-grid { gap:14px; }
+    .case-sheet .case-progress-grid > div { padding:12px; border:1px solid var(--line); border-radius:10px; background:color-mix(in srgb, var(--neutral-soft) 35%, var(--panel-solid)); }
+    .case-sheet .case-progress-grid .eyebrow { margin-bottom:9px; color:var(--accent-strong); }
+    .case-progress-summary { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; margin-bottom:12px; font-size:12px; color:var(--muted); }
+    .case-progress-summary strong { color:var(--ink); }
+    .case-progress-context { margin:0 0 12px; color:var(--ink); font-size:12px; white-space:normal; overflow-wrap:anywhere; line-height:1.6; }
+    .case-progress-notice { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:8px; padding:10px 12px; margin-bottom:12px; border:1px solid var(--line); border-radius:8px; background:var(--accent-soft); color:var(--ink); font-size:12px; white-space:normal; }
+    .case-progress-block + .case-progress-block { margin-top:15px; }
+    .case-progress-entry-label { display:block; margin-top:14px; color:var(--ink); font-size:12px; font-weight:600; }
+    .case-sheet .case-main-row { cursor:default; }
+    .case-sheet .case-main-row:hover td { background:var(--accent-soft); }
+    .case-sheet-footer { padding:9px 14px; border-top:1px solid var(--line); font-size:10px; color:var(--muted); display:flex; gap:12px; justify-content:space-between; background:var(--panel-solid); }
+    .case-sheet-footer [role="status"] { font-size:11px; }
+    .case-sheet-footer [role="status"][data-error="true"] { color:#b42318; }
+    @media(max-width:900px) { .case-sheet-nav { padding:9px; } .case-sheet-nav .case-tab-count, .case-sheet-nav .case-tool-icon { display:none; } .case-sheet-panel .case-sheet-tools { padding:9px; } .case-search-wrap { max-width:none; flex-basis:100%; } .case-filter-pair { flex:1; } .case-sheet-tools .case-filter-pair select { flex:1; min-width:0; width:110px; } .case-filter-result { display:none; } .case-sheet-panel .table-wrap { max-height:calc(100svh - 315px); } .case-sheet-footer { flex-wrap:wrap; gap:5px; padding:8px 10px; } .case-sheet-footer > span:first-child { display:none; } .case-sheet .case-main-row .danger-icon-btn { opacity:1; } }
     .case-inline-field { width:100%; min-width:86px; height:26px; padding:3px 5px; border:1px solid transparent; border-radius:5px; color:var(--ink); background:transparent; font-size:12px; }
     .case-inline-field:focus { border-color:var(--accent); background:var(--panel-solid); outline:0; }
     .case-inline-field.case-client-field { min-width:170px; font-weight:700; }
@@ -3596,7 +3684,19 @@
     .workspace-bars i:nth-child(2){height:18px;animation-delay:120ms}.workspace-bars i:nth-child(3){height:24px;animation-delay:240ms}.workspace-bars i:nth-child(4){height:30px;animation-delay:360ms}
     @keyframes workspace-pulse{0%,100%{transform:scaleY(.6);opacity:.45}50%{transform:scaleY(1);opacity:1}}
     @media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}
+    html.cases-fullscreen body { padding:0 !important; }
+    html.cases-fullscreen .shell { max-width:none; padding:10px; margin:0; display:block; }
+    html.cases-fullscreen .sidebar, html.cases-fullscreen .global-topbar { display:none !important; }
+    html.cases-fullscreen .main { display:block; padding:0; height:auto; min-height:0; }
+    html.cases-fullscreen .main > .view { max-width:none; }
+    html.cases-fullscreen .workspace-cases { max-width:none; margin:0; }
+    html.cases-fullscreen .case-sheet-panel { display:flex; flex-direction:column; height:calc(100svh - 20px); min-height:0; }
+    html.cases-fullscreen .case-sheet-panel > .toolbar, html.cases-fullscreen .case-sheet-footer { flex-shrink:0; }
+    html.cases-fullscreen .case-sheet-panel .table-wrap { flex:1; max-height:none; min-height:0; }
+    .case-sheet-nav .case-fullscreen-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:7px 10px; font-size:11px; font-weight:600; border:1px solid var(--line); border-radius:8px; color:var(--accent-strong); background:var(--panel-solid); text-decoration:none; }
+    @media(max-width:900px) { html.cases-fullscreen .shell { padding:6px; } html.cases-fullscreen .case-sheet-panel { height:calc(100svh - 12px); } .case-sheet-nav .case-fullscreen-link { width:32px; min-width:32px; padding:0; font-size:0; } .case-sheet-nav .case-fullscreen-link .case-tool-icon { display:block; width:16px; height:16px; } }
   </style>
+  <link rel="stylesheet" href="submenu-tabs.css" />
 </head>
 <body>
   <div class="app-loading-overlay visible initial-load" id="app-loading-overlay" role="status" aria-live="polite" aria-busy="true">
@@ -3604,6 +3704,7 @@
   </div>
   <script data-workspace-boot>
     (() => {
+      if (new URLSearchParams(location.search).get("casesFullscreen") === "1") document.documentElement.classList.add("cases-fullscreen");
       const notify = () => { if (parent !== window) parent.postMessage({ type: "dashboard:mounted" }, location.protocol === "file:" ? "*" : location.origin); };
       window.addEventListener("message", event => { if (event.origin === location.origin && event.source === parent && event.data?.type === "workspace:status") notify(); });
       notify();
@@ -3703,6 +3804,9 @@
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
+    const casePageParams = new URLSearchParams(window.location.search);
+    const IS_CASES_FULLSCREEN = casePageParams.get("casesFullscreen") === "1";
+    if (IS_CASES_FULLSCREEN) { document.documentElement.classList.add("cases-fullscreen"); document.title = "Cases | Tax Dashboard"; }
     const IS_ANNUAL_SHEET_PREVIEW = IS_OFFLINE_DEMO && new URLSearchParams(window.location.search).get("annualAccountingPreview") === "1";
     if (IS_ANNUAL_SHEET_PREVIEW) {
       await new Promise((resolve, reject) => {
@@ -3732,6 +3836,10 @@
         document.body.textContent = "Unable to verify your account. Please sign in again or reload when connected.";
         return;
       }
+    }
+    if (IS_CASES_FULLSCREEN && !IS_OFFLINE_DEMO && casePageParams.get("account") && casePageParams.get("account") !== bootstrapProfile.user.id) {
+      document.body.textContent = "The signed-in account changed. Open Cases Full Screen again from your current dashboard.";
+      return;
     }
     const OBLIGATIONS = ["pph21", "unifikasi", "pph25", "phrpb1", "ppn"];
 
@@ -4602,6 +4710,10 @@
       profileClientSearch: persistedDemoState?.ui?.profileClientSearch || "",
       proposalSearch: persistedDemoState?.ui?.proposalSearch || "",
       caseSearch: persistedDemoState?.ui?.caseSearch || "",
+      caseAccFilter: persistedDemoState?.ui?.caseAccFilter || "all",
+      caseTaxFilter: persistedDemoState?.ui?.caseTaxFilter || "all",
+      caseSheetSort: persistedDemoState?.ui?.caseSheetSort || { key: "clientName", direction: "asc" },
+      caseColumnWidths: persistedDemoState?.ui?.caseColumnWidths || {},
       profileTab: persistedDemoState?.ui?.profileTab || "profile",
       myWork: myWorkDemoMode ? createMyWorkDemoTasks() : IS_OFFLINE_DEMO && Array.isArray(persistedDemoState?.ui?.myWork) ? persistedDemoState.ui.myWork : [],
       selectedMyWorkId: myWorkDemoMode ? "" : persistedDemoState?.ui?.selectedMyWorkId || "",
@@ -4650,6 +4762,10 @@
     state.selectedPic = bootstrapProfile.profile.display_name || bootstrapProfile.profile.full_name || state.selectedPic;
     state.username = bootstrapProfile.profile.username || "";
     state.teamDivision = bootstrapProfile.profile.team_division || state.teamDivision;
+    if (IS_CASES_FULLSCREEN) {
+      state.currentView = "cases-view";
+      if (["himbauan", "pemeriksaan"].includes(casePageParams.get("casesTab"))) state.casesTab = casePageParams.get("casesTab");
+    }
     if (IS_ANNUAL_SHEET_PREVIEW) {
       state.currentView = "matrix-view"; state.operationsMode = "annual"; state.annualTeam = "accounting";
       state.appearance.accent = "#087f8d";
@@ -4983,9 +5099,8 @@
     }
 
     function createCaseRecord() {
-      const nextNumber = taxCases.length + 1;
       return {
-        id: `case-${String(nextNumber).padStart(3, "0")}`,
+        id: `case-${crypto.randomUUID()}`,
         clientId: "",
         clientName: "",
         caseType: "Himbauan",
@@ -6771,9 +6886,9 @@
           ${state.managementTab === "workload" ? `
             <section class="panel">
               <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff directory roles, operational teams, and access status. Every change notifies active Partners and Leaders.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
-              <div class="workspace-tabs" style="margin-bottom:16px;">
-                <button class="${state.staffAccessTab === "active" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="active">Active (${staffDirectory.filter((staff) => staff.directory_active !== false).length})</button>
-                <button class="${state.staffAccessTab === "deleted" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="deleted">Recently Deleted (${staffDirectory.filter((staff) => staff.directory_active === false && !staff.access_deleted_at).length})</button>
+              <div class="workspace-tabs submenu-secondary" style="margin-bottom:16px;" role="group" aria-label="PIC access status">
+                <button class="${state.staffAccessTab === "active" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="active">Active <span class="submenu-count">${staffDirectory.filter((staff) => staff.directory_active !== false).length}</span></button>
+                <button class="${state.staffAccessTab === "deleted" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="deleted">Recently Deleted <span class="submenu-count">${staffDirectory.filter((staff) => staff.directory_active === false && !staff.access_deleted_at).length}</span></button>
               </div>
               ${state.staffAccessTab === "active" ? `
               <div class="detail-grid-2" style="margin-bottom:16px;">
@@ -7522,7 +7637,7 @@
                     <p>Track expiring contracts early so renewals do not depend on manual reminders.</p>
                   </div>
                 </div>
-                <div class="workspace-tabs" style="margin-bottom:10px;">
+                <div class="workspace-tabs submenu-secondary" style="margin-bottom:10px;" role="group" aria-label="Contract status">
                   <button class="${state.contractFilter === "all" ? "solid-btn" : "ghost-btn"}" data-contract-filter="all">All Clients</button>
                   <button class="${state.contractFilter === "renewal" ? "solid-btn" : "ghost-btn"}" data-contract-filter="renewal">Expiring Soon</button>
                   <button class="${state.contractFilter === "expired" ? "solid-btn" : "ghost-btn"}" data-contract-filter="expired">Expired</button>
@@ -7691,8 +7806,8 @@
                 <span class="pill ${state.operationsMode === "monthly" ? (completedHiddenCount ? "warning" : "accent") : (annualPendingCount ? "warning" : "accent")}">${state.operationsMode === "monthly" ? `${completedHiddenCount} completed hidden` : `${annualPendingCount} still open`}</span>
               </div>
             </div>
-            <div class="toolbar" style="margin-top:10px;">
-              <div class="workspace-tabs">
+            <div class="toolbar submenu-secondary-row">
+              <div class="workspace-tabs submenu-secondary" role="group" aria-label="${state.operationsMode === "monthly" ? "Monthly compliance views" : "Annual compliance team"}">
                 ${state.operationsMode === "monthly" ? `
                   <button class="${state.operationsTab === "active" ? "solid-btn" : "ghost-btn"}" data-operations-tab="active">Active Queue</button>
                   <button class="${state.operationsTab === "history" ? "solid-btn" : "ghost-btn"}" data-operations-tab="history">Completed History</button>
@@ -8376,20 +8491,81 @@
       `);
     }
 
+    function caseFullScreenUrl() {
+      const url = new URL("./demo.html", window.location.href);
+      url.searchParams.set("casesFullscreen", "1");
+      url.searchParams.set("casesTab", state.casesTab);
+      if (!IS_OFFLINE_DEMO) url.searchParams.set("account", bootstrapProfile.user.id);
+      return url.href;
+    }
+
+    function renderCaseProgressPanel(item, progress) {
+      const draft = !IS_OFFLINE_DEMO && item.id.startsWith("case-");
+      const pendingTasks = state.myWork.filter(task => task.caseId === item.id && !task.done);
+      const nextActions = (item.nextSteps || []).filter(step => !step.done);
+      const completed = progress?.completedTasks || [];
+      const entries = progress?.progressEntries || [];
+      const ready = !draft && Boolean(progress) && !progress.error;
+      const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
+      return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><strong>${escapeHtml(item.stage || "Not started")}</strong><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(item.dueDate)}</strong></span>` : ""}</div>
+        ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Follow-ups entered here do not update the database.</div>` : draft ? `<div class="case-progress-notice"><span>New case draft. Choose a Client Master client, then leave the cell to save automatically before adding follow-ups.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
+        ${item.notes ? `<p class="case-progress-context">${escapeHtml(item.notes)}</p>` : ""}
+        <div class="case-progress-grid"><div>
+          <section class="case-progress-block"><div class="eyebrow">Next actions / open linked work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No next action or open linked task recorded in your current access scope.</div>`)}</div></section>
+          <section class="case-progress-block"><div class="eyebrow">Completed My Work (${completed.length})</div><div class="case-progress-list">${completed.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.completedByName || task.creatorName || "PIC")} · ${timestamp(task.completedAt)}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">${progress || draft ? "No completed linked tasks yet." : "Loading linked work..."}</div>`}</div></section>
+        </div><div><div class="eyebrow">Follow-up log (${entries.length})</div>
+          ${progress?.error ? `<div class="case-progress-notice" role="alert"><span>${escapeHtml(progress.error)}</span><button class="tiny-btn" data-case-reload-progress="${escapeAttr(item.id)}">Retry</button></div>` : ""}
+          <div class="case-progress-list">${entries.map(entry => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}</div></div></div>`).join("") || `<div class="subline">${progress || draft ? "No follow-ups recorded yet." : "Loading follow-ups..."}</div>`}</div>
+          <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready ? "" : "disabled"}>${IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div>
+        </div></div></div>`;
+    }
+
     function renderCases(rootOverride = null) {
+      const profileId = bootstrapProfile.profile.id;
       const scopedCases = hasLeadershipAccess()
         ? taxCases
-        : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic || (item.id === state.selectedCaseId && item.id.startsWith("case-")));
+        : taxCases.filter((item) => (profileId && [item.taxPicProfileId, item.accountingPicProfileId].includes(profileId)) || (!item.taxPicProfileId && String(item.taxPic || "").toLowerCase() === state.selectedPic.toLowerCase()) || (!item.accountingPicProfileId && String(item.accountingPic || "").toLowerCase() === state.selectedPic.toLowerCase()) || (item.id === state.selectedCaseId && item.id.startsWith("case-")));
       const caseQuery = state.caseSearch.trim().toLowerCase();
       const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
-      const caseList = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes].join(" ").toLowerCase().includes(caseQuery)));
-      const caseWindow = windowedRows(caseList, "cases", 44);
-      const expandedHimbauan = category === "Himbauan" ? caseList.find((item) => item.id === state.expandedHimbauanId) : null;
+      const categoryCases = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category);
+      const casePicKey = (item, type) => {
+        if (item[`${type}PicProfileId`]) return String(item[`${type}PicProfileId`]).toLowerCase();
+        const name = String(item[`${type}Pic`] || "").trim().toLowerCase();
+        const matches = staffDirectory.filter(person => person.team_division === (type === "tax" ? "Tax Team" : "Accounting Team") && String(person.display_name || person.full_name || "").trim().toLowerCase() === name);
+        return matches.length === 1 ? matches[0].id.toLowerCase() : name || "unassigned";
+      };
+      const caseList = categoryCases.filter((item) =>
+        (state.caseAccFilter === "all" || casePicKey(item, "accounting") === state.caseAccFilter)
+        && (state.caseTaxFilter === "all" || casePicKey(item, "tax") === state.caseTaxFilter)
+        && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes, item.inspectorPic, item.completionNotes, item.taxYear].join(" ").toLowerCase().includes(caseQuery)));
+      const columns = category === "Himbauan"
+        ? [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["dueDate", "Jatuh Tempo", "derived"], ["deadline", "Deadline", "derived"], ["completionDate", "Tgl Selesai", "date"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["notes", "Note"]]
+        : [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["taxYear", "Tahun Pajak"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["inspectorPic", "PIC Pemeriksa"], ["sphpDate", "Tgl SPHP", "date"], ["completionNotes", "Penyelesaian"]];
+      const sort = state.caseSheetSort;
+      if (columns.some(([key]) => key === sort.key)) caseList.sort((a, b) => {
+        if (a.id.startsWith("case-") !== b.id.startsWith("case-")) return a.id.startsWith("case-") ? -1 : 1;
+        const key = sort.key === "deadline" ? "dueDate" : sort.key;
+        const x = String(a[key] || ""), y = String(b[key] || "");
+        if (!x || !y) return x ? -1 : y ? 1 : 0;
+        return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" }) * (sort.direction === "desc" ? -1 : 1);
+      });
+      const picOptions = (type, selected) => {
+        const entries = new Map([["unassigned", "Unassigned"]]);
+        staffDirectory.filter(person => person.directory_active !== false && person.team_division === (type === "tax" ? "Tax Team" : "Accounting Team")).forEach(person => entries.set(person.id.toLowerCase(), person.display_name || person.full_name));
+        categoryCases.forEach(item => { const key = casePicKey(item, type); if (!entries.has(key)) entries.set(key, item[`${type}Pic`] || "Unassigned"); });
+        return `<option value="all">All ${type === "tax" ? "Tax" : "ACC"} PIC</option>${[...entries].sort((a, b) => a[1].localeCompare(b[1])).map(([key, label]) => `<option value="${escapeAttr(key)}" ${key === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}`;
+      };
+      const caseWindow = windowedRows(caseList, "cases", 36);
+      const expandedHimbauan = caseList.find((item) => item.id === state.expandedHimbauanId);
       const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
       const root = rootOverride || document.getElementById("cases-view");
-      const inlineCaseInput = (item, field, type = "text", extraClass = "") => `<input class="case-inline-field ${extraClass}" data-case-inline="${item.id}" data-case-field="${field}" type="${type}" value="${escapeAttr(item[field] || "")}" ${field === "clientName" ? 'list="case-client-options" placeholder="Type wajib pajak"' : ""} />`;
-      const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" aria-label="Delete case ${escapeAttr(item.clientName)}" title="Delete case">${deleteIcon()}</button>`;
-      const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${item.id.startsWith("case-") ? `<div class="empty-state">Save this Himbauan first, then add progress updates.</div>` : expandedProgress ? `<div class="case-progress-grid"><div><div class="eyebrow">Completed My Work</div><div class="case-progress-list">${expandedProgress.completedTasks.map((task) => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">Completed by ${escapeHtml(task.completedByName || task.creatorName)} · ${task.completedAt ? new Date(task.completedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div><span class="pill accent">Done</span></div>`).join("") || `<div class="subline">No completed linked tasks yet.</div>`}</div></div><div><div class="eyebrow">PIC Progress</div><div class="case-progress-list">${expandedProgress.progressEntries.map((entry) => `<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName)} · ${entry.createdAt ? new Date(entry.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "time unavailable"}</div></div></div>`).join("") || `<div class="subline">No direct progress updates yet.</div>`}</div><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Add progress completed by you..." /><button class="solid-btn" data-add-himbauan-progress="${item.id}">Add</button></div></div></div>` : `<div class="subline">Loading progress...</div>`}</td></tr>` : "";
+      const toolIcon = (path) => `<svg class="case-tool-icon" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+      const columnGroup = (field) => ["taxPic", "accountingPic", "inspectorPic"].includes(field) ? "ownership" : ["dueDate", "deadline", "completionDate", "taxYear", "sphpDate", "completionNotes"].includes(field) ? "tracking" : "reference";
+      const groupStart = (index) => index > 0 && columnGroup(columns[index][0]) !== columnGroup(columns[index - 1][0]);
+      const categoryCount = (name) => scopedCases.filter(item => (item.caseCategory || "Himbauan") === name).length;
+      const inlineCaseInput = (item, field, type = "text") => `<input class="case-inline-field ${field === "clientName" ? "case-client-field" : ""}" data-case-sheet-id="${item.id}" data-case-sheet-field="${field}" aria-label="${escapeAttr(columns.find(([key]) => key === field)?.[1] || field)}: ${escapeAttr(item.clientName || "New case")}" type="${type}" value="${escapeAttr(caseSheetValue(item, field))}" ${field === "clientName" ? (item.id.startsWith("case-") ? 'list="case-client-options" placeholder="Choose a client to save"' : 'readonly title="Client linkage is retained for case history"') : ""} ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""} />`;
+      const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" ${caseSheetPending.get(item)?.count ? "disabled" : ""} aria-label="Archive case ${escapeAttr(item.clientName)}" title="Archive case">${deleteIcon()}</button>`;
+      const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${renderCaseProgressPanel(item, expandedProgress)}</td></tr>` : "";
       const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
       const casePicCell = (item, type) => {
         const isTax = type === "tax";
@@ -8398,42 +8574,38 @@
         if (!canReassignCasePic() || item.id.startsWith("case-")) return `<span class="case-inline-readonly">${escapeHtml(currentName || "-")}</span>`;
         const division = isTax ? "Tax Team" : "Accounting Team";
         const people = staffDirectory.filter((person) => person.directory_active !== false && person.team_division === division);
-        return `<select class="inline-select" data-case-pic-select="${escapeAttr(item.id)}" data-pic-type="${type}" aria-label="${division} case PIC"><option value="" ${!currentId ? "selected" : ""}>Unassigned</option>${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === currentId ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
+        const field = isTax ? "taxPicProfileId" : "accountingPicProfileId";
+        return `<select class="inline-select" data-case-sheet-id="${escapeAttr(item.id)}" data-case-sheet-field="${field}" aria-label="${division} case PIC" ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""}><option value="">Unassigned</option>${currentId && !people.some(person => person.id === currentId) ? `<option value="${escapeAttr(currentId)}" selected>${escapeHtml(currentName || "Historical PIC")}</option>` : ""}${!currentId && currentName ? `<option value="legacy" selected disabled>${escapeHtml(currentName)}</option>` : ""}${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === caseSheetValue(item, field) ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
       };
-      const himbauanRows = caseWindow.rows.map((item, index) => {
-        const days = item.dueDate ? Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) : null;
-        return `<tr class="case-main-row" data-keyboard-row="case" data-toggle-himbauan-progress="${item.id}" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td><span class="case-inline-readonly">${item.dueDate || "-"}</span></td><td><span class="case-inline-readonly">${days === null ? "-" : `${days} days`}</span></td><td>${inlineCaseInput(item, "completionDate", "date", "case-inline-date")}</td><td data-case-pic-tax="${item.id}">${casePicCell(item, "tax")}</td><td data-case-pic-acc="${item.id}">${casePicCell(item, "accounting")}</td><td>${inlineCaseInput(item, "notes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`;
-      }).join("") || `<tr><td colspan="13"><div class="empty-state">No Himbauan records in your PIC scope.</div></td></tr>`;
-      const pemeriksaanRows = caseWindow.rows.map((item, index) => {
-        return `<tr data-keyboard-row="case" tabindex="0"><td>${caseWindow.start + index + 1}</td><td>${inlineCaseInput(item, "clientName", "text", "case-client-field")}</td><td>${inlineCaseInput(item, "letterNumber")}</td><td>${inlineCaseInput(item, "letterDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "receivedDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "subject")}</td><td>${inlineCaseInput(item, "taxYear")}</td><td data-case-pic-tax="${item.id}">${casePicCell(item, "tax")}</td><td data-case-pic-acc="${item.id}">${casePicCell(item, "accounting")}</td><td>${inlineCaseInput(item, "inspectorPic")}</td><td>${inlineCaseInput(item, "sphpDate", "date", "case-inline-date")}</td><td>${inlineCaseInput(item, "completionNotes", "text", "case-note-field")}</td><td>${caseActionButtons(item)}</td></tr>`;
-      }).join("") || `<tr><td colspan="13"><div class="empty-state">No Pemeriksaan records in your PIC scope.</div></td></tr>`;
+      const sheetRows = caseWindow.rows.map((item, index) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${index + 1}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(item.dueDate || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
 
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-cases">
-          <section class="panel">
-            <div class="toolbar">
+          <section class="panel case-sheet-panel">
+            <div class="toolbar case-sheet-nav">
               <div class="workspace-tabs case-mobile-tabs">
-                <button class="${category === "Himbauan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="himbauan">Himbauan</button>
-                <button class="${category === "Pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan">Pemeriksaan</button>
+                <button class="${category === "Himbauan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="himbauan" aria-pressed="${category === "Himbauan"}">Himbauan <span class="case-tab-count">${categoryCount("Himbauan")}</span></button>
+                <button class="${category === "Pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan" aria-pressed="${category === "Pemeriksaan"}">Pemeriksaan <span class="case-tab-count">${categoryCount("Pemeriksaan")}</span></button>
               </div>
               <div class="toolbar-right case-mobile-actions">
-                <button class="ghost-btn" data-toggle-case-trash="yes">Archived Cases${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
-                <span class="pill neutral">${caseList.length} cases</span>
-                <button class="solid-btn" data-new-case="yes">Add Case</button>
+                ${IS_CASES_FULLSCREEN ? `<a class="case-fullscreen-link" href="${IS_OFFLINE_DEMO ? "./demo.html" : "/dashboard"}" aria-label="Back to Dashboard">${toolIcon('<path d="m10 5-7 7 7 7M3 12h18"/>')}Dashboard</a>` : `<a class="case-fullscreen-link" data-case-fullscreen="yes" href="${escapeAttr(caseFullScreenUrl())}" target="_blank" rel="noopener noreferrer" aria-label="Open Cases in full screen">${toolIcon('<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>')}Full Screen</a>`}
+                <button class="ghost-btn" data-toggle-case-trash="yes" aria-expanded="${state.caseTrashOpen}" aria-label="Archived Cases">${toolIcon('<path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/>')}Archived Cases${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
+                <button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>
               </div>
             </div>
-          </section>
-
-          <section class="panel">
-            <div class="toolbar compact-toolbar"><input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Search wajib pajak, surat, PIC..." /></div>
-            <div class="table-wrap" data-virtual-table="cases" data-row-height="44"><table><thead><tr>${category === "Himbauan" ? `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Jatuh Tempo</th><th>Deadline</th><th>Tgl Selesai</th><th>PIC Tax</th><th>PIC ACC</th><th>Note</th><th></th>` : `<th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun Pajak</th><th>PIC Tax</th><th>PIC ACC</th><th>PIC Pemeriksa</th><th>Tgl SPHP</th><th>Penyelesaian</th><th></th>`}</tr></thead><tbody>
-              ${virtualSpacer(13, caseWindow.top)}${category === "Himbauan" ? himbauanRows : pemeriksaanRows}${virtualSpacer(13, caseWindow.bottom)}
+            <div class="toolbar case-sheet-tools"><label class="case-search-wrap">${toolIcon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}<input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Find client, letter, or note..." aria-label="Search cases" /></label><div class="case-filter-pair"><select id="case-acc-filter" class="filter-input" aria-label="Filter ACC PIC">${picOptions("accounting", state.caseAccFilter)}</select><select id="case-tax-filter" class="filter-input" aria-label="Filter Tax PIC">${picOptions("tax", state.caseTaxFilter)}</select></div><button class="ghost-btn case-reset" data-case-sheet-reset="yes">${toolIcon('<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>')}Reset</button><span class="case-filter-result"><strong>${caseList.length}</strong> of ${categoryCases.length} cases</span></div>
+            <div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col">No.</th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+              ${sheetRows}
             </tbody></table></div>
+            <div class="case-sheet-footer"><span>${caseList.length} / ${categoryCases.length} cases · Enter: next row · Tab: next cell · Row number: progress</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
           </section>
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Archived Cases</h3><p>Archived cases retain their task links and progress history. They can be restored later.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · archived ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No archived cases.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${activeClientMasterRecords().map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
+      applyCaseColumnWidths(root);
+      const fullScreenLink = root.querySelector("[data-case-fullscreen]");
+      if (fullScreenLink) { fullScreenLink.target = "_blank"; fullScreenLink.rel = "noopener noreferrer"; }
     }
 
     function renderClientView() {
@@ -9112,10 +9284,13 @@
 
     async function loadSharedCases(background = false) {
       try {
+        const revision = caseSheetWriteRevision;
         const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared cases...");
         if (!response.ok) return false;
         const result = await response.json();
-        taxCases = (Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo);
+        if (revision !== caseSheetWriteRevision) return true;
+        const protectedRows = taxCases.filter(item => item.id.startsWith("case-") || caseSheetPending.get(item)?.count);
+        taxCases = [...protectedRows, ...(Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo).filter(item => !protectedRows.some(row => row.id === item.id))];
         casesLoadedFromDatabase = true;
         if (!taxCases.some((item) => item.id === state.selectedCaseId)) state.selectedCaseId = taxCases[0]?.id || "";
         renderAfterSharedDataUpdate(["cases-view", "client-view"]);
@@ -9138,7 +9313,23 @@
       }
     }
 
+    function refreshExpandedCaseProgress(caseId) {
+      if (state.currentView !== "cases-view" || state.expandedHimbauanId !== caseId) return;
+      const item = taxCases.find(row => row.id === caseId);
+      const row = [...document.querySelectorAll("[data-case-sheet-row]")].find(row => row.dataset.caseSheetRow === caseId);
+      const panel = row?.nextElementSibling;
+      if (item && panel?.classList.contains("case-progress-inline")) panel.firstElementChild.innerHTML = safeHtml(renderCaseProgressPanel(item, state.caseProgressById[caseId]));
+    }
+
     async function loadCaseProgress(caseId) {
+      if (IS_OFFLINE_DEMO && caseId) {
+        state.caseProgressById[caseId] = {
+          completedTasks: state.myWork.filter(task => task.caseId === caseId && task.done),
+          progressEntries: state.caseProgressById[caseId]?.progressEntries || []
+        };
+        refreshExpandedCaseProgress(caseId);
+        return;
+      }
       if (!caseId || caseId.startsWith("case-")) return;
       try {
         const response = await appFetch(`/api/cases?progressFor=${encodeURIComponent(caseId)}`, { cache: "no-store", headers: { Accept: "application/json" } }, "", { trackUpdate: false });
@@ -9148,13 +9339,23 @@
           completedTasks: Array.isArray(result.completedTasks) ? result.completedTasks : [],
           progressEntries: Array.isArray(result.progressEntries) ? result.progressEntries : []
         };
-        if (state.currentView === "cases-view" && state.expandedHimbauanId === caseId) renderCases();
+        clearSyncFailure("Case progress");
+        refreshExpandedCaseProgress(caseId);
       } catch (error) {
+        state.caseProgressById[caseId] = { completedTasks:[], progressEntries:[], error:error instanceof Error ? error.message : "Case progress could not be loaded." };
         markSyncFailure("Case progress", error);
+        refreshExpandedCaseProgress(caseId);
       }
     }
 
     async function addHimbauanProgress(caseId, entry) {
+      if (IS_OFFLINE_DEMO) {
+        const progress = state.caseProgressById[caseId] || { completedTasks:[], progressEntries:[] };
+        progress.progressEntries.unshift({ id:crypto.randomUUID(), entry, creatorName:state.selectedPic || "Demo PIC", createdAt:new Date().toISOString() });
+        state.caseProgressById[caseId] = progress;
+        refreshExpandedCaseProgress(caseId);
+        return;
+      }
       const response = await appFetch("/api/cases", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -9166,7 +9367,7 @@
       progress.progressEntries.unshift(result.progressEntry);
       state.caseProgressById[caseId] = progress;
       clearSyncFailure("Case progress");
-      if (state.currentView === "cases-view") renderCases();
+      refreshExpandedCaseProgress(caseId);
     }
 
     async function deleteCaseFromDatabase(record) {
@@ -9251,7 +9452,290 @@
       record.version = saved.version;
       if (acceptServerDerivedFields && !record.keepLocalDerivedFields) record.dueDate = saved.dueDate;
       clearSyncFailure(`Case ${record.clientName || "new row"}`);
+      return saved;
     }
+
+    const caseSheetPending = new WeakMap();
+    let caseSheetWriteRevision = 0;
+    let caseSheetStatus = "Changes save to the database when you leave a cell.";
+    const caseDefaultColumnWidths = { _number:44, _actions:38, clientName:220, letterNumber:110, subject:150, letterDate:118, receivedDate:118, dueDate:118, completionDate:118, sphpDate:118, deadline:88, taxYear:88, taxPic:104, accountingPic:104, inspectorPic:130, notes:160, completionNotes:160 };
+    let caseColumnDrag = null;
+
+    function caseColumnWidth(key, value) {
+      return Number.isFinite(Number(value)) && Number(value) > 0 ? Math.max(key.startsWith("_") ? 30 : 72, Math.min(640, Math.round(Number(value)))) : caseDefaultColumnWidths[key];
+    }
+
+    function applyCaseColumnWidths(root = document.getElementById("cases-view")) {
+      const table = root?.querySelector(".case-sheet");
+      if (!table) return;
+      const widths = state.caseColumnWidths[state.casesTab] || {};
+      const custom = Object.keys(widths).some(key => key in caseDefaultColumnWidths);
+      let total = 0;
+      table.querySelectorAll("col[data-case-column]").forEach(col => {
+        const key = col.dataset.caseColumn;
+        const width = caseColumnWidth(key, widths[key]);
+        col.style.width = custom ? `${width}px` : "";
+        total += width;
+        const handle = table.querySelector(`[data-case-resize="${key}"]`);
+        if (handle) handle.setAttribute("aria-valuenow", String(width));
+      });
+      table.style.width = custom ? `${total}px` : "";
+      table.style.minWidth = custom ? "0" : "";
+      const numberWidth = custom ? caseColumnWidth("_number", widths._number) : table.querySelector('[data-case-column="_number"]').getBoundingClientRect().width || 44;
+      table.style.setProperty("--case-number-width", `${numberWidth}px`);
+    }
+
+    function measuredCaseColumnWidths(table) {
+      return Object.fromEntries([...table.querySelectorAll("col[data-case-column]")].map(col => {
+        const key = col.dataset.caseColumn;
+        return [key, caseColumnWidth(key, col.getBoundingClientRect().width || state.caseColumnWidths[state.casesTab]?.[key])];
+      }));
+    }
+
+    window.addEventListener("storage", event => {
+      if (event.key !== DEMO_STORAGE_KEY || !event.newValue || caseColumnDrag) return;
+      try {
+        const incoming = JSON.parse(event.newValue)?.ui?.caseColumnWidths;
+        if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return;
+        const widths = {};
+        for (const category of ["himbauan", "pemeriksaan"]) {
+          const values = incoming[category];
+          if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+          widths[category] = Object.fromEntries(Object.entries(values).filter(([key]) => Object.hasOwn(caseDefaultColumnWidths, key)).map(([key, value]) => [key, caseColumnWidth(key, value)]));
+        }
+        state.caseColumnWidths = widths;
+        applyCaseColumnWidths();
+      } catch { /* Ignore malformed preferences from another tab. */ }
+    });
+
+    function resetCaseColumnWidth(handle) {
+      const key = handle.dataset.caseResize;
+      const widths = { ...(state.caseColumnWidths[state.casesTab] || {}) };
+      delete widths[key];
+      state.caseColumnWidths[state.casesTab] = widths;
+      applyCaseColumnWidths(); persistDemoState();
+    }
+
+    function finishCaseColumnResize(save) {
+      const drag = caseColumnDrag;
+      if (!drag) return;
+      caseColumnDrag = null;
+      document.body.classList.remove("case-column-resizing");
+      if (!save) state.caseColumnWidths[drag.category] = drag.before;
+      applyCaseColumnWidths();
+      if (save && drag.moved) persistDemoState();
+    }
+
+    document.addEventListener("pointerdown", event => {
+      const handle = event.target.closest?.("[data-case-resize]");
+      if (!handle || (event.button !== undefined && event.button !== 0)) return;
+      event.preventDefault();
+      const table = handle.closest("table"), key = handle.dataset.caseResize;
+      const widths = measuredCaseColumnWidths(table);
+      caseColumnDrag = { table, key, category:state.casesTab, pointerId:event.pointerId, x:event.clientX, widths, before:{ ...(state.caseColumnWidths[state.casesTab] || {}) }, moved:false };
+      document.body.classList.add("case-column-resizing");
+      handle.setPointerCapture?.(event.pointerId);
+    });
+    document.addEventListener("pointermove", event => {
+      const drag = caseColumnDrag;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (!drag.table.isConnected) { finishCaseColumnResize(false); return; }
+      const delta = event.clientX - drag.x;
+      if (!delta && !drag.moved) return;
+      drag.moved = true;
+      state.caseColumnWidths[drag.category] = { ...drag.widths, [drag.key]:caseColumnWidth(drag.key, drag.widths[drag.key] + delta) };
+      applyCaseColumnWidths();
+    });
+    document.addEventListener("pointerup", event => { if (caseColumnDrag?.pointerId === event.pointerId) finishCaseColumnResize(true); });
+    document.addEventListener("pointercancel", event => { if (caseColumnDrag?.pointerId === event.pointerId) finishCaseColumnResize(false); });
+    window.addEventListener("blur", () => finishCaseColumnResize(false));
+    document.addEventListener("dblclick", event => {
+      const handle = event.target.closest?.("[data-case-resize]");
+      if (handle) { event.preventDefault(); resetCaseColumnWidth(handle); }
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && caseColumnDrag) { event.preventDefault(); finishCaseColumnResize(false); return; }
+      const handle = event.target.closest?.("[data-case-resize]");
+      if (!handle || !["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === "Home") { resetCaseColumnWidth(handle); return; }
+      const key = handle.dataset.caseResize;
+      const widths = measuredCaseColumnWidths(handle.closest("table"));
+      widths[key] = caseColumnWidth(key, widths[key] + (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 24 : 8));
+      state.caseColumnWidths[state.casesTab] = widths;
+      applyCaseColumnWidths(); persistDemoState();
+    });
+
+    function caseSheetValue(record, field) {
+      if (!caseSheetPending.get(record)?.values.has(field) && field.endsWith("PicProfileId") && !record[field] && record[field.replace("ProfileId", "")]) return "legacy";
+      return caseSheetPending.get(record)?.values.get(field) ?? record[field] ?? "";
+    }
+
+    function caseSheetMessage(message, error = false) {
+      caseSheetStatus = message;
+      const status = document.getElementById("case-sheet-status");
+      if (status) { status.textContent = message; status.dataset.error = String(error); }
+    }
+
+    function refreshCaseSheetRecord(record, previousId = record.id, confirmedField = "") {
+      document.querySelectorAll("[data-case-sheet-row]").forEach(row => {
+        if (row.dataset.caseSheetRow !== previousId) return;
+        row.dataset.caseSheetRow = record.id;
+        row.querySelectorAll("[data-case-sheet-id]").forEach(cell => {
+          cell.dataset.caseSheetId = record.id;
+          const pending = caseSheetPending.get(record)?.values.has(cell.dataset.caseSheetField);
+          cell.disabled = Boolean(pending);
+          cell.toggleAttribute("data-saving", Boolean(pending));
+          if (cell.dataset.caseSheetField === confirmedField || cell !== document.activeElement || pending) cell.value = caseSheetValue(record, cell.dataset.caseSheetField);
+          if (cell.dataset.caseSheetField === "clientName") cell.readOnly = !record.id.startsWith("case-");
+        });
+        const toggle = row.querySelector("[data-toggle-himbauan-progress]");
+        if (toggle) toggle.dataset.toggleHimbauanProgress = record.id;
+        const archive = row.querySelector("[data-delete-case]");
+        if (archive) { archive.dataset.deleteCase = record.id; archive.disabled = Boolean(caseSheetPending.get(record)?.count); }
+        const due = row.querySelector('[data-case-derived="dueDate"]');
+        const deadline = row.querySelector('[data-case-derived="deadline"]');
+        if (due) due.textContent = record.dueDate || "-";
+        if (deadline) deadline.textContent = record.dueDate ? `${Math.ceil((new Date(`${record.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-";
+      });
+    }
+
+    function saveCaseSheetCell(cell) {
+      const record = taxCases.find(item => item.id === cell.dataset.caseSheetId);
+      const field = cell.dataset.caseSheetField;
+      const value = cell.value.trim();
+      if (!record || cell.disabled || cell.readOnly || value === String(caseSheetValue(record, field))) return;
+      if (record.id.startsWith("case-") && field !== "clientName" && !record.clientName && !caseSheetPending.get(record)?.count) {
+        record[field] = value;
+        caseSheetMessage("Draft only. Choose a Client Master client to save this row.");
+        return;
+      }
+      let pending = caseSheetPending.get(record);
+      if (!pending) { pending = { values: new Map(), count: 0, queue: Promise.resolve() }; caseSheetPending.set(record, pending); }
+      pending.values.set(field, value); pending.count++;
+      caseSheetWriteRevision++;
+      refreshCaseSheetRecord(record);
+      caseSheetMessage("Saving changes...");
+      // Serialize each case, not the whole sheet. Every request uses the last confirmed version.
+      pending.queue = pending.queue.then(async () => {
+        const previousId = record.id;
+        try {
+          const draft = structuredClone(record);
+          draft[field] = value;
+          let saved;
+          if (field.endsWith("PicProfileId")) {
+            if (!canReassignCasePic()) throw new Error("Only leadership can reassign a case PIC.");
+            const response = await appFetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: record.id, version: record.version, action: "assign-pic", picType: field === "taxPicProfileId" ? "tax" : "accounting", profileId: value || null }) }, "");
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "PIC could not be saved.");
+            saved = databaseCaseToDemo(result.data);
+          } else {
+            if (field === "clientName") {
+              const client = findCaseClient({ clientName: value });
+              if (!client || (!IS_OFFLINE_DEMO && !client.databaseId)) throw new Error("Choose a valid client from Client Master.");
+              Object.assign(draft, { clientId: client.id, databaseClientId: client.databaseId, taxPic: client.taxPic || "", accountingPic: client.accountingPic || "" });
+            }
+            saved = IS_OFFLINE_DEMO ? draft : await saveCaseToDatabase(draft, { showLoading: false });
+          }
+          Object.assign(record, saved);
+          caseSheetWriteRevision++;
+          if (state.selectedCaseId === previousId) state.selectedCaseId = record.id;
+          if (state.expandedHimbauanId === previousId) state.expandedHimbauanId = record.id;
+          caseSheetMessage(IS_OFFLINE_DEMO ? "Demo updated. No database changes." : "Saved to database.");
+        } catch (error) {
+          // This editor rolls back failed writes; there is no local change to retry globally.
+          clearSyncFailure(`Case ${record.clientName || (field === "clientName" ? value : "new row")}`);
+          caseSheetMessage(`Not saved: ${error instanceof Error ? error.message : "Please retry."} Your previous database value is retained.`, true);
+        } finally {
+          pending.values.delete(field); pending.count--;
+          refreshCaseSheetRecord(record, previousId, field);
+          if (previousId.startsWith("case-") && !record.id.startsWith("case-")) {
+            const editor = activeEditorSnapshot();
+            const rawValue = editor?.sheet ? document.activeElement.value : null;
+            renderCases();
+            if (state.expandedHimbauanId === record.id) loadCaseProgress(record.id);
+            if (editor?.sheet) {
+              if (editor.inlineId === previousId) editor.inlineId = record.id;
+              restoreActiveEditor(editor);
+              if (rawValue !== null && document.activeElement.matches?.("[data-case-sheet-field]")) document.activeElement.value = rawValue;
+            }
+          }
+        }
+      });
+      return pending.queue;
+    }
+
+    document.addEventListener("focusout", event => {
+      if (event.target.matches?.("input[data-case-sheet-field]")) saveCaseSheetCell(event.target);
+    });
+    document.addEventListener("change", event => {
+      const target = event.target;
+      if (target.matches?.("select[data-case-sheet-field]")) saveCaseSheetCell(target);
+      if (target.id === "case-acc-filter" || target.id === "case-tax-filter") {
+        state[target.id === "case-acc-filter" ? "caseAccFilter" : "caseTaxFilter"] = target.value;
+        renderCases(); persistDemoState();
+      }
+    });
+    document.addEventListener("paste", event => {
+      if (!event.target.matches?.("[data-case-sheet-field]")) return;
+      if (/[\t\r\n]/.test(event.clipboardData?.getData("text/plain") || "")) {
+        event.preventDefault();
+        caseSheetMessage("Paste one cell at a time. Multi-cell paste is not yet supported for Cases.", true);
+      }
+    });
+    document.addEventListener("click", event => {
+      const fullscreen = event.target.closest?.("[data-case-fullscreen]");
+      if (fullscreen) {
+        const active = document.activeElement;
+        if (active?.matches?.("input[data-case-sheet-field]")) saveCaseSheetCell(active);
+        if (taxCases.some(record => caseSheetPending.get(record)?.count)) {
+          event.preventDefault(); caseSheetMessage("Wait for the current case save to finish, then open Full Screen.", true); return;
+        }
+        if (!IS_OFFLINE_DEMO && taxCases.some(record => record.id.startsWith("case-"))) {
+          event.preventDefault(); caseSheetMessage("Finish or remove new case drafts before opening Full Screen.", true); return;
+        }
+        persistDemoState(); fullscreen.href = caseFullScreenUrl();
+        return;
+      }
+      const chooseClient = event.target.closest?.("[data-case-focus-client]");
+      if (chooseClient) {
+        const input = [...document.querySelectorAll('[data-case-sheet-field="clientName"]')].find(cell => cell.dataset.caseSheetId === chooseClient.dataset.caseFocusClient);
+        input?.focus(); input?.scrollIntoView({ block:"nearest", inline:"nearest" });
+        return;
+      }
+      const retryProgress = event.target.closest?.("[data-case-reload-progress]");
+      if (retryProgress) { retryProgress.disabled = true; loadCaseProgress(retryProgress.dataset.caseReloadProgress); return; }
+      const sort = event.target.closest?.("[data-case-sheet-sort]");
+      const reset = event.target.closest?.("[data-case-sheet-reset]");
+      if (!sort && !reset) return;
+      if (reset) {
+        state.caseSearch = ""; state.caseAccFilter = "all"; state.caseTaxFilter = "all";
+        state.caseSheetSort = { key: "clientName", direction: "asc" };
+      } else {
+        const key = sort.dataset.caseSheetSort;
+        state.caseSheetSort = { key, direction: state.caseSheetSort.key === key && state.caseSheetSort.direction === "asc" ? "desc" : "asc" };
+      }
+      renderCases(); persistDemoState();
+    });
+    document.addEventListener("keydown", event => {
+      const cell = event.target.closest?.("[data-case-sheet-field]");
+      if (!cell) return;
+      if (event.key === "Escape") {
+        const record = taxCases.find(item => item.id === cell.dataset.caseSheetId);
+        if (record) cell.value = caseSheetValue(record, cell.dataset.caseSheetField);
+        return;
+      }
+      if (!["Enter", "Tab", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      if (cell.tagName === "SELECT" && event.key.startsWith("Arrow")) return;
+      const rows = [...cell.closest("tbody").querySelectorAll("[data-case-sheet-row]")];
+      const row = cell.closest("tr"), cells = [...row.querySelectorAll("[data-case-sheet-field]")];
+      let r = rows.indexOf(row), c = cells.indexOf(cell);
+      if (event.key === "Tab") { c += event.shiftKey ? -1 : 1; if (c < 0) { r--; c = cells.length - 1; } if (c >= cells.length) { r++; c = 0; } }
+      else r += event.key === "ArrowUp" || (event.key === "Enter" && event.shiftKey) ? -1 : 1;
+      const next = rows[r]?.querySelectorAll("[data-case-sheet-field]")[c];
+      if (!next || next.disabled) return;
+      event.preventDefault(); next.focus();
+    });
 
     const inlineCaseSaveQueues = new WeakMap();
     const inlineCaseSaveTimers = new WeakMap();
@@ -9973,7 +10457,7 @@
               annualTaxRows
             },
             ui: {
-              currentView: state.currentView,
+              currentView: IS_CASES_FULLSCREEN ? (loadPersistedDemoState()?.ui?.currentView || persistedDemoState?.ui?.currentView || "cases-view") : state.currentView,
               appearance: state.appearance,
               selectedPic: state.selectedPic,
               username: state.username,
@@ -10009,6 +10493,10 @@
               profileClientSearch: state.profileClientSearch,
               proposalSearch: state.proposalSearch,
               caseSearch: state.caseSearch,
+              caseAccFilter: state.caseAccFilter,
+              caseTaxFilter: state.caseTaxFilter,
+              caseSheetSort: state.caseSheetSort,
+              caseColumnWidths: state.caseColumnWidths,
               profileTab: state.profileTab,
               myWork: myWorkDemoMode ? [] : state.myWork,
               selectedMyWorkId: state.selectedMyWorkId,
@@ -10129,6 +10617,7 @@
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
       for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
+      if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
     }
 
     function normalizeMobileWorkspaceView() {
@@ -10238,6 +10727,10 @@
         operationsTab: state.operationsTab,
         annualTeam: state.annualTeam,
         casesTab: state.casesTab,
+        caseSearch: state.caseSearch,
+        caseAccFilter: state.caseAccFilter,
+        caseTaxFilter: state.caseTaxFilter,
+        caseSheetSort: { ...state.caseSheetSort },
         selectedCaseId: state.selectedCaseId,
         clientManagementTab: state.clientManagementTab,
         activeProposalId: state.activeProposalId,
@@ -10276,6 +10769,10 @@
       state.operationsTab = snapshot.operationsTab || state.operationsTab;
       state.annualTeam = snapshot.annualTeam || state.annualTeam;
       state.casesTab = snapshot.casesTab || state.casesTab;
+      state.caseSearch = snapshot.caseSearch ?? state.caseSearch;
+      state.caseAccFilter = snapshot.caseAccFilter || "all";
+      state.caseTaxFilter = snapshot.caseTaxFilter || "all";
+      state.caseSheetSort = snapshot.caseSheetSort || { key: "clientName", direction: "asc" };
       state.selectedCaseId = snapshot.selectedCaseId || state.selectedCaseId;
       state.clientManagementTab = snapshot.clientManagementTab || state.clientManagementTab;
       state.activeProposalId = snapshot.activeProposalId || state.activeProposalId;
@@ -10302,7 +10799,9 @@
 
     function syncBrowserHistory(mode = "replace") {
       const method = mode === "push" ? "pushState" : "replaceState";
-      window.history[method](historySnapshot(), "", window.location.pathname + (IS_ANNUAL_SHEET_PREVIEW ? window.location.search : ""));
+      const caseUrl = new URL(window.location.href);
+      if (IS_CASES_FULLSCREEN) caseUrl.searchParams.set("casesTab", state.casesTab);
+      window.history[method](historySnapshot(), "", window.location.pathname + (IS_CASES_FULLSCREEN ? caseUrl.search : IS_ANNUAL_SHEET_PREVIEW ? window.location.search : ""));
     }
 
     function commitUi(mode = "push") {
@@ -10324,13 +10823,15 @@
       const active = document.activeElement;
       if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement)) return null;
       const id = active.id;
-      const inlineId = active.getAttribute("data-case-inline");
-      const field = active.getAttribute("data-case-field");
+      const sheet = active.hasAttribute("data-case-sheet-id");
+      const inlineId = active.getAttribute(sheet ? "data-case-sheet-id" : "data-case-inline");
+      const field = active.getAttribute(sheet ? "data-case-sheet-field" : "data-case-field");
       if (!id && !inlineId) return null;
       return {
         id,
         inlineId,
         field,
+        sheet,
         start: "selectionStart" in active ? active.selectionStart : null,
         end: "selectionEnd" in active ? active.selectionEnd : null
       };
@@ -10341,7 +10842,7 @@
       const escapedId = window.CSS?.escape ? window.CSS.escape(snapshot.id || "") : snapshot.id;
       const selector = snapshot.id
         ? `#${escapedId}`
-        : `[data-case-inline="${escapeAttr(snapshot.inlineId)}"][data-case-field="${escapeAttr(snapshot.field)}"]`;
+        : snapshot.sheet ? `[data-case-sheet-id="${escapeAttr(snapshot.inlineId)}"][data-case-sheet-field="${escapeAttr(snapshot.field)}"]` : `[data-case-inline="${escapeAttr(snapshot.inlineId)}"][data-case-field="${escapeAttr(snapshot.field)}"]`;
       const field = document.querySelector(selector);
       if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
       field.focus({ preventScroll: true });
@@ -10942,7 +11443,7 @@
         return;
       }
 
-      if (toggleHimbauanProgressTrigger && !target.closest("input, textarea, select, button")) {
+      if (toggleHimbauanProgressTrigger && (!target.closest("input, textarea, select, button") || toggleHimbauanProgressTrigger.matches("button.case-sheet-row-toggle"))) {
         const caseId = toggleHimbauanProgressTrigger.getAttribute("data-toggle-himbauan-progress");
         if (!caseId) return;
         if (state.expandedHimbauanId === caseId) {
@@ -10957,6 +11458,7 @@
       }
 
       if (addHimbauanProgressTrigger) {
+        if (addHimbauanProgressTrigger.disabled) return;
         const caseId = addHimbauanProgressTrigger.getAttribute("data-add-himbauan-progress");
         const entry = document.getElementById("himbauan-progress-entry")?.value.trim();
         if (!caseId || !entry) {
@@ -10964,10 +11466,13 @@
           return;
         }
         try {
+          addHimbauanProgressTrigger.disabled = true;
           await addHimbauanProgress(caseId, entry);
         } catch (error) {
           markSyncFailure("Case progress", error);
           window.alert(error instanceof Error ? error.message : "Case progress could not be saved.");
+        } finally {
+          if (addHimbauanProgressTrigger.isConnected) addHimbauanProgressTrigger.disabled = false;
         }
         return;
       }
@@ -10979,6 +11484,7 @@
       }
 
       if (newCaseTrigger) {
+        state.caseSearch = ""; state.caseAccFilter = "all"; state.caseTaxFilter = "all";
         const record = createCaseRecord();
         record.caseCategory = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
         record.caseType = record.caseCategory;
@@ -10986,13 +11492,16 @@
         state.casesTab = record.caseCategory === "Pemeriksaan" ? "pemeriksaan" : "himbauan";
         state.selectedCaseId = record.id;
         commitUi("push");
+        const clientCell = document.querySelector(`[data-case-sheet-id="${record.id}"][data-case-sheet-field="clientName"]`);
+        clientCell?.focus({ preventScroll: true });
+        clientCell?.scrollIntoView({ block: "nearest", inline: "nearest" });
         return;
       }
 
       if (deleteCaseTrigger) {
         const record = taxCases.find((item) => item.id === deleteCaseTrigger.getAttribute("data-delete-case"));
         if (!record) return;
-        if (!window.confirm(`Delete case for ${record.clientName}? It can be restored for three days.`)) return;
+        if (!window.confirm(`Archive case for ${record.clientName}? Its task links and history will be retained, and it can be restored from Archived Cases.`)) return;
         await deleteCaseFromDatabase(record);
         return;
       }
@@ -12192,6 +12701,15 @@
         });
         return;
       }
+      if (target?.id === "case-search") {
+        state.caseSearch = target.value;
+        const start = target.selectionStart;
+        renderCases(); persistDemoState();
+        const replacement = document.getElementById("case-search");
+        replacement?.focus({ preventScroll: true });
+        if (replacement && start !== null) replacement.setSelectionRange(start, start);
+        return;
+      }
       if (target && SEARCH_STATE_BY_INPUT[target.id]) scheduleAutoSearch(target);
       if (!target || !target.matches('[data-case-field="clientName"]')) return;
       const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
@@ -12977,25 +13495,32 @@
       finishStartup();
       startupOverlay?.setAttribute("aria-busy", "false");
       const remainingLoads = [];
-      if (initialView === "client-view") {
-        remainingLoads.push(loadSharedOperationalWorkspaces(true, "annual_accounting"), loadSharedOperationalWorkspaces(true, "annual_tax"));
-      } else if (initialOperationScope) {
-        for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
-          if (scope !== initialOperationScope) remainingLoads.push(loadSharedOperationalWorkspaces(true, scope));
-        }
-      } else remainingLoads.push(loadSharedOperationalWorkspaces(true));
-      if (!["cases-view", "my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedCases(true));
-      if (!["my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedMyWork(true));
-      if (initialView === "client-view") remainingLoads.push(loadSharedMyWork(true));
-      remainingLoads.push(loadStaffDirectory(true));
-      remainingLoads.push(loadSharedAnnouncements(true));
-      Promise.allSettled(remainingLoads).then(() => window.AnnualDashboardSheets?.preload(state.teamDivision));
+      if (IS_CASES_FULLSCREEN) {
+        remainingLoads.push(loadStaffDirectory(true), loadSharedMyWork(true));
+      } else {
+        if (initialView === "client-view") {
+          remainingLoads.push(loadSharedOperationalWorkspaces(true, "annual_accounting"), loadSharedOperationalWorkspaces(true, "annual_tax"));
+        } else if (initialOperationScope) {
+          for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
+            if (scope !== initialOperationScope) remainingLoads.push(loadSharedOperationalWorkspaces(true, scope));
+          }
+        } else remainingLoads.push(loadSharedOperationalWorkspaces(true));
+        if (!["cases-view", "my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedCases(true));
+        if (!["my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedMyWork(true));
+        if (initialView === "client-view") remainingLoads.push(loadSharedMyWork(true));
+        remainingLoads.push(loadStaffDirectory(true));
+        remainingLoads.push(loadSharedAnnouncements(true));
+      }
+      Promise.allSettled(remainingLoads).then(() => {
+        if (!IS_CASES_FULLSCREEN) window.AnnualDashboardSheets?.preload(state.teamDivision);
+      });
     }
     const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
     scheduleBackgroundLoad(() => refreshDatabaseStatus(true));
-    scheduleBackgroundLoad(() => loadPerformanceLedger(true));
+    if (!IS_CASES_FULLSCREEN) scheduleBackgroundLoad(() => loadPerformanceLedger(true));
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
+      if (IS_CASES_FULLSCREEN) return;
       loadSharedAnnouncements(true);
       loadPerformanceLedger(true);
     }, 120000);
@@ -13008,7 +13533,7 @@
       loadSharedClients(true);
       loadSharedCases(true);
       loadSharedMyWork(true);
-      loadSharedAnnouncements(true);
+      if (!IS_CASES_FULLSCREEN) loadSharedAnnouncements(true);
     });
     const myWorkMobileViewport = window.matchMedia("(max-width: 900px)");
     myWorkMobileViewport.addEventListener("change", (event) => {
@@ -13020,7 +13545,7 @@
       persistDemoState();
     });
     window.setTimeout(() => {
-      queueLatestFameAnnouncement();
+      if (!IS_CASES_FULLSCREEN) queueLatestFameAnnouncement();
     }, 280);
     syncBrowserHistory("replace");
     })().catch(error => { console.error("Workspace initialization failed", error); document.body.textContent = "Workspace could not be initialized. Please reload."; });

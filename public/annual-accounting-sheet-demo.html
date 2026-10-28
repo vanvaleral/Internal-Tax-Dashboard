@@ -17,6 +17,7 @@
     @media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}
   </style>
   <link id="sheet-styles" rel="stylesheet" href="./annual-accounting-sheet-demo.css" media="print" onload="this.media='all';this.dataset.ready='true';window.dispatchEvent(new Event('sheet-styles-ready'))" onerror="this.dataset.failed='true';window.dispatchEvent(new Event('sheet-styles-error'))" />
+  <link rel="stylesheet" href="./submenu-tabs.css" />
   <noscript><style>.sheet-booting .workbook{display:none}</style></noscript>
   <script src="./annual-tax-sheet-config.js" defer></script>
   <script src="./annual-sheet-live.js" defer></script>
@@ -48,7 +49,7 @@
 
     <section class="sheet-shell" aria-label="Annual accounting workbook">
       <div class="sheet-toolbar">
-        <div class="toolbar-group"><label class="year-control">Tax year <select id="year-select" aria-label="Tax year"><option>2026</option><option selected>2025</option><option>2024</option></select></label><span class="separator"></span><div class="view-tabs" role="tablist" aria-label="Annual accounting summary"><button data-view="summary" role="tab" aria-selected="true">Summary</button></div></div>
+        <div class="toolbar-group"><label class="year-control">Tax year <select id="year-select" aria-label="Tax year"><option>2026</option><option selected>2025</option><option>2024</option></select></label><span class="separator"></span><div class="view-tabs submenu-secondary" role="tablist" aria-label="Annual accounting summary"><button data-view="summary" role="tab" aria-selected="true">Summary</button></div></div>
         <div class="toolbar-group"><div class="add-client-actions"><button id="add-client-button" type="button" class="button primary" aria-expanded="false" aria-controls="add-client-menu"><span aria-hidden="true">+</span>Add Client<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button><div id="add-client-menu" class="add-client-menu" role="group" aria-label="Add client actions" hidden><button id="generate-button" type="button">Generate Clients</button><button id="outside-button" type="button">Add Ext Client</button></div></div><a id="fullscreen-button" class="button secondary" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M3 8l6-6m12 6-6-6M3 16l6 6m12-6-6 6"/></svg>Full Screen</a></div>
       </div>
       <section id="accounting-pic-progress" class="pic-progress-board is-collapsed" aria-labelledby="pic-progress-title" hidden>
@@ -68,7 +69,7 @@
         <div class="inline-row-actions"><button id="add-annual-rows" type="button" class="text-button">Add</button><input id="annual-row-count" type="number" min="1" max="250" value="10" aria-label="Number of rows to add" /><span>more rows at the bottom</span><span id="new-rows-status" role="status"></span><button id="clear-new-rows" type="button" class="text-button" hidden>Clear new rows</button><button id="save-new-rows" type="button" class="button primary" hidden>Save new rows</button></div>
         <p id="new-rows-error" class="new-rows-error" role="alert" hidden></p>
       </div>
-      <div class="sheet-bottom"><div class="status-tabs" role="tablist" aria-label="Work status"><button data-status="incomplete" role="tab" aria-selected="true"><span class="tab-dot"></span>Incomplete <span id="incomplete-count">0</span></button><button data-status="complete" role="tab">Complete <span id="complete-count">0</span></button><button data-status="deleted" role="tab">Deleted <span id="deleted-count">0</span></button></div><div class="sheet-status"><span id="visible-count">0 clients</span><span class="separator"></span><span id="selection-count">1 cell selected</span></div></div>
+      <div class="sheet-bottom"><div class="status-tabs submenu-secondary" role="tablist" aria-label="Work status"><button data-status="incomplete" role="tab" aria-selected="true"><span class="tab-dot"></span>Incomplete <span id="incomplete-count">0</span></button><button data-status="complete" role="tab">Complete <span id="complete-count">0</span></button><button data-status="deleted" role="tab">Deleted <span id="deleted-count">0</span></button></div><div class="sheet-status"><span id="visible-count">0 clients</span><span class="separator"></span><span id="selection-count">1 cell selected</span></div></div>
     </section>
     <footer id="sheet-hint" class="page-foot"><span><i></i><span id="save-status" role="status">Demo ready. Changes stay in this page only.</span></span><span><kbd>Click</kbd> dropdown <kbd>F2</kbd> edit <kbd>Drag</kbd> fill months <kbd>?</kbd> shortcuts</span></footer>
   </main>

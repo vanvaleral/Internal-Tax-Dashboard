@@ -44,6 +44,34 @@ test("authenticated dashboard startup opens from each primary menu using confirm
   }
 });
 
+test("shared submenu presentation preserves primary and nested navigation without business writes", async () => {
+  const d = await openDashboard("matrix-view", "monthly");
+  try {
+    assert.ok(d.w.document.querySelector('link[href="submenu-tabs.css"]'));
+    assert.equal(d.w.document.querySelectorAll('.workspace-operations .ops-mode-tabs button').length, 2);
+    assert.equal(d.w.document.querySelectorAll('.workspace-operations .submenu-secondary [data-operations-tab]').length, 4);
+    d.w.document.querySelector('[data-operations-tab="history"]').click();
+    assert.ok(d.w.document.querySelector('.submenu-secondary [data-operations-tab="history"].solid-btn'));
+    d.w.document.querySelector('[data-operations-mode="annual"]').click();
+    assert.equal(d.w.document.querySelectorAll('.annual-sheet-heading .submenu-secondary [data-annual-team]').length, 2);
+    d.w.document.querySelector('[data-annual-team="tax"]').click();
+    assert.ok(d.w.document.querySelector('.submenu-secondary [data-annual-team="tax"].solid-btn'));
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+  for (const [view, ui, selector, count] of [
+    ["dashboard-view", { managementTab:"workload" }, '[aria-label="PIC access status"] button', 2],
+    ["client-management-view", { clientManagementTab:"contracts" }, '[aria-label="Contract status"] button', 4],
+    ["profile-view", {}, '.workspace-tabs [data-profile-tab]', 3],
+    ["my-work-view", {}, '.my-work-tabs [data-my-work-tab]', 2]
+  ] as const) {
+    const page = await openDashboard(view, "monthly", ui);
+    try {
+      assert.equal(page.w.document.querySelectorAll(selector).length, count);
+      assert.deepEqual(page.warnings, []);
+    } finally { page.dom.window.close(); }
+  }
+});
+
 test("a saved Himbauan tab loads successfully instead of being misreported as a database failure", async () => {
   const d = await openDashboard("cases-view", "annual", { casesTab: "himbauan" });
   try {

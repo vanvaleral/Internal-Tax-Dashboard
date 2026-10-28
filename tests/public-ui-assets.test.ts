@@ -6,7 +6,7 @@ import ts from "typescript";
 import { isPublicUiAsset } from "../lib/public-ui-assets.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
-  for (const path of ["/favicon.svg", "/annual-sheet-live.js", "/annual-accounting-sheet-demo.css", "/vendor/purify.min.js", "/workspace-sync.js", "/images/lmats-logo-official.png"]) {
+  for (const path of ["/favicon.svg", "/annual-sheet-live.js", "/annual-accounting-sheet-demo.css", "/submenu-tabs.css", "/vendor/purify.min.js", "/workspace-sync.js", "/images/lmats-logo-official.png"]) {
     assert.ok(existsSync(new URL(`../public${path}`, import.meta.url)));
     assert.equal(isPublicUiAsset(path, "GET"), true);
     assert.equal(isPublicUiAsset(path, "HEAD"), true);

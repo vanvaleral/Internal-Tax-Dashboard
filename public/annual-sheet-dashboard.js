@@ -31,7 +31,7 @@
       && !(navigator.deviceMemory && navigator.deviceMemory <= 2);
   }
   function prefetchFiles(team) {
-    const files = [["annual-accounting-sheet-demo.css", "style"], ["annual-sheet-dashboard.css", "style"], ["annual-sheet-live.js", "script"], ["annual-accounting-sheet-demo.js", "script"]];
+    const files = [["annual-accounting-sheet-demo.css", "style"], ["submenu-tabs.css", "style"], ["annual-sheet-dashboard.css", "style"], ["annual-sheet-live.js", "script"], ["annual-accounting-sheet-demo.js", "script"]];
     if (team === "tax") files.push(["annual-tax-sheet-config.js", "script"]);
     for (const [href, as] of files) {
       if (document.querySelector(`link[data-annual-prefetch="${href}"]`)) continue;
@@ -124,7 +124,7 @@
     const team = state.annualTeam === "tax" ? "tax" : "accounting";
     ensure(team);
     const header = document.createElement("section"); header.className = "panel annual-sheet-heading";
-    header.innerHTML = `<div class="toolbar"><div class="ops-mode-tabs"><button class="ghost-btn" data-operations-mode="monthly">Monthly Compliance</button><button class="solid-btn" data-operations-mode="annual">Annual Compliance</button></div></div><div class="toolbar" style="margin-top:10px"><div class="workspace-tabs"><button class="${team === "accounting" ? "solid-btn" : "ghost-btn"}" data-annual-team="accounting">Accounting Team</button><button class="${team === "tax" ? "solid-btn" : "ghost-btn"}" data-annual-team="tax">Tax Team</button></div><span class="annual-sheet-connected">Shared annual workspace</span></div>`;
+    header.innerHTML = `<div class="toolbar"><div class="ops-mode-tabs"><button class="ghost-btn" data-operations-mode="monthly">Monthly Compliance</button><button class="solid-btn" data-operations-mode="annual">Annual Compliance</button></div></div><div class="toolbar submenu-secondary-row"><div class="workspace-tabs submenu-secondary" role="group" aria-label="Annual compliance team"><button class="${team === "accounting" ? "solid-btn" : "ghost-btn"}" data-annual-team="accounting">Accounting Team</button><button class="${team === "tax" ? "solid-btn" : "ghost-btn"}" data-annual-team="tax">Tax Team</button></div><span class="annual-sheet-connected">Shared annual workspace</span></div>`;
     root.replaceChildren(header); syncVisibility(state);
   }
   window.addEventListener("message", event => {

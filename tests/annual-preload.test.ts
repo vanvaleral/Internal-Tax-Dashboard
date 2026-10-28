@@ -54,7 +54,8 @@ test("annual idle preload warms only the preferred team, never creates a hidden 
       assert.equal(d.requests[0].init.headers["x-workspace-user"], "user-1");
       assert.equal(d.requests[0].init.cache, "no-store");
       assert.equal(d.requests[0].init.credentials, "same-origin");
-      assert.equal(d.w.document.querySelectorAll('link[rel="prefetch"]').length, team === "tax" ? 5 : 4);
+      assert.equal(d.w.document.querySelectorAll('link[rel="prefetch"]').length, team === "tax" ? 6 : 5);
+      assert.ok(d.w.document.querySelector('link[rel="prefetch"][data-annual-prefetch="submenu-tabs.css"]'));
       const frame = d.open(team);
       assert.equal(await d.api.takePreload(team, "different-user", frame.contentWindow), null);
       assert.equal(await d.api.takePreload(team, "user-1", d.w), null, "unregistered windows cannot consume the snapshot");
@@ -169,9 +170,9 @@ test("a cancelled annual preload handoff cannot replace a newer confirmed transp
   } finally { dom.window.close(); }
 });
 
-test("dashboard schedules annual speculation only after startup data and clears it on successful logout", () => {
+test("dashboard schedules annual speculation after startup outside standalone Cases and clears it on successful logout", () => {
   const html = readFileSync(new URL("../public/demo.html", import.meta.url), "utf8");
-  assert.match(html, /Promise\.allSettled\(remainingLoads\)\.then\(\(\) => window\.AnnualDashboardSheets\?\.preload\(state\.teamDivision\)\)/);
+  assert.match(html, /Promise\.allSettled\(remainingLoads\)\.then\(\(\) => \{\s*if \(!IS_CASES_FULLSCREEN\) window\.AnnualDashboardSheets\?\.preload\(state\.teamDivision\);\s*\}\)/);
   const logout = html.slice(html.indexOf("if (logoutTrigger) {"), html.indexOf("if (openAppearanceSettingsTrigger)"));
   assert.ok(logout.indexOf("if (!response.ok)") < logout.indexOf("AnnualDashboardSheets?.clear()"));
   assert.ok(logout.indexOf("AnnualDashboardSheets?.clear()") < logout.indexOf('location.assign("/login")'));
