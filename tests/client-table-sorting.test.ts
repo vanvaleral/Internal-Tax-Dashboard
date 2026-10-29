@@ -38,3 +38,17 @@ test("both tables expose clickable sort controls without sorting the numbering c
   assert.match(demo, /const activeClientRows = sortClientMasterRows\(\[\.\.\.managedClients\]\.filter/);
   assert.match(demo, /return sortClientMasterRows\(activeClientMasterRecords\(\)/);
 });
+
+test("Allocation sorting recognizes explicit empty PIC drafts as pending removals", () => {
+  assert.ok(source);
+  const state = { sorts:{ allocation:{ key:"status", dir:"asc" } }, allocationDrafts:{ first:{ nextAccPic:"" } } };
+  const sort = vm.runInNewContext(`${source}; sortClientMasterRows`, {
+    state, splitBusinessName:(client: any) => ({ name:client.name, form:"Individual" }),
+    activeObligationKeys:() => [], compareText:(a: any, b: any) => String(a || "").localeCompare(String(b || ""))
+  });
+  const rows = [
+    { id:"second", name:"Alpha", taxPic:"Bagus", accountingPic:"", serviceFee:0, annualFee:0 },
+    { id:"first", name:"Beta", taxPic:"Bagus", accountingPic:"Ivan", serviceFee:0, annualFee:0 }
+  ];
+  assert.equal(sort(rows, "allocation")[0].id, "first");
+});

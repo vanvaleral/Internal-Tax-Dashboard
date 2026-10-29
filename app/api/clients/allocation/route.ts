@@ -18,6 +18,11 @@ export async function POST(request: Request) {
   const changes: AllocationChange[] = Array.isArray(body.changes) ? body.changes : [];
   if (!Number.isInteger(allocationYear) || allocationYear < 2000 || allocationYear > 2200) return NextResponse.json({ error: "Allocation year is invalid." }, { status: 400 });
   if (!changes.length) return NextResponse.json({ error: "No allocation changes supplied." }, { status: 400 });
+  if (changes.some(change => !change || typeof change !== "object" || Array.isArray(change)
+    || !["nextTaxPic", "nextAccPic"].every(field => Object.hasOwn(change, field)
+      && (change[field as keyof AllocationChange] === null || typeof change[field as keyof AllocationChange] === "string")))) {
+    return NextResponse.json({ error: "Supply both PIC fields explicitly. Use an empty string or null for No PIC." }, { status: 400 });
+  }
 
   const codes = [...new Set(changes.map((change) => asSafeText(change.clientCode)).filter(Boolean))];
   const [clientsResult, staffResult] = await Promise.all([
@@ -44,12 +49,12 @@ export async function POST(request: Request) {
     const taxIds = resolveStaff(taxName);
     const accIds = resolveStaff(accName);
     if (!clientsByCode.has(clientCode)) errors.push(`${clientCode || "Unknown client"}: client was not found.`);
-    if (taxIds.length !== 1) errors.push(`${clientCode}: Tax PIC must match one active staff profile.`);
-    if (accIds.length !== 1) errors.push(`${clientCode}: ACC PIC must match one active staff profile.`);
+    if (taxName && taxIds.length !== 1) errors.push(`${clientCode}: Tax PIC must match one active staff profile.`);
+    if (accName && accIds.length !== 1) errors.push(`${clientCode}: ACC PIC must match one active staff profile.`);
     return {
       client_id: clientsByCode.get(clientCode),
-      tax_pic_profile_id: taxIds[0], tax_pic_name: staffLabelById.get(taxIds[0]) || taxName,
-      accounting_pic_profile_id: accIds[0], accounting_pic_name: staffLabelById.get(accIds[0]) || accName
+      tax_pic_profile_id: taxIds[0] || null, tax_pic_name: taxName ? staffLabelById.get(taxIds[0]) || taxName : null,
+      accounting_pic_profile_id: accIds[0] || null, accounting_pic_name: accName ? staffLabelById.get(accIds[0]) || accName : null
     };
   });
   if (errors.length) return NextResponse.json({ error: "Allocation validation failed.", details: errors }, { status: 422 });

@@ -5603,10 +5603,10 @@
           npwp: client.npwp,
           taxPic: client.taxPic,
           accPic: client.accountingPic,
-          nextTaxPic: draft.nextTaxPic || client.taxPic,
-          nextAccPic: draft.nextAccPic || client.accountingPic,
+          nextTaxPic: draft.nextTaxPic ?? client.taxPic ?? "",
+          nextAccPic: draft.nextAccPic ?? client.accountingPic ?? "",
           industry: client.industry,
-          status: scope === "allocation" ? (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic) || (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) ? "Pending Update" : "Unchanged" : client.clientStatus,
+          status: scope === "allocation" ? (draft.nextTaxPic ?? client.taxPic ?? "") !== (client.taxPic || "") || (draft.nextAccPic ?? client.accountingPic ?? "") !== (client.accountingPic || "") ? "Pending Update" : "Unchanged" : client.clientStatus,
           obligations: activeObligationKeys(client).length,
           monthlyFee: Number(client.serviceFee || 0),
           annualFee: Number(client.annualFee || 0)
@@ -5993,10 +5993,10 @@
         .filter((client) => hasLeadershipAccess() || client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic)
         .filter((client) => {
           const draft = state.allocationDrafts[client.id] || {};
-          const changed = (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) || (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic);
+          const changed = (draft.nextAccPic ?? client.accountingPic ?? "") !== (client.accountingPic || "") || (draft.nextTaxPic ?? client.taxPic ?? "") !== (client.taxPic || "");
           if (state.allocationShowChangedOnly && !changed) return false;
-          if (state.allocationAccFilter !== "all" && client.accountingPic !== state.allocationAccFilter) return false;
-          if (state.allocationTaxFilter !== "all" && client.taxPic !== state.allocationTaxFilter) return false;
+          if (state.allocationAccFilter === "__no_pic__" ? Boolean(client.accountingPic) : state.allocationAccFilter !== "all" && client.accountingPic !== state.allocationAccFilter) return false;
+          if (state.allocationTaxFilter === "__no_pic__" ? Boolean(client.taxPic) : state.allocationTaxFilter !== "all" && client.taxPic !== state.allocationTaxFilter) return false;
           if (!query) return true;
           return [
             client.clientCode,
@@ -6051,10 +6051,10 @@
                 ${state.allocationLastReport.map((row) => `
                   <tr>
                     <td>${row.clientName}</td>
-                    <td>${row.previousAccPic}</td>
-                    <td>${row.nextAccPic}</td>
-                    <td>${row.previousTaxPic}</td>
-                    <td>${row.nextTaxPic}</td>
+                    <td>${escapeHtml(row.previousAccPic || "No PIC")}</td>
+                    <td>${escapeHtml(row.nextAccPic || "No PIC")}</td>
+                    <td>${escapeHtml(row.previousTaxPic || "No PIC")}</td>
+                    <td>${escapeHtml(row.nextTaxPic || "No PIC")}</td>
                   </tr>
                 `).join("")}
               </tbody>
@@ -7058,6 +7058,11 @@
       `);
     }
 
+    function allocationPicOptions(people, selected) {
+      const choices = selected && !people.includes(selected) ? [...people, selected] : people;
+      return `<option value="" ${!selected ? "selected" : ""}>No PIC</option>${optionsMarkup(choices, selected)}`;
+    }
+
     function renderAllocation(rootOverride = null) {
       const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
@@ -7068,7 +7073,7 @@
       const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
       const pendingChanges = rows.filter((client) => {
         const draft = state.allocationDrafts[client.id] || {};
-        return (draft.nextAccPic && draft.nextAccPic !== client.accountingPic) || (draft.nextTaxPic && draft.nextTaxPic !== client.taxPic);
+        return (draft.nextAccPic ?? client.accountingPic ?? "") !== (client.accountingPic || "") || (draft.nextTaxPic ?? client.taxPic ?? "") !== (client.taxPic || "");
       }).length;
 
       root.innerHTML = safeHtml(`
@@ -7083,8 +7088,8 @@
           <section class="panel">
             <div class="toolbar compact-toolbar">
               <div class="toolbar-left">
-                <select id="allocation-acc-filter" class="filter-select" aria-label="Filter by ACC PIC"><option value="all">All ACC PIC</option>${allocationAccOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationAccFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
-                <select id="allocation-tax-filter" class="filter-select" aria-label="Filter by Tax PIC"><option value="all">All Tax PIC</option>${allocationTaxOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationTaxFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
+                <select id="allocation-acc-filter" class="filter-select" aria-label="Filter by ACC PIC"><option value="all">All ACC PIC</option><option value="__no_pic__" ${state.allocationAccFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationAccOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationAccFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
+                <select id="allocation-tax-filter" class="filter-select" aria-label="Filter by Tax PIC"><option value="all">All Tax PIC</option><option value="__no_pic__" ${state.allocationTaxFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationTaxOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationTaxFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <input id="allocation-query" class="filter-input" type="text" placeholder="Search client, code, current PIC, next PIC" value="${state.allocationQuery}" />
               </div>
               <div class="toolbar-right">
@@ -7113,9 +7118,9 @@
                 <tbody>
                   ${virtualSpacer(9, allocationWindow.top)}${allocationWindow.rows.map((client, index) => {
                     const draft = state.allocationDrafts[client.id] || {};
-                    const nextAcc = draft.nextAccPic || client.accountingPic;
-                    const nextTax = draft.nextTaxPic || client.taxPic;
-                    const changed = nextAcc !== client.accountingPic || nextTax !== client.taxPic;
+                    const nextAcc = draft.nextAccPic ?? client.accountingPic ?? "";
+                    const nextTax = draft.nextTaxPic ?? client.taxPic ?? "";
+                    const changed = nextAcc !== (client.accountingPic || "") || nextTax !== (client.taxPic || "");
                     const identity = splitBusinessName(client);
                     return `
                       <tr>
@@ -7123,18 +7128,16 @@
                         <td>${escapeHtml(client.clientCode)}</td>
                         <td>${escapeHtml(identity.form || "Individual")}</td>
                         <td>${escapeHtml(identity.name)}</td>
-                        <td>${escapeHtml(client.accountingPic)}</td>
+                        <td>${escapeHtml(client.accountingPic || "No PIC")}</td>
                         <td>
                           <select class="inline-select" data-allocation-acc="${client.id}">
-                            ${nextAcc ? "" : `<option value="">No PIC yet</option>`}
-                            ${optionsMarkup(ACC_PICS, nextAcc)}
+                            ${allocationPicOptions(ACC_PICS, nextAcc)}
                           </select>
                         </td>
-                        <td>${escapeHtml(client.taxPic)}</td>
+                        <td>${escapeHtml(client.taxPic || "No PIC")}</td>
                         <td>
                           <select class="inline-select" data-allocation-tax="${client.id}">
-                            ${nextTax ? "" : `<option value="">No PIC yet</option>`}
-                            ${optionsMarkup(TAX_PICS, nextTax)}
+                            ${allocationPicOptions(TAX_PICS, nextTax)}
                           </select>
                         </td>
                         <td><span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending Update" : "Unchanged"}</span></td>
@@ -7149,9 +7152,9 @@
               <div class="list-grid">
                 ${rows.map((client, index) => {
                   const draft = state.allocationDrafts[client.id] || {};
-                  const nextAcc = draft.nextAccPic || client.accountingPic;
-                  const nextTax = draft.nextTaxPic || client.taxPic;
-                  const changed = nextAcc !== client.accountingPic || nextTax !== client.taxPic;
+                  const nextAcc = draft.nextAccPic ?? client.accountingPic ?? "";
+                  const nextTax = draft.nextTaxPic ?? client.taxPic ?? "";
+                  const changed = nextAcc !== (client.accountingPic || "") || nextTax !== (client.taxPic || "");
                   const identity = splitBusinessName(client);
                   return `
                     <div class="mobile-card">
@@ -7163,12 +7166,12 @@
                         <span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending" : "Stable"}</span>
                       </div>
                       <div class="detail-grid-2">
-                        <div class="mobile-meta-box"><div class="eyebrow">ACC PIC Lama</div><strong>${client.accountingPic}</strong></div>
-                        <div class="mobile-meta-box"><div class="eyebrow">TAX PIC Lama</div><strong>${client.taxPic}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">ACC PIC Lama</div><strong>${escapeHtml(client.accountingPic || "No PIC")}</strong></div>
+                        <div class="mobile-meta-box"><div class="eyebrow">TAX PIC Lama</div><strong>${escapeHtml(client.taxPic || "No PIC")}</strong></div>
                       </div>
                       <div class="detail-grid-2">
-                        <select class="field" data-allocation-acc="${client.id}">${nextAcc ? "" : `<option value="">No PIC yet</option>`}${optionsMarkup(ACC_PICS, nextAcc)}</select>
-                        <select class="field" data-allocation-tax="${client.id}">${nextTax ? "" : `<option value="">No PIC yet</option>`}${optionsMarkup(TAX_PICS, nextTax)}</select>
+                        <select class="field" data-allocation-acc="${client.id}">${allocationPicOptions(ACC_PICS, nextAcc)}</select>
+                        <select class="field" data-allocation-tax="${client.id}">${allocationPicOptions(TAX_PICS, nextTax)}</select>
                       </div>
                     </div>
                   `;
@@ -7199,10 +7202,10 @@
                   ${state.allocationLastReport.map((row) => `
                     <tr>
                       <td>${row.clientName}</td>
-                      <td>${row.previousAccPic}</td>
-                      <td>${row.nextAccPic}</td>
-                      <td>${row.previousTaxPic}</td>
-                      <td>${row.nextTaxPic}</td>
+                      <td>${escapeHtml(row.previousAccPic || "No PIC")}</td>
+                      <td>${escapeHtml(row.nextAccPic || "No PIC")}</td>
+                      <td>${escapeHtml(row.previousTaxPic || "No PIC")}</td>
+                      <td>${escapeHtml(row.nextTaxPic || "No PIC")}</td>
                     </tr>
                   `).join("") || `<tr><td colspan="5"><div class="empty-state">No allocation report generated yet.</div></td></tr>`}
                 </tbody>
@@ -10446,8 +10449,8 @@
         });
         Object.values(state.allocationDrafts).forEach((draft) => {
           if (!draft || typeof draft !== "object") return;
-          draft.nextAccPic = normalizePic(draft.nextAccPic);
-          draft.nextTaxPic = normalizePic(draft.nextTaxPic);
+          if (Object.hasOwn(draft, "nextAccPic")) draft.nextAccPic = normalizePic(draft.nextAccPic);
+          if (Object.hasOwn(draft, "nextTaxPic")) draft.nextTaxPic = normalizePic(draft.nextTaxPic);
         });
         syncOperationalPicLists(staff);
         staffDirectoryLoaded = true;
@@ -12783,9 +12786,9 @@
         clientMasterClients.forEach((client) => {
           const draft = state.allocationDrafts[client.id];
           if (!draft) return;
-          const nextAcc = draft.nextAccPic || client.accountingPic;
-          const nextTax = draft.nextTaxPic || client.taxPic;
-          if (nextAcc === client.accountingPic && nextTax === client.taxPic) return;
+          const nextAcc = draft.nextAccPic ?? client.accountingPic ?? "";
+          const nextTax = draft.nextTaxPic ?? client.taxPic ?? "";
+          if (nextAcc === (client.accountingPic || "") && nextTax === (client.taxPic || "")) return;
           report.push({
             clientId: client.id,
             clientCode: client.clientCode,
@@ -13466,7 +13469,7 @@
         if (!client) return;
         const draft = state.allocationDrafts[clientId] || {};
         draft.nextAccPic = target.value;
-        if (!draft.nextTaxPic) draft.nextTaxPic = client.taxPic;
+        if (!Object.hasOwn(draft, "nextTaxPic")) draft.nextTaxPic = client.taxPic || "";
         state.allocationDrafts[clientId] = draft;
         commitUi("replace");
         return;
@@ -13478,7 +13481,7 @@
         if (!client) return;
         const draft = state.allocationDrafts[clientId] || {};
         draft.nextTaxPic = target.value;
-        if (!draft.nextAccPic) draft.nextAccPic = client.accountingPic;
+        if (!Object.hasOwn(draft, "nextAccPic")) draft.nextAccPic = client.accountingPic || "";
         state.allocationDrafts[clientId] = draft;
         commitUi("replace");
         return;
