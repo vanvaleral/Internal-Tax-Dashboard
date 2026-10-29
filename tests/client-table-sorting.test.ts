@@ -52,3 +52,26 @@ test("Allocation sorting recognizes explicit empty PIC drafts as pending removal
   ];
   assert.equal(sort(rows, "allocation")[0].id, "first");
 });
+
+test("Allocation entry order uses original creation dates, numeric code ties and keeps unknown dates last", () => {
+  assert.ok(source);
+  const state = { sorts:{ allocation:{ key:"createdAt", dir:"asc" } }, allocationDrafts:{} };
+  const sort = vm.runInNewContext(`${source}; sortClientMasterRows`, {
+    state, splitBusinessName:(client: any) => ({ name:client.name, form:client.form }),
+    activeObligationKeys:() => [], compareText:(a: any, b: any) => String(a || "").localeCompare(String(b || ""))
+  });
+  const rows = [
+    { id:"new", clientCode:"CL-3", name:"Alpha", form:"BUT", createdAt:"2026-10-20T08:00:00Z", updatedAt:"2026-10-20T08:00:00Z" },
+    { id:"bulk10", clientCode:"CL-10", name:"Beta", form:"CV", createdAt:"2026-10-10T08:00:00Z", updatedAt:"2026-10-20T08:00:00Z" },
+    { id:"missing", clientCode:"CL-20", name:"First alphabetically", form:"BUT", createdAt:"", updatedAt:"2026-09-01T08:00:00Z" },
+    { id:"bulk2", clientCode:"CL-2", name:"Zulu", form:"PT", createdAt:"2026-10-10T16:00:00+08:00", updatedAt:"2026-10-29T08:00:00Z" },
+    { id:"invalid", clientCode:"CL-21", name:"Invalid", form:"PT", createdAt:"unknown", updatedAt:"2026-01-01T00:00:00Z" }
+  ];
+  const original = rows.map(row => row.id).join(",");
+  assert.equal(sort(rows, "allocation").map((row: any) => row.id).join(","), "bulk2,bulk10,new,missing,invalid");
+  rows[3].updatedAt = "2026-12-31T00:00:00Z";
+  assert.equal(sort(rows, "allocation")[0].id, "bulk2");
+  state.sorts.allocation.dir = "desc";
+  assert.equal(sort(rows, "allocation").map((row: any) => row.id).join(","), "new,bulk10,bulk2,invalid,missing");
+  assert.equal(rows.map(row => row.id).join(","), original);
+});

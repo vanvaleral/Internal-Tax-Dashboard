@@ -2510,6 +2510,13 @@
     .compact-toolbar {
       gap: 10px;
     }
+    .allocation-bulk-toolbar { padding:10px; margin:0 0 10px; border:1px solid var(--line); border-radius:10px; background:var(--accent-soft); }
+    .allocation-check-cell { width:36px; min-width:36px; text-align:center; }
+    [data-allocation-row][data-selected="true"] > td { background:var(--accent-soft); }
+    .mobile-card[data-allocation-row][data-selected="true"] { border-color:var(--accent); background:var(--accent-soft); }
+    .allocation-card-select { display:flex; align-items:center; gap:8px; }
+    .allocation-mobile-select { margin-bottom:10px; }
+    [data-allocation-select], [data-allocation-select-all] { accent-color:var(--accent); cursor:pointer; }
 
     .compact-toolbar .toolbar-left,
     .compact-toolbar .toolbar-right {
@@ -4692,6 +4699,9 @@
       allocationYear: Number(persistedDemoState?.ui?.allocationYear || new Date().getFullYear()),
       allocationShowChangedOnly: typeof persistedDemoState?.ui?.allocationShowChangedOnly === "boolean" ? persistedDemoState.ui.allocationShowChangedOnly : false,
       allocationDrafts: persistedDemoState?.ui?.allocationDrafts || {},
+      allocationDraftEpoch: persistedDemoState?.ui?.allocationDraftEpoch || crypto.randomUUID(),
+      allocationSelection: [],
+      allocationApplying: false,
       allocationLastReport: persistedDemoState?.ui?.allocationLastReport || [],
       mobileScopeOpen: false,
       autoHideCompleted: typeof persistedDemoState?.ui?.autoHideCompleted === "boolean" ? persistedDemoState.ui.autoHideCompleted : true,
@@ -5614,6 +5624,13 @@
         return fields[field] ?? "";
       };
       return [...rows].sort((left, right) => {
+        if (key === "createdAt") {
+          const a = Date.parse(left.createdAt), b = Date.parse(right.createdAt);
+          const knownA = Number.isFinite(a), knownB = Number.isFinite(b);
+          if (knownA !== knownB) return knownA ? -1 : 1;
+          if (knownA && a !== b) return (a - b) * direction;
+          return (String(left.clientCode || "").localeCompare(String(right.clientCode || ""), "id", { numeric:true }) || String(left.id || "").localeCompare(String(right.id || ""))) * direction;
+        }
         const a = value(left, key);
         const b = value(right, key);
         const result = typeof a === "number" && typeof b === "number" ? a - b : compareText(a, b);
@@ -7066,11 +7083,18 @@
     function renderAllocation(rootOverride = null) {
       const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
+      const canEdit = hasLeadershipAccess() && !state.allocationApplying;
+      const visibleIds = new Set(rows.map(client => client.id));
+      state.allocationSelection = hasLeadershipAccess() ? [...new Set(state.allocationSelection)].filter(id => visibleIds.has(id)) : [];
+      const selectedIds = new Set(state.allocationSelection);
+      const selectAll = `<input type="checkbox" data-allocation-select-all aria-label="Select all visible clients" title="Select all visible clients" ${rows.length && selectedIds.size === rows.length ? "checked" : ""} ${!canEdit || !rows.length ? "disabled" : ""} />`;
+      const hasDrafts = Object.keys(state.allocationDrafts).length > 0;
       const activeAllocationClients = activeClientMasterRecords();
       const allocationAccOptions = [...new Set([...ACC_PICS, ...activeAllocationClients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
       const allocationTaxOptions = [...new Set([...TAX_PICS, ...activeAllocationClients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
       const allocationWindow = windowedRows(rows, "allocation-clients", 48);
       const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
+      const allocationOrder = state.sorts.allocation.key === "createdAt" ? (state.sorts.allocation.dir === "asc" ? "oldest" : "newest") : state.sorts.allocation.key === "form" && state.sorts.allocation.dir === "asc" ? "form" : "column";
       const pendingChanges = rows.filter((client) => {
         const draft = state.allocationDrafts[client.id] || {};
         return (draft.nextAccPic ?? client.accountingPic ?? "") !== (client.accountingPic || "") || (draft.nextTaxPic ?? client.taxPic ?? "") !== (client.taxPic || "");
@@ -7090,20 +7114,26 @@
               <div class="toolbar-left">
                 <select id="allocation-acc-filter" class="filter-select" aria-label="Filter by ACC PIC"><option value="all">All ACC PIC</option><option value="__no_pic__" ${state.allocationAccFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationAccOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationAccFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <select id="allocation-tax-filter" class="filter-select" aria-label="Filter by Tax PIC"><option value="all">All Tax PIC</option><option value="__no_pic__" ${state.allocationTaxFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationTaxOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationTaxFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
+                <select id="allocation-order" class="filter-select" aria-label="Allocation row order" title="Date added means the original Client Master creation date, not the latest PIC update."><option value="form" ${allocationOrder === "form" ? "selected" : ""}>Company form / name</option><option value="oldest" ${allocationOrder === "oldest" ? "selected" : ""}>Oldest added first</option><option value="newest" ${allocationOrder === "newest" ? "selected" : ""}>Newest added first</option>${allocationOrder === "column" ? '<option value="column" selected disabled>Column sort</option>' : ""}</select>
                 <input id="allocation-query" class="filter-input" type="text" placeholder="Search client, code, current PIC, next PIC" value="${state.allocationQuery}" />
               </div>
               <div class="toolbar-right">
-                <label class="pill neutral">Allocation year <input id="allocation-year" type="number" min="2000" max="2200" value="${state.allocationYear}" style="width:72px" /></label>
+                <label class="pill neutral">Allocation year <input id="allocation-year" type="number" min="2000" max="2200" value="${state.allocationYear}" style="width:72px" ${state.allocationApplying ? "disabled" : ""} /></label>
                 <label class="pill neutral"><input id="allocation-changed-only" type="checkbox" ${state.allocationShowChangedOnly ? "checked" : ""} /> Changed only</label>
                 <button class="ghost-btn" data-print-allocation-report="yes">Print Latest Report</button>
-                <button class="solid-btn" data-apply-allocation="yes">Apply PIC Update</button>
+                <button class="ghost-btn" data-reset-allocation-drafts title="Discard all unsaved PIC drafts, including clients hidden by filters" ${!canEdit || !hasDrafts ? "disabled" : ""}>Reset unsaved</button>
+                <button class="solid-btn" data-apply-allocation="yes" title="Save all pending PIC changes, including clients hidden by filters" ${!canEdit ? "disabled" : ""}>${state.allocationApplying ? "Saving..." : "Apply PIC Update"}</button>
               </div>
             </div>
+
+            ${isMobileLayout ? `<label class="pill neutral allocation-mobile-select">${selectAll} Select visible clients</label>` : ""}
+            ${selectedIds.size ? `<div class="toolbar compact-toolbar allocation-bulk-toolbar" aria-label="Bulk PIC assignment"><div class="toolbar-left"><strong role="status">${selectedIds.size} selected</strong><button class="ghost-btn" data-clear-allocation-selection ${!canEdit ? "disabled" : ""}>Clear selection</button></div><div class="toolbar-right"><select class="filter-select" data-allocation-bulk="acc" aria-label="Assign ACC PIC to selected clients" ${!canEdit ? "disabled" : ""}><option value="__choose__" selected disabled>Assign ACC PIC...</option><option value="">No PIC</option>${optionsMarkup(ACC_PICS, "__choose__")}</select><select class="filter-select" data-allocation-bulk="tax" aria-label="Assign Tax PIC to selected clients" ${!canEdit ? "disabled" : ""}><option value="__choose__" selected disabled>Assign Tax PIC...</option><option value="">No PIC</option>${optionsMarkup(TAX_PICS, "__choose__")}</select><span class="subline">Draft only. Save with Apply PIC Update.</span></div></div>` : ""}
 
             ${!isMobileLayout ? `<div class="table-wrap" data-virtual-table="allocation-clients" data-row-height="48">
               <table>
                 <thead>
                   <tr>
+                    <th class="allocation-check-cell">${selectAll}</th>
                     <th>No.</th>
                     <th>${sortHeader("allocation", "code", "Code")}</th>
                     <th>${sortHeader("allocation", "form", "Form")}</th>
@@ -7116,34 +7146,35 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${virtualSpacer(9, allocationWindow.top)}${allocationWindow.rows.map((client, index) => {
+                  ${virtualSpacer(10, allocationWindow.top)}${allocationWindow.rows.map((client, index) => {
                     const draft = state.allocationDrafts[client.id] || {};
                     const nextAcc = draft.nextAccPic ?? client.accountingPic ?? "";
                     const nextTax = draft.nextTaxPic ?? client.taxPic ?? "";
                     const changed = nextAcc !== (client.accountingPic || "") || nextTax !== (client.taxPic || "");
                     const identity = splitBusinessName(client);
                     return `
-                      <tr>
+                      <tr data-allocation-row="${escapeAttr(client.id)}" data-selected="${selectedIds.has(client.id)}">
+                        <td class="allocation-check-cell"><input type="checkbox" data-allocation-select="${escapeAttr(client.id)}" aria-label="Select ${escapeAttr(client.name)}" ${selectedIds.has(client.id) ? "checked" : ""} ${!canEdit ? "disabled" : ""} /></td>
                         <td>${allocationWindow.start + index + 1}</td>
                         <td>${escapeHtml(client.clientCode)}</td>
                         <td>${escapeHtml(identity.form || "Individual")}</td>
                         <td>${escapeHtml(identity.name)}</td>
                         <td>${escapeHtml(client.accountingPic || "No PIC")}</td>
                         <td>
-                          <select class="inline-select" data-allocation-acc="${client.id}">
+                          <select class="inline-select" data-allocation-acc="${client.id}" ${!canEdit ? "disabled" : ""}>
                             ${allocationPicOptions(ACC_PICS, nextAcc)}
                           </select>
                         </td>
                         <td>${escapeHtml(client.taxPic || "No PIC")}</td>
                         <td>
-                          <select class="inline-select" data-allocation-tax="${client.id}">
+                          <select class="inline-select" data-allocation-tax="${client.id}" ${!canEdit ? "disabled" : ""}>
                             ${allocationPicOptions(TAX_PICS, nextTax)}
                           </select>
                         </td>
                         <td><span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending Update" : "Unchanged"}</span></td>
                       </tr>
                     `;
-                  }).join("") || `<tr><td colspan="9"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(9, allocationWindow.bottom)}
+                  }).join("") || `<tr><td colspan="10"><div class="empty-state">No clients match the current allocation scope.</div></td></tr>`}${virtualSpacer(10, allocationWindow.bottom)}
                 </tbody>
               </table>
             </div>` : ""}
@@ -7157,10 +7188,10 @@
                   const changed = nextAcc !== (client.accountingPic || "") || nextTax !== (client.taxPic || "");
                   const identity = splitBusinessName(client);
                   return `
-                    <div class="mobile-card">
+                    <div class="mobile-card" data-allocation-row="${escapeAttr(client.id)}" data-selected="${selectedIds.has(client.id)}">
                       <div class="mobile-card-header">
                         <div>
-                          <div class="mobile-card-title">${index + 1}. ${escapeHtml(identity.name)}</div>
+                          <div class="mobile-card-title"><label class="allocation-card-select"><input type="checkbox" data-allocation-select="${escapeAttr(client.id)}" aria-label="Select ${escapeAttr(client.name)}" ${selectedIds.has(client.id) ? "checked" : ""} ${!canEdit ? "disabled" : ""} />${index + 1}. ${escapeHtml(identity.name)}</label></div>
                           <div class="subline">${escapeHtml(identity.form || "Individual")} · ${escapeHtml(client.clientCode)}</div>
                         </div>
                         <span class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending" : "Stable"}</span>
@@ -7170,8 +7201,8 @@
                         <div class="mobile-meta-box"><div class="eyebrow">TAX PIC Lama</div><strong>${escapeHtml(client.taxPic || "No PIC")}</strong></div>
                       </div>
                       <div class="detail-grid-2">
-                        <select class="field" data-allocation-acc="${client.id}">${allocationPicOptions(ACC_PICS, nextAcc)}</select>
-                        <select class="field" data-allocation-tax="${client.id}">${allocationPicOptions(TAX_PICS, nextTax)}</select>
+                        <select class="field" data-allocation-acc="${client.id}" ${!canEdit ? "disabled" : ""}>${allocationPicOptions(ACC_PICS, nextAcc)}</select>
+                        <select class="field" data-allocation-tax="${client.id}" ${!canEdit ? "disabled" : ""}>${allocationPicOptions(TAX_PICS, nextTax)}</select>
                       </div>
                     </div>
                   `;
@@ -7214,6 +7245,7 @@
           </section>
         </div>
       `);
+      root.querySelectorAll("[data-allocation-select-all]").forEach(input => { input.indeterminate = selectedIds.size > 0 && selectedIds.size < rows.length; });
     }
 
     function selectedClient() {
@@ -9150,6 +9182,7 @@
       }, { useDefaults: false });
       client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
       client.databaseId = row.id;
+      client.createdAt = row.created_at || "";
       client.taxPicProfileId = row.tax_pic_profile_id || "";
       client.accountingPicProfileId = row.accounting_pic_profile_id || "";
       client.sourceSystem = row.source_system;
@@ -9759,7 +9792,7 @@
       });
     }
     window.addEventListener("beforeunload", event => {
-      if (caseSheetBulkSaving) { event.preventDefault(); event.returnValue = ""; }
+      if (caseSheetBulkSaving || state.allocationApplying) { event.preventDefault(); event.returnValue = ""; }
     });
 
     function clearCaseSheetRange() {
@@ -10782,6 +10815,7 @@
               allocationYear: state.allocationYear,
               allocationShowChangedOnly: state.allocationShowChangedOnly,
               allocationDrafts: state.allocationDrafts,
+              allocationDraftEpoch: state.allocationDraftEpoch,
               allocationLastReport: state.allocationLastReport,
               autoHideCompleted: state.autoHideCompleted,
               showCompletedRows: state.showCompletedRows,
@@ -11043,6 +11077,7 @@
         allocationTaxFilter: state.allocationTaxFilter,
         allocationShowChangedOnly: state.allocationShowChangedOnly,
         allocationDrafts: JSON.parse(JSON.stringify(state.allocationDrafts)),
+        allocationDraftEpoch: state.allocationDraftEpoch,
         allocationLastReport: JSON.parse(JSON.stringify(state.allocationLastReport)),
         mobileScopeOpen: state.mobileScopeOpen,
         autoHideCompleted: state.autoHideCompleted,
@@ -11082,7 +11117,7 @@
       state.announcements = Array.isArray(snapshot.announcements) ? snapshot.announcements : state.announcements;
       state.allocationQuery = snapshot.allocationQuery || "";
       state.allocationShowChangedOnly = typeof snapshot.allocationShowChangedOnly === "boolean" ? snapshot.allocationShowChangedOnly : state.allocationShowChangedOnly;
-      state.allocationDrafts = snapshot.allocationDrafts || state.allocationDrafts;
+      if (snapshot.allocationDraftEpoch === state.allocationDraftEpoch) state.allocationDrafts = snapshot.allocationDrafts || state.allocationDrafts;
       state.allocationLastReport = snapshot.allocationLastReport || state.allocationLastReport;
       state.mobileScopeOpen = typeof snapshot.mobileScopeOpen === "boolean" ? snapshot.mobileScopeOpen : state.mobileScopeOpen;
       state.autoHideCompleted = typeof snapshot.autoHideCompleted === "boolean" ? snapshot.autoHideCompleted : state.autoHideCompleted;
@@ -12781,7 +12816,26 @@
         return;
       }
 
+      if (target.closest("[data-clear-allocation-selection]")) {
+        if (!hasLeadershipAccess() || state.allocationApplying) return;
+        state.allocationSelection = [];
+        commitUi("replace");
+        return;
+      }
+
+      if (target.closest("[data-reset-allocation-drafts]")) {
+        if (!hasLeadershipAccess() || state.allocationApplying || !Object.keys(state.allocationDrafts).length) return;
+        if (!window.confirm("Discard all unsaved PIC changes, including clients hidden by filters? Saved assignments and allocation history will not be changed.")) return;
+        state.allocationDrafts = {};
+        state.allocationDraftEpoch = crypto.randomUUID();
+        state.allocationSelection = [];
+        clearSyncFailure("PIC allocation");
+        commitUi("replace");
+        return;
+      }
+
       if (applyAllocationTrigger) {
+        if (!hasLeadershipAccess() || state.allocationApplying) return;
         const report = [];
         clientMasterClients.forEach((client) => {
           const draft = state.allocationDrafts[client.id];
@@ -12804,29 +12858,37 @@
           commitUi("replace");
           return;
         }
+        const allocationYear = state.allocationYear;
+        let applied = false;
+        state.allocationApplying = true;
+        renderAllocation();
         setDatabaseStatus("updating");
         try {
           const response = await appFetch("/api/clients/allocation", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({
-              allocationYear: state.allocationYear,
+              allocationYear,
               changes: report.map((change) => ({ clientCode: change.clientCode, nextTaxPic: change.nextTaxPic, nextAccPic: change.nextAccPic }))
             })
           }, "", { trackUpdate: false });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error([result.error, ...(result.details || [])].filter(Boolean).join("\n"));
-          state.allocationLastReport = report.map((change) => ({ ...change, allocationYear: state.allocationYear }));
+          state.allocationLastReport = report.map((change) => ({ ...change, allocationYear }));
           state.allocationDrafts = {};
+          state.allocationDraftEpoch = crypto.randomUUID();
+          state.allocationSelection = [];
           await loadSharedClients(true);
           clearSyncFailure("PIC allocation");
           setDatabaseStatus("connected");
-          commitUi("push");
+          applied = true;
         } catch (error) {
           state.allocationDrafts = Object.fromEntries(report.map((change) => [change.clientId, { nextAccPic: change.nextAccPic, nextTaxPic: change.nextTaxPic }]));
           markSyncFailure("PIC allocation", error);
           setDatabaseStatus("failed");
-          commitUi("replace");
+        } finally {
+          state.allocationApplying = false;
+          commitUi(applied ? "push" : "replace");
         }
         return;
       }
@@ -13068,7 +13130,45 @@
         return;
       }
 
+      if (target.matches("[data-allocation-select], [data-allocation-select-all]")) {
+        if (!hasLeadershipAccess() || state.allocationApplying) return;
+        const visibleIds = new Set(allocationRows().map(client => client.id));
+        const selected = new Set(state.allocationSelection.filter(id => visibleIds.has(id)));
+        if (target.hasAttribute("data-allocation-select-all")) {
+          state.allocationSelection = target.checked ? [...visibleIds] : [];
+        } else {
+          const id = target.dataset.allocationSelect;
+          if (!visibleIds.has(id)) return;
+          if (target.checked) selected.add(id); else selected.delete(id);
+          state.allocationSelection = [...selected];
+        }
+        renderAllocation();
+        return;
+      }
+
+      if (target instanceof HTMLSelectElement && target.matches("[data-allocation-bulk]")) {
+        if (!hasLeadershipAccess() || state.allocationApplying) return;
+        const accounting = target.dataset.allocationBulk === "acc";
+        if (!["acc", "tax"].includes(target.dataset.allocationBulk) || target.value !== "" && !(accounting ? ACC_PICS : TAX_PICS).includes(target.value)) return;
+        const selected = new Set(state.allocationSelection);
+        allocationRows().filter(client => selected.has(client.id)).forEach(client => {
+          state.allocationDrafts[client.id] = { ...state.allocationDrafts[client.id], [accounting ? "nextAccPic" : "nextTaxPic"]:target.value };
+        });
+        commitUi("replace");
+        return;
+      }
+
+      if (target instanceof HTMLSelectElement && target.id === "allocation-order") {
+        if (!["form", "oldest", "newest"].includes(target.value)) return;
+        state.sorts.allocation = target.value === "form" ? { key:"form", dir:"asc" } : { key:"createdAt", dir:target.value === "oldest" ? "asc" : "desc" };
+        state.tableViewport["allocation-clients"] = 0;
+        state.virtualScrollTop = { ...(state.virtualScrollTop || {}), "allocation-clients":0 };
+        commitUi("replace");
+        return;
+      }
+
       if (target instanceof HTMLInputElement && target.id === "allocation-year") {
+        if (state.allocationApplying) return;
         const year = Number(target.value);
         if (Number.isInteger(year) && year >= 2000 && year <= 2200) state.allocationYear = year;
         persistDemoState();
@@ -13464,6 +13564,7 @@
       }
 
       if (target.matches("[data-allocation-acc]")) {
+        if (!hasLeadershipAccess() || state.allocationApplying) return;
         const clientId = target.getAttribute("data-allocation-acc");
         const client = clientMasterClients.find((item) => item.id === clientId);
         if (!client) return;
@@ -13476,6 +13577,7 @@
       }
 
       if (target.matches("[data-allocation-tax]")) {
+        if (!hasLeadershipAccess() || state.allocationApplying) return;
         const clientId = target.getAttribute("data-allocation-tax");
         const client = clientMasterClients.find((item) => item.id === clientId);
         if (!client) return;
