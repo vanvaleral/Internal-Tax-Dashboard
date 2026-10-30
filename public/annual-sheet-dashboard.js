@@ -78,6 +78,26 @@
       warm = null; window.clearTimeout(entry.expiry); return structuredClone(data);
     } catch (error) { if ([401, 403, 409].includes(error.status)) throw error; return null; }
   }
+  function seedStartup(team, data) {
+    if (!data || data.userId !== expectedUserId || data.team !== team || !data.actor?.id || !Array.isArray(data.rows) || !Array.isArray(data.staff) || !Array.isArray(data.columns) || sheets.has(team)) return false;
+    cancelIdle(); discardPreload(); preloadAttempted = true;
+    const entry = { team, userId: expectedUserId, epoch: warmEpoch, controller: new AbortController(), checkedAt: Date.now(), timeout: null, expiry: null, promise: Promise.resolve(data) };
+    warm = entry;
+    entry.expiry = window.setTimeout(() => { if (warm === entry) discardPreload(); }, warmLifetime);
+    return true;
+  }
+  function whenReady(team) {
+    const sheet = sheets.get(team);
+    if (sheet?.ready) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => { window.removeEventListener("message", check); reject(new Error("Annual workspace could not be opened. Please retry.")); }, 20000);
+      function check(event) {
+        if (event.origin !== location.origin || event.source !== sheet?.frame.contentWindow || event.data?.type !== "annual-sheet:state" || event.data.team !== team) return;
+        window.clearTimeout(timeout); window.removeEventListener("message", check); resolve();
+      }
+      window.addEventListener("message", check);
+    });
+  }
   function clear() {
     cancelIdle(); discardPreload(); preferredTeam = ""; preloadAttempted = false; expectedUserId = "";
     for (const sheet of sheets.values()) sheet.section.remove();
@@ -143,7 +163,7 @@
   navigator.connection?.addEventListener?.("change", reconsider);
   window.addEventListener("resize", reconsider);
   window.AnnualDashboardSheets = {
-    render, syncVisibility, directoryChanged, takePreload, clear, setAppearance,
+    render, syncVisibility, directoryChanged, takePreload, seedStartup, whenReady, clear, setAppearance,
     preload(division) {
       const team = division === "Tax Team" ? "tax" : division === "Accounting Team" ? "accounting" : "";
       if (team !== preferredTeam) { cancelIdle(); discardPreload(); preloadAttempted = false; preferredTeam = team; }

@@ -17,7 +17,7 @@ test("only reviewed public UI assets bypass auth; data, HTML and extension-looka
   }
 });
 
-test("middleware delegates only the self-authenticating annual API and retains checks on other pages and APIs", async () => {
+test("middleware delegates exact self-authenticating APIs and the data-free shell, retaining private HTML checks", async () => {
   let clients = 0, authReads = 0, profileReads = 0, user: any = null, active = true;
   const source = readFileSync(new URL("../middleware.ts", import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
@@ -39,10 +39,13 @@ test("middleware delegates only the self-authenticating annual API and retains c
   assert.equal((await run("/annual-sheet-live.js")).status, 200);
   assert.equal((await run("/favicon.svg")).status, 200);
   assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
+  assert.equal((await run("/api/workspace/bootstrap")).status, 200);
+  assert.equal((await run("/")).status, 200, "root is only a loader and iframe, never private data");
   assert.equal(clients, 0); assert.equal(authReads, 0); assert.equal(profileReads, 0);
   assert.equal((await run("/demo.html")).status, 307);
   assert.equal((await run("/api/clients")).status, 401);
   assert.equal((await run("/api/annual-sheet/extra")).status, 401);
+  assert.equal((await run("/api/workspace/bootstrap/extra")).status, 401);
   assert.equal((await run("/api/profile.css")).status, 401);
   user = { id: "current-account" }; active = false;
   assert.equal((await run("/api/clients")).status, 403);

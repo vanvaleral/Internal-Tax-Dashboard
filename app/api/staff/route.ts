@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { currentActor, isLeadership, type CurrentActor } from "@/lib/access";
 import { STAFF_DIRECTORY_TEAMS, isStaffDirectoryRole, canManageDirectoryRole } from "@/lib/staff-directory";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
+import { readStaff } from "@/lib/workspace-reads";
 
 async function notifyLeadershipOfDirectoryChange(actor: CurrentActor, action: string, subject: string) {
   const { data: recipients, error } = await actor.admin
@@ -27,20 +28,8 @@ export async function GET(request: Request) {
   const includeInactive = new URL(request.url).searchParams.get("includeInactive") === "1";
   if (includeInactive && !isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can view archived staff profiles." }, { status: 403 });
 
-  let query = actor.admin
-    .from("staff_profiles")
-    .select("*")
-    .order("display_name");
-  if (!includeInactive) query = query.eq("directory_active", true);
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const staff = (data || []).map((profile) => {
-    const base = { id: profile.id, full_name: profile.full_name, display_name: profile.display_name || profile.full_name, team_division: profile.team_division, role: profile.role };
-    return isLeadership(actor.profile.role)
-      ? { ...base, employment_title: profile.employment_title || null, auth_user_id: profile.auth_user_id || null, claimed_at: profile.claimed_at || null, directory_active: profile.directory_active !== false, archived_at: profile.archived_at || null, access_deletion_started_at: profile.access_deletion_started_at || null, access_deleted_at: profile.access_deleted_at || null }
-      : base;
-  });
-  return NextResponse.json({ staff });
+  try { return NextResponse.json(await readStaff(actor, includeInactive)); }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {

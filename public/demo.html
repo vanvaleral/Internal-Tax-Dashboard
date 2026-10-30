@@ -3727,6 +3727,7 @@
       notify();
     })();
   </script>
+  <script src="workspace-startup.js"></script>
   <div class="shell">
     <aside class="sidebar">
       <div>
@@ -3833,6 +3834,17 @@
       });
     }
     const startupOverlay = document.getElementById("app-loading-overlay");
+    let startupPending = !IS_OFFLINE_DEMO;
+    function failStartup(error) {
+      const message = document.getElementById("app-loading-message");
+      if (!message) return;
+      message.textContent = error.message || "Unable to load your workspace.";
+      const retry = document.createElement("button"); retry.textContent = "Retry"; retry.className = "ghost-btn";
+      retry.addEventListener("click", () => location.reload()); message.after(retry);
+      if ([401, 403].includes(error.status)) {
+        const signIn = document.createElement("a"); signIn.href = "/login"; signIn.target = "_top"; signIn.textContent = "Sign in again"; retry.after(signIn);
+      }
+    }
     if (IS_OFFLINE_DEMO) startupOverlay?.classList.remove("visible", "initial-load");
     function safeHtml(markup) {
       return DOMPurify.sanitize(markup, { USE_PROFILES: { html: true, svg: true }, FORBID_TAGS: ["style", "iframe", "object", "embed"], ALLOW_DATA_ATTR: true });
@@ -3845,12 +3857,15 @@
         : { user: { id: "offline-preview" }, profile: { role: "staff" } };
     } else {
       try {
-        const response = await fetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } });
-        if (!response.ok) throw new Error("Active staff access is required.");
-        bootstrapProfile = await response.json();
+        if (window.WorkspaceStartup) bootstrapProfile = await window.WorkspaceStartup.begin();
+        else {
+          const response = await fetch("/api/profile", { cache: "no-store", headers: { Accept: "application/json" } });
+          if (!response.ok) throw new Error("Active staff access is required.");
+          bootstrapProfile = await response.json();
+        }
         if (!bootstrapProfile.user?.id || !bootstrapProfile.profile) throw new Error("Staff profile is unavailable.");
-      } catch {
-        document.body.textContent = "Unable to verify your account. Please sign in again or reload when connected.";
+      } catch (error) {
+        failStartup(error);
         return;
       }
     }
@@ -9132,6 +9147,10 @@
         }
         const headers = new Headers(options?.headers || {});
         headers.set("X-Workspace-User", bootstrapProfile.user.id);
+        if (method === "GET") {
+          const startupData = window.WorkspaceStartup?.take(url, bootstrapProfile.user.id);
+          if (startupData) return new Response(JSON.stringify(startupData), { headers: { "Content-Type": "application/json" } });
+        }
         return await fetch(url, { ...options, headers });
       } finally {
         if (isDatabaseUpdate) {
@@ -10488,7 +10507,7 @@
         syncOperationalPicLists(staff);
         staffDirectoryLoaded = true;
         notifyAnnualDirectoryChanged(staff);
-        rerender();
+        if (!startupPending) rerender();
         return true;
       } catch (error) {
         console.warn("[staff directory] request failed", error);
@@ -10779,6 +10798,7 @@
 
     function persistDemoState() {
       if (IS_ANNUAL_SHEET_PREVIEW) return;
+      window.WorkspaceStartup?.remember(state);
       try {
         window.localStorage.setItem(
           DEMO_STORAGE_KEY,
@@ -11000,13 +11020,22 @@
       renderActiveView();
       renderShellChrome();
       restoreVirtualTableScrollPositions();
-      if (viewId === "my-work-view") loadSharedMyWork(true);
+      if (viewId === "cases-view" && !casesLoadedFromDatabase) loadSharedCases(true);
+      if (viewId === "matrix-view" && state.operationsMode !== "annual" && !operationalScopesLoaded.has("monthly_compliance")) loadSharedOperationalWorkspaces(true, "monthly_compliance");
+      if (viewId === "dashboard-view") {
+        if (["monthly_compliance", "annual_accounting", "annual_tax"].some(scope => !operationalScopesLoaded.has(scope))) loadSharedOperationalWorkspaces(true);
+        if (!casesLoadedFromDatabase) loadSharedCases(true);
+      }
+      if (viewId === "announcement-view") loadSharedAnnouncements(true);
+      if (["dashboard-view", "allocation-view", "profile-view"].includes(viewId)) loadStaffDirectory(true);
+      if (viewId === "my-work-view") {
+        loadSharedMyWork(true);
+        if (!casesLoadedFromDatabase) loadSharedCases(true);
+      }
       if (viewId === "client-view") {
         if (!casesLoadedFromDatabase) loadSharedCases(true);
         if (!myWorkLoadedFromDatabase) loadSharedMyWork(true);
-        for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
-          if (!operationalScopesLoaded.has(scope)) loadSharedOperationalWorkspaces(true, scope);
-        }
+        if (["monthly_compliance", "annual_accounting", "annual_tax"].some(scope => !operationalScopesLoaded.has(scope))) loadSharedOperationalWorkspaces(true);
       }
     }
 
@@ -11185,6 +11214,7 @@
     }
 
     function renderAfterSharedDataUpdate(views) {
+      if (startupPending) return;
       if (!views.includes(state.currentView)) return;
       // Background polling must never replace an input while someone is typing.
       if (activeEditorSnapshot()) return;
@@ -13872,23 +13902,38 @@
       normalizeMobileWorkspaceView();
       const initialView = state.currentView;
       const initialLoads = [loadSharedClients(true)];
-      const initialOperationScope = initialView === "matrix-view" ? "monthly_compliance"
+      if (window.WorkspaceStartup) initialLoads.push(loadStaffDirectory(true));
+      const initialAnnualTeam = initialView === "matrix-view" && state.operationsMode === "annual" ? (state.annualTeam === "tax" ? "tax" : "accounting") : "";
+      const initialOperationScope = initialView === "matrix-view" && !initialAnnualTeam ? "monthly_compliance"
         : initialView === "annual-accounting-view" ? "annual_accounting"
         : initialView === "annual-tax-view" ? "annual_tax" : "";
       if (initialOperationScope) initialLoads.push(loadSharedOperationalWorkspaces(true, initialOperationScope));
       if (["cases-view", "my-work-view"].includes(initialView)) initialLoads.push(loadSharedCases(true));
       if (initialView === "my-work-view") initialLoads.push(loadSharedMyWork(true));
+      if (initialView === "dashboard-view") initialLoads.push(loadSharedCases(true), loadSharedOperationalWorkspaces(true));
+      if (initialView === "announcement-view") initialLoads.push(loadSharedAnnouncements(true));
       if (initialView === "client-view") {
-        initialLoads.push(loadSharedCases(true), loadSharedOperationalWorkspaces(true, "monthly_compliance"));
+        initialLoads.push(loadSharedCases(true), loadSharedMyWork(true), loadSharedOperationalWorkspaces(true));
       }
       const initialResults = await Promise.all(initialLoads);
       if (!clientsLoadedFromDatabase || initialResults.some((result) => result === false)) {
-        const message = document.getElementById("app-loading-message");
-        if (message) message.textContent = "Workspace data could not be loaded. Refresh to retry.";
+        failStartup(new Error("Workspace data could not be loaded. Please retry."));
         return;
       }
       databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Client Master loaded from the database." };
+      if (initialAnnualTeam) {
+        // The directory must be applied before seeding its matching annual snapshot.
+        const data = window.WorkspaceStartup?.take(`annual:${initialAnnualTeam}`, bootstrapProfile.user.id);
+        if (data) window.AnnualDashboardSheets?.seedStartup(initialAnnualTeam, data);
+      }
       rerender();
+      if (initialAnnualTeam && window.WorkspaceStartup && window.AnnualDashboardSheets?.whenReady) {
+        try { await window.AnnualDashboardSheets.whenReady(initialAnnualTeam); }
+        catch (error) {
+          failStartup(error); return;
+        }
+      }
+      startupPending = false;
       persistDemoState();
       // Never add animation time to a confirmed database load.
       const finishStartup = () => {
@@ -13896,30 +13941,26 @@
       };
       finishStartup();
       startupOverlay?.setAttribute("aria-busy", "false");
+      window.WorkspaceStartup?.ready();
       const remainingLoads = [];
       if (IS_CASES_FULLSCREEN) {
-        remainingLoads.push(loadStaffDirectory(true), loadSharedMyWork(true));
+        remainingLoads.push(() => loadStaffDirectory(true), () => loadSharedMyWork(true));
       } else {
-        if (initialView === "client-view") {
-          remainingLoads.push(loadSharedOperationalWorkspaces(true, "annual_accounting"), loadSharedOperationalWorkspaces(true, "annual_tax"));
-        } else if (initialOperationScope) {
-          for (const scope of ["monthly_compliance", "annual_accounting", "annual_tax"]) {
-            if (scope !== initialOperationScope) remainingLoads.push(loadSharedOperationalWorkspaces(true, scope));
-          }
-        } else remainingLoads.push(loadSharedOperationalWorkspaces(true));
-        if (!["cases-view", "my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedCases(true));
-        if (!["my-work-view", "client-view"].includes(initialView)) remainingLoads.push(loadSharedMyWork(true));
-        if (initialView === "client-view") remainingLoads.push(loadSharedMyWork(true));
-        remainingLoads.push(loadStaffDirectory(true));
-        remainingLoads.push(loadSharedAnnouncements(true));
+        // Do not fetch entire annual workspaces behind unrelated menus.
+        if (!operationalScopesLoaded.has("monthly_compliance")) remainingLoads.push(() => loadSharedOperationalWorkspaces(true, "monthly_compliance"));
+        if (!casesLoadedFromDatabase) remainingLoads.push(() => loadSharedCases(true));
+        if (!myWorkLoadedFromDatabase) remainingLoads.push(() => loadSharedMyWork(true));
+        if (!window.WorkspaceStartup) remainingLoads.push(() => loadStaffDirectory(true));
+        remainingLoads.push(() => loadSharedAnnouncements(true));
       }
-      Promise.allSettled(remainingLoads).then(() => {
+      remainingLoads.push(() => refreshDatabaseStatus(true));
+      if (!IS_CASES_FULLSCREEN) remainingLoads.push(() => loadPerformanceLedger(true));
+      const backgroundComplete = () => {
         if (!IS_CASES_FULLSCREEN) window.AnnualDashboardSheets?.preload(state.teamDivision);
-      });
+      };
+      if (window.WorkspaceStartup) window.WorkspaceStartup.backgroundQueue(remainingLoads, backgroundComplete);
+      else Promise.allSettled(remainingLoads.map(load => load())).then(backgroundComplete);
     }
-    const scheduleBackgroundLoad = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 750));
-    scheduleBackgroundLoad(() => refreshDatabaseStatus(true));
-    if (!IS_CASES_FULLSCREEN) scheduleBackgroundLoad(() => loadPerformanceLedger(true));
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (IS_CASES_FULLSCREEN) return;

@@ -11,6 +11,10 @@ type CookieMutation = {
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
   if (isPublicUiAsset(request.nextUrl.pathname, request.method)) return response;
+  // The root contains only a loader/iframe. Private HTML remains protected below.
+  if (request.nextUrl.pathname === "/" && ["GET", "HEAD"].includes(request.method)) return response;
+  // This read-only handler verifies identity, active staff and account binding itself.
+  if (request.nextUrl.pathname === "/api/workspace/bootstrap" && request.method === "GET") return response;
   // This exact handler verifies the user, active staff, account binding and PIC on every request.
   if (request.nextUrl.pathname === "/api/annual-sheet") return response;
   // The handler authenticates this exact scheduler route with CRON_SECRET.

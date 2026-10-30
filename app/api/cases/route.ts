@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { createOperationalAnnouncement, notificationEventKey, uniqueProfileIds } from "@/lib/notifications";
 import { calculateHimbauanDueDate } from "@/lib/operational-rules";
+import { readCases } from "@/lib/workspace-reads";
 
 function canAccess(actor: any, client: any) {
   return isLeadership(actor.profile.role) || [client.tax_pic_profile_id, client.accounting_pic_profile_id].includes(actor.profile.id);
@@ -78,18 +79,8 @@ export async function GET(request: NextRequest) {
       }))
     });
   }
-  const includeDeleted = request.nextUrl.searchParams.get("deleted") === "1";
-  let query = actor.admin.from("tax_cases").select("*").order("updated_at", { ascending: false });
-  if (includeDeleted) {
-    query = query.not("deleted_at", "is", null);
-    if (!isLeadership(actor.profile.role)) query = query.eq("deleted_by_profile_id", actor.profile.id);
-  } else {
-    query = query.is("deleted_at", null);
-    if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
-  }
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data });
+  try { return NextResponse.json(await readCases(actor, request.nextUrl.searchParams.get("deleted") === "1")); }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {

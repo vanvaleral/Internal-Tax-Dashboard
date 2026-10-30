@@ -7,10 +7,16 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
   const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const context = { exports: {} as Record<string, any>, require(name: string) {
-    if (name === "next/server") return { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200 }) }, after: () => {} };
+    if (name === "next/server") return { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) }, after: () => {} };
     if (name in bindings) return bindings[name];
+    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/annual-sheet-read", "@/lib/workspace-security"].includes(name)) {
+      return loadRoute(`${name.replace("@/", "")}.ts`, {
+        "@/lib/access": { isLeadership: (role: string) => ["leader", "supervisor", "partner", "admin"].includes(role) },
+        ...bindings
+      });
+    }
     throw new Error(`Unmocked route dependency ${name}`);
-  }, URL, Date, Set, Map, structuredClone, console, crypto: { randomUUID } };
+  }, URL, URLSearchParams, Date, Set, Map, structuredClone, console, crypto: { randomUUID } };
   vm.runInNewContext(compiled, context, { filename: file });
   return context.exports;
 }
@@ -19,9 +25,11 @@ export const request = (body: any = {}, search = "") => ({ url: `http://test.loc
 
 export function mockDatabase(tables: Record<string, any[]>) {
   const db = { tables, beforeWrite: null as (() => void) | null, from(table: string) {
-    let filters: Array<(row: any) => boolean> = [], action = "read", input: any, single = false;
+    let filters: Array<(row: any) => boolean> = [], action = "read", input: any, single = false, bounds: number[] | null = null;
     const query: any = {
       select() { return query; }, order() { return query; }, limit() { return query; },
+      range(from: number, to: number) { bounds = [from, to]; return query; },
+      not(key: string, _op: string, value: any) { filters.push(row => (row[key] ?? null) !== value); return query; },
       eq(key: string, value: any) { filters.push(row => row[key] === value); return query; },
       is(key: string, value: any) { filters.push(row => (row[key] ?? null) === value); return query; },
       in(key: string, values: any[]) { filters.push(row => values.includes(row[key])); return query; },
@@ -43,7 +51,9 @@ export function mockDatabase(tables: Record<string, any[]>) {
       }
       if (action === "update") result.forEach(row => Object.assign(row, structuredClone(input), table === "my_work_tasks" ? { updated_at: `${row.updated_at}+1` } : {}));
       if (action === "upsert") { result = Array.isArray(input) ? input : [input]; rows.push(...structuredClone(result)); }
-      return { data: structuredClone(single ? result[0] || null : result), error: null };
+      const count = result.length;
+      if (bounds && action === "read") result = result.slice(bounds[0], bounds[1] + 1);
+      return { data: structuredClone(single ? result[0] || null : result), count, error: null };
     }
     return query;
   } };

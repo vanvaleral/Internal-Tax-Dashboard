@@ -141,7 +141,7 @@ test("database connection status uses the verified profile before background sch
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /Database: loading/);
   assert.match(demo, /Client Master loaded from the database\./);
-  assert.match(demo, /scheduleBackgroundLoad\(\(\) => refreshDatabaseStatus\(true\)\)/);
+  assert.match(demo, /remainingLoads\.push\(\(\) => refreshDatabaseStatus\(true\)\)/);
   assert.doesNotMatch(demo, /loadPerformanceLedger\(true\);\s+refreshDatabaseStatus\(true\);/);
 });
 
@@ -153,10 +153,10 @@ test("production startup never renders demo records before shared data arrives",
   assert.match(demo, /Loading secure workspace\.\.\./);
   assert.match(demo, /app-loading-overlay visible initial-load/);
   assert.match(demo, /const initialLoads = \[loadSharedClients\(true\)\]/);
-  assert.match(demo, /remainingLoads\.push\(loadStaffDirectory\(true\)\)/);
+  assert.match(demo, /remainingLoads\.push\(\(\) => loadStaffDirectory\(true\)\)/);
   assert.doesNotMatch(demo, /Updating workspace\.\.\./);
   assert.match(demo, /const initialResults = await Promise\.all\(initialLoads\);\s*if \(!clientsLoadedFromDatabase \|\| initialResults\.some/);
-  assert.match(demo, /Promise\.allSettled\(remainingLoads\)/);
+  assert.match(demo, /WorkspaceStartup\.backgroundQueue\(remainingLoads, backgroundComplete\)/);
   assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load", "is-entering"\)/);
 });
 
@@ -214,7 +214,7 @@ test("Allocation separates company form from the client name", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /<th>\$\{sortHeader\("allocation", "form", "Form"\)\}<\/th>\s*<th>\$\{sortHeader\("allocation", "name", "Client Name"\)\}<\/th>/);
   assert.match(demo, /escapeHtml\(identity\.form \|\| "Individual"\)/);
-  assert.match(demo, /virtualSpacer\(9, allocationWindow\.top\)/);
+  assert.match(demo, /virtualSpacer\(10, allocationWindow\.top\)/);
   assert.match(demo, /sortClientMasterRows\(activeClientMasterRecords\(\)/);
 });
 

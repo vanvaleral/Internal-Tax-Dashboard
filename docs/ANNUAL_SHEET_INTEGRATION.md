@@ -58,10 +58,13 @@ Reviewed public UI assets (exact paths in `lib/public-ui-assets.ts`) skip Supaba
 middleware calls on GET/HEAD, avoiding repeated session/profile round trips for
 CSS, data-free JavaScript and the favicon. HTML pages, renderers with embedded
 client/staff demo fixtures and downloads still pass through the existing
-middleware checks. Only the exact `/api/annual-sheet` path delegates authentication
-to its handler, which runs `currentActor(request)` for GET and POST: verified user,
+middleware checks. The exact `/api/annual-sheet` and `/api/workspace/bootstrap`
+handlers verify authentication
+using `currentActor(request)` (Annual GET/POST and bootstrap GET): verified user,
 current active-staff profile, account binding, then per-row permissions. Other
-APIs retain middleware checks. Neither client headers nor a cached actor grant
+APIs retain middleware checks; the data-free root shell needs no database check.
+See `WORKSPACE_STARTUP.md` for first-menu loading and timing. Neither client headers
+nor a cached actor grant
 access. Annual saves read the workspace, staff and columns concurrently, then
 write through the same compare-and-swap check; retries reread current state.
 There is no generic file-extension bypass and no cached authorization. This is

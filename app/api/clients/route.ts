@@ -2,13 +2,10 @@ import { after, NextResponse } from "next/server";
 import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
 import { asSafeText, normalizeClientIdentityName, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
+import { readClients } from "@/lib/workspace-reads";
 
 type ClientInput = Record<string, unknown>;
 type StaffIds = { tax: string | null; accounting: string | null; partner: string | null; supervisor: string | null };
-
-function redactFees<T extends Record<string, unknown>>(client: T): T {
-  return Object.fromEntries(Object.entries(client).filter(([key]) => !["monthly_fee", "annual_fee", "fee_notes"].includes(key))) as T;
-}
 
 async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/lib/supabase/admin").createAdminClient>>, rows: ClientInput[]) {
   const { data, error } = await admin.from("staff_profiles").select("id, full_name, display_name").eq("directory_active", true);
@@ -89,16 +86,8 @@ function buildPayload(client: ClientInput, ids: StaffIds) {
 export async function GET(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  const url = new URL(request.url);
-  const search = url.searchParams.get("search")?.trim();
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 500), 1), 1000);
-  const offset = Math.max(Number(url.searchParams.get("offset") || 0), 0);
-  let query = actor.admin.from("client_master").select("*", { count: "exact" }).order("legal_name").range(offset, offset + limit - 1);
-  if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
-  if (search) query = query.or(`legal_name.ilike.%${search}%,client_code.ilike.%${search}%,npwp.ilike.%${search}%`);
-  const { data, error, count } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: isLeadership(actor.profile.role) ? data || [] : (data || []).map(redactFees), count, mode: "database", feeAccess: isLeadership(actor.profile.role) });
+  try { return NextResponse.json(await readClients(actor, new URL(request.url).searchParams)); }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {

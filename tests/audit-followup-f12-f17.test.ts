@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../supabase/migrations/202609160004_audit_integrity_outbox_pagination.sql");
 const duplicateRoute = read("../app/api/clients/duplicates/route.ts");
-const myWorkRoute = read("../app/api/my-work/route.ts");
+const myWorkRoute = read("../app/api/my-work/route.ts") + read("../lib/my-work-read.ts");
 const caseRoute = read("../app/api/cases/route.ts");
 const notificationHelper = read("../lib/notifications.ts");
 const notificationWorker = read("../app/api/maintenance/deliver-notifications/route.ts");

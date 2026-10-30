@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { canAccessMonthlyRow, clientIdentifier, mergeWorkspace, scopedWorkspace } from "@/lib/workspace-security";
 import { validateMonthlyPatch } from "@/lib/monthly-patch-validation";
+import { readOperations } from "@/lib/workspace-reads";
 
 const scopes = new Set(["monthly_compliance", "annual_accounting", "annual_tax"]);
 
@@ -74,19 +75,8 @@ function monthlySnapshotRow(client: Record<string, any>, period: NonNullable<Ret
 export async function GET(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  const scope = new URL(request.url).searchParams.get("scope");
-  let query = actor.admin.from("operational_workspace_state").select("scope, payload, version, updated_at");
-  if (scope && scopes.has(scope)) query = query.eq("scope", scope);
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (isLeadership(actor.profile.role)) return NextResponse.json({ data: (data || []).map(row => ({ ...row, payload: scopedWorkspace(row.scope, row.payload, new Set(), actor.profile.id, true) })) });
-  const { data: clients, error: clientsError } = await actor.admin.from("client_master").select("id, client_code, legal_name").or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
-  if (clientsError) return NextResponse.json({ error: clientsError.message }, { status: 500 });
-  const allowed = new Set((clients || []).flatMap((client) => [client.id, client.client_code, client.legal_name]));
-  return NextResponse.json({ data: (data || []).map((row) => ({
-    ...row,
-    payload: scopedWorkspace(row.scope, row.payload, allowed, actor.profile.id, false)
-  })) });
+  try { return NextResponse.json(await readOperations(actor, new URL(request.url).searchParams.get("scope"))); }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {

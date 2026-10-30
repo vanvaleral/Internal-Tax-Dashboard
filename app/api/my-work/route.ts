@@ -2,28 +2,8 @@ import { after, NextResponse } from "next/server";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { readMyWork, taskResponse, TASK_SELECT, type TaskRow } from "@/lib/my-work-read";
 
-type TaskRow = {
-  id: string;
-  title: string;
-  notes: string;
-  steps: unknown[];
-  reminder_at: string | null;
-  due_date: string | null;
-  repeat_rule: string;
-  repeat_custom_date: string | null;
-  repeat_parent_id: string | null;
-  case_id: string | null;
-  is_completed: boolean;
-  completed_at: string | null;
-  completed_by_profile_id: string | null;
-  created_at: string;
-  updated_at: string;
-  created_by_profile_id: string;
-  staff_profiles?: { display_name?: string | null; full_name?: string | null } | null;
-  completed_by_profile?: { display_name?: string | null; full_name?: string | null } | null;
-  my_work_task_assignees?: Array<{ staff_profile_id: string; staff_profiles?: { display_name?: string | null; full_name?: string | null } | null }>;
-};
 
 async function currentProfile() {
   const supabase = await createClient();
@@ -44,62 +24,9 @@ function isLeadership(role: string | null | undefined) {
   return ["leader", "supervisor", "partner", "admin"].includes(String(role || "").toLowerCase());
 }
 
-function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; favorited_at?: string | null } | null) {
-  return {
-    id: task.id,
-    version: task.updated_at,
-    title: task.title,
-    note: task.notes || "",
-    steps: Array.isArray(task.steps) ? task.steps : [],
-    reminder: task.reminder_at ? task.reminder_at.slice(0, 16) : "",
-    dueDate: task.due_date || "",
-    repeatRule: task.repeat_rule || "none",
-    repeatCustomDate: task.repeat_custom_date ? task.repeat_custom_date.slice(0, 16) : "",
-    repeatParentId: task.repeat_parent_id || "",
-    caseId: task.case_id || "",
-    done: Boolean(task.is_completed),
-    completedAt: task.completed_at ? new Date(task.completed_at).getTime() : 0,
-    createdAt: new Date(task.created_at).getTime(),
-    createdAtText: task.created_at,
-    creatorName: displayName(task.staff_profiles || {}),
-    completedByName: task.completed_by_profile_id ? displayName(task.completed_by_profile || {}) : "",
-    assignees: (task.my_work_task_assignees || []).map((assignee) => displayName(assignee.staff_profiles || {})),
-    favorite: Boolean(preference?.favorite),
-    favoritedAt: preference?.favorited_at ? new Date(preference.favorited_at).getTime() : 0
-  };
-}
 
-const TASK_SELECT = "*, staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), completed_by_profile:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name), my_work_task_assignees(staff_profile_id, staff_profiles(display_name, full_name))";
 const TASK_MUTATION_SELECT = "id, title, notes, steps, reminder_at, due_date, repeat_rule, repeat_custom_date, repeat_parent_id, case_id, is_completed, completed_at, completed_by_profile_id, created_at, updated_at, created_by_profile_id, my_work_task_assignees(staff_profile_id)";
 
-async function pagedQuery(build: (from: number, to: number) => any, pageSize = 500) {
-  const rows: any[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await build(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
-    rows.push(...(data || []));
-    if ((data || []).length < pageSize) return rows;
-  }
-}
-
-async function visibleTasks(admin: NonNullable<ReturnType<typeof createAdminClient>>, profile: { id: string; role?: string | null }) {
-  if (isLeadership(profile.role)) {
-    return pagedQuery((from, to) => admin.from("my_work_tasks").select(TASK_SELECT).order("created_at", { ascending: false }).range(from, to));
-  }
-  const assigned = await pagedQuery((from, to) => admin.from("my_work_task_assignees").select("task_id").eq("staff_profile_id", profile.id).range(from, to));
-  const assignedIds = [...new Set(assigned.map((row) => row.task_id))];
-  const own = await pagedQuery((from, to) => admin.from("my_work_tasks").select(TASK_SELECT).eq("created_by_profile_id", profile.id).order("created_at", { ascending: false }).range(from, to));
-  const ownIds = new Set(own.map((task) => task.id));
-  const additional: any[] = [];
-  for (let index = 0; index < assignedIds.length; index += 200) {
-    const ids = assignedIds.slice(index, index + 200).filter((id) => !ownIds.has(id));
-    if (!ids.length) continue;
-    const { data, error } = await admin.from("my_work_tasks").select(TASK_SELECT).in("id", ids);
-    if (error) throw new Error(error.message);
-    additional.push(...(data || []));
-  }
-  return [...own, ...additional].sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)));
-}
 
 async function accessibleCaseId(admin: NonNullable<ReturnType<typeof createAdminClient>>, profileId: string, role: string | null | undefined, caseId: unknown) {
   const id = String(caseId || "").trim();
@@ -162,13 +89,8 @@ export async function GET() {
   if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ error: "Task service is not configured." }, { status: 503 });
-  let visible: TaskRow[];
-  try { visible = await visibleTasks(admin, current.profile) as TaskRow[]; }
+  try { return NextResponse.json(await readMyWork(admin, current.profile)); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Tasks could not be loaded." }, { status: 500 }); }
-  const ids = visible.map((task: TaskRow) => task.id);
-  const { data: preferences } = ids.length ? await admin.from("my_work_task_preferences").select("task_id, favorite, favorited_at").eq("staff_profile_id", current.profile.id).in("task_id", ids) : { data: [] };
-  const preferenceByTask = new Map((preferences || []).map((item) => [item.task_id, item]));
-  return NextResponse.json({ tasks: visible.map((task: TaskRow) => taskResponse(task, preferenceByTask.get(task.id))) });
 }
 
 export async function POST(request: Request) {
