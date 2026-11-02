@@ -59,7 +59,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js"));
   // Expose closure references in the test source only, never in the served dashboard.
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress, loadStaffDirectory, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__casesTest;
   if (!expectBlocked) assert.ok(api, warnings.join("\n") || w.document.body.textContent.slice(-500));
@@ -69,6 +69,60 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
 const field = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-id="${id}"][data-case-sheet-field="${name}"]`);
 const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-row]")].map((row: any) => row.dataset.caseSheetRow);
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
+const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
+function mockCaseViewportGeometry(d: any) {
+  for (const [property, value] of Object.entries({ scrollWidth:2400, clientWidth:900, scrollHeight:1400, clientHeight:500 })) {
+    Object.defineProperty(d.w.HTMLElement.prototype, property, { configurable:true, get() { return (this as any).getAttribute("data-virtual-table") === "cases" ? value : 0; } });
+  }
+}
+
+test("Cases retain horizontal scroll on refreshes and direct renders without losing existing vertical restoration", async () => {
+  for (const casesTab of ["himbauan", "pemeriksaan"]) for (const query of ["", "?casesFullscreen=1&account=auth-user-1"]) {
+    const d = await dashboard("supervisor", { casesTab }, false, query);
+    try {
+      mockCaseViewportGeometry(d);
+      const initial = caseViewport(d); initial.scrollLeft = 720; initial.scrollTop = 180;
+      const rowId = casesTab === "himbauan" ? "saved-a" : "saved-d";
+      d.rows.find((row: any) => row.id === rowId)!.subject = "Confirmed background change";
+      await d.api.loadSharedCases(true);
+      assert.notEqual(caseViewport(d), initial, "exercise actual table replacement, not a disabled refresh");
+      assert.equal(caseViewport(d).scrollLeft, 720); assert.equal(caseViewport(d).scrollTop, 180);
+      assert.equal(field(d, rowId, "subject").value, "Confirmed background change");
+      await d.api.loadStaffDirectory(true);
+      assert.equal(caseViewport(d).scrollLeft, 720); assert.equal(caseViewport(d).scrollTop, 180);
+      caseViewport(d).scrollLeft = 1100; caseViewport(d).scrollTop = 240;
+      d.api.renderCases();
+      assert.equal(caseViewport(d).scrollLeft, 1100);
+      assert.deepEqual(d.writes, []); assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("a delayed Cases refresh retains the user's latest scroll position, not where the request started", async () => {
+  const d = await dashboard();
+  try {
+    mockCaseViewportGeometry(d);
+    let release!: () => void;
+    const fetch = d.w.fetch;
+    d.w.fetch = async (url: string, init: any) => {
+      const response = await fetch(url, init);
+      if (url === "/api/cases") await new Promise<void>(resolve => { release = resolve; });
+      return response;
+    };
+    caseViewport(d).scrollLeft = 200;
+    const refreshing = d.api.loadSharedCases(true); await tick();
+    caseViewport(d).scrollLeft = 1200; caseViewport(d).scrollTop = 350;
+    release(); await refreshing;
+    assert.equal(caseViewport(d).scrollLeft, 1200); assert.equal(caseViewport(d).scrollTop, 350);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click(); await tick();
+    assert.equal(caseViewport(d).scrollLeft, 1200);
+    const viewport = caseViewport(d);
+    await d.api.loadCaseProgress("saved-a");
+    assert.equal(caseViewport(d), viewport); assert.equal(viewport.scrollLeft, 1200);
+    assert.deepEqual(d.writes, []); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
 const copyRange = (d: any, td: any) => {
   let copied = ""; const event = new d.w.Event("copy", { bubbles:true, cancelable:true });
   Object.defineProperty(event, "clipboardData", { value:{ setData: (_type: string, value: string) => { copied = value; } } });

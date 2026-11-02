@@ -2785,6 +2785,7 @@
     .client-obligation-quick-option.active { border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); background:var(--accent-soft); color:var(--accent-strong); }
     .client-list-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .client-list-filters .filter-select { min-width:150px; }
+    .client-sort-controls { display:flex; gap:6px; align-items:center; }
 
     .danger-icon-btn {
       width: 28px;
@@ -5104,7 +5105,7 @@
         clientStatus: row.clientStatus || "Active",
         industry: row.industry || "Other",
         servicePackage: row.servicePackage || "Monthly + Annual",
-        engagementStart: row.engagementStart || "2026-01-01",
+        engagementStart: row.engagementStart || (useDefaults ? "2026-01-01" : ""),
         engagementEnd: row.engagementEnd || "",
         contractStartedAt: row.contractStartedAt || row.engagementStart || "",
         inactivatedAt: row.inactivatedAt || "",
@@ -5618,6 +5619,12 @@
     function sortClientMasterRows(rows, scope) {
       const { key, dir } = state.sorts[scope];
       const direction = dir === "desc" ? -1 : 1;
+      const contractDate = (client) => {
+        const raw = String(client.contractStartedAt || client.engagementStart || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number(raw.slice(0, 4)) < 1) return NaN;
+        const date = new Date(`${raw}T00:00:00Z`);
+        return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw ? date.getTime() : NaN;
+      };
       const value = (client, field) => {
         const identity = splitBusinessName(client);
         const draft = state.allocationDrafts[client.id] || {};
@@ -5639,6 +5646,13 @@
         return fields[field] ?? "";
       };
       return [...rows].sort((left, right) => {
+        if (key === "contractStart") {
+          const a = contractDate(left), b = contractDate(right);
+          const knownA = Number.isFinite(a), knownB = Number.isFinite(b);
+          if (knownA !== knownB) return knownA ? -1 : 1;
+          if (knownA && a !== b) return (a - b) * direction;
+          return compareText(splitBusinessName(left).name, splitBusinessName(right).name) || String(left.clientCode || "").localeCompare(String(right.clientCode || ""), "id", { numeric:true }) || compareText(left.id, right.id);
+        }
         if (key === "createdAt") {
           const a = Date.parse(left.createdAt), b = Date.parse(right.createdAt);
           const knownA = Number.isFinite(a), knownB = Number.isFinite(b);
@@ -7359,6 +7373,8 @@
         return matchesStatus && matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
       }), "clients");
       const activeClientWindow = windowedRows(activeClientRows, "active-clients", 43);
+      const clientSortOptions = [["form", "Form"], ["name", "Name"], ["taxPic", "Tax PIC"], ["accPic", "ACC PIC"], ["industry", "Industry"], ["monthlyFee", "Monthly Fee"], ["contract-oldest", "Contract: oldest first"], ["contract-newest", "Contract: newest first"]];
+      const clientSortValue = state.sorts.clients.key === "contractStart" ? (state.sorts.clients.dir === "desc" ? "contract-newest" : "contract-oldest") : state.sorts.clients.key;
       const proposalQuery = state.proposalSearch.trim().toLowerCase();
       const proposalRows = proposals.filter((proposal) => !proposalQuery || [displayClientName(proposal), proposal.proposedPic, proposal.proposedAccPic, proposal.status, proposal.notes].join(" ").toLowerCase().includes(proposalQuery));
 
@@ -7387,7 +7403,7 @@
                   <h3>${viewingInactiveClients ? "Inactive Clients" : "Active Clients"}</h3>
                   <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : "Client master overview. Select a client to review or update its operational profile."}</p>
                 </div>
-                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="mobile-only"><select id="client-sort-mobile" class="filter-select" aria-label="Sort clients">${[["form", "Form"], ["name", "Name"], ["taxPic", "Tax PIC"], ["accPic", "ACC PIC"], ["industry", "Industry"], ["monthlyFee", "Monthly Fee"]].map(([key, label]) => `<option value="${key}" ${state.sorts.clients.key === key ? "selected" : ""}>${label}</option>`).join("")}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
+                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="client-sort-controls"><select id="client-order" class="filter-select" aria-label="Sort clients" title="Contract order uses Contract Start, or Engagement Start for older records. Unknown dates appear last.">${clientSortOptions.map(([key, label]) => `<option value="${key}" ${clientSortValue === key ? "selected" : ""}>${label}</option>`).join("")}${clientSortOptions.some(([key]) => key === clientSortValue) ? "" : `<option value="column" selected disabled>Column sort</option>`}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
               </div>
               <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43">
                 <table class="client-table">
@@ -8625,6 +8641,8 @@
       const expandedHimbauan = caseList.find((item) => item.id === state.expandedHimbauanId);
       const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
       const root = rootOverride || document.getElementById("cases-view");
+      const previousViewport = root.querySelector('[data-virtual-table="cases"]');
+      const previousScrollLeft = previousViewport?.scrollLeft || 0;
       const toolIcon = (path) => `<svg class="case-tool-icon" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
       const columnGroup = (field) => ["taxPic", "accountingPic", "inspectorPic"].includes(field) ? "ownership" : ["dueDate", "deadline", "completionDate", "taxYear", "sphpDate", "completionNotes"].includes(field) ? "tracking" : "reference";
       const groupStart = (index) => index > 0 && columnGroup(columns[index][0]) !== columnGroup(columns[index - 1][0]);
@@ -8679,6 +8697,9 @@
       updateCaseSheetBusy();
       const fullScreenLink = root.querySelector("[data-case-fullscreen]");
       if (fullScreenLink) { fullScreenLink.target = "_blank"; fullScreenLink.rel = "noopener noreferrer"; }
+      // Restore after column widths are applied; native scrolling clamps narrower layouts.
+      const viewport = root.querySelector('[data-virtual-table="cases"]');
+      if (viewport && previousViewport) viewport.scrollLeft = previousScrollLeft;
     }
 
     function renderClientView() {
@@ -13145,8 +13166,11 @@
           .catch((error) => { target.value = previous || ""; target.disabled = false; window.alert(error instanceof Error ? error.message : "Case PIC could not be saved."); });
         return;
       }
-      if (target instanceof HTMLSelectElement && target.id === "client-sort-mobile") {
-        state.sorts.clients = { key: target.value, dir: "asc" };
+      if (target instanceof HTMLSelectElement && target.id === "client-order") {
+        if (!["form", "name", "taxPic", "accPic", "industry", "monthlyFee", "contract-oldest", "contract-newest"].includes(target.value)) return;
+        state.sorts.clients = target.value.startsWith("contract-") ? { key: "contractStart", dir: target.value === "contract-newest" ? "desc" : "asc" } : { key: target.value, dir: "asc" };
+        state.tableViewport["active-clients"] = 0;
+        state.virtualScrollTop = { ...(state.virtualScrollTop || {}), "active-clients": 0 };
         commitUi("replace");
         return;
       }

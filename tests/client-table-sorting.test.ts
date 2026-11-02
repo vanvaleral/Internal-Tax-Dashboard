@@ -75,3 +75,27 @@ test("Allocation entry order uses original creation dates, numeric code ties and
   assert.equal(sort(rows, "allocation").map((row: any) => row.id).join(","), "new,bulk10,bulk2,invalid,missing");
   assert.equal(rows.map(row => row.id).join(","), original);
 });
+
+test("client contract order uses valid contract dates with legacy fallback, stable ties and unknown dates last", () => {
+  assert.ok(source);
+  const state = { sorts: { clients: { key: "contractStart", dir: "asc" } }, allocationDrafts: {} };
+  const sort = vm.runInNewContext(`${source}; sortClientMasterRows`, {
+    state, splitBusinessName: (client: any) => ({ name: client.name, form: client.form }),
+    activeObligationKeys: () => [], compareText: (a: any, b: any) => String(a || "").localeCompare(String(b || ""))
+  });
+  const rows = [
+    { id: "new", name: "New", contractStartedAt: "2030-01-01", engagementStart: "2010-01-01", createdAt: "2000-01-01" },
+    { id: "tie10", name: "Same name", clientCode: "CL-10", contractStartedAt: "2024-02-29" },
+    { id: "missing", name: "A missing", contractStartedAt: "", engagementStart: "" },
+    { id: "legacy", name: "Legacy", engagementStart: "2020-06-01", createdAt: "2035-01-01" },
+    { id: "invalid", name: "Invalid", contractStartedAt: "2024-02-30", engagementStart: "2015-01-01" },
+    { id: "tie2", name: "Same name", clientCode: "CL-2", contractStartedAt: "2024-02-29" },
+    { id: "old", name: "Old", contractStartedAt: "2015-01-01" },
+    { id: "zero", name: "Zero", contractStartedAt: "0000-01-01" }
+  ];
+  const snapshot = JSON.stringify(rows);
+  assert.equal(sort(rows, "clients").map((row: any) => row.id).join(","), "old,legacy,tie2,tie10,new,missing,invalid,zero");
+  state.sorts.clients.dir = "desc";
+  assert.equal(sort(rows, "clients").map((row: any) => row.id).join(","), "new,tie2,tie10,legacy,old,missing,invalid,zero");
+  assert.equal(JSON.stringify(rows), snapshot);
+});

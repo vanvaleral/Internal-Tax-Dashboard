@@ -1,5 +1,21 @@
 # IMPLEMENTATION ROADMAP
 
+## Deferred Partner Workspaces
+
+The future multi-partner workspace plan is saved in
+[PARTNER_WORKSPACES_PLAN.md](PARTNER_WORKSPACES_PLAN.md), recorded 2026-10-30.
+It covers isolated partner workspaces, scoped oversight, client/employee transfers,
+history preservation, migration precautions and a staged rollout.
+
+Status: deferred at the user's request. Verify existing features and resolve
+current defects before resuming this larger initiative. Saving the plan does not
+authorize implementation or a production migration. Older phases below include
+early-prototype assumptions; inspect current code/schema before treating them as
+a current implementation-status checklist.
+
+Use [FEATURE_ACCEPTANCE_CHECKLIST.md](FEATURE_ACCEPTANCE_CHECKLIST.md) for the
+user's menu-by-menu verification and issue reporting before that initiative.
+
 ## Phase 0 — Audit and Documentation
 
 Deliverables:

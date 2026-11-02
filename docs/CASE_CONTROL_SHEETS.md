@@ -107,6 +107,13 @@ failed edits. New drafts with failed creation remain drafts, not saved records.
 
 Background refreshes preserve draft/pending records. Responses to reads started
 before an intervening edit are ignored to avoid replacing newly saved values.
+When the case table is rebuilt, its current horizontal scroll position is restored
+after column widths are applied. This also covers directory refreshes and direct
+case renders after interactions, in both categories and Full Screen. A delayed
+read preserves where the user is when the response is applied, not where they
+were when the request began. Native browser clamping handles narrower layouts;
+there is no wheel interception, scrolling animation, timer correction loop or new
+persisted scroll preference. Existing vertical-scroll handling is unchanged.
 Untouched blank rows do not create database records. Unsaved drafts are not a
 database backup and should be completed before leaving the page.
 
