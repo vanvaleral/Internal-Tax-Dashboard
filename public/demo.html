@@ -544,6 +544,8 @@
       font-weight: 800;
     }
 
+    .announcement-inbox-backdrop { position: fixed; inset: 0; z-index: 70; }
+
     .announcement-inbox {
       position: fixed;
       z-index: 70;
@@ -3087,6 +3089,51 @@
       }
     }
 
+    @media (min-width: 901px) {
+      .sidebar {
+        width: 240px;
+        transition: transform 240ms cubic-bezier(.22, 1, .36, 1), opacity 200ms ease, visibility 0s;
+      }
+      .compact-rail-toggle {
+        position: fixed;
+        top: 50%;
+        left: max(246px, calc((100vw - 1780px) / 2 + 246px));
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 48px;
+        padding: 0;
+        transform: translateY(-50%);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-solid);
+        color: var(--ink);
+        box-shadow: 0 3px 12px rgba(24, 38, 48, .12);
+        transition: left 240ms cubic-bezier(.22, 1, .36, 1), background-color 150ms ease, box-shadow 150ms ease;
+      }
+
+      .compact-rail-toggle:hover { background: var(--accent-soft); }
+      .compact-rail-toggle:hover:not(:disabled),
+      .compact-rail-toggle:active:not(:disabled) { transform: translateY(-50%); }
+      .compact-rail-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .compact-rail-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 240ms ease; }
+      .compact-nav-collapsed .shell { max-width: none; grid-template-columns: 0px minmax(0, 1fr); gap: 10px; }
+      .compact-nav-collapsed .main > .panel,
+      .compact-nav-collapsed .main > .view,
+      .compact-nav-collapsed .workspace-frame { max-width: none; }
+      .compact-nav-collapsed .sidebar {
+        transform: translateX(calc(-100% - max(14px, calc((100vw - 1780px) / 2 + 14px))));
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition-delay: 0s, 0s, 240ms;
+      }
+      .compact-nav-collapsed .compact-rail-toggle { left: 0; border-radius: 0 8px 8px 0; }
+      .compact-nav-collapsed .compact-rail-toggle svg { transform: rotate(180deg); }
+      .compact-nav-collapsed .topbar-actions .mobile-attendance-trigger { display: inline-flex; align-items: center; justify-content: center; }
+    }
+
     @media (min-width: 901px) and (max-width: 1100px) {
       .shell {
         grid-template-columns: 84px minmax(0, 1fr);
@@ -3103,34 +3150,12 @@
         padding: 8px;
         gap: 12px;
         border-radius: 20px;
-        transition: transform .18s ease, opacity .18s ease, visibility .18s;
       }
 
-      .compact-rail-toggle {
-        position: fixed;
-        top: 50%;
-        left: 86px;
-        z-index: 40;
-        display: grid;
-        place-items: center;
-        width: 24px;
-        height: 48px;
-        padding: 0;
-        transform: translateY(-50%);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--panel-solid);
-        color: var(--ink);
-        box-shadow: 0 3px 12px rgba(24, 38, 48, .12);
-      }
-
-      .compact-rail-toggle:hover { background: var(--accent-soft); }
-      .compact-rail-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-      .compact-rail-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .compact-rail-toggle { left: 86px; }
       .compact-nav-collapsed .shell { grid-template-columns: 0px minmax(0, 1fr); gap: 14px; }
-      .compact-nav-collapsed .sidebar { transform: translateX(calc(-100% - 12px)); opacity: 0; visibility: hidden; pointer-events: none; }
-      .compact-nav-collapsed .compact-rail-toggle { left: 0; border-radius: 0 8px 8px 0; }
-      .compact-nav-collapsed .compact-rail-toggle svg { transform: rotate(180deg); }
+      .compact-nav-collapsed .sidebar { transform: translateX(calc(-100% - 12px)); }
+      .compact-nav-collapsed .compact-rail-toggle { left: 0; }
 
       .sidebar > div:first-child .eyebrow,
       .sidebar-stack,
@@ -3167,7 +3192,9 @@
       .topbar-actions .mobile-attendance-trigger { display: inline-flex; align-items: center; justify-content: center; }
     }
 
-    @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .sidebar, .compact-rail-toggle, .compact-rail-toggle svg { transition: none !important; }
+    }
 
     @media (max-width: 900px) {
       body {
@@ -3882,7 +3909,7 @@
         <div class="topbar-actions">
           <button class="database-status-chip" id="database-status-chip" type="button" title="Checking database connection">Database: checking...</button>
           <button class="solid-btn mobile-attendance-trigger" data-open-attendance-site="yes" aria-label="Open attendance"><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5 9.2 17 19 7"></path></svg></span><span class="topbar-desktop-label">Attend</span></button>
-          <button class="ghost-btn inbox-trigger" data-open-announcement-inbox="yes" aria-label="Open announcements"><span class="topbar-desktop-label">Announcements</span><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 17h12l-1.5-2.2V10a4.5 4.5 0 0 0-9 0v4.8z"></path><path d="M10 20h4"></path></svg></span><span class="inbox-badge" id="announcement-unread-count" hidden>0</span></button>
+          <button class="ghost-btn inbox-trigger" data-open-announcement-inbox="yes" aria-label="Open Notification Center" aria-expanded="false" aria-controls="announcement-inbox-root"><span class="topbar-desktop-label">Notification</span><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 17h12l-1.5-2.2V10a4.5 4.5 0 0 0-9 0v4.8z"></path><path d="M10 20h4"></path></svg></span><span class="inbox-badge" id="announcement-unread-count" hidden>0</span></button>
           <button class="ghost-btn settings-btn" data-open-appearance-settings="yes" aria-label="Appearance settings" title="Appearance settings"><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.25"></circle><path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M18 6l-1.4 1.4M7.4 16.6 6 18M18 18l-1.4-1.4M7.4 7.4 6 6"></path></svg></span><span class="topbar-desktop-label">&#9881;</span></button>
           <button class="ghost-btn logout-btn" data-logout="yes" aria-label="Log out of the workspace"><span class="topbar-desktop-label">Log out</span><span class="topbar-mobile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5"></path><path d="m14 8 4 4-4 4M9 12h9"></path></svg></span></button>
         </div>
@@ -3902,7 +3929,7 @@
 
   <script data-compact-navigation>
     (() => {
-      const viewport = window.matchMedia("(min-width: 901px) and (max-width: 1100px)");
+      const viewport = window.matchMedia("(min-width: 901px)");
       const root = document.documentElement, sidebar = document.getElementById("workspace-sidebar"), toggle = document.getElementById("compact-rail-toggle");
       let requestedHidden = false;
       const sync = () => {
@@ -5099,12 +5126,12 @@
           workload: ["Management / PIC Access", "Management Workspace", "Leadership-only directory controls for PIC roles, teams, and access status."],
           recognition: ["Management / Recognition", "Management Workspace", "Transparent points, monthly recognition, and supervisor-ready incentive estimates."],
           report: ["Management / Monthly Report", "Management Workspace", "Printable monthly partner briefing and period-end activity review."],
-          announcements: ["Management / Announcements", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."],
+          announcements: ["Management / Notifications", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."],
           access: ["Management / Quick Access", "Management Workspace", "Launch directly into clients, cases, and operations that need attention."]
         },
         profile: ["Profile / My Scope", "Profile Workspace", "Update your display name and review clients assigned to you."],
         myWork: ["My Work / Daily Tasks", "My Work", "Personal and shared daily tasks, reminders, and next actions."],
-        notifications: ["Notifications", "Notifications", "Firm announcements, assignments, and updates for your account."],
+        notifications: ["Notification Center", "Notification Center", "Firm notices, assignments, and updates for your account."],
         allocation: ["Allocation / PIC Reassignment", "Allocation Workspace", "Leader workspace for mass PIC reassignment, controlled rollout, and printable change reporting."],
         client: ["Clients / Client Detail", "Client Detail Workspace", "Compact client timeline and grouped obligation history for drill-down without leaving the workspace model."]
       };
@@ -6828,6 +6855,7 @@
 
     function renderAnnouncementInbox() {
       const root = document.getElementById("announcement-inbox-root");
+      document.querySelector("[data-open-announcement-inbox]")?.setAttribute("aria-expanded", String(state.announcementInboxOpen));
       const badge = document.getElementById("announcement-unread-count");
       const unread = unreadAnnouncementCount();
       if (badge) {
@@ -6841,8 +6869,9 @@
       }
       const items = visibleAnnouncements().filter((item) => !item.readAt);
       root.innerHTML = safeHtml(`
-        <section class="announcement-inbox" role="dialog" aria-label="Announcement inbox">
-          <div class="announcement-inbox-head"><div><div class="eyebrow">My Inbox</div><strong>Announcements</strong></div><div class="inline-controls"><button class="ghost-btn" data-open-announcement-history="yes">History</button><button class="ghost-btn" data-close-announcement-inbox="yes">Close</button></div></div>
+        <div class="announcement-inbox-backdrop" data-close-announcement-inbox="yes">
+        <section class="announcement-inbox" role="dialog" aria-label="Notification Center">
+          <div class="announcement-inbox-head"><div><div class="eyebrow">My Inbox</div><strong>Notification Center</strong></div><div class="inline-controls"><button class="ghost-btn" data-open-announcement-history="yes">History</button><button class="ghost-btn" data-close-announcement-inbox="yes">Close</button></div></div>
           <div class="announcement-list">
             ${items.map((item) => {
               const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
@@ -6851,9 +6880,10 @@
                 <p>${escapeHtml(item.message)}</p>
                 <div class="announcement-meta">${escapeHtml(item.sender)} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
               </button>`;
-            }).join("") || `<div class="empty-state">No announcements for you yet.</div>`}
+            }).join("") || `<div class="empty-state">No notifications for you yet.</div>`}
           </div>
         </section>
+        </div>
       `);
     }
 
@@ -6864,7 +6894,7 @@
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-notifications">
           <section class="panel">
-            <div class="section-title"><div><h2>Notifications</h2><p>Announcements and assignment updates for your account.</p></div><span class="pill accent">${unreadAnnouncementCount()} unread</span></div>
+            <div class="section-title"><div><h2>Notification Center</h2><p>Notices and assignment updates for your account.</p></div><span class="pill accent">${unreadAnnouncementCount()} unread</span></div>
             <div class="announcement-list">
               ${items.map((item) => {
                 const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
@@ -6981,7 +7011,7 @@
                 <button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button>
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
                 <button class="${state.managementTab === "report" ? "solid-btn" : "ghost-btn"}" data-management-tab="report">Monthly Report</button>
-                <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Announcements</button>
+                <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Notifications</button>
                 <button class="${state.managementTab === "access" ? "solid-btn" : "ghost-btn"}" data-management-tab="access">Quick Access</button>
               </div>
             </div>
@@ -7177,12 +7207,12 @@
           ${state.managementTab === "announcements" ? `
             <section class="dashboard-grid">
               <div class="panel">
-                <div class="section-title"><div><h3>Broadcast Announcement</h3><p>Use for a briefing, a meeting, or a firm-wide operational update.</p></div></div>
+                <div class="section-title"><div><h3>Broadcast Notification</h3><p>Use for a briefing, a meeting, or a firm-wide operational update.</p></div></div>
                 <div class="announcement-composer">
                   <div class="client-field"><label for="announcement-title">Subject</label><input id="announcement-title" class="field" placeholder="Example: Friday briefing at 16.00" /></div>
                   <div class="client-field"><label for="announcement-audience">Send to</label><select id="announcement-audience" class="field"><option value="all">All employees</option><option value="tax">Tax team</option><option value="accounting">Accounting team</option></select></div>
                   <div class="client-field"><label for="announcement-message">Message</label><textarea id="announcement-message" class="inline-textarea" placeholder="Add the time, place, and required preparation."></textarea></div>
-                  <button class="solid-btn" data-send-announcement="yes">Send Announcement</button>
+                  <button class="solid-btn" data-send-announcement="yes">Send Notification</button>
                 </div>
               </div>
               <div class="panel">
@@ -8963,7 +8993,7 @@
         <div class="workspace-frame">
           <section class="panel">
             <div class="section-title"><div><div class="eyebrow">My Profile</div><h2>Profile & Client Scope</h2><p>Update the display name used for PIC assignments and review your assigned clients.</p></div></div>
-            <div class="workspace-tabs"><button class="${state.profileTab === "profile" ? "solid-btn" : "ghost-btn"}" data-profile-tab="profile">Profile</button><button class="${state.profileTab === "clients" ? "solid-btn" : "ghost-btn"}" data-profile-tab="clients">Client List</button><button class="${state.profileTab === "history" ? "solid-btn" : "ghost-btn"}" data-profile-tab="history">Announcement History</button></div>
+            <div class="workspace-tabs"><button class="${state.profileTab === "profile" ? "solid-btn" : "ghost-btn"}" data-profile-tab="profile">Profile</button><button class="${state.profileTab === "clients" ? "solid-btn" : "ghost-btn"}" data-profile-tab="clients">Client List</button><button class="${state.profileTab === "history" ? "solid-btn" : "ghost-btn"}" data-profile-tab="history">Notification History</button></div>
             <div class="detail-grid" ${state.profileTab === "profile" ? "" : "hidden"}>
               <div class="detail-card">
                 <div class="eyebrow">Display Name</div>
@@ -8988,7 +9018,7 @@
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>No.</th><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
               ${assignedClients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
-            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Announcement History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete announcement" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read announcements yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
+            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
         </div>`);
     }
@@ -11727,7 +11757,7 @@
         return;
       }
 
-      if (closeAnnouncementInboxTrigger) {
+      if (closeAnnouncementInboxTrigger && (target === closeAnnouncementInboxTrigger || closeAnnouncementInboxTrigger.tagName === "BUTTON")) {
         state.announcementInboxOpen = false;
         renderAnnouncementInbox();
         return;
@@ -13975,6 +14005,12 @@
     });
 
     window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.announcementInboxOpen) {
+        state.announcementInboxOpen = false;
+        renderAnnouncementInbox();
+        document.querySelector("[data-open-announcement-inbox]")?.focus({ preventScroll: true });
+        return;
+      }
       if (event.key === "Enter" && event.target?.id === "my-work-title") {
         event.preventDefault();
         const title = event.target.value.trim();

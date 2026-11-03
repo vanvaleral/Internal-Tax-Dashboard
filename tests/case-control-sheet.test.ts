@@ -198,6 +198,50 @@ test("an older announcement read cannot replace a newer inbox response", async (
   } finally { d.dom.window.close(); }
 });
 
+test("Notification Center dismisses outside, by Close or Escape, without changing workspace data", async () => {
+  const d = await dashboard();
+  try {
+    const trigger = d.w.document.querySelector("[data-open-announcement-inbox]");
+    const root = d.w.document.getElementById("announcement-inbox-root");
+    assert.equal(trigger.querySelector(".topbar-desktop-label").textContent, "Notification");
+    for (const method of ["outside", "close", "escape", "toggle"]) {
+      trigger.click(); await tick();
+      assert.equal(trigger.getAttribute("aria-expanded"), "true");
+      const panel = root.querySelector(".announcement-inbox");
+      assert.equal(panel.getAttribute("aria-label"), "Notification Center");
+      panel.querySelector("strong").click();
+      assert.equal(d.api.state.announcementInboxOpen, true, "inside clicks must not dismiss the popup");
+      if (method === "outside") root.querySelector(".announcement-inbox-backdrop").click();
+      else if (method === "close") panel.querySelector("[data-close-announcement-inbox]").click();
+      else if (method === "escape") d.w.dispatchEvent(new d.w.KeyboardEvent("keydown", { key:"Escape", bubbles:true }));
+      else trigger.click();
+      assert.equal(d.api.state.announcementInboxOpen, false);
+      assert.equal(root.children.length, 0);
+      assert.equal(trigger.getAttribute("aria-expanded"), "false");
+      assert.equal(d.api.state.currentView, "cases-view");
+    }
+    assert.deepEqual(d.writes, []); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("Notification Center read and History actions remain functional inside its dismissal backdrop", async () => {
+  const d = await dashboard();
+  try {
+    d.announcements.push({ id:"notice-1", title:"New case", message:"Assigned to you", audience:"all", sender:"PIC", createdAt:"2026-11-03T00:00:00Z", readAt:null });
+    const trigger = d.w.document.querySelector("[data-open-announcement-inbox]");
+    trigger.click(); await tick();
+    d.w.document.querySelector("[data-read-announcement] strong").click(); await tick();
+    assert.equal(d.api.state.announcementInboxOpen, true, "reading a notification must not dismiss the panel");
+    assert.ok(d.api.state.announcements[0].readAt);
+    assert.equal(d.writes.length, 1); assert.equal(d.writes[0].announcementId, "notice-1");
+    d.w.document.querySelector("[data-open-announcement-history]").click(); await tick();
+    assert.equal(d.api.state.announcementInboxOpen, false);
+    assert.equal(d.api.state.currentView, "profile-view"); assert.equal(d.api.state.profileTab, "history");
+    assert.match(d.w.document.getElementById("profile-view").textContent, /Notification History/);
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
 test("Cases default to creation order and retain earlier numbers through name sorts, filters, saves and reloads", async () => {
   const d = await dashboard("supervisor", { caseSheetSort:{ key:"clientName", direction:"asc" } });
   try {

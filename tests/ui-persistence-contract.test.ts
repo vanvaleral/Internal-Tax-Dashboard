@@ -312,7 +312,7 @@ test("announcement inbox can be toggled without leaving the current workspace", 
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /if \(openAnnouncementInboxTrigger\) \{\s*state\.announcementInboxOpen = !state\.announcementInboxOpen;/);
   assert.match(demo, /height: calc\(100svh - 190px\)/);
-  assert.match(demo, /mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24">/);
+  assert.match(demo, /mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"[^>]*>/);
   assert.match(demo, /settings-btn[\s\S]{0,360}<svg viewBox="0 0 24 24">/);
 });
 

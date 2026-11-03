@@ -4,10 +4,19 @@
 
 The prototype in `public/demo.html` provides:
 
-- a per-user announcement inbox with unread counts
+- a per-user Notification Center with unread counts
 - a Management broadcast composer for briefing, meeting, and firm-wide notices
 - a Wall of Fame announcement after Employee of the Month is finalized
 - local browser persistence for demo review
+
+The desktop header action is labeled **Notification** and opens **Notification
+Center**. The popup closes with Close, Escape, the header toggle, or a click on
+the transparent outside backdrop. The backdrop covers embedded sheets as well,
+so an outside click dismisses the popup without also editing the sheet underneath.
+Clicks within the panel do not dismiss it; notification read actions and History
+keep their existing behavior. Mobile retains its full-page notification view,
+also titled Notification Center. These are UI-only changes; database/API names,
+delivery, recipients and stored history are unchanged.
 
 Announcements are stored in Supabase with per-recipient read status. Web Push is
 implemented separately for opted-in devices and requires the configured VAPID

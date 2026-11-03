@@ -88,7 +88,7 @@ test("full desktop and mobile keep their existing sidebar and bottom-navigation 
         assert.equal(d.css(".sidebar").position, "sticky");
         assert.notEqual(d.css(".sidebar-stack").display, "none");
         assert.equal(d.css(".mobile-nav-icon").display, "none");
-        assert.equal(d.css(".compact-rail-toggle").display, "none");
+        assert.equal(d.css(".compact-rail-toggle").display, "grid");
       }
     } finally { d.dom.window.close(); }
   }
@@ -106,11 +106,34 @@ test("Cases full-screen still hides navigation at the compact desktop breakpoint
 
 function mountToggle(d: ReturnType<typeof atWidth>, compact = true) {
   const listeners: Array<() => void> = [], viewport = { matches: compact, addEventListener(_event: string, listener: () => void) { listeners.push(listener); } };
-  d.w.matchMedia = (() => viewport) as any;
+  d.w.matchMedia = ((query: string) => { assert.equal(query, "(min-width: 901px)"); return viewport; }) as any;
   (d.w as any).fetch = () => { throw new Error("Collapsing navigation must not request workspace data"); };
   d.w.eval(d.w.document.querySelector("script[data-compact-navigation]")!.textContent!);
   return { toggle: d.w.document.getElementById("compact-rail-toggle")!, sidebar: d.w.document.getElementById("workspace-sidebar")!, change(compact: boolean) { viewport.matches = compact; listeners.forEach(listener => listener()); } };
 }
+
+test("sidebar animation retains its width, delays visibility and keeps the edge handle centered on hover/press", () => {
+  for (const [width, sidebarWidth] of [[940, "84px"], [1440, "240px"]] as const) {
+    const d = atWidth(width);
+    try {
+      const rules = [...d.w.document.styleSheets].flatMap(sheet => [...sheet.cssRules]) as CSSStyleRule[];
+      const hover = rules.find(rule => rule.selectorText?.includes(".compact-rail-toggle:hover:not(:disabled)"))!;
+      assert.ok(hover.selectorText.includes(".compact-rail-toggle:active:not(:disabled)"));
+      assert.equal(hover.style.transform, "translateY(-50%)");
+      assert.match(d.css(".sidebar").transition, /transform 240ms/);
+      assert.match(d.css(".compact-rail-toggle").transition, /left 240ms/);
+      assert.match(d.css(".compact-rail-toggle svg").transition, /transform 240ms/);
+      const { toggle } = mountToggle(d);
+      toggle.click();
+      assert.equal(d.css(".sidebar").width, sidebarWidth, "grid collapse must not shrink the sliding sidebar");
+      assert.equal(d.css(".sidebar").transitionDelay, "0s, 0s, 240ms");
+      assert.notEqual(d.css(".sidebar").transform, "translateX(-100vw)", "slide only travels far enough to clear the left edge");
+      toggle.click();
+      assert.equal(d.css(".sidebar").width, sidebarWidth);
+      assert.match(html, /\.sidebar, \.compact-rail-toggle, \.compact-rail-toggle svg \{ transition: none !important; \}/);
+    } finally { d.dom.window.close(); }
+  }
+});
 
 test("compact rail can hide/reopen with an accessible edge handle without replacing workspace edits or frames", () => {
   const d = atWidth(940);
@@ -135,7 +158,7 @@ test("compact rail can hide/reopen with an accessible edge handle without replac
   } finally { d.dom.window.close(); }
 });
 
-test("hidden rail never disables desktop/mobile navigation on resize and remembers the choice only within the page", () => {
+test("hidden sidebar restores mobile navigation on resize and remembers the choice only within the page", () => {
   const d = atWidth(940);
   try {
     const { toggle, sidebar, change } = mountToggle(d);
@@ -152,6 +175,34 @@ test("hidden rail never disables desktop/mobile navigation on resize and remembe
   const fresh = atWidth(940);
   try { assert.equal(mountToggle(fresh).toggle.getAttribute("aria-expanded"), "true", "reload starts with navigation available"); }
   finally { fresh.dom.window.close(); }
+});
+
+test("wide desktop can hide its full sidebar and use the entire screen without replacing the workspace", () => {
+  for (const width of [1101, 1440, 1920, 2560]) {
+    const d = atWidth(width);
+    try {
+      const { toggle, sidebar } = mountToggle(d), main = d.w.document.querySelector(".main")!;
+      const workspace = d.w.document.createElement("div");
+      workspace.className = "workspace-frame";
+      d.w.document.getElementById("cases-view")!.append(workspace);
+      assert.equal(d.css(".compact-rail-toggle").display, "grid");
+      toggle.click();
+      assert.equal(d.css(".shell").gridTemplateColumns, "0px minmax(0, 1fr)");
+      assert.equal(d.css(".shell").maxWidth, "none", "collapsed workspace must not retain the 1780px cap");
+      assert.equal(d.css(".global-topbar").maxWidth, "none");
+      assert.equal(d.css("#cases-view").maxWidth, "none");
+      assert.equal(d.css(".workspace-frame").maxWidth, "none", "inner workspace must expand too");
+      assert.equal(d.css(".compact-rail-toggle").left, "0px");
+      assert.equal(sidebar.hasAttribute("inert"), true);
+      assert.equal(d.css(".topbar-actions .mobile-attendance-trigger").display, "inline-flex", "attendance remains accessible with its sidebar card hidden");
+      assert.equal(d.w.document.querySelector(".main"), main);
+      toggle.click();
+      assert.equal(d.css(".shell").gridTemplateColumns, "240px 1fr");
+      assert.equal(d.css(".shell").maxWidth, "1780px");
+      assert.equal(sidebar.hasAttribute("inert"), false);
+      assert.equal(toggle.getAttribute("aria-expanded"), "true");
+    } finally { d.dom.window.close(); }
+  }
 });
 
 test("Cases Full Screen never enables the hide/show handle or makes navigation inert", () => {

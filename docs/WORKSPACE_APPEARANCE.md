@@ -49,22 +49,34 @@ attendance remains available through the existing header action. Short windows
 can scroll the rail independently, without pushing the workspace below it.
 
 All desktop menus remain available according to the existing role permissions.
-This is not the restricted mobile feature set. Existing desktop navigation above
-1100px and the fixed five-item mobile bottom navigation at 900px and below remain
-unchanged. Cases Full Screen continues to hide navigation entirely. Resizing is
+This is not the restricted mobile feature set. Desktop navigation above 1100px
+keeps its full sidebar when open; the fixed five-item mobile bottom navigation
+at 900px and below remains unchanged. Cases Full Screen hides navigation entirely. Resizing is
 CSS-only: it does not reload data, recreate Annual frames or change permissions.
 No database migration or additional dependency is required.
 
-The compact rail has a small chevron handle at its right edge. Hide it to slide
-the rail off the left and widen the existing workspace; the same handle remains
+Every desktop width above 900px has a small chevron handle at the sidebar's right
+edge, including maximized windows. Hide it to slide the sidebar off the left and
+widen the existing workspace; the same handle remains
 at the left edge to reopen it. Hidden navigation is inert and excluded from
 keyboard/screen-reader interaction. The button exposes its expanded state, and
 reduced-motion settings disable the slide transition. Workspace DOM, focused
 editors, Annual frames and data are not replaced by the toggle.
 
-The hide/show choice lives only in page memory. Leaving the compact width range
-restores normal desktop/mobile navigation and removes inert/hidden state; returning
-to a compact window reapplies that page's choice. Reload starts with the rail open.
+The edge handle retains its vertical centering on hover and press instead of
+inheriting the generic button lift. Hide/show uses a 240ms slide with a short fade,
+matching handle movement and chevron rotation. The sidebar keeps its normal width
+during the transition and becomes visually hidden only after the slide completes.
+The workspace grid resizes once, not on every animation frame, to avoid repeatedly
+resizing embedded sheets. Reduced-motion preference disables all three transitions.
+
+When hidden, the workspace also removes its usual 1780px width cap and fills the
+available window with small edge margins. Attendance is available in the header
+while its sidebar card is hidden. Reopening restores the original desktop layout.
+
+The hide/show choice lives only in page memory and applies across desktop widths.
+Resizing to mobile restores bottom navigation and removes inert/hidden state;
+returning to desktop reapplies that page's choice. Reload starts with navigation open.
 Cases Full Screen has no rail toggle. No local-storage preference or database write
 is introduced.
 
