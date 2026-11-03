@@ -39,49 +39,39 @@ Dark-mode surfaces/checklist contrast are provided without changing their data o
 completion rules. The annual preload uses the same frames and is unaffected by
 cosmetic changes; no speculative data cache is created by a theme update.
 
-## Compact Desktop Navigation
+## Desktop Navigation And Spacing
 
-At viewport widths of 901-1100px (for example, a half-screen desktop window), the
-dashboard uses an 84px sticky left rail with custom SVG icons and readable labels.
-This replaces the old single-column layout that placed the complete sidebar above
-the workspace. User/points/attendance cards are hidden only in this width range;
-attendance remains available through the existing header action. Short windows
-can scroll the rail independently, without pushing the workspace below it.
+The dashboard uses a centered shell capped at 1920px rather than stretching across
+ultrawide monitors. Wide desktop has 22px outer padding, a 22px sidebar/workspace
+gap, and a roomier 260px sidebar with 18px internal padding. All workspace frames
+share the available content width, so moving between menus stays consistent.
 
-All desktop menus remain available according to the existing role permissions.
-This is not the restricted mobile feature set. Desktop navigation above 1100px
-keeps its full sidebar when open; the fixed five-item mobile bottom navigation
-at 900px and below remains unchanged. Cases Full Screen hides navigation entirely. Resizing is
-CSS-only: it does not reload data, recreate Annual frames or change permissions.
-No database migration or additional dependency is required.
+Desktop offers exactly two persistent sidebar sizes: Full (260px, with normal
+labels and profile/points/attendance cards) and Mini (84px, with custom icons above
+labels). Neither mode auto-hides or creates a hover popup. The chevron switches
+sizes, exposes its full/mini state accessibly, and does not move vertically on
+hover or press. Double-clicking the title/background also switches sizes;
+interactive buttons and fields retain their normal behavior.
 
-Every desktop width above 900px has a small chevron handle at the sidebar's right
-edge, including maximized windows. Hide it to slide the sidebar off the left and
-widen the existing workspace; the same handle remains
-at the left edge to reopen it. Hidden navigation is inert and excluded from
-keyboard/screen-reader interaction. The button exposes its expanded state, and
-reduced-motion settings disable the slide transition. Workspace DOM, focused
-editors, Annual frames and data are not replaced by the toggle.
+Wide desktop starts Full; 901-1100px windows start Mini to avoid stacking a large
+sidebar above the workspace. Both sizes can be selected explicitly at either
+desktop width. Narrow desktop retains 14px outer padding and an 18px workspace
+gap. A selection remains in page memory across desktop resizes; reload restores
+the width-based default. No local-storage or database preference is added.
 
-The edge handle retains its vertical centering on hover and press instead of
-inheriting the generic button lift. Hide/show uses a 240ms slide with a short fade,
-matching handle movement and chevron rotation. The sidebar keeps its normal width
-during the transition and becomes visually hidden only after the slide completes.
-The workspace grid resizes once, not on every animation frame, to avoid repeatedly
-resizing embedded sheets. Reduced-motion preference disables all three transitions.
+Mini navigation is always usable, follows existing role-based menu visibility and
+scrolls independently in short windows. Its hidden information cards are replaced
+by the existing header Attend action. Navigation itself is never made inert.
+Changing size does not recreate the workspace, editors or Annual frames, or
+request/rewrite business data. Grid width changes once; only the edge handle and
+chevron animate, with reduced-motion support.
 
-When hidden, the workspace also removes its usual 1780px width cap and fills the
-available window with small edge margins. Attendance is available in the header
-while its sidebar card is hidden. Reopening restores the original desktop layout.
+Mobile at 900px and below retains its fixed five-item bottom navigation and
+existing feature restrictions, without a desktop size toggle. Cases Full Screen
+still hides dashboard navigation entirely. No hover zones, cloned menu trees,
+popup timers, pointer-position tracking or auto-close behavior remain.
 
-The hide/show choice lives only in page memory and applies across desktop widths.
-Resizing to mobile restores bottom navigation and removes inert/hidden state;
-returning to desktop reapplies that page's choice. Reload starts with navigation open.
-Cases Full Screen has no rail toggle. No local-storage preference or database write
-is introduced.
-
-Rail and mobile navigation share one minimal SVG icon family: a 24px canvas,
-1.75px rounded strokes, open outlines and theme-inherited color. Calendar, folder,
-checklist, people, chart, reassignment arrows, bell and profile silhouettes replace
-the former mixed-detail symbols. Labels remain visible, button dimensions and
-role rules are unchanged, and no icon font or external image request is added.
+Rail and mobile navigation share the same minimal 24px SVG family with 1.75px
+rounded strokes and theme-inherited color. Calendar, folder, checklist, people,
+chart, reassignment arrows, bell and profile icons retain readable labels. No
+icon font, external request, new dependency or database migration is required.

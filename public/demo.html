@@ -31,7 +31,7 @@
       --danger-soft: #ffe1ea;
       --neutral-soft: #edf3f1;
       --shadow: 0 10px 24px rgba(24, 38, 48, 0.08);
-      --workspace-width: 1320px;
+      --workspace-width: none;
     }
 
     body.theme-dark {
@@ -141,7 +141,7 @@
     }
 
     .shell {
-      max-width: 1780px;
+      max-width: none;
       margin: 0 auto;
       padding: 14px;
       display: grid;
@@ -3090,14 +3090,12 @@
     }
 
     @media (min-width: 901px) {
-      .sidebar {
-        width: 240px;
-        transition: transform 240ms cubic-bezier(.22, 1, .36, 1), opacity 200ms ease, visibility 0s;
-      }
+      .shell { max-width: 1920px; padding: 22px; gap: 22px; grid-template-columns: 260px minmax(0, 1fr); align-items: start; }
+      .sidebar { position: sticky; top: 22px; width: 260px; height: calc(100svh - 44px); padding: 18px; }
       .compact-rail-toggle {
         position: fixed;
         top: 50%;
-        left: max(246px, calc((100vw - 1780px) / 2 + 246px));
+        left: max(274px, calc((100% - 1920px) / 2 + 274px));
         z-index: 40;
         display: grid;
         place-items: center;
@@ -3110,90 +3108,40 @@
         background: var(--panel-solid);
         color: var(--ink);
         box-shadow: 0 3px 12px rgba(24, 38, 48, .12);
-        transition: left 240ms cubic-bezier(.22, 1, .36, 1), background-color 150ms ease, box-shadow 150ms ease;
+        transition: left 180ms ease, background-color 150ms ease;
       }
-
       .compact-rail-toggle:hover { background: var(--accent-soft); }
       .compact-rail-toggle:hover:not(:disabled),
       .compact-rail-toggle:active:not(:disabled) { transform: translateY(-50%); }
       .compact-rail-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-      .compact-rail-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 240ms ease; }
-      .compact-nav-collapsed .shell { max-width: none; grid-template-columns: 0px minmax(0, 1fr); gap: 10px; }
-      .compact-nav-collapsed .main > .panel,
-      .compact-nav-collapsed .main > .view,
-      .compact-nav-collapsed .workspace-frame { max-width: none; }
-      .compact-nav-collapsed .sidebar {
-        transform: translateX(calc(-100% - max(14px, calc((100vw - 1780px) / 2 + 14px))));
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-        transition-delay: 0s, 0s, 240ms;
-      }
-      .compact-nav-collapsed .compact-rail-toggle { left: 0; border-radius: 0 8px 8px 0; }
-      .compact-nav-collapsed .compact-rail-toggle svg { transform: rotate(180deg); }
-      .compact-nav-collapsed .topbar-actions .mobile-attendance-trigger { display: inline-flex; align-items: center; justify-content: center; }
+      .compact-rail-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 180ms ease; }
+      .desktop-nav-mini .shell { grid-template-columns: 84px minmax(0, 1fr); }
+      .desktop-nav-mini .sidebar { width: 84px; padding: 8px; gap: 12px; border-radius: 20px; }
+      .desktop-nav-mini .compact-rail-toggle { left: max(98px, calc((100% - 1920px) / 2 + 98px)); }
+      .desktop-nav-mini .compact-rail-toggle svg { transform: rotate(180deg); }
+      .desktop-nav-mini .sidebar > div:first-child .eyebrow,
+      .desktop-nav-mini .sidebar-stack,
+      .desktop-nav-mini .nav-desktop-subtitle { display: none; }
+      .desktop-nav-mini .sidebar h1 { margin: 4px 0; font-size: 12px; line-height: 1.2; letter-spacing: -0.02em; text-align: center; }
+      .desktop-nav-mini .nav { gap: 5px; }
+      .desktop-nav-mini .nav-btn { flex-direction: column; justify-content: center; min-height: 61px; padding: 7px 3px; gap: 5px; border-radius: 12px; text-align: center; }
+      .desktop-nav-mini .nav-desktop-label { order: 1; font-size: 10px; line-height: 1.2; }
+      .desktop-nav-mini .mobile-nav-icon { display: grid; place-items: center; width: 24px; height: 24px; }
+      .desktop-nav-mini .topbar-actions .mobile-attendance-trigger { display: inline-flex; align-items: center; justify-content: center; }
     }
 
     @media (min-width: 901px) and (max-width: 1100px) {
-      .shell {
-        grid-template-columns: 84px minmax(0, 1fr);
-        padding: 10px;
-        gap: 10px;
-        align-items: start;
-      }
-
-      .sidebar {
-        position: sticky;
-        top: 10px;
-        width: 84px;
-        height: calc(100svh - 20px);
-        padding: 8px;
-        gap: 12px;
-        border-radius: 20px;
-      }
-
-      .compact-rail-toggle { left: 86px; }
-      .compact-nav-collapsed .shell { grid-template-columns: 0px minmax(0, 1fr); gap: 14px; }
-      .compact-nav-collapsed .sidebar { transform: translateX(calc(-100% - 12px)); }
-      .compact-nav-collapsed .compact-rail-toggle { left: 0; }
-
-      .sidebar > div:first-child .eyebrow,
-      .sidebar-stack,
-      .nav-desktop-subtitle {
-        display: none;
-      }
-
-      .sidebar h1 {
-        margin: 4px 0;
-        font-size: 12px;
-        line-height: 1.2;
-        letter-spacing: -0.02em;
-        text-align: center;
-      }
-
-      .nav { gap: 5px; }
-
-      .nav-btn {
-        flex-direction: column;
-        justify-content: center;
-        min-height: 61px;
-        padding: 7px 3px;
-        gap: 5px;
-        border-radius: 12px;
-        text-align: center;
-      }
-
-      .nav-desktop-label { order: 1; font-size: 10px; line-height: 1.2; }
-      .mobile-nav-icon { display: grid; place-items: center; width: 24px; height: 24px; }
-
+      .shell { padding: 14px; gap: 18px; }
+      .sidebar { top: 14px; height: calc(100svh - 28px); }
+      .compact-rail-toggle { left: 266px; }
+      .desktop-nav-mini .compact-rail-toggle { left: 90px; }
       .global-topbar { flex-direction: row; align-items: center; gap: 10px; }
       .global-topbar > div:first-child { flex: 1; min-width: 0; }
       .topbar-actions { flex-wrap: nowrap; }
-      .topbar-actions .mobile-attendance-trigger { display: inline-flex; align-items: center; justify-content: center; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .sidebar, .compact-rail-toggle, .compact-rail-toggle svg { transition: none !important; }
+      .compact-rail-toggle, .compact-rail-toggle svg { transition: none !important; }
     }
 
     @media (max-width: 900px) {
@@ -3851,7 +3799,7 @@
   </script>
   <script src="workspace-startup.js"></script>
   <div class="shell">
-    <button id="compact-rail-toggle" class="compact-rail-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"></path></svg></button>
+    <button id="compact-rail-toggle" class="compact-rail-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Use mini sidebar" title="Use mini sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"></path></svg></button>
     <aside class="sidebar" id="workspace-sidebar">
       <div>
         <div class="eyebrow">LMATS Consulting</div>
@@ -3929,27 +3877,33 @@
 
   <script data-compact-navigation>
     (() => {
-      const viewport = window.matchMedia("(min-width: 901px)");
+      const desktop = window.matchMedia("(min-width: 901px)");
+      const narrow = window.matchMedia("(min-width: 901px) and (max-width: 1100px)");
       const root = document.documentElement, sidebar = document.getElementById("workspace-sidebar"), toggle = document.getElementById("compact-rail-toggle");
-      let requestedHidden = false;
+      let requestedMini = null;
       const sync = () => {
-        const available = viewport.matches && !root.classList.contains("cases-fullscreen");
-        const hidden = available && requestedHidden;
-        root.classList.toggle("compact-nav-collapsed", hidden);
-        sidebar.toggleAttribute("inert", hidden);
-        if (hidden) sidebar.setAttribute("aria-hidden", "true"); else sidebar.removeAttribute("aria-hidden");
+        const available = desktop.matches && !root.classList.contains("cases-fullscreen");
+        const mini = available && (requestedMini ?? narrow.matches);
+        root.classList.toggle("desktop-nav-mini", mini);
+        sidebar.removeAttribute("inert"); sidebar.removeAttribute("aria-hidden");
         toggle.disabled = !available;
-        toggle.setAttribute("aria-expanded", String(!hidden));
-        toggle.setAttribute("aria-label", hidden ? "Show sidebar" : "Hide sidebar");
-        toggle.title = hidden ? "Show sidebar" : "Hide sidebar";
-        if (hidden && sidebar.contains(document.activeElement)) toggle.focus({ preventScroll: true });
-        else if (!available && document.activeElement === toggle) sidebar.querySelector(".nav-btn.active:not([hidden])")?.focus({ preventScroll: true });
+        toggle.setAttribute("aria-expanded", String(!mini));
+        toggle.setAttribute("aria-label", mini ? "Show full sidebar" : "Use mini sidebar");
+        toggle.title = mini ? "Show full sidebar" : "Use mini sidebar";
+        sidebar.querySelector("h1").title = available ? "Double-click to switch sidebar size" : "";
+        if (!available && document.activeElement === toggle) sidebar.querySelector(".nav-btn.active:not([hidden])")?.focus({ preventScroll: true });
       };
-      toggle.addEventListener("click", () => {
-        if (!viewport.matches || root.classList.contains("cases-fullscreen")) return;
-        requestedHidden = !requestedHidden; sync();
+      const switchSize = () => {
+        if (!desktop.matches || root.classList.contains("cases-fullscreen")) return;
+        requestedMini = !root.classList.contains("desktop-nav-mini"); sync();
+      };
+      toggle.addEventListener("click", switchSize);
+      sidebar.addEventListener("dblclick", event => {
+        if (!(event.target instanceof Element) || event.target.closest("button,a,input,select,textarea,[contenteditable]")) return;
+        event.preventDefault(); switchSize();
       });
-      viewport.addEventListener("change", sync);
+      desktop.addEventListener("change", sync);
+      narrow.addEventListener("change", sync);
       sync();
     })();
   </script>
