@@ -45,6 +45,73 @@ test("initial annual load skips Client Master and lazy generation reads only cur
   assert.equal(legacy.body.clients.length, 1, "older open tabs must retain their legacy initial candidates until reloaded");
 });
 
+test("both Annual generation sources use today's Master PIC and previous-year lists retain external clients without copying completion", async () => {
+  for (const team of ["accounting", "tax"] as const) {
+    const current = team === "accounting" ? { ...staff[1], role: "staff" } : { id: "tax-2", display_name: "Current Tax", team_division: "Tax Team", directory_active: true, role: "staff" };
+    const { route, db } = setup(current);
+    if (team === "tax") db.tables.staff_profiles.push(current);
+    const primaryField = team === "accounting" ? "accounting_pic_profile_id" : "tax_pic_profile_id";
+    db.tables.client_master[0][primaryField] = current.id;
+    db.tables.client_master[0].company_form = "Individual";
+    db.tables.client_master.push({ ...db.tables.client_master[0], id: "inactive", status: "Inactive", legal_name: "Inactive Client" });
+    const workspace = db.tables.operational_workspace_state[0]; workspace.scope = rules.annualScope(team);
+    const contract = { ...raw(), subjectId: "stable-taxpayer", sourceClientId: team === "tax" ? "client-1" : "", progress: "Done", ntpe: "OLD-BPE", paymentAmount: 123, documents: [0, 1, 2], filing: [0, 1, 2], laporDate: "2026-03-20" };
+    const external = { ...contract, id: "external-old", annualWorkId: "22222222-2222-4222-8222-222222222222", subjectId: "external-subject", clientId: "", sourceClientId: "", clientName: "External Annual Client", accountingPicProfileId: team === "accounting" ? current.id : "acc-1", taxPicProfileId: team === "tax" ? current.id : "tax-1", accountingPic: team === "accounting" ? current.display_name : "Real Acc", taxPic: team === "tax" ? current.display_name : "Real Tax" };
+    workspace.payload = [contract, external, { ...contract, id: "inactive-old", clientId: "inactive", sourceClientId: team === "tax" ? "inactive" : "" }];
+    const historical = JSON.stringify(workspace.payload), masters = JSON.stringify(db.tables.client_master);
+    const direct = await route.GET(request({}, `?team=${team}&part=clients`));
+    assert.equal(direct.body.clients.length, 1, "Master source never mixes in external annual work");
+    const preview = await route.GET(request({}, `?team=${team}&part=clients&source=previous-annual&sourceYear=2025`));
+    assert.equal(preview.status, 200);
+    assert.deepEqual(Array.from(preview.body.clients, (row: any) => row.name), ["Actual Client", "External Annual Client"]);
+    assert.equal(preview.body.clients[0][team === "accounting" ? "accountingPicId" : "taxPicId"], current.id, "the source year's old owner is not reused for Master clients");
+    const creates = preview.body.clients.map((row: any, i: number) => ({ ...row, id: `${i + 3}3333333-3333-4333-8333-333333333333`, year: 2026, clientName: "Spoofed identity", accountingPic: "Spoofed PIC", taxPic: "Spoofed PIC", progress: "Done", ntpe: "COPY-THIS" }));
+    const saved = await route.POST(request({ team, action: "commit", edits: [], creates }));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const added = saved.body.rows.filter((row: any) => row.year === 2026);
+    assert.equal(added.length, 2);
+    for (const row of added) {
+      assert.equal(row[team === "accounting" ? "accountingPicId" : "taxPicId"], current.id);
+      assert.equal(row.progress, "Data Request"); assert.equal(row.ntpe, ""); assert.equal(row.notes, "");
+      for (const field of team === "accounting" ? ["technicalAdminMonths", "dataMonths", "reportPreparationMonths"] : ["documents", "preparation", "filing"]) assert.equal(row[field].length, 0);
+      assert.equal(row[team === "accounting" ? "paymentValue" : "payableAmount"], "");
+    }
+    const stored = db.tables.operational_workspace_state[0].payload;
+    assert.equal(JSON.stringify(stored.slice(0, 3)), historical);
+    assert.equal(stored[3].generatedFromAnnualRowId, "existing-work"); assert.equal(stored[3].generatedFromAnnualYear, 2025);
+    assert.equal(stored[4].clientId, "", "external generation must not create a Client Master allocation");
+    assert.equal(team === "accounting" ? stored[4].annualClientId : stored[4].subjectId, team === "accounting" ? external.annualWorkId : external.subjectId);
+    const repeat = await route.POST(request({ team, action: "commit", edits: [], creates: creates.map((row: any, i: number) => ({ ...row, id: `${i + 5}5555555-5555-4555-8555-555555555555` })) }));
+    assert.equal(repeat.status, 200); assert.equal(db.tables.operational_workspace_state[0].payload.length, 5);
+    assert.equal(JSON.stringify(db.tables.client_master), masters);
+    const changed = db.tables.operational_workspace_state[0].payload[1];
+    if (team === "accounting") changed.accountingPicProfileId = "acc-1"; else changed.taxPicProfileId = "tax-1";
+    db.tables.client_master[0][primaryField] = team === "accounting" ? "acc-1" : "tax-1";
+    const stale = await route.POST(request({ team, action: "commit", edits: [], creates: creates.map((row: any, i: number) => ({ ...row, id: `${i + 7}7777777-7777-4777-8777-777777777777`, year: 2027 })) }));
+    assert.equal(stale.status, 403, "a stale generation preview cannot grant ownership");
+    assert.equal(db.tables.operational_workspace_state[0].payload.length, 5);
+  }
+});
+
+test("previous Annual generation rejects unknown/removed sources, future years, imported proof and assistant-only ownership", async () => {
+  const { route, db } = setup();
+  const create = { id: "33333333-3333-4333-8333-333333333333", year: 2026, generationSource: "previous-annual", sourceAnnualYear: 2025, sourceAnnualRowId: "existing-work" };
+  const commit = (overrides: any) => route.POST(request({ team: "accounting", action: "commit", creates: [{ ...create, ...overrides }], edits: [] }));
+  assert.equal((await commit({ sourceAnnualRowId: "missing" })).status, 403);
+  assert.equal((await commit({ sourceAnnualYear: 2026 })).status, 400);
+  assert.equal((await commit({ initialValues: { ntpe: "OLD" } })).status, 400);
+  assert.equal((await route.GET(request({}, "?team=accounting&part=clients&source=previous-annual&sourceYear=invalid"))).status, 400);
+  db.tables.operational_workspace_state[0].payload[0].deletedAt = "2026-01-01";
+  assert.equal((await commit({})).status, 403);
+  db.tables.operational_workspace_state[0].payload[0].deletedAt = "";
+  db.tables.client_master[0].accounting_pic_profile_id = "acc-2";
+  db.tables.operational_workspace_state[0].payload[0].assistantProfileIds = ["acc-1"];
+  const preview = await route.GET(request({}, "?team=accounting&part=clients&source=previous-annual&sourceYear=2025"));
+  assert.equal(preview.body.clients.length, 0);
+  assert.equal((await commit({})).status, 403);
+  assert.equal(db.tables.operational_workspace_state[0].payload.length, 1);
+});
+
 test("annual Tax candidates include only active Individual clients for the current Tax PIC, not corporate directors or inactive clients", async () => {
   const { route, db } = setup({ ...staff[2], role: "staff" });
   db.tables.client_master = [
@@ -155,6 +222,232 @@ async function openRefreshFixture({ holdInitial = false, stylesReady = false, te
     focus() { w.dispatchEvent(new w.Event("focus")); w.document.dispatchEvent(new w.Event("visibilitychange")); }
   };
 }
+
+function holdAnnualWrites(d: any) {
+  const fetch = d.w.fetch, releases: Array<() => void> = [], bodies: any[] = [];
+  let active = 0, maxActive = 0, failure = 0;
+  d.w.fetch = async (url: string, options: any) => {
+    if (options.method !== "POST") return fetch(url, options);
+    bodies.push(JSON.parse(options.body)); active++; maxActive = Math.max(active, maxActive);
+    await new Promise<void>(resolve => releases.push(resolve));
+    try {
+      if (failure) { const status = failure; failure = 0; return { ok: false, status, json: async () => ({ error: "Database unavailable" }) }; }
+      return await fetch(url, options);
+    } finally { active--; }
+  };
+  return { bodies, release() { assert.ok(releases.length, "a save must be waiting"); releases.shift()!(); }, fail(status: number) { failure = status; }, get maxActive() { return maxActive; } };
+}
+
+function pasteAnnualField(d: any, field: string, value: string) {
+  const c = d.api.columns.findIndex((col: any) => col.field === field);
+  assert.ok(c >= 0, `column ${field} exists`);
+  const cell = d.w.document.querySelector(`td[data-r="0"][data-c="${c}"]`);
+  cell.dispatchEvent(new d.w.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  d.w.document.dispatchEvent(new d.w.MouseEvent("pointerup", { bubbles: true }));
+  const event = new d.w.Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { getData: () => value } });
+  d.w.document.getElementById("annual-grid").dispatchEvent(event);
+}
+
+test("both live sheets present separate generation sources, reset new-year controls and skip already generated external rows", async () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = await openRefreshFixture({ team, stylesReady: true });
+    try {
+      const stored = d.db.tables.operational_workspace_state[0].payload;
+      stored.push({ ...raw(), id: "external-source", annualWorkId: "22222222-2222-4222-8222-222222222222", clientId: "", clientName: "External Work", sourceClientId: "", subjectId: "external-person", progress: "Done", ntpe: "OLD-BPE" });
+      if (team === "tax") stored[0].sourceClientId = "client-1";
+      d.w.document.getElementById("reset-demo").click(); await d.tick();
+      d.api.state.year = 2026;
+      d.w.document.getElementById("generate-button").click(); await d.tick();
+      const doc = d.w.document, source = doc.getElementById("generation-source");
+      assert.equal(source.value, "client-master");
+      assert.equal(doc.querySelectorAll("#candidate-list input").length, 1);
+      assert.equal(doc.getElementById("generation-pic").disabled, true);
+      source.value = "previous-annual"; source.dispatchEvent(new d.w.Event("change", { bubbles: true })); await d.tick();
+      assert.equal(doc.getElementById("generation-year-field").hidden, false);
+      assert.equal(doc.getElementById("generation-source-year").value, "2025");
+      assert.equal(doc.querySelectorAll("#candidate-list input").length, 2);
+      assert.match(doc.getElementById("candidate-list").textContent, /External client/);
+      const all = doc.getElementById("candidate-all"); all.checked = true; all.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+      doc.getElementById("confirm-generate").click(); await d.tick();
+      const added = d.api.state.rows.filter((row: any) => row.year === 2026);
+      assert.equal(added.length, 2); assert.ok(added.every((row: any) => row.progress === "Data Request" && row.ntpe === ""));
+      doc.getElementById("generate-button").click(); await d.tick();
+      assert.equal(doc.querySelectorAll("#candidate-list input:disabled").length, 2);
+      assert.equal(doc.getElementById("confirm-generate").disabled, true);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("a late Master candidate read cannot replace the selected previous-year source and leadership can filter its current PIC", async () => {
+  const d = await openRefreshFixture({ stylesReady: true, leadership: true });
+  try {
+    d.db.tables.operational_workspace_state[0].payload.push({ ...raw(), id: "external-source", annualWorkId: "22222222-2222-4222-8222-222222222222", clientId: "", clientName: "Other PIC External", accountingPicProfileId: "acc-2", accountingPic: "Other Acc" });
+    d.w.document.getElementById("reset-demo").click(); await d.tick(); d.api.state.year = 2026;
+    const fetch = d.w.fetch; let release: (() => void) | undefined;
+    d.w.fetch = async (url: string, options: any) => {
+      const result = await fetch(url, options);
+      if (url.includes("part=clients") && !url.includes("previous-annual")) await new Promise<void>(resolve => { release = resolve; });
+      return result;
+    };
+    const doc = d.w.document;
+    doc.getElementById("generate-button").click(); await d.tick();
+    const source = doc.getElementById("generation-source"); source.value = "previous-annual"; source.dispatchEvent(new d.w.Event("change", { bubbles: true })); await d.tick();
+    assert.equal(doc.querySelectorAll("#candidate-list input").length, 2);
+    const pic = doc.getElementById("generation-pic"); pic.value = "acc-2"; pic.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    assert.equal(doc.querySelectorAll("#candidate-list input").length, 1);
+    assert.match(doc.getElementById("candidate-list").textContent, /Other PIC External/);
+    release!(); await d.tick();
+    assert.equal(source.value, "previous-annual");
+    assert.equal(doc.querySelectorAll("#candidate-list input").length, 1);
+    assert.match(doc.getElementById("candidate-list").textContent, /Other PIC External/);
+    doc.getElementById("confirm-generate").click(); await d.tick();
+    assert.equal(d.api.state.rows.find((row: any) => row.year === 2026).accountingPicId, "acc-2");
+  } finally { d.dom.window.close(); }
+});
+
+test("Accounting saves never lock normal cells, batch rapid edits and keep confirmed data separate", async () => {
+  const d = await openRefreshFixture({ stylesReady: true }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "notes", "First note");
+    assert.equal(saves.bodies.length, 1);
+    assert.equal(d.w.document.querySelector('[data-field="progress"] select').disabled, false);
+    pasteAnnualField(d, "technicalAdminMonths", "5");
+    pasteAnnualField(d, "dataMonths", "8");
+    pasteAnnualField(d, "technicalAdminMonths", "7");
+    pasteAnnualField(d, "notes", "Latest note");
+    assert.equal(saves.bodies.length, 1, "never send competing snapshots in parallel");
+    assert.equal(d.w.AnnualSheetLive.context.rows[0].notes, "Old note");
+    assert.equal(d.api.state.rows[0].notes, "Latest note");
+    assert.equal(d.api.state.rows[0].technicalAdminMonths.length, 7);
+    assert.ok(d.w.document.querySelector('[data-field="notes"].save-pending'));
+    assert.equal(d.w.document.getElementById("export-button").disabled, true, "exports must not include unconfirmed edits");
+    const unload = new d.w.Event("beforeunload", { cancelable: true }); d.w.dispatchEvent(unload);
+    assert.equal(unload.defaultPrevented, true);
+    saves.release(); await d.tick();
+    assert.equal(saves.bodies.length, 2, "four waiting gestures share a single atomic request");
+    assert.equal(saves.bodies[1].edits.length, 1);
+    assert.equal(saves.bodies[1].edits[0].before.notes, "First note");
+    assert.equal(saves.bodies[1].edits[0].changes.notes, "Latest note");
+    assert.equal(d.api.state.rows[0].notes, "Latest note", "the first response cannot roll back newer gestures");
+    saves.release(); await d.tick();
+    const row = d.db.tables.operational_workspace_state[0].payload[0];
+    assert.equal(row.notes, "Latest note"); assert.equal(row.technicalAdminMonths.length, 7); assert.equal(row.dataMonths.length, 8);
+    assert.equal(saves.maxActive, 1);
+    assert.equal(d.w.document.querySelectorAll(".save-pending").length, 0);
+    assert.equal(d.w.document.getElementById("export-button").disabled, false);
+    assert.match(d.w.document.getElementById("save-status").textContent, /All changes saved/);
+  } finally { d.dom.window.close(); }
+});
+
+test("Tax checklists and edits also remain interactive while saving and retain completion validation", async () => {
+  const d = await openRefreshFixture({ stylesReady: true, team: "tax" }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "notes", "Tax note");
+    d.w.document.querySelector('[data-view="documents"]').click();
+    const c = d.api.columns.findIndex((col: any) => col.field === "documents" && col.month === 1);
+    const cell = d.w.document.querySelector(`td[data-r="0"][data-c="${c}"]`);
+    cell.dispatchEvent(new d.w.MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    d.w.document.dispatchEvent(new d.w.MouseEvent("pointerup", { bubbles: true }));
+    assert.equal(d.api.state.rows[0].documents.includes(1), true);
+    pasteAnnualField(d, "progress", "Preparation");
+    assert.equal(saves.bodies.length, 1);
+    pasteAnnualField(d, "progress", "Done");
+    assert.notEqual(d.api.state.rows[0].progress, "Done", "pending mode never bypasses filing evidence requirements");
+    saves.release(); await d.tick(); saves.release(); await d.tick(); saves.release(); await d.tick();
+    const row = d.w.AnnualSheetLive.context.rows[0];
+    assert.equal(row.notes, "Tax note"); assert.equal(row.documents.includes(1), true); assert.equal(row.progress, "Preparation");
+    assert.equal(saves.maxActive, 1);
+  } finally { d.dom.window.close(); }
+});
+
+test("returning saves never remove or reset an active cell editor", async () => {
+  const d = await openRefreshFixture({ stylesReady: true }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "dataMonths", "5");
+    d.choose(); d.cell().dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "F2", bubbles: true }));
+    const input = d.cell().querySelector("input"); input.value = "Still typing";
+    saves.release(); await d.tick();
+    assert.equal(d.cell().querySelector("input"), input);
+    assert.equal(d.w.document.activeElement, input); assert.equal(input.value, "Still typing");
+    assert.equal(d.w.document.querySelectorAll(".save-pending").length, 0, "saved marks clear without rebuilding the active editor");
+    input.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    assert.equal(saves.bodies.length, 2);
+    saves.release(); await d.tick();
+    assert.equal(d.w.AnnualSheetLive.context.rows[0].notes, "Still typing");
+    assert.equal(d.w.AnnualSheetLive.context.rows[0].dataMonths.length, 5);
+  } finally { d.dom.window.close(); }
+});
+
+test("failed saves stop queued dependent changes and restore confirmed data without silent retry", async () => {
+  const d = await openRefreshFixture({ stylesReady: true }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "notes", "Unconfirmed");
+    pasteAnnualField(d, "progress", "In Process");
+    assert.equal(d.api.state.rows[0].dataMonths.length, 12);
+    saves.fail(503); saves.release(); await d.tick();
+    assert.equal(saves.bodies.length, 1);
+    assert.equal(d.api.state.rows[0].notes, "Old note");
+    assert.equal(d.api.state.rows[0].progress, "Data Request");
+    assert.equal(d.api.state.rows[0].dataMonths.length, 0);
+    assert.equal(d.w.document.querySelectorAll(".save-pending").length, 0);
+    assert.match(d.w.document.getElementById("save-status").textContent, /Save not confirmed/);
+    assert.match(d.w.document.getElementById("toast").textContent, /2 pending change\(s\) stopped/);
+    assert.equal(d.w.document.querySelector('[data-field="progress"] select').disabled, false);
+    pasteAnnualField(d, "notes", "Reviewed and retried"); saves.release(); await d.tick();
+    assert.equal(d.w.AnnualSheetLive.context.rows[0].notes, "Reviewed and retried");
+  } finally { d.dom.window.close(); }
+});
+
+test("queued edits cannot silently overwrite another session's same-field change included in a response", async () => {
+  const d = await openRefreshFixture({ stylesReady: true }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "dataMonths", "5");
+    pasteAnnualField(d, "notes", "My queued note");
+    d.db.tables.operational_workspace_state[0].payload[0].notes = "Another session's note";
+    saves.release(); await d.tick();
+    assert.equal(saves.bodies.length, 1, "reject the stale queued baseline instead of rebasing over somebody else's note");
+    assert.equal(d.api.state.rows[0].notes, "Another session's note");
+    assert.equal(d.api.state.rows[0].dataMonths.length, 5);
+    assert.match(d.w.document.getElementById("save-status").textContent, /CONFLICT/);
+    d.w.document.getElementById("undo-button").click();
+    assert.deepEqual(Object.keys(saves.bodies[1].edits[0].changes), ["dataMonths"], "Undo cannot include unrelated remote edits from the response");
+    saves.release(); await d.tick();
+    assert.equal(d.w.AnnualSheetLive.context.rows[0].notes, "Another session's note");
+  } finally { d.dom.window.close(); }
+});
+
+test("rapid dependent progress and NTPE changes retain server-checked month transitions and undo", async () => {
+  const d = await openRefreshFixture({ stylesReady: true }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "notes", "Initial save");
+    pasteAnnualField(d, "progress", "In Process");
+    pasteAnnualField(d, "progress", "Financials Done");
+    pasteAnnualField(d, "ntpe", "BPE-2025");
+    for (let i = 0; i < 4; i++) { saves.release(); await d.tick(); }
+    let row = d.w.AnnualSheetLive.context.rows[0];
+    assert.equal(row.progress, "Done"); assert.equal(row.ntpe, "BPE-2025");
+    assert.equal(row.dataMonths.length, 12); assert.equal(row.reportPreparationMonths.length, 12);
+    assert.equal(row.progressBeforeNtpe, "Financials Done");
+    d.w.document.getElementById("undo-button").click(); saves.release(); await d.tick();
+    row = d.w.AnnualSheetLive.context.rows[0];
+    assert.equal(row.progress, "Financials Done"); assert.equal(row.ntpe, "");
+    assert.equal(row.dataMonths.length, 12); assert.equal(row.reportPreparationMonths.length, 12);
+  } finally { d.dom.window.close(); }
+});
+
+test("access loss discards pending edits and a late save cannot resurrect private annual rows", async () => {
+  const d = await openRefreshFixture({ stylesReady: true }), saves = holdAnnualWrites(d);
+  try {
+    pasteAnnualField(d, "notes", "Private edit"); pasteAnnualField(d, "dataMonths", "5");
+    d.w.AnnualSheetLive.clearAccess();
+    saves.release(); await d.tick();
+    assert.equal(saves.bodies.length, 1);
+    assert.equal(d.w.AnnualSheetLive.context, null);
+    assert.equal(d.api.state.rows.length, 0);
+    assert.equal(d.w.document.getElementById("sheet-loading").hidden, false);
+  } finally { d.dom.window.close(); }
+});
 
 test("annual startup waits for confirmed data and stylesheet readiness without an extra animation delay", async () => {
   const d = await openRefreshFixture();
@@ -717,7 +1010,10 @@ test("live sheet never seeds samples, uses authenticated roster and waits for da
       w.document.getElementById("annual-grid").dispatchEvent(event);
     };
     paste("Confirmed note");
-    assert.equal(api.state.rows[0].notes, "Old note", "pending changes must not masquerade as saved");
+    assert.equal(api.state.rows[0].notes, "Confirmed note", "working values stay editable while saving");
+    assert.equal(w.AnnualSheetLive.context.rows[0].notes, "Old note", "pending edits must not mutate confirmed transport data");
+    assert.ok(w.document.querySelector('[data-field="notes"].save-pending'));
+    assert.match(w.document.getElementById("save-status").textContent, /not confirmed yet/);
     const pendingNavigation = new w.MouseEvent("click", { bubbles: true, cancelable: true });
     w.document.getElementById("fullscreen-button").dispatchEvent(pendingNavigation);
     assert.equal(pendingNavigation.defaultPrevented, true, "new-tab navigation must wait for database confirmation");

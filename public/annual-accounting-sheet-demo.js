@@ -6,8 +6,11 @@
   let sheetAppearance = { theme: pageParams.get("theme") === "dark" ? "dark" : "light", accent: /^#[0-9a-f]{6}$/i.test(pageParams.get("accent") || "") ? pageParams.get("accent").toLowerCase() : "#087f8d" };
   const liveMode = new URLSearchParams(location.search).get("live") === "1";
   let liveRoster = [], liveReady = false, liveBusy = false;
+  let liveExclusive = false, livePaintPending = false, liveEditQueue = [], liveInFlight = [], liveSaveGeneration = 0;
+  let pendingCellKeys = new Set();
   let liveEpoch = 0, lastRefreshAt = 0, refreshPromise = null, deferredRefresh = null, lastLiveSnapshot = "", generationLoading = false;
   let directoryRefreshPending = false, lastDirectoryChange = "";
+  let generationList = [], generationRead = 0;
   const embeddedPreview = window.parent !== window && new URLSearchParams(location.search).get("embedded") === "1";
   const taxMode = new URLSearchParams(location.search).get("team") === "tax";
   const taxConfig = taxMode ? window.AnnualTaxSheetConfig : null;
@@ -57,8 +60,9 @@
   let counter = 0;
   function createRow(client, year, outside = false) {
     const id = liveMode ? crypto.randomUUID() : taxMode ? `demo-tax-work-${++counter}` : `demo-work-${++counter}`;
-    if (taxMode) { const row = taxConfig.createRow(client, year, id, staffId); if (liveMode) row.subjectId = client.subjectId || id; row.sourceClientId = client.sourceClientId || ""; return row; }
-    return { id, clientId: client.clientId || "", clientName: client.name, year, outside, accountingPic: client.accountingPic || "", accountingPicId: staffId(client.accountingPic), taxPic: client.taxPic || "", taxPicId: staffId(client.taxPic, "tax"), assistantIds: [], progress: "Data Request", paymentValue: "", ntpe: "", progressBeforeNtpe: "", deadline: liveMode ? "" : `${year + 1}-04-30`, notes: "", technicalAdminMonths: [], dataMonths: [], reportPreparationMonths: [] };
+    const provenance = client.generationSource === "previous-annual" ? { generationSource: client.generationSource, sourceAnnualRowId: client.sourceAnnualRowId, sourceAnnualYear: client.sourceAnnualYear } : {};
+    if (taxMode) { const row = taxConfig.createRow(client, year, id, staffId); if (liveMode) row.subjectId = client.subjectId || id; row.sourceClientId = client.sourceClientId || ""; return Object.assign(row, provenance); }
+    return { id, annualClientId: client.annualClientId || id, clientId: client.clientId || "", clientName: client.name, year, outside: outside || client.outside === true, accountingPic: client.accountingPic || "", accountingPicId: client.accountingPicId || staffId(client.accountingPic), taxPic: client.taxPic || "", taxPicId: client.taxPicId || staffId(client.taxPic, "tax"), assistantIds: [], progress: "Data Request", paymentValue: "", ntpe: "", progressBeforeNtpe: "", deadline: liveMode ? "" : `${year + 1}-04-30`, notes: "", technicalAdminMonths: [], dataMonths: [], reportPreparationMonths: [], ...provenance };
   }
   function seed() {
     if (liveMode) return [];
@@ -101,7 +105,7 @@
   const ownsRow = (row) => (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId || row.assistantIds.includes(state.actorId);
   const canManageRow = row => row && !bulkSaving && (!liveMode ? isLeadership() || (taxMode ? row.taxPicId : row.accountingPicId) === state.actorId : liveReady && !liveBusy && row.canManageRow);
   function canEdit(row, col) {
-    if (bulkSaving || liveMode && (!liveReady || liveBusy)) return false;
+    if (bulkSaving || liveMode && (!liveReady || liveExclusive)) return false;
     if (!row || row.deletedAt || !col || col.type === "summary") return false;
     if (taxMode && ["clientName", "subjectType", "groupName"].includes(col.field)) return isLeadership();
     if (col.field === "clientName") return isLeadership() && row.outside;
@@ -113,14 +117,30 @@
   }
   function notify(message) { $("toast").textContent = message; $("toast").hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 3300); }
   function change(label, mutate) {
-    if (liveMode && (!liveReady || liveBusy)) return;
+    if (liveMode && (!liveReady || liveExclusive)) return;
     const before = { rows: clone(state.rows), customColumns: clone(state.customColumns) };
     mutate();
     if (JSON.stringify(before) === JSON.stringify({ rows: state.rows, customColumns: state.customColumns })) return;
     if (liveMode) {
       const next = { rows: clone(state.rows), customColumns: clone(state.customColumns) };
-      state.rows = before.rows; state.customColumns = before.customColumns;
-      return saveLive(() => window.AnnualSheetLive.commit(before, next, label), label);
+      if (JSON.stringify(before.customColumns) !== JSON.stringify(next.customColumns) || next.rows.some(row => !before.rows.some(old => old.id === row.id))) {
+        state.rows = before.rows; state.customColumns = before.customColumns;
+        if (liveBusy) { render(); notify("Wait for pending cell saves before adding annual rows or columns."); return; }
+        return saveLive(() => window.AnnualSheetLive.commit(before, next, label), label);
+      }
+      liveEpoch++; deferredRefresh = null; window.AnnualSheetLive.cancelLoad();
+      const touched = next.rows.filter(row => {
+        const old = before.rows.find(item => item.id === row.id);
+        return JSON.stringify(old) !== JSON.stringify(row);
+      });
+      const barrier = touched.some(row => {
+        const old = before.rows.find(item => item.id === row.id);
+        return row.progress !== old.progress || row.ntpe !== old.ntpe;
+      });
+      liveEditQueue.push({ before, next, label, barrier, rowIds: touched.map(row => row.id) }); liveBusy = true;
+      updatePendingCells(); render(); showPendingSaves();
+      drainLiveEdits();
+      return;
     }
     state.history.push({ ...before, label });
     if (state.history.length > 50) state.history.shift();
@@ -401,7 +421,8 @@
       else if (col.frozen) content = `<span class="cell-text">${escape(value)}</span>${row.outside && !taxMode ? `<span title="Outside contract" style="color:#a58a4a;font-size:9px">EXT</span>` : ""}${row.assistantIds.length ? `<span class="assist-badge" title="Assigned assistant: ${escape(row.assistantIds.map(id => actors.find(person => person.id === id)?.name || id).join(", "))}">ASSIST</span>` : ""}`;
       else if (!editable) content += lockIcon;
       const hint = !editable && col.type !== "summary" ? "Read-only for this account" : col.type === "range" ? "Click or F2 to adjust completed months from January onward" : col.type === "select" ? "Click to choose" : col.type === "check" ? "Click or drag to mark" : col.type === "summary" ? "Click to open checklist" : "Double-click or F2 to edit";
-      return `<td role="gridcell" tabindex="-1" class="cell ${col.frozen ? "client-column" : ""} ${!editable && col.type !== "summary" ? "readonly" : ""} ${col.type === "check" && value ? "checked" : ""}" data-r="${r}" data-c="${c}" data-field="${col.field}" data-type="${col.type}" aria-readonly="${!editable}" aria-label="${escape(`${row.clientName}, ${col.group ? col.group.title + " " : ""}${col.title}: ${col.type === "check" ? value ? "checked" : "unchecked" : value || "empty"}`)}" title="${escape(`${col.group ? col.group.title + " " : ""}${col.title}: ${col.type === "check" ? value ? "checked" : "unchecked" : value || "Empty"} / ${hint}`)}"><div class="cell-content">${content}</div></td>`;
+      const pending = isPendingCell(row.id, col.field);
+      return `<td role="gridcell" tabindex="-1" class="cell ${pending ? "save-pending" : ""} ${col.frozen ? "client-column" : ""} ${!editable && col.type !== "summary" ? "readonly" : ""} ${col.type === "check" && value ? "checked" : ""}" data-r="${r}" data-c="${c}" data-field="${col.field}" data-type="${col.type}" aria-readonly="${!editable}" aria-label="${escape(`${row.clientName}, ${col.group ? col.group.title + " " : ""}${col.title}: ${col.type === "check" ? value ? "checked" : "unchecked" : value || "empty"}${pending ? ", save pending" : ""}`)}" title="${escape(`${col.group ? col.group.title + " " : ""}${col.title}: ${col.type === "check" ? value ? "checked" : "unchecked" : value || "Empty"} / ${pending ? "Not yet confirmed by database / " : ""}${hint}`)}"><div class="cell-content">${content}</div></td>`;
     }).join("")}</tr>`).join("");
     syncRangeEditor();
     $("empty-state").hidden = !!visible.length; table.hidden = !visible.length;
@@ -430,6 +451,7 @@
     const focused = document.activeElement?.matches("[data-grid-range]");
     activeRange = null; syncRangeEditor();
     if (focused) getCell(state.selection.r, state.selection.c)?.focus({ preventScroll: true });
+    if (livePaintPending) Promise.resolve().then(applyDeferredRefresh);
   }
   function openRangeEditor(r, c, keyboard = false) {
     const row = visible[r], col = columns[c];
@@ -968,22 +990,44 @@
   }
   $("fullscreen-button").addEventListener("click", guardFullScreenNavigation);
   document.querySelectorAll("[data-sheet-team]").forEach(link => link.addEventListener("click", guardFullScreenNavigation));
-  const generationKey = row => taxMode ? row.subjectId : row.clientId;
+  const generationKey = row => taxMode ? row.subjectId || row.clientId : row.clientId || `external:${row.annualClientId || row.id}`;
   const generationCandidates = () => {
+    const primaryId = taxMode ? "taxPicId" : "accountingPicId", primaryName = taxMode ? "taxPic" : "accountingPic";
+    return generationList.filter(client => (!$("generation-pic").value || (client[primaryId] || staffId(client[primaryName], taxMode ? "tax" : "acc")) === $("generation-pic").value) && (isLeadership() || (client[primaryId] || staffId(client[primaryName], taxMode ? "tax" : "acc")) === state.actorId));
+  };
+  function currentGenerationCandidates() {
     let candidates = master;
     if (taxMode) {
       const individuals = master.filter(client => client.sourceClientId && client.subjectType === "Individual");
       const prior = taxConfig.priorCandidates(state);
       const matchesSource = (row, client) => row.sourceClientId === client.sourceClientId || (row.linkedClientId || row.clientId) === client.sourceClientId && row.subjectType === "Individual" && bulkIdentity(row.name || row.clientName) === bulkIdentity(client.name);
-      candidates = [...prior.filter(row => !individuals.some(client => matchesSource(row, client))), ...individuals.map(client => {
+      candidates = individuals.map(client => {
         const previous = prior.find(row => matchesSource(row, client));
         const current = state.rows.find(row => matchesSource(row, client));
         const subjectId = previous?.subjectId || current?.subjectId || client.subjectId;
         return { ...client, subjectId, clientId: subjectId };
-      })];
+      });
     }
-    return candidates.filter(client => (taxMode || client.active && client.accountingPic) && matchesAccPic(client) && matchesTaxPic(client) && (isLeadership() || (taxMode ? client.taxPicId || staffId(client.taxPic, "tax") : client.accountingPicId || staffId(client.accountingPic)) === state.actorId));
-  };
+    return candidates.filter(client => taxMode || client.active && client.accountingPic);
+  }
+  function demoPreviousCandidates(year) {
+    return state.rows.filter(row => !row.deletedAt && row.year === year).flatMap(row => {
+      const masterId = taxMode ? row.sourceClientId : row.clientId;
+      const client = masterId ? master.find(item => (item.sourceClientId || item.clientId) === masterId && item.active) : null;
+      if (masterId && !client) return [];
+      return [{ ...row, ...(client || {}), clientId: taxMode ? row.subjectId : row.clientId, annualClientId: row.annualClientId || row.id, subjectId: row.subjectId, linkedClientId: row.clientId, sourceClientId: row.sourceClientId || "", name: client?.name || row.clientName, outside: !masterId, generationSource: "previous-annual", sourceAnnualRowId: row.id, sourceAnnualYear: year }];
+    });
+  }
+  function prepareGenerationOptions() {
+    const years = Array.from({ length: Math.max(0, state.year - 2000) }, (_, index) => state.year - index - 1);
+    const previous = $("generation-source-year").value;
+    $("generation-source-year").innerHTML = years.map(year => `<option>${year}</option>`).join("");
+    if (years.includes(Number(previous))) $("generation-source-year").value = previous;
+    const names = taxMode ? taxPics : accPics, field = taxMode ? state.taxPic : state.pic;
+    $("generation-pic").innerHTML = `<option value="">All ${taxMode ? "Tax" : "ACC"} PIC</option>${names.map(name => `<option value="${escape(staffId(name, taxMode ? "tax" : "acc"))}">${escape(name)}</option>`).join("")}`;
+    $("generation-pic").value = isLeadership() ? staffId(field, taxMode ? "tax" : "acc") : state.actorId;
+    $("generation-pic").disabled = !isLeadership();
+  }
   function warmGenerationCandidates() {
     if (!liveMode || !liveReady || !(isLeadership() || (taxMode ? actorTaxName() : actorAccName()))) return;
     window.AnnualSheetLive.loadClients().catch(error => { if ([401, 403, 409].includes(error.status)) clearLiveAccess(); });
@@ -992,35 +1036,51 @@
     closeAddClientMenu();
     if (bulkSaving) return;
     if (liveMode && (!liveReady || liveBusy || state.year === 0)) return;
-    if (generationLoading) return;
+    const opening = !$("generate-dialog").open;
+    if (opening) prepareGenerationOptions();
+    const previous = $("generation-source").value === "previous-annual", sourceYear = Number($("generation-source-year").value);
+    $("generation-year-field").hidden = !previous;
+    $("generation-description").textContent = previous ? "Use the selected year's client list, with today's Client Master PIC assignments. External clients keep their Annual PIC. All progress and proof fields start empty." : `Use active Client Master clients assigned to the current ${taxMode ? "Tax" : "ACC"} PIC. Existing client-year rows are skipped.`;
+    const read = ++generationRead;
+    generationList = []; generationLoading = false;
+    $("generate-year").textContent = state.year;
+    if (!$("generate-dialog").open) $("generate-dialog").showModal();
+    if (previous && (!sourceYear || sourceYear >= state.year)) { $("generate-button").disabled = liveMode && (!liveReady || liveBusy || state.year === 0); renderGenerationCandidates(); return; }
     if (liveMode) {
       generationLoading = true; $("generate-button").disabled = true; $("candidate-list").textContent = "Loading eligible clients...";
-      $("candidate-summary").textContent = "Checking current Client Master assignments"; $("confirm-generate").disabled = true; $("candidate-all").disabled = true;
+      $("candidate-summary").textContent = previous ? "Checking previous Annual clients and current PIC assignments" : "Checking current Client Master assignments"; $("confirm-generate").disabled = true; $("candidate-all").disabled = true;
       $("generate-year").textContent = state.year; if (!$("generate-dialog").open) $("generate-dialog").showModal();
       const epoch = liveEpoch, year = state.year;
       try {
-        const candidates = await window.AnnualSheetLive.loadClients(force === true);
-        if (epoch !== liveEpoch || year !== state.year || !$("generate-dialog").open) return;
-        master.splice(0, master.length, ...candidates.map(client => ({ ...client, accountingPic: liveRoster.find(person => person.id === client.accountingPicId)?.name || client.accountingPic, taxPic: liveRoster.find(person => person.id === client.taxPicId)?.name || client.taxPic })));
-      } catch (error) { if ([401, 403, 409].includes(error.status)) clearLiveAccess(); else if (error.name !== "AbortError") { $("candidate-list").textContent = error.message; $("candidate-summary").textContent = "Use Refresh list to retry."; } return; }
-      finally { generationLoading = false; $("generate-button").disabled = liveBusy || !liveReady || state.year === 0; }
-    }
-    $("generate-year").textContent = state.year;
+        const candidates = await (previous ? window.AnnualSheetLive.loadPreviousClients(sourceYear) : window.AnnualSheetLive.loadClients(force === true));
+        if (read !== generationRead || epoch !== liveEpoch || year !== state.year || !$("generate-dialog").open) return;
+        const normalized = candidates.map(client => ({ ...client, accountingPic: liveRoster.find(person => person.id === client.accountingPicId)?.name || client.accountingPic, taxPic: liveRoster.find(person => person.id === client.taxPicId)?.name || client.taxPic }));
+        if (previous) generationList = normalized;
+        else { master.splice(0, master.length, ...normalized); generationList = currentGenerationCandidates(); }
+      } catch (error) { if (read !== generationRead) return; if ([401, 403, 409].includes(error.status)) clearLiveAccess(); else if (error.name !== "AbortError") { $("candidate-list").textContent = error.message; $("candidate-summary").textContent = "Use Refresh list to retry."; } return; }
+      finally { if (read === generationRead) { generationLoading = false; $("generate-button").disabled = liveBusy || !liveReady || state.year === 0; } }
+    } else generationList = previous ? demoPreviousCandidates(sourceYear) : currentGenerationCandidates();
+    renderGenerationCandidates();
+  }
+  function renderGenerationCandidates() {
     const existing = new Set(yearRows().map(generationKey).filter(Boolean));
     const eligible = generationCandidates();
-    $("candidate-list").innerHTML = eligible.map(client => `<label class="candidate"><input type="checkbox" value="${escape(client.clientId)}" ${existing.has(client.clientId) ? "disabled" : taxMode ? "" : "checked"} /><span><strong>${escape(client.name)}</strong><small>${taxMode ? `${escape(client.subjectType)} / ${escape(client.sourceClientId ? "Client Master" : client.groupName || "Independent")} / ` : ""}ACC: ${escape(client.accountingPic || "Unassigned")} / Tax: ${escape(client.taxPic || "Unassigned")}</small></span>${existing.has(client.clientId) ? `<span class="existing">Already generated</span>` : ""}</label>`).join("") || `<p class="form-hint">${taxMode ? "No assigned Individual clients or prior-year subjects match this scope. Use Add Ext Client for a new taxpayer." : "No eligible clients match this scope."}</p>`;
-    const remaining = eligible.filter(client => !existing.has(client.clientId)).length;
+    $("candidate-list").innerHTML = eligible.map(client => `<label class="candidate"><input type="checkbox" value="${escape(generationKey(client))}" ${existing.has(generationKey(client)) ? "disabled" : taxMode ? "" : "checked"} /><span><strong>${escape(client.name)}</strong><small>${client.generationSource === "previous-annual" ? `${client.sourceAnnualYear} Annual / ${client.outside ? "External client" : "Current Master PIC"} / ` : ""}${taxMode ? `${escape(client.subjectType)} / ` : ""}ACC: ${escape(client.accountingPic || "Unassigned")} / Tax: ${escape(client.taxPic || "Unassigned")}</small></span>${existing.has(generationKey(client)) ? `<span class="existing">Already generated</span>` : ""}</label>`).join("") || `<p class="form-hint">No eligible clients match this source, year and PIC. Use Add Ext Client for new external work.</p>`;
+    const remaining = eligible.filter(client => !existing.has(generationKey(client))).length;
     $("candidate-summary").textContent = `${remaining} available / ${eligible.length - remaining} already in sheet`;
     $("candidate-all").checked = remaining > 0 && !taxMode; $("candidate-all").indeterminate = false; $("candidate-all").disabled = !remaining; $("confirm-generate").disabled = !remaining || taxMode;
-    if (!$("generate-dialog").open) $("generate-dialog").showModal();
   }
   $("generate-button").addEventListener("click", showGeneration); $("empty-generate").addEventListener("click", showGeneration);
   $("refresh-candidates").addEventListener("click", () => showGeneration(true));
+  $("generation-source").addEventListener("change", () => showGeneration());
+  $("generation-source-year").addEventListener("change", () => showGeneration());
+  $("generation-pic").addEventListener("change", () => { if (!generationLoading) renderGenerationCandidates(); });
   $("candidate-all").addEventListener("change", event => { $("candidate-list").querySelectorAll("input:not(:disabled)").forEach(input => { input.checked = event.target.checked; }); $("confirm-generate").disabled = !event.target.checked; });
   $("candidate-list").addEventListener("change", () => { const inputs = [...$("candidate-list").querySelectorAll("input:not(:disabled)")]; const selected = inputs.filter(input => input.checked).length; $("candidate-all").checked = selected === inputs.length; $("candidate-all").indeterminate = selected > 0 && selected < inputs.length; $("confirm-generate").disabled = !selected; });
   $("confirm-generate").addEventListener("click", () => {
     const selected = [...$("candidate-list").querySelectorAll("input:checked:not(:disabled)")].map(input => input.value);
-    const existing = new Set(yearRows().map(generationKey)); const candidates = generationCandidates().filter(client => selected.includes(client.clientId) && !existing.has(client.clientId));
+    if (generationLoading || liveBusy) return;
+    const existing = new Set(yearRows().map(generationKey)); const candidates = generationCandidates().filter(client => selected.includes(generationKey(client)) && !existing.has(generationKey(client)));
     change(`Generated ${candidates.length} ${taxMode ? "SPT subject(s)" : "annual client(s)"} for ${state.year}`, () => candidates.forEach(client => state.rows.push(createRow(client, state.year))));
     state.status = "incomplete"; $("generate-dialog").close(); render(); if (!liveMode) notify(`${candidates.length} ${taxMode ? "SPT subject(s)" : "client(s)"} added. Previous years remain separate.`);
   });
@@ -1119,8 +1179,10 @@
   }
   $("export-button").addEventListener("click", async () => {
     if (!finishEdit(true)) return;
+    if (liveMode && (!liveReady || liveBusy)) { notify("Wait for database confirmation before exporting."); return; }
     const button = $("export-button"), original = button.innerHTML;
-    const snapshot = { year: state.year, rows: clone(yearRows()), customColumns: clone(state.customColumns) };
+    const confirmed = liveMode ? window.AnnualSheetLive.context : null;
+    const snapshot = { year: state.year, rows: clone(confirmed ? confirmed.rows.filter(row => row.year === state.year && !row.deletedAt) : yearRows()), customColumns: clone(confirmed ? confirmed.columns : state.customColumns) };
     button.disabled = true; button.textContent = "Exporting...";
     try {
       const XLSX = await loadExcelLibrary();
@@ -1128,10 +1190,92 @@
       XLSX.writeFile(workbook, `annual-${taxMode ? "tax" : "accounting"}-summary-${snapshot.year}.xlsx`, { bookType: "xlsx", compression: true, cellDates: true });
       notify(`Exported ${snapshot.rows.length} annual rows for ${snapshot.year}: Summary and ${taxMode ? "SPT Details" : "Monthly Controls"}, including Complete and Incomplete work.`);
     } catch (error) { notify(error instanceof Error ? error.message : "Excel export failed. Please retry."); }
-    finally { button.disabled = false; button.innerHTML = original; }
+    finally { button.disabled = liveMode && (!liveReady || liveBusy); button.innerHTML = original; }
   });
   $("reset-demo").addEventListener("click", () => { if (liveMode) { if (!liveBusy && finishEdit(true)) loadLive(true); return; } finishEdit(false); state.rows = seed(); state.customColumns = []; state.history = []; state.future = []; state.year = 2025; state.status = "incomplete"; state.pic = ""; state.taxPic = ""; state.search = ""; state.sort = { field: "clientName", type: "text", title: taxMode ? "SPT subject" : "Client", direction: "asc" }; state.selection = { r: 0, c: 0 }; state.range = null; $("year-select").value = "2025"; $("pic-filter").value = ""; $("tax-pic-filter").value = ""; $("search").value = ""; render(); $("save-status").textContent = "Demo reset to sample data."; });
   const liveSnapshot = data => JSON.stringify({ actor: data.actor, staff: data.staff, rows: data.rows, columns: data.columns });
+  const sheetSnapshot = data => ({ rows: clone(data.rows), customColumns: clone(data.columns) });
+  const isPendingCell = (id, field) => pendingCellKeys.has(`${id}:${field}`);
+  function updatePendingCells() {
+    pendingCellKeys = new Set();
+    for (const edit of [...liveInFlight, ...liveEditQueue]) {
+      const oldRows = new Map(edit.before.rows.map(row => [row.id, row]));
+      for (const row of edit.next.rows) {
+        const old = oldRows.get(row.id);
+        if (old) for (const field of Object.keys(row)) if (JSON.stringify(old[field] ?? "") !== JSON.stringify(row[field] ?? "")) pendingCellKeys.add(`${row.id}:${field}`);
+      }
+    }
+    // Acknowledgements can clear pending marks without replacing an editor or slider.
+    document.querySelectorAll("#annual-grid td.save-pending").forEach(cell => {
+      if (!isPendingCell(visible[Number(cell.dataset.r)]?.id, cell.dataset.field)) {
+        cell.classList.remove("save-pending");
+        cell.title = cell.title.replace("Not yet confirmed by database / ", "");
+        cell.setAttribute("aria-label", cell.getAttribute("aria-label").replace(", save pending", ""));
+      }
+    });
+  }
+  function showPendingSaves() {
+    const count = liveInFlight.length + liveEditQueue.length;
+    $("save-status").textContent = `Saving ${count} change${count === 1 ? "" : "s"} to database... You can keep editing. Marked cells are not confirmed yet.`;
+  }
+  function paintLiveEdits() {
+    if (interactingWithSheet()) { livePaintPending = true; return; }
+    const data = window.AnnualSheetLive.context;
+    let projected = sheetSnapshot(data);
+    for (const edit of liveEditQueue) projected = window.AnnualSheetLive.rebase(edit.before, edit.next, projected);
+    applyLiveContext({ ...data, rows: projected.rows }); livePaintPending = false; render();
+  }
+  async function drainLiveEdits() {
+    if (liveInFlight.length || liveExclusive || !liveReady) return;
+    const generation = liveSaveGeneration;
+    try {
+      while (liveEditQueue.length && liveReady && generation === liveSaveGeneration) {
+        // Preserve stage/NTPE ordering; ordinary cell gestures can share an atomic save.
+        let count = 1;
+        const rowIds = new Set(liveEditQueue[0].rowIds);
+        if (!liveEditQueue[0].barrier) while (count < liveEditQueue.length && !liveEditQueue[count].barrier) {
+          const combined = new Set([...rowIds, ...liveEditQueue[count].rowIds]);
+          if (combined.size > 250) break;
+          combined.forEach(id => rowIds.add(id)); count++;
+        }
+        liveInFlight = liveEditQueue.splice(0, count);
+        const before = sheetSnapshot(window.AnnualSheetLive.context);
+        let next = before;
+        for (const edit of liveInFlight) next = window.AnnualSheetLive.rebase(edit.before, edit.next, next);
+        const label = liveInFlight.length === 1 ? liveInFlight[0].label : `Updated ${liveInFlight.length} changes`;
+        await window.AnnualSheetLive.commit(before, next, label);
+        if (generation !== liveSaveGeneration || !liveReady) return;
+        liveInFlight = []; updatePendingCells();
+        paintLiveEdits();
+        if (liveEditQueue.length) showPendingSaves();
+      }
+      $("save-status").textContent = "All changes saved to database.";
+    } catch (error) {
+      if (generation !== liveSaveGeneration) return;
+      const count = liveInFlight.length + liveEditQueue.length;
+      liveExclusive = true; liveInFlight = []; liveEditQueue = []; updatePendingCells(); finishEdit(false); drag = null; closeRangeEditor();
+      if ([401, 403].includes(error.status)) clearLiveAccess();
+      else {
+        try { const data = await window.AnnualSheetLive.load(); if (generation !== liveSaveGeneration) return; applyLiveContext(data); }
+        catch (refreshError) {
+          if (generation !== liveSaveGeneration) return;
+          if ([401, 403, 409].includes(refreshError.status)) clearLiveAccess();
+          else applyLiveContext(window.AnnualSheetLive.context);
+        }
+      }
+      if (generation !== liveSaveGeneration) return;
+      livePaintPending = false;
+      $("save-status").textContent = `Save not confirmed: ${error.message}`;
+      notify(`Save not confirmed: ${error.message} ${count} pending change(s) stopped. The sheet shows confirmed database data; review before retrying.`);
+    } finally {
+      if (generation === liveSaveGeneration) {
+        liveBusy = false; liveExclusive = false;
+        if (interactingWithSheet()) livePaintPending = true;
+        else { livePaintPending = false; applyLiveContext(window.AnnualSheetLive.context); render(); }
+        if (directoryRefreshPending) applyDeferredRefresh();
+      }
+    }
+  }
   function applyLiveContext(data, checkedAt = Date.now()) {
     lastRefreshAt = checkedAt;
     lastLiveSnapshot = liveSnapshot(data);
@@ -1143,7 +1287,7 @@
     accPics.splice(0, accPics.length, ...new Set(operationalRoster("Accounting Team").map(person => person.name)));
     taxPics.splice(0, taxPics.length, ...new Set(operationalRoster("Tax Team").map(person => person.name)));
     if (data.clients) master.splice(0, master.length, ...data.clients);
-    state.rows = data.rows; state.customColumns = data.columns;
+    state.rows = clone(data.rows); state.customColumns = clone(data.columns);
     const updatedFilter = (value, id, division, names) => id ? operationalRoster(division).find(person => person.id === id)?.name || "__former__" : ["", "__unassigned__", "__former__", ...names].includes(value) ? value : "";
     state.pic = updatedFilter(state.pic, previousAccId, "Accounting Team", accPics);
     state.taxPic = updatedFilter(state.taxPic, previousTaxId, "Tax Team", taxPics);
@@ -1165,18 +1309,20 @@
   async function saveLive(operation, label) {
     if (liveBusy || !liveReady) return;
     liveEpoch++; deferredRefresh = null; window.AnnualSheetLive.cancelLoad();
-    liveBusy = true; render(); $("save-status").textContent = "Saving to database...";
+    liveBusy = true; liveExclusive = true; render(); $("save-status").textContent = "Saving to database...";
     try { applyLiveContext(await operation()); $("save-status").textContent = `${label}. Saved to database.`; return true; }
     catch (error) {
       try { applyLiveContext(await window.AnnualSheetLive.load()); } catch (refreshError) { if ([401, 403, 409].includes(refreshError.status)) clearLiveAccess(); }
       $("save-status").textContent = `Save not confirmed: ${error.message}`; notify(`Save not confirmed: ${error.message} The sheet shows the last confirmed database data.`);
       return false;
-    } finally { liveBusy = false; render(); if (directoryRefreshPending) applyDeferredRefresh(); }
+    } finally { liveBusy = false; liveExclusive = false; render(); if (directoryRefreshPending) applyDeferredRefresh(); }
   }
   function interactingWithSheet() {
     return bulkSaving || editor || drag || activeRange || rowMenuId || !$("add-client-menu").hidden || document.querySelector("dialog[open]") || document.hasFocus() && document.activeElement?.matches("input,select,textarea");
   }
   function clearLiveAccess() {
+    generationRead++; generationList = []; generationLoading = false; $("candidate-list").textContent = "";
+    liveSaveGeneration++; liveEditQueue = []; liveInFlight = []; pendingCellKeys.clear(); liveBusy = false; liveExclusive = false; livePaintPending = false;
     liveEpoch++; deferredRefresh = null; directoryRefreshPending = false; liveReady = false; window.AnnualSheetLive?.clearAccess();
     finishEdit(false); document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
     draftSets.clear(); bulkDrafts = []; bulkColumns = []; bulkDraftOwner = ""; activeDraftCell = null;
@@ -1184,6 +1330,7 @@
     $("sheet-loading").hidden = false; $("sheet-loading").textContent = "Your access or account changed. Reload the dashboard to reconnect.";
   }
   function applyDeferredRefresh() {
+    if (livePaintPending && !liveBusy && liveReady && !interactingWithSheet()) { paintLiveEdits(); }
     if (directoryRefreshPending && !liveBusy && !interactingWithSheet()) { deferredRefresh = null; loadLive(true); return; }
     if (!deferredRefresh) return;
     if (deferredRefresh.epoch !== liveEpoch) { deferredRefresh = null; return; }
@@ -1208,7 +1355,7 @@
         if (!initial && liveSnapshot(data) === lastLiveSnapshot) return;
         if (!initial && interactingWithSheet()) { deferredRefresh = { data, epoch, checkedAt: Date.now() }; return; }
         applyLiveContext(data); render(); finishSheetStartup();
-        $("save-status").textContent = "Connected. Changes are confirmed by the database before appearing here.";
+        $("save-status").textContent = "Connected. Edits save in the background; marked cells are pending database confirmation.";
       } catch (error) {
         if (epoch !== liveEpoch || error.name === "AbortError") return;
         if ([401, 403, 409].includes(error.status)) { clearLiveAccess(); return; }

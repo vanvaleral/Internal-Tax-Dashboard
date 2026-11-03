@@ -6,10 +6,11 @@
   const expectedUserId = new URLSearchParams(location.search).get("account") || "";
   let context = null, undoStack = [], redoStack = [], revision = 0, readPromise = null, readController = null, clientsPromise = null;
   let clientsCache = null, clientsCheckedAt = 0, clientsEpoch = 0, clientsController = null;
-  let initialRead = true;
+  let initialRead = true, accessRevision = 0;
   const equal = (a, b) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
   function cancelLoad() { revision++; readController?.abort(); readController = null; readPromise = null; }
   async function request(body, options = {}) {
+    const access = accessRevision;
     if (body) cancelLoad();
     const boundUser = context?.userId || expectedUserId;
     let preloaded = null;
@@ -24,13 +25,14 @@
     }
     if (options.readRevision !== undefined && options.readRevision !== revision) return null;
     if (options.signal?.aborted) throw new DOMException("Annual read cancelled.", "AbortError");
-    const response = preloaded ? null : await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}`}`, {
+    const response = preloaded ? null : await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}${options.sourceYear ? `&source=previous-annual&sourceYear=${options.sourceYear}` : ""}`}`, {
       method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
       headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(boundUser ? { "x-workspace-user": boundUser } : {}) },
       ...(body ? { body: JSON.stringify({ ...body, team }) } : {}),
       ...(options.signal ? { signal: options.signal } : {})
     });
     const data = preloaded || await response.json().catch(() => ({}));
+    if (access !== accessRevision) { const error = new Error("Annual workspace access changed."); error.status = 403; throw error; }
     if (options.readRevision !== undefined && options.readRevision !== revision) return null;
     if (response && !response.ok || boundUser && data.userId && data.userId !== boundUser) { clientsCache = null; const error = new Error(data.error || (!response || response.ok ? "Annual workspace access changed. Reload and retry." : "Annual request failed. Please retry.")); error.status = !response || response.ok ? 409 : response.status; throw error; }
     if (options.clients) return data.clients || [];
@@ -55,6 +57,10 @@
     }).finally(() => { if (clientsPromise === pending) { clientsPromise = null; clientsController = null; } });
     clientsPromise = pending; return pending;
   }
+  function loadPreviousClients(year) {
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) return Promise.reject(new Error("Choose a valid previous annual year."));
+    return request(undefined, { clients: true, sourceYear: year });
+  }
   const fields = () => ["clientName", "year", "accountingPic", "taxPic", "progress", "deadline", "notes", "ntpe", ...(team === "tax" ? ["subjectType", "groupName", "recordMethod", "documents", "preparation", "filing", "payableAmount", "paymentDate", "paymentNtpn", "filingDate"] : ["technicalAdminMonths", "dataMonths", "reportPreparationMonths", "paymentValue"]), ...(context?.columns || []).map(col => col.field)];
   function rowEdits(before, next) {
     return next.rows.flatMap(row => {
@@ -66,6 +72,24 @@
       if (changed.includes("progress") && team === "accounting") ["technicalAdminMonths", "dataMonths", "reportPreparationMonths"].forEach(field => baselineFields.add(field));
       return [{ id: row.id, changes: Object.fromEntries(changed.map(field => [field, row[field] ?? ""])), before: Object.fromEntries([...baselineFields].map(field => [field, old[field] ?? ""])) }];
     });
+  }
+  function rebase(before, next, confirmed) {
+    const result = structuredClone(confirmed);
+    for (const edit of rowEdits(before, next)) {
+      const row = result.rows.find(item => item.id === edit.id);
+      if (!row || row.deletedAt) throw new Error("An edited annual row is no longer available. Refresh and review it.");
+      for (const [field, value] of Object.entries(edit.before)) {
+        if (!equal(row[field], value)) throw new Error(`CONFLICT: ${row.clientName} / ${field} changed while saving. No queued changes were overwritten.`);
+      }
+      const projected = next.rows.find(item => item.id === edit.id);
+      Object.assign(row, structuredClone(edit.changes));
+      // These display-only dependencies are derived again by the server at commit time.
+      for (const field of ["accountingPicId", "taxPicId", "progressBeforeNtpe"]) {
+        const old = before.rows.find(item => item.id === edit.id);
+        if (!equal(old[field], projected[field])) row[field] = projected[field];
+      }
+    }
+    return result;
   }
   async function commit(before, next, label) {
     if (!equal(before.customColumns, next.customColumns)) {
@@ -80,7 +104,13 @@
     redoStack = [];
     if (creates.length) undoStack = [];
     else {
-      const actual = rowEdits(before, { rows: result.rows });
+      const actual = rowEdits(before, { rows: result.rows }).flatMap(edit => {
+        const submitted = edits.find(item => item.id === edit.id);
+        if (!submitted) return [];
+        const allowed = new Set(Object.keys(submitted.before));
+        const changes = Object.fromEntries(Object.entries(edit.changes).filter(([field]) => allowed.has(field)));
+        return Object.keys(changes).length ? [{ ...edit, changes }] : [];
+      });
       undoStack.push({ before, after: structuredClone(result), edits: actual, label });
       if (undoStack.length > 50) undoStack.shift();
     }
@@ -105,6 +135,6 @@
     undoStack = []; redoStack = []; return result;
   }
   function invalidateClients() { clientsEpoch++; clientsController?.abort(); clientsController = null; clientsPromise = null; clientsCache = null; }
-  function clearAccess() { cancelLoad(); invalidateClients(); initialRead = false; context = null; undoStack = []; redoStack = []; }
-  window.AnnualSheetLive = { load, cancelLoad, clearAccess, invalidateClients, loadClients, commit, manageRow, undo: () => replay(false), redo: () => replay(true), get canUndo() { return !!undoStack.length; }, get canRedo() { return !!redoStack.length; }, get context() { return context; } };
+  function clearAccess() { accessRevision++; cancelLoad(); invalidateClients(); initialRead = false; context = null; undoStack = []; redoStack = []; }
+  window.AnnualSheetLive = { load, cancelLoad, clearAccess, invalidateClients, loadClients, loadPreviousClients, rebase, commit, manageRow, undo: () => replay(false), redo: () => replay(true), get canUndo() { return !!undoStack.length; }, get canRedo() { return !!redoStack.length; }, get context() { return context; } };
 })();

@@ -276,3 +276,11 @@ th[aria-sort=ascending],th[aria-sort=descending]{background:#e3f1ec}
 .sheet-theme-dark .team-control-heading h3,.sheet-theme-dark .team-control-field.control-complete>span,.sheet-theme-dark .team-control-secondary .team-control-field>span:not(.team-control-meter){color:var(--muted)}
 .sheet-theme-dark .team-control-meter,.sheet-theme-dark .coverage-track{background:var(--sheet-header)}
 .sheet-theme-dark #sheet-loading{background:rgba(17,31,34,.8);color:var(--ink)}
+.cell.save-pending{box-shadow:inset 0 -2px #b77a19}
+.cell.save-pending .cell-content:after{content:"";width:5px;height:5px;border-radius:50%;background:#b77a19;flex-shrink:0;margin-left:4px}
+.generation-options{display:flex;flex-wrap:wrap;gap:12px;padding:0 30px 16px}
+.generation-options label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted);flex:1;min-width:110px}
+.generation-options label:first-child{flex:2;min-width:190px}
+.generation-options [hidden]{display:none}
+.generation-options select{padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
+@media(max-width:650px){.generation-options{padding:0 20px 14px}}

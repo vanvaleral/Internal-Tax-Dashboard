@@ -29,7 +29,7 @@ async function payloadFor(actor: any, input: Record<string, unknown>, fallbackCl
 }
 
 async function recipients(admin: any, payload: any) {
-  const { data, error } = await admin.from("staff_profiles").select("id").in("role", ["leader", "supervisor", "partner", "admin"]);
+  const { data, error } = await admin.from("staff_profiles").select("id").eq("directory_active", true).in("role", ["leader", "supervisor", "partner", "admin"]);
   if (error) throw new Error(error.message);
   return uniqueProfileIds([payload.tax_pic_profile_id, payload.accounting_pic_profile_id, ...(data || []).map((profile: any) => profile.id)]);
 }
@@ -91,13 +91,16 @@ export async function POST(request: Request) {
     const payload = await payloadFor(actor, body.case || body);
     const { data, error } = await actor.admin.from("tax_cases").insert(payload).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    let announcementStatus = "delivered";
     try {
-      await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${actor.profile.display_name || actor.profile.full_name} created a new ${payload.case_category} case.`, senderProfileId: actor.profile.id, recipientProfileIds: await recipients(actor.admin, payload), eventKey: notificationEventKey("case", data.id), sourceType: "tax_case", sourceId: data.id });
+      const announcement = await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${actor.profile.display_name || actor.profile.full_name} created a new ${payload.case_category} case.`, senderProfileId: actor.profile.id, recipientProfileIds: await recipients(actor.admin, payload), eventKey: notificationEventKey("case", data.id), sourceType: "tax_case", sourceId: data.id });
+      announcementStatus = announcement.queued ? "queued" : "delivered";
     } catch (notificationError) {
-      // The case itself is durable even when notification delivery is retried later.
+      // A failure before enqueue has no outbox job. Do not imply it will retry.
+      announcementStatus = "failed";
       console.error("[cases] notification failed", notificationError);
     }
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json({ data, announcementStatus }, { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save case." }, { status: 403 }); }
 }
 

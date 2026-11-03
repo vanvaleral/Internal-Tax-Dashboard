@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { annualContext, annualResponseData } from "@/lib/annual-sheet-read";
-import { addAnnualRows, annualIndividualClient, annualScope, annualTeam, applyAnnualEdits, manageAnnualRow, type AnnualTeam } from "@/lib/annual-sheet";
+import { addAnnualRows, annualIndividualClient, annualPreviousCandidates, annualScope, annualTeam, applyAnnualEdits, manageAnnualRow, type AnnualTeam } from "@/lib/annual-sheet";
 
 export async function GET(request: Request) {
   const started = Date.now();
@@ -15,6 +15,13 @@ export async function GET(request: Request) {
   const headers = () => ({ "Cache-Control": "no-store", "Server-Timing": `auth;dur=${authenticated - started},data;dur=${Date.now() - authenticated}` });
   try {
     if (params.get("part") === "clients") {
+      if (params.get("source") === "previous-annual") {
+        const year = Number(params.get("sourceYear"));
+        if (!Number.isInteger(year) || year < 2000 || year > 2100) return NextResponse.json({ error: "Choose a valid previous annual year." }, { status: 400, headers: headers() });
+        const ctx = await annualContext(actor, team, true, true);
+        return NextResponse.json({ userId: actor.userId, clients: annualPreviousCandidates(Array.isArray(ctx.workspace?.payload) ? ctx.workspace.payload : [], year, team, actor.profile, ctx.staff, ctx.clients) }, { headers: headers() });
+      }
+      if (params.has("source") && params.get("source") !== "client-master") return NextResponse.json({ error: "Choose a valid generation source." }, { status: 400, headers: headers() });
       const picField = team === "tax" ? "tax_pic_profile_id" : "accounting_pic_profile_id";
       let query = actor.admin.from("client_master").select("id, legal_name, company_form, accounting_pic_name, accounting_pic_profile_id, tax_pic_name, tax_pic_profile_id").eq("status", "Active");
       if (!isLeadership(actor.profile.role)) query = query.eq(picField, actor.profile.id);
@@ -33,7 +40,7 @@ export async function POST(request: Request) {
   let team: AnnualTeam;
   try { team = annualTeam(body.team); } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
   try {
-    const ctx = await annualContext(actor, team, true, Boolean(body.creates?.some((row: any) => team === "accounting" ? row.clientId : row.sourceClientId)));
+    const ctx = await annualContext(actor, team, true, Boolean(body.creates?.some((row: any) => row.generationSource === "previous-annual" || (team === "accounting" ? row.clientId : row.sourceClientId))));
     if (body.action === "add-column") {
       if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can add shared columns." }, { status: 403 });
       if (!ctx.columnsReady) return NextResponse.json({ error: "Apply the annual_sheet_columns migration before adding shared columns." }, { status: 503 });

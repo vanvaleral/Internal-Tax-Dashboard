@@ -32,7 +32,8 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
   const rows = [dbCase("saved-a", "Alpha", "tax-a", "acc-a"), dbCase("saved-b", "Beta", "tax-b", "acc-a"), dbCase("saved-c", "Gamma", "tax-a", "acc-b"), dbCase("saved-d", "Delta", "tax-a", "acc-a", "Pemeriksaan")];
   let hold: ((value: any) => void) | undefined;
-  let delay = false, fail = false, failId = "", created = 0;
+  let delay = false, fail = false, failId = "", created = 0, announcementStatus = "delivered";
+  const announcements: any[] = [];
   w.fetch = async (url: string, init: any = {}) => {
     if (init.method && init.method !== "GET") {
       const body = JSON.parse(init.body); writes.push(body);
@@ -46,12 +47,14 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       for (const [field, column] of [["notes", "notes"], ["taxYear", "tax_year"], ["inspectorPic", "inspector_pic"], ["completionNotes", "completion_notes"]]) if (body.case?.[field] !== undefined) data[column] = body.case[field];
       if (body.action === "assign-pic") { data[`${body.picType}_pic_profile_id`] = body.profileId; data[`${body.picType}_pic_name`] = body.profileId; }
       const stored = rows.find(row => row.id === data.id); if (stored) Object.assign(stored, data); else rows.push(data);
-      return { ok: true, status: 200, json: async () => ({ data }) };
+      if (url === "/api/cases" && init.method === "POST" && announcementStatus === "delivered") announcements.push({ id:`announcement-${data.id}`, title:`New ${data.case_category}: ${data.client_name}`, message:"New case created", audience:"all", sender:"Supervisor", createdAt:new Date().toISOString(), readAt:null });
+      return { ok: true, status: 200, json: async () => ({ data, ...(init.method === "POST" ? { announcementStatus } : {}) }) };
     }
     reads.push(url);
     const body = url === "/api/profile" ? { user: { id: "auth-user-1" }, profile: { id: "tax-a", role, display_name: "tax-a", team_division: "Tax Team", directory_active: true } }
       : url === "/api/clients" ? { data: [{ id: "master-1", client_code: "CL-00001", legal_name: "Alpha", status: "Active", tax_pic_profile_id: "tax-a", accounting_pic_profile_id: "acc-a", tax_pic_name: "tax-a", accounting_pic_name: "acc-a" }] }
       : url === "/api/cases" ? { data: rows }
+      : url === "/api/announcements" ? { announcements }
       : url.includes("progressFor=") ? { completedTasks: [{ title: "Linked completed task", completedByName: "tax-a" }], progressEntries: [] }
       : url === "/api/staff" ? { staff: ["tax-a", "tax-b", "acc-a", "acc-b"].map(id => ({ id, display_name: id, directory_active: true, team_division: id.startsWith("tax") ? "Tax Team" : "Accounting Team" })) }
       : { data: [], tasks: [], staff: [], announcements: [] };
@@ -59,11 +62,11 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js"));
   // Expose closure references in the test source only, never in the served dashboard.
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress, loadStaffDirectory, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__casesTest;
   if (!expectBlocked) assert.ok(api, warnings.join("\n") || w.document.body.textContent.slice(-500));
-  return { dom, w, api, rows, writes, reads, warnings, delay: () => { delay = true; }, fail: () => { fail = true; }, failCase: (id: string) => { failId = id; }, release: () => { delay = false; hold?.(null); } };
+  return { dom, w, api, rows, writes, reads, warnings, announcements, announcementStatus:(value: string) => { announcementStatus = value; }, delay: () => { delay = true; }, fail: () => { fail = true; }, failCase: (id: string) => { failId = id; }, release: () => { delay = false; hold?.(null); } };
 }
 
 const field = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-id="${id}"][data-case-sheet-field="${name}"]`);
@@ -128,6 +131,72 @@ const copyRange = (d: any, td: any) => {
   Object.defineProperty(event, "clipboardData", { value:{ setData: (_type: string, value: string) => { copied = value; } } });
   td.dispatchEvent(event); assert.equal(event.defaultPrevented, true); return copied;
 };
+
+test("case creation refreshes the inbox and distinguishes notification problems from failed case saves", async () => {
+  for (const status of ["delivered", "queued", "failed"]) {
+    const d = await dashboard();
+    try {
+      d.announcementStatus(status);
+      const reads = d.reads.filter(url => url === "/api/announcements").length;
+      d.w.document.querySelector("[data-new-case]").click();
+      const draft = d.api.getRows().find((item: any) => item.id.startsWith("case-"));
+      const client = field(d, draft.id, "clientName"); client.value = "Alpha";
+      await d.api.saveCaseSheetCell(client); await tick();
+      assert.equal(d.writes.length, 1); assert.equal(draft.id.startsWith("case-"), false);
+      assert.equal(d.reads.filter(url => url === "/api/announcements").length, reads + 1);
+      const message = d.w.document.getElementById("case-sheet-status").textContent;
+      assert.match(message, status === "failed" ? /Case saved.*delivery could not be confirmed/ : status === "queued" ? /Case saved.*queued/ : /Saved to database/);
+      assert.doesNotMatch(message, /^Not saved/);
+      assert.equal(d.api.state.announcements.length, status === "delivered" ? 1 : 0);
+      assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("bulk new cases refresh announcements once after the batch, not once per row", async () => {
+  const d = await dashboard();
+  try {
+    const reads = d.reads.filter(url => url === "/api/announcements").length;
+    d.w.document.querySelector("[data-new-case]").click();
+    const draft = d.api.getRows().find((item: any) => item.id.startsWith("case-"));
+    await d.api.pasteCaseSheetRange(gridCell(d, draft.id, "clientName"), "Alpha\tNEW-1\nAlpha\tNEW-2"); await tick();
+    assert.equal(d.writes.length, 2);
+    assert.equal(d.reads.filter(url => url === "/api/announcements").length, reads + 1);
+    assert.equal(d.api.state.announcements.length, 2); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("opening the desktop inbox fetches current announcements and an open Alerts page refreshes its content", async () => {
+  const d = await dashboard();
+  try {
+    const item = (id: string) => ({ id, title:`New case ${id}`, message:"Test update", audience:"all", sender:"PIC", createdAt:"2026-11-02T00:00:00Z", readAt:null });
+    d.announcements.push(item("one"));
+    d.w.document.querySelector("[data-open-announcement-inbox]").click(); await tick();
+    assert.match(d.w.document.getElementById("announcement-inbox-root").textContent, /New case one/);
+    d.w.document.querySelector('[data-view="announcement-view"]').click(); await tick();
+    d.announcements.push(item("two"));
+    await d.api.loadSharedAnnouncements(true);
+    assert.match(d.w.document.getElementById("announcement-view").textContent, /New case two/);
+    assert.equal(d.writes.length, 0); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("an older announcement read cannot replace a newer inbox response", async () => {
+  const d = await dashboard();
+  try {
+    let release!: () => void, calls = 0;
+    const fetch = d.w.fetch;
+    d.w.fetch = async (url: string, init: any) => {
+      if (url !== "/api/announcements") return fetch(url, init);
+      const first = ++calls === 1;
+      if (first) await new Promise<void>(resolve => { release = resolve; });
+      return { ok:true, json:async () => ({ announcements:[{ id:first ? "older" : "latest", title:"Update", audience:"all" }] }) };
+    };
+    const oldRead = d.api.loadSharedAnnouncements(true); await tick();
+    await d.api.loadSharedAnnouncements(true); release(); await oldRead;
+    assert.equal(d.api.state.announcements[0].id, "latest"); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
 
 test("Cases default to creation order and retain earlier numbers through name sorts, filters, saves and reloads", async () => {
   const d = await dashboard("supervisor", { caseSheetSort:{ key:"clientName", direction:"asc" } });

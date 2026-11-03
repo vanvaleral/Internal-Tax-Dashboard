@@ -507,6 +507,7 @@ test("Annual Tax manual subjects remain distinct and reviewed new-year suggestio
     assert.ok(added.every((row: any) => row.taxPicId === "tax-bagus"));
     const year = d.w.document.getElementById("year-select"); year.value = "2026"; year.dispatchEvent(new d.w.Event("change", { bubbles: true }));
     d.w.document.getElementById("generate-button").click();
+    const source = d.w.document.getElementById("generation-source"); source.value = "previous-annual"; source.dispatchEvent(new d.w.Event("change", { bubbles: true }));
     assert.equal(d.w.document.querySelectorAll("#candidate-list input:checked").length, 0);
     const selected = [...d.w.document.querySelectorAll("#candidate-list input")].filter((input: any) => added.some((row: any) => row.subjectId === input.value));
     assert.equal(selected.length, 2);

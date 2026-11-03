@@ -87,7 +87,7 @@
     byId("generate-dialog").querySelector("h2").innerHTML = 'Review subjects for <span id="generate-year"></span>.';
     byId("generate-dialog").querySelector(".dialog-head p").textContent = "Review active Individual clients assigned to the Tax PIC and prior-year SPT subjects. Directors not in Client Master are added separately. New-year milestones start blank.";
     byId("confirm-generate").textContent = "Add selected subjects";
-    byId("empty-generate").textContent = "Review prior-year subjects";
+    byId("empty-generate").textContent = "Generate SPT subjects";
     byId("empty-state").querySelector("p").textContent = "No SPT subjects match this year, status, and filter.";
     document.querySelector(".page-foot > span:last-child").innerHTML = '<kbd>Click</kbd> dropdown <kbd>F2</kbd> edit <kbd>Drag</kbd> fill checks <kbd>?</kbd> shortcuts';
   }

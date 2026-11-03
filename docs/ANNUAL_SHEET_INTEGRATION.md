@@ -77,9 +77,10 @@ or when Add Client is opened, without blocking startup. Requests are coalesced a
 their preview results cached in memory for at most 60 seconds, never local storage.
 **Refresh list** bypasses that cache; access changes discard it, including late
 responses. Every creation rechecks current Client Master ownership on the server.
-Accounting lists active ACC assignments. Tax combines active Individual clients
-assigned to the Tax PIC with its existing prior-year SPT suggestions; it does not
-infer directors from corporate clients. API responses
+Accounting lists active ACC assignments. Tax lists active Individual clients
+assigned to the Tax PIC; it does not infer directors from corporate clients.
+Previous-year Annual clients are an explicit separate generation source, not
+silently mixed into the current Client Master list. API responses
 include Server-Timing for authentication and data-query duration, to help separate
 application/database time from browser/network/platform startup time.
 
@@ -93,8 +94,8 @@ replace a newer confirmed save. Temporary refresh failures retain the last confi
 data; detected authentication/account/access errors clear and lock the sheet.
 
 No role or write authorization is cached server-side. Every save still authenticates
-and validates current PIC ownership and field baselines, and only appears in the
-sheet after database confirmation. Automatic refresh throttling is not a guarantee
+and validates current PIC ownership and field baselines; edits are marked pending
+until database confirmation. Automatic refresh throttling is not a guarantee
 of a specific live load time; deployed latency must be measured separately.
 
 ## Idle Annual Preload
@@ -131,6 +132,44 @@ no retry loop or global loading overlay. Once consumed/expired, no periodic annu
 prefetch polling occurs. Server-side authorization and database schema are unchanged;
 no migration is needed. Actual time saved depends on the browser/network and on
 whether the user opens the sheet before the short-lived snapshot expires.
+
+## Annual Generation Sources
+
+**Add Client > Generate Clients** provides two sources for both teams:
+
+- **Current PIC clients** reads today's active Client Master assignments. Accounting
+  uses ACC PIC; Tax uses Tax PIC and Individual clients only.
+- **Previous-year Annual clients** uses a selected earlier tax year's client list,
+  including independent/external annual work. For linked Master clients, eligibility,
+  name and both PIC assignments come from today's active Client Master, not the old
+  Annual row. A reassigned client is eligible for its current primary PIC, even if
+  that PIC cannot read the previous owner's old Annual row. Inactive/missing Master
+  clients and unassigned primary PICs are excluded rather than treated as external.
+- External work, which has no Master assignment, keeps the primary/secondary PICs
+  recorded on the selected Annual source row, provided those PICs are still active
+  in their corresponding team. A former secondary PIC becomes unassigned. Staff
+  must be the primary PIC; assistant-only access is not enough to generate work.
+  Leadership can filter and generate across eligible primary PICs.
+
+The generation dialog has an independent primary-PIC filter and an earlier-year
+selector. New source reads are fenced so a late response cannot replace the source
+or year the user has just selected. Prior-year previews are read freshly on demand;
+they are not loaded on startup or persisted locally.
+
+At save time, the server rereads the source Annual row and current Master data. It
+derives identity and PICs itself, rejects a stale ownership preview, and skips
+existing target client/subject-year rows. It never accepts copied completion,
+monthly flags, milestones, amounts, receipts, dates or notes. New work has a new
+work ID and starts at Data Request with empty controls/evidence; older records are
+unchanged. Prior-source row/year and the creating actor are recorded in its audit.
+
+Accounting external work uses an Annual-only `annualClientId` to retain identity
+across generated years. Legacy external rows fall back to their existing work ID
+without rewriting history. Tax keeps its existing stable subject ID. Neither source
+creates Client Master clients or changes Allocation/PIC portfolio counts.
+
+This uses additive metadata in the existing Annual JSON records. No database schema
+migration, destructive update, new dependency or automatic regeneration is needed.
 
 ## Bulk Entry And Individual Subjects
 
@@ -248,11 +287,29 @@ Staff see only authorized subjects with an explicit accessible-work scope label.
   Same-field conflicts fail without silent overwrite. Paste/fill batches are one
   atomic workspace update. Fields derived by a stage or NTPE edit include baseline
   dependencies, so concurrent control/status edits cannot be lost.
-- The UI updates only after database confirmation. Failed/unconfirmed saves reload
-  shared data when possible; they do not enter a local-storage retry queue.
+- Ordinary cell edits stay interactive during saving for both teams. The working
+  sheet shows pending values with an amber underline/dot and an explicit pending
+  save status; these are not represented as database-confirmed values. Transport
+  data remains a separate confirmed snapshot, never mutated by UI edits.
+- Only one cell-save request runs at a time. Ordinary gestures made during that
+  request share the next atomic batch (up to 250 distinct rows). Progress and NTPE
+  changes are ordering barriers, preserving stage automation, previous-stage
+  restoration and audit semantics. Dependent edits keep their original field
+  baselines when applied to a response; unrelated concurrent data is not replaced.
+- Responses do not rebuild an active text editor, drag or slider. Pending edits
+  are replayed over confirmed data, not replaced by an earlier save response.
+  Exports, Undo/Redo, row management, generation and full-screen navigation wait
+  for pending saves. Leaving/reloading the page warns while writes are pending.
+- Failed/unconfirmed saves stop dependent queued changes and restore the last
+  confirmed data, reloading it when possible. An explicit error asks the user to
+  review/re-enter stopped edits. There is no silent retry, offline persistence or
+  local-storage save queue. Access loss clears private data and fences late reads
+  and writes so they cannot resurrect a cleared session.
 - Undo/redo uses inverse field edits with the same concurrency and permission
   checks. Creation and shared-column additions are not undo-deletable, preserving
   operational history. Standard cell edits remain undoable.
+  A coalesced batch is one Undo step; unrelated remote edits returned by the server
+  are excluded from that step.
 - Full before/after field events and actor IDs are appended to each saved row in
   the same atomic update. A summary audit entry is also scheduled after response.
   The old annual whole-payload PUT route is blocked to prevent bypassing these
@@ -309,6 +366,16 @@ a staff member cannot change another team's row or manage shared column metadata
 6. Test two sessions editing different fields, then the same field, on one row.
 7. Export Excel and verify the selected year, authorized rows, payment, proof,
    custom fields and monthly/milestone details.
+8. Under a slow connection, edit multiple bars/cells without waiting. Verify amber
+   pending marks disappear after confirmation and the latest values survive reload.
+9. Type in a second cell while the first saves; its input/focus must stay intact.
+10. Simulate a failed save and a same-field two-session conflict. Confirm queued
+    dependent edits stop, the error is visible and no other user's data is replaced.
+
+The non-blocking cell-save change needs no database migration or new dependency.
+It removes the per-click interaction lock; it does not promise a sub-second
+database round trip. Automated tests hold writes artificially to verify safe
+interaction while slow saves are outstanding.
 
 Local tests use mock database/client contexts. These checks do not substitute for
 a real authenticated smoke test against the deployed project.

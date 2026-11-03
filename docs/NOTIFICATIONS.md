@@ -9,7 +9,61 @@ The prototype in `public/demo.html` provides:
 - a Wall of Fame announcement after Employee of the Month is finalized
 - local browser persistence for demo review
 
-Announcements are now stored in Supabase with per-recipient read status. This makes the in-app inbox shared between logged-in employees. Phone push delivery remains a separate future phase.
+Announcements are stored in Supabase with per-recipient read status. Web Push is
+implemented separately for opted-in devices and requires the configured VAPID
+keys, HTTPS and browser permission; it is not the source of truth for the inbox.
+
+## Case-Creation Delivery Fix (2026-11-02)
+
+New saved Himbauan/Pemeriksaan cases create an operational announcement for their
+Tax/Accounting PICs and active leadership, not every employee. Blank unsaved rows
+do not create announcements. Ordinary cell edits do not create a second new-case
+announcement.
+
+A read-only production inspection found 11 recent cases without an announcement
+or delivery job. A non-executing EXPLAIN diagnostic reproduced SQLSTATE 42702:
+`announcement_id` in `enqueue_operational_announcement` was both a local variable
+and an outbox column, making its ON CONFLICT target ambiguous. The corrective
+migration is `20261102094113_fix_announcement_outbox_variable_ambiguity.sql`.
+It renames local variables, retains the function signature and service-role-only
+execution, and does not rewrite cases, announcements, permissions or history.
+The corresponding corrected statement passed the read-only planner diagnostic.
+
+Apply only this reviewed migration, not an unreviewed `supabase db push`; the
+project has historical migration-ledger differences. The function-only fix was
+applied with explicit approval on 2026-11-02 to project `kedpcolyklquhfjzimvx`;
+the local filename matches production ledger version `20261102094113`.
+Existing missed notifications are not
+automatically backfilled or broadcast. If recovery is requested, review the
+specific cases, recipients and stable event keys before creating old events.
+
+Post-migration verification called the corrected function as `service_role` in
+an explicitly rolled-back transaction. It confirmed a first enqueue, the same
+announcement ID on retry without duplicate jobs, and rejection/rollback for an
+invalid recipient. No user inbox records were written and zero diagnostic
+announcements persisted. `anon` and `authenticated` still cannot execute the
+function; `service_role` can. Cases and historical announcements were not
+rewritten or backfilled. Application/UI changes remain a separate GitHub/deploy
+step, while the corrected function is already active for existing server calls.
+
+Notification errors no longer masquerade as a case-save failure or disappear
+entirely. Creation returns its saved case plus `announcementStatus` (delivered,
+queued or failed); the sheet reports delivery issues without inviting duplicate
+case creation. A failure before enqueue has no durable retry job; once enqueue
+succeeds, the existing delivery worker can retry delivery. A failed helper call
+can also occur after enqueue, so the UI says delivery was not confirmed rather
+than asserting that no announcement exists.
+
+The creator refreshes their inbox after a successful new-case save without
+waiting for that read to finish. Bulk creation refreshes once after the batch.
+Opening the desktop inbox fetches current data, and background reads update an
+already-open mobile Alerts page. Older reads cannot replace a newer inbox
+response. Other active sessions retain the existing two-minute polling interval;
+opening Alerts/inbox or returning to the tab also refreshes. This is not Realtime.
+
+The existing immediate Web Push attempt and daily retry schedule are unchanged.
+An in-app fix does not guarantee browser push when permission/keys/subscriptions
+are absent. Existing case creation remains durable if notification delivery fails.
 
 ## Production Delivery Model
 

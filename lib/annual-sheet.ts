@@ -9,6 +9,7 @@ const taxChecks: Record<string, string[]> = { documents: ["previousSpt", "lifest
 const text = (value: any) => value == null || value === "-" ? "" : String(value).trim();
 const label = (person: Row) => text(person.display_name || person.full_name);
 const equal = (a: any, b: any) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
+const accountingIdentity = (row: Row) => row.clientId ? `client:${row.clientId}` : `external:${row.annualClientId || row.annualWorkId || row.id}`;
 export const annualScope = (team: AnnualTeam) => team === "tax" ? "annual_tax" : "annual_accounting";
 export const annualOperationalPic = (person: Row, division: string) => person.directory_active === true && person.team_division === division && String(person.role || "staff").toLowerCase() !== "partner";
 export function annualIndividualClient(client: Row) {
@@ -47,7 +48,7 @@ export function annualToSheet(row: Row, team: AnnualTeam, staff: Row[], columns:
   const accId = profileId(row, "accounting", staff), taxId = profileId(row, "tax", staff);
   const assignedName = (id: string, fallback: any) => label(staff.find(person => person.id === id) || {}) || text(fallback);
   const output: Row = {
-    id: String(row.id || row.annualWorkId || ""), subjectId: String(row.subjectId || row.annualWorkId || row.id || ""), clientId: text(row.clientId), clientName: text(row.clientName),
+    id: String(row.id || row.annualWorkId || ""), subjectId: String(row.subjectId || row.annualWorkId || row.id || ""), annualClientId: String(row.annualClientId || row.annualWorkId || row.id || ""), clientId: text(row.clientId), clientName: text(row.clientName),
     year: Number(row.taxYear || row.year) || 0, outside: ["Lepas", "Outside contract"].includes(row.contractType) || !row.clientId,
     accountingPic: assignedName(accId, row.accountingPic || row.reportPic), accountingPicId: accId,
     taxPic: assignedName(taxId, row.taxPic), taxPicId: taxId, assistantIds: row.assistantProfileIds || [],
@@ -68,6 +69,39 @@ export function annualToSheet(row: Row, team: AnnualTeam, staff: Row[], columns:
   }
   columns.forEach(column => { output[column.field] = row.sheetValues?.[column.field] ?? ""; });
   return output;
+}
+export function annualPreviousCandidates(stored: Row[], sourceYear: number, team: AnnualTeam, actor: Row, staff: Row[], clients: Row[]) {
+  if (!Number.isInteger(sourceYear) || sourceYear < 2000 || sourceYear > 2100) throw new Error("Choose a previous annual year from 2000 to 2100.");
+  const division = team === "accounting" ? "Accounting Team" : "Tax Team";
+  if (!isLeadership(actor.role) && actor.team_division !== division) return [];
+  const candidates = new Map<string, Row>();
+  const people = new Map(staff.map(person => [person.id, person])), master = new Map(clients.map(client => [client.id, client]));
+  const person = (id: string, group: string) => { const profile = people.get(id); return profile && annualOperationalPic(profile, group) ? profile : undefined; };
+  for (const raw of stored) {
+    if (raw.deletedAt || Number(raw.taxYear || raw.year) !== sourceYear) continue;
+    const row = annualToSheet(raw, team, staff);
+    if (row.deletedAt || row.year !== sourceYear) continue;
+    const masterId = team === "accounting" ? row.clientId : row.sourceClientId;
+    const current = master.get(masterId);
+    const client = current?.status === "Active" && (team !== "tax" || annualIndividualClient(current)) ? current : null;
+    if (masterId && !client) continue;
+    const acc = person(client ? client.accounting_pic_profile_id : row.accountingPicId, "Accounting Team");
+    const tax = person(client ? client.tax_pic_profile_id : row.taxPicId, "Tax Team");
+    const primary = team === "accounting" ? acc : tax;
+    if (!primary || !isLeadership(actor.role) && primary.id !== actor.id) continue;
+    // Linked clients follow today's assignments; independent annual work keeps its annual owner.
+    const key = team === "accounting" ? row.clientId || row.annualClientId : row.subjectId;
+    if (!key || candidates.has(key)) continue;
+    candidates.set(key, {
+      clientId: team === "accounting" ? row.clientId : row.subjectId, annualClientId: row.annualClientId,
+      subjectId: row.subjectId, sourceClientId: team === "tax" ? masterId : "", linkedClientId: row.clientId,
+      name: client?.legal_name || row.clientName, active: true, outside: !masterId,
+      accountingPic: acc ? label(acc) : "", accountingPicId: acc?.id || "", taxPic: tax ? label(tax) : "", taxPicId: tax?.id || "",
+      subjectType: client ? "Individual" : row.subjectType, groupName: client ? "" : row.groupName, recordMethod: row.recordMethod,
+      generationSource: "previous-annual", sourceAnnualRowId: row.id, sourceAnnualYear: sourceYear
+    });
+  }
+  return [...candidates.values()];
 }
 function validateField(field: string, value: any, team: AnnualTeam, columns: AnnualColumn[]) {
   const checks = monthFields.includes(field) ? 12 : field in taxChecks ? 3 : 0;
@@ -148,20 +182,30 @@ export function applyAnnualEdits(stored: Row[], edits: Row[], team: AnnualTeam, 
   }
   for (const edit of edits.filter(item => Object.hasOwn(item.changes, "year"))) {
     const row = rows.find(item => String(item.id || item.annualWorkId) === edit.id)!;
-    const key = team === "accounting" ? row.clientId : row.subjectId || row.annualWorkId || row.id;
-    if (key && rows.some(other => !other.deletedAt && other !== row && (team === "accounting" ? other.clientId : other.subjectId || other.annualWorkId || other.id) === key && Number(other.taxYear || other.year) === row.taxYear)) throw new Error("This client/subject already has work for that year.");
+    const key = team === "accounting" ? accountingIdentity(row) : row.subjectId || row.annualWorkId || row.id;
+    if (key && rows.some(other => !other.deletedAt && other !== row && (team === "accounting" ? accountingIdentity(other) : other.subjectId || other.annualWorkId || other.id) === key && Number(other.taxYear || other.year) === row.taxYear)) throw new Error("This client/subject already has work for that year.");
   }
   return rows;
 }
 
 export function addAnnualRows(stored: Row[], creates: Row[], team: AnnualTeam, actor: Row, staff: Row[], clients: Row[], columns: AnnualColumn[] = []) {
   const rows = structuredClone(stored), initialEdits: Row[] = [], importedControls: Row[] = [];
+  const previousSources = new Map<number, Map<string, Row>>();
   for (let input of creates) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(input.id || ""))) throw new Error("A unique annual work request ID is required.");
     if (rows.some(row => row.id === input.id || row.annualWorkId === input.id)) continue; // Safe retry after an uncertain network response.
+    let previous: Row | undefined;
+    if (input.generationSource === "previous-annual") {
+      if (!Number.isInteger(input.sourceAnnualYear) || input.sourceAnnualYear >= input.year || input.initialValues) throw new Error("Choose an earlier annual source year; generation starts with empty controls.");
+      if (!previousSources.has(input.sourceAnnualYear)) previousSources.set(input.sourceAnnualYear, new Map(annualPreviousCandidates(stored, input.sourceAnnualYear, team, actor, staff, clients).map(candidate => [candidate.sourceAnnualRowId, candidate])));
+      previous = previousSources.get(input.sourceAnnualYear)!.get(input.sourceAnnualRowId);
+      if (!previous) throw new Error("This previous annual client is not eligible for your current PIC workload. Refresh the generation list.");
+      input = { ...input, ...previous, id: input.id, year: input.year, clientName: previous.name, notes: "" };
+      if (team === "accounting" && !previous.clientId && rows.some(row => !row.deletedAt && !row.clientId && String(row.annualClientId || row.annualWorkId || row.id) === previous!.annualClientId && Number(row.taxYear || row.year) === input.year)) continue;
+    }
     validateField("year", input.year, team, []); validateField("clientName", input.clientName, team, []);
     validateField("notes", input.notes || "", team, []);
-    let accName = text(input.accountingPic), taxName = text(input.taxPic), clientId = "", contractType = "Lepas", assignedAccId = "", assignedTaxId = "";
+    let accName = text(input.accountingPic), taxName = text(input.taxPic), clientId = "", contractType = "Lepas", assignedAccId = previous?.accountingPicId || "", assignedTaxId = previous?.taxPicId || "";
     if (team === "accounting" && input.clientId) {
       const client = clients.find(item => item.id === input.clientId && item.status === "Active");
       if (!client?.accounting_pic_profile_id || !isLeadership(actor.role) && client.accounting_pic_profile_id !== actor.id) throw new Error("This client is not eligible for your annual accounting workload.");
@@ -187,7 +231,7 @@ export function addAnnualRows(stored: Row[], creates: Row[], team: AnnualTeam, a
       const division = team === "accounting" ? "Accounting Team" : "Tax Team";
       if (actor.team_division !== division) throw new Error("Only the corresponding team PIC or leadership can add annual work.");
       if (input.initialValues && !clientId && (team === "accounting" ? taxName || accName && accName !== label(actor) : accName || taxName && taxName !== label(actor))) throw new Error("Only leadership can assign other PICs to imported annual work.");
-      if (!clientId) { accName = team === "accounting" ? label(actor) : ""; taxName = team === "tax" ? label(actor) : ""; }
+      if (!clientId && !previous) { accName = team === "accounting" ? label(actor) : ""; taxName = team === "tax" ? label(actor) : ""; }
     }
     const resolve = (name: string, division: string, assignedId = "") => {
       if (assignedId) {
@@ -201,6 +245,11 @@ export function addAnnualRows(stored: Row[], creates: Row[], team: AnnualTeam, a
       return matches[0].id;
     };
     const raw: Row = { id: input.id, annualWorkId: input.id, clientId, clientName: text(input.clientName), taxYear: input.year, contractType, accountingPic: accName, accountingPicProfileId: resolve(accName, "Accounting Team", assignedAccId) || null, taxPic: taxName, taxPicProfileId: resolve(taxName, "Tax Team", assignedTaxId) || null, progress: "Data Request", deadline: "", notes: text(input.notes), ntpe: "", paymentAmount: "", reported: false, changeLog: [{ action: "annual_sheet_created", byProfileId: actor.id, at: new Date().toISOString() }] };
+    if (team === "accounting") raw.annualClientId = previous?.annualClientId || input.id;
+    if (previous) {
+      raw.generationSource = "previous-annual"; raw.generatedFromAnnualRowId = previous.sourceAnnualRowId; raw.generatedFromAnnualYear = previous.sourceAnnualYear;
+      Object.assign(raw.changeLog[0], { sourceAnnualRowId: previous.sourceAnnualRowId, sourceAnnualYear: previous.sourceAnnualYear });
+    }
     if (input.initialValues && !(team === "accounting" ? raw.accountingPicProfileId : raw.taxPicProfileId)) throw new Error("Choose an active primary PIC for imported annual work.");
     if (team === "accounting") monthFields.forEach(field => { raw[field] = []; });
     else {

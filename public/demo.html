@@ -9546,6 +9546,13 @@
         throw error;
       }
       const saved = databaseCaseToDemo(result.data);
+      saved.announcementStatus = result.announcementStatus || "";
+      saved.announcementWarning = result.announcementStatus === "failed" ? "Case saved, but its announcement delivery could not be confirmed. Do not recreate the case; contact management."
+        : result.announcementStatus === "queued" ? "Case saved. Its announcement is queued for delivery." : "";
+      if (method === "POST") {
+        caseAnnouncementRefreshPending = true;
+        if (!caseSheetBulkSaving) { caseAnnouncementRefreshPending = false; loadSharedAnnouncements(true); }
+      }
       // Keep newer unsent typing intact. Only update server-generated identity
       // and deadline fields, instead of replacing the entire local record.
       record.id = saved.id;
@@ -9560,6 +9567,7 @@
     let caseSheetWriteRevision = 0;
     let caseSheetStatus = "Changes save to the database when you leave a cell.";
     let caseSheetRange = null, caseSheetRangeDrag = null, caseSheetBulkSaving = false;
+    let caseAnnouncementRefreshPending = false;
     const caseDefaultColumnWidths = { _number:44, _actions:38, clientName:220, letterNumber:110, subject:150, letterDate:118, receivedDate:118, dueDate:118, completionDate:118, sphpDate:118, deadline:88, taxYear:88, taxPic:104, accountingPic:104, inspectorPic:130, notes:160, completionNotes:160 };
     let caseColumnDrag = null;
 
@@ -9778,7 +9786,7 @@
           caseSheetWriteRevision++;
           if (state.selectedCaseId === previousId) state.selectedCaseId = record.id;
           if (state.expandedHimbauanId === previousId) state.expandedHimbauanId = record.id;
-          caseSheetMessage(caseSheetBulkSaving ? "Saving pasted rows..." : IS_OFFLINE_DEMO ? "Demo updated. No database changes." : "Saved to database.");
+          caseSheetMessage(caseSheetBulkSaving ? "Saving pasted rows..." : IS_OFFLINE_DEMO ? "Demo updated. No database changes." : saved.announcementWarning || "Saved to database.", saved.announcementStatus === "failed");
           return true;
         } catch (error) {
           // This editor rolls back failed writes; there is no local change to retry globally.
@@ -10021,8 +10029,13 @@
           }
         };
         await Promise.all([worker(), worker()]);
-      } finally { caseSheetBulkSaving = false; updateCaseSheetBusy(); }
-      caseSheetMessage(failed.length ? `${saved} row(s) saved; ${failed.length} incomplete: ${failed.join(", ")}. Successful changes are retained; failed edits reverted. Refresh before retrying conflicts.` : `${saved} row(s) ${IS_OFFLINE_DEMO ? "updated in demo (no database writes)" : "saved to database"}.`, Boolean(failed.length));
+      } finally {
+        caseSheetBulkSaving = false; updateCaseSheetBusy();
+        if (caseAnnouncementRefreshPending) { caseAnnouncementRefreshPending = false; loadSharedAnnouncements(true); }
+      }
+      const announcementIssues = plans.filter(plan => plan.record.announcementStatus === "failed").length;
+      const message = failed.length ? `${saved} row(s) saved; ${failed.length} incomplete: ${failed.join(", ")}. Successful changes are retained; failed edits reverted. Refresh before retrying conflicts.` : `${saved} row(s) ${IS_OFFLINE_DEMO ? "updated in demo (no database writes)" : "saved to database"}.`;
+      caseSheetMessage(`${message}${announcementIssues ? ` Announcement delivery could not be confirmed for ${announcementIssues} case(s). Do not recreate saved cases; contact management.` : ""}`, Boolean(failed.length || announcementIssues));
     }
 
     document.addEventListener("paste", event => {
@@ -10337,16 +10350,20 @@
       return nextSave;
     }
 
+    let announcementReadRevision = 0;
     async function loadSharedAnnouncements(background = false) {
+      const revision = ++announcementReadRevision;
       try {
         const response = await appFetch("/api/announcements", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading announcements...");
         if (!response.ok) return;
         const result = await response.json();
+        if (revision !== announcementReadRevision) return;
         const nextAnnouncements = Array.isArray(result.announcements) ? result.announcements : [];
         if (JSON.stringify(state.announcements) === JSON.stringify(nextAnnouncements)) return;
         state.announcements = nextAnnouncements;
         renderShellChrome();
         renderAnnouncementInbox();
+        if (state.currentView === "announcement-view") renderAnnouncementView();
       } catch (error) {
         console.warn("[announcements] shared load failed", error);
       }
@@ -11575,6 +11592,7 @@
       if (openAnnouncementInboxTrigger) {
         state.announcementInboxOpen = !state.announcementInboxOpen;
         renderAnnouncementInbox();
+        if (state.announcementInboxOpen) loadSharedAnnouncements(true);
         return;
       }
 
