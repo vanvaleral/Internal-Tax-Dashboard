@@ -178,8 +178,17 @@ directly to the same table for either team, sharing its column headings and widt
 There is no separate insertion popup. Type in the cells, use their native PIC and
 Progress dropdowns, or paste Excel values starting in a Draft cell. Paste follows
 the currently visible columns and expands the drafts up to 250 rows per year.
-Use values without a header row, ISO dates (YYYY-MM-DD) and numbers without
-thousands separators. Month counts fill January onward; Tax checklist counts fill
+Use values without a header row and ISO dates (YYYY-MM-DD). Payment value and Tax
+payable display Indonesian grouping (`1.250.000`) in cells, editors and the formula
+bar, including while typing. Use a comma for decimals (`1.250.000,50`). Amount paste
+also accepts plain numbers, dot-decimal values such as `1250.50`, and unambiguous
+international grouping such as `1,250,000.50`. Ambiguous values such as `1.234`
+are treated as Indonesian grouping; use `1,234` to enter that decimal precisely.
+Invalid/negative amounts are rejected, not silently stripped. Other numeric columns
+retain their existing ungrouped input rules. Stored/API amounts and Excel workbook
+cells stay numeric; blanks stay unknown and `0` stays nil. Amount clipboard copy
+uses the localized representation to avoid reparsing decimal numbers as thousands.
+Month counts fill January onward; Tax checklist counts fill
 milestones left to right. Individually checked Tax milestones retain their exact
 positions across views. Quoted tabs, quotes and multiline cells are parsed as
 single cells. Enter / Shift+Enter move down/up; Tab / Shift+Tab move across fields,

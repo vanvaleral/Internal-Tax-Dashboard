@@ -31,6 +31,98 @@ function loadDemo(team = "accounting", search = "") {
   return { dom, w, api, cell, choose, key, actAs, paste };
 }
 
+test("Annual currency cells group Indonesian amounts while values, copy/paste and Excel stay numeric", () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = loadDemo(team);
+    try {
+      const field = team === "tax" ? "payableAmount" : "paymentValue", c = d.api.columns.findIndex((col: any) => col.field === field), id = d.api.visible[0].id;
+      const col = d.api.columns[c];
+      for (const [input, expected] of [["1250000", 1250000], ["1.250.000", 1250000], ["1.250.000,50", 1250000.5], ["1,250,000.50", 1250000.5], ["1250.50", 1250.5], ["1.234", 1234], ["1,234", 1.234], [1.234, 1.234], ["0", 0], ["", ""]]) assert.equal(d.api.parseValue(col, input), expected, String(input));
+      for (const invalid of ["1.23.456", "1,2,3", "12abc34", "-1.000", "Infinity"]) assert.throws(() => d.api.parseValue(col, invalid));
+      d.choose(0, c); d.paste("1250000");
+      assert.equal(d.api.state.rows.find((row: any) => row.id === id)[field], 1250000);
+      assert.equal(d.cell(0, c).textContent.trim(), "1.250.000");
+      assert.equal(d.w.document.getElementById("cell-value").value, "1.250.000");
+      const event = new d.w.Event("copy", { bubbles: true, cancelable: true }); let copied = "";
+      Object.defineProperty(event, "clipboardData", { value: { setData: (_type: string, value: string) => { copied = value; } } });
+      d.w.document.getElementById("annual-grid").dispatchEvent(event); assert.equal(copied, "1.250.000");
+      d.paste("1,234"); d.w.document.getElementById("annual-grid").dispatchEvent(event);
+      assert.equal(copied, "1,234"); d.paste(copied);
+      assert.equal(d.api.state.rows.find((row: any) => row.id === id)[field], 1.234, "localized copy cannot turn a decimal into thousands");
+      const workbook = d.api.buildExportWorkbook(XLSX, { year: 2025, rows: d.api.state.rows.filter((row: any) => row.year === 2025), customColumns: [] });
+      const summary = XLSX.utils.sheet_to_json<Record<string, any>>(workbook.Sheets.Summary, { range: 4 });
+      const exported = summary.find(row => row["Annual Work ID"] === id)!;
+      assert.equal(exported[team === "tax" ? "Tax payable (Rp)" : "Payment value (Rp)"], 1.234);
+      d.paste("0,0000000000000000000001");
+      assert.equal(d.cell(0, c).textContent.trim(), "0,0000000000000000000001", "formatting must not turn a small saved amount into zero");
+      d.paste("0"); assert.equal(d.cell(0, c).textContent.trim(), "0");
+      d.key("Delete"); assert.equal(d.api.visible[0][field], ""); assert.equal(d.cell(0, c).textContent.trim(), "");
+      assert.throws(() => d.api.parseValue({ field: "custom_number", type: "number" }, "1.250.000"), "other numeric columns are unchanged");
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("amount editors group each keystroke, preserve caret/decimals and backspace without adding zeros", () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = loadDemo(team);
+    try {
+      const field = team === "tax" ? "payableAmount" : "paymentValue", c = d.api.columns.findIndex((col: any) => col.field === field);
+      d.choose(0, c); d.key("F2"); const input = d.cell(0, c).querySelector("input");
+      input.value = ""; input.setSelectionRange(0, 0);
+      const insert = (text: string) => { input.setRangeText(text, input.selectionStart, input.selectionEnd, "end"); input.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "insertText", data: text })); };
+      for (const digit of "1234567") insert(digit);
+      assert.equal(input.value, "1.234.567"); assert.equal(input.selectionStart, input.value.length);
+      input.setSelectionRange(3, 3); insert("9");
+      assert.equal(input.value, "12.934.567"); assert.equal(input.selectionStart, 4);
+      input.setSelectionRange(3, 3);
+      input.dispatchEvent(new d.w.InputEvent("beforeinput", { bubbles: true, inputType: "deleteContentBackward" }));
+      const caret = input.selectionStart; input.setRangeText("", caret - 1, caret, "end");
+      input.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+      assert.equal(input.value, "1.934.567", "backspace beside a separator removes a digit, never inserts a zero");
+      for (let remaining = 7; remaining > 0; remaining--) {
+        input.setSelectionRange(input.value.length, input.value.length);
+        input.dispatchEvent(new d.w.InputEvent("beforeinput", { bubbles: true, inputType: "deleteContentBackward" }));
+        const end = input.selectionStart; input.setRangeText("", end - 1, end, "end");
+        input.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+        assert.equal(input.value.replace(/\./g, "").length, remaining - 1);
+      }
+      assert.equal(input.value, "");
+      input.value = ""; input.setSelectionRange(0, 0);
+      for (const digit of "1234,50") insert(digit);
+      assert.equal(input.value, "1.234,50");
+      input.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      assert.equal(d.api.visible[0][field], 1234.5);
+      d.choose(0, c);
+      const formula = d.w.document.getElementById("cell-value"); formula.value = "9999999";
+      formula.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "insertText" }));
+      assert.equal(formula.value, "9.999.999"); formula.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      assert.equal(d.api.visible[0][field], 9999999);
+      d.key("F2"); const cancel = d.cell(0, c).querySelector("input"); cancel.value = "20.000";
+      cancel.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); assert.equal(d.api.visible[0][field], 9999999);
+      d.key("F2"); const pasted = d.cell(0, c).querySelector("input"); pasted.value = "1,250,000.50";
+      pasted.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "insertFromPaste" })); assert.equal(pasted.value, "1.250.000,50");
+      pasted.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); assert.equal(d.api.visible[0][field], 1250000.5);
+    } finally { d.dom.window.close(); }
+  }
+});
+
+test("draft amounts accept grouped Excel values and type with separators before numeric creation", async () => {
+  const d = loadDemo();
+  try {
+    const doc = d.w.document, c = d.api.columns.findIndex((col: any) => col.field === "paymentValue");
+    doc.getElementById("annual-row-count").value = "1"; doc.getElementById("add-annual-rows").click();
+    const name = doc.querySelector('[data-draft-r="0"][data-field="clientName"]'); name.value = "Grouped External Payment"; name.dispatchEvent(new d.w.Event("input", { bubbles: true }));
+    const pic = doc.querySelector('[data-draft-r="0"][data-field="accountingPic"]'); pic.value = "Cemari"; pic.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    let amount = doc.querySelector(`[data-draft-r="0"][data-draft-c="${c}"]`); amount.value = "7654321";
+    amount.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "insertText" })); assert.equal(amount.value, "7.654.321");
+    const paste = new d.w.Event("paste", { bubbles: true, cancelable: true }); Object.defineProperty(paste, "clipboardData", { value: { getData: () => "1.234.567,50" } }); amount.dispatchEvent(paste);
+    amount = doc.querySelector(`[data-draft-r="0"][data-draft-c="${c}"]`); assert.equal(amount.value, "1.234.567,50");
+    doc.getElementById("save-new-rows").click(); await new Promise<void>(resolve => setImmediate(resolve));
+    const created = d.api.state.rows.find((row: any) => row.clientName === "Grouped External Payment");
+    assert.ok(created); assert.equal(created.paymentValue, 1234567.5); assert.equal(typeof created.paymentValue, "number");
+  } finally { d.dom.window.close(); }
+});
+
 test("both annual teams insert blank drafts, expand Excel paste, handle quoted multiline cells and save only named rows", async () => {
   for (const team of ["accounting", "tax"]) {
     const d = loadDemo(team);

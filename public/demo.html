@@ -222,13 +222,28 @@
       color: var(--accent-contrast);
     }
 
+    .nav-btn[hidden] { display: none !important; }
+
     .mobile-nav-only {
       display: none;
     }
 
+    .compact-rail-toggle { display: none; }
+
     .mobile-nav-icon,
     .mobile-nav-label {
       display: none;
+    }
+
+    .mobile-nav-icon svg {
+      display: block;
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .topbar-mobile-icon {
@@ -3072,6 +3087,88 @@
       }
     }
 
+    @media (min-width: 901px) and (max-width: 1100px) {
+      .shell {
+        grid-template-columns: 84px minmax(0, 1fr);
+        padding: 10px;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 10px;
+        width: 84px;
+        height: calc(100svh - 20px);
+        padding: 8px;
+        gap: 12px;
+        border-radius: 20px;
+        transition: transform .18s ease, opacity .18s ease, visibility .18s;
+      }
+
+      .compact-rail-toggle {
+        position: fixed;
+        top: 50%;
+        left: 86px;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 48px;
+        padding: 0;
+        transform: translateY(-50%);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-solid);
+        color: var(--ink);
+        box-shadow: 0 3px 12px rgba(24, 38, 48, .12);
+      }
+
+      .compact-rail-toggle:hover { background: var(--accent-soft); }
+      .compact-rail-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .compact-rail-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .compact-nav-collapsed .shell { grid-template-columns: 0px minmax(0, 1fr); gap: 14px; }
+      .compact-nav-collapsed .sidebar { transform: translateX(calc(-100% - 12px)); opacity: 0; visibility: hidden; pointer-events: none; }
+      .compact-nav-collapsed .compact-rail-toggle { left: 0; border-radius: 0 8px 8px 0; }
+      .compact-nav-collapsed .compact-rail-toggle svg { transform: rotate(180deg); }
+
+      .sidebar > div:first-child .eyebrow,
+      .sidebar-stack,
+      .nav-desktop-subtitle {
+        display: none;
+      }
+
+      .sidebar h1 {
+        margin: 4px 0;
+        font-size: 12px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        text-align: center;
+      }
+
+      .nav { gap: 5px; }
+
+      .nav-btn {
+        flex-direction: column;
+        justify-content: center;
+        min-height: 61px;
+        padding: 7px 3px;
+        gap: 5px;
+        border-radius: 12px;
+        text-align: center;
+      }
+
+      .nav-desktop-label { order: 1; font-size: 10px; line-height: 1.2; }
+      .mobile-nav-icon { display: grid; place-items: center; width: 24px; height: 24px; }
+
+      .global-topbar { flex-direction: row; align-items: center; gap: 10px; }
+      .global-topbar > div:first-child { flex: 1; min-width: 0; }
+      .topbar-actions { flex-wrap: nowrap; }
+      .topbar-actions .mobile-attendance-trigger { display: inline-flex; align-items: center; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+
     @media (max-width: 900px) {
       body {
         padding-bottom: calc(112px + env(safe-area-inset-bottom));
@@ -3135,7 +3232,6 @@
         line-height: 1;
       }
 
-      .mobile-nav-icon svg,
       .topbar-mobile-icon svg {
         width: 100%;
         height: 100%;
@@ -3145,8 +3241,6 @@
         stroke-linejoin: round;
         stroke-width: 1.8;
       }
-
-      .mobile-nav-icon svg { width: 24px; height: 24px; }
 
       .mobile-nav-label {
         display: block;
@@ -3704,7 +3798,7 @@
     @media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}
     html.cases-fullscreen body { padding:0 !important; }
     html.cases-fullscreen .shell { max-width:none; padding:10px; margin:0; display:block; }
-    html.cases-fullscreen .sidebar, html.cases-fullscreen .global-topbar { display:none !important; }
+    html.cases-fullscreen .sidebar, html.cases-fullscreen .global-topbar, html.cases-fullscreen .compact-rail-toggle { display:none !important; }
     html.cases-fullscreen .main { display:block; padding:0; height:auto; min-height:0; }
     html.cases-fullscreen .main > .view { max-width:none; }
     html.cases-fullscreen .workspace-cases { max-width:none; margin:0; }
@@ -3730,21 +3824,22 @@
   </script>
   <script src="workspace-startup.js"></script>
   <div class="shell">
-    <aside class="sidebar">
+    <button id="compact-rail-toggle" class="compact-rail-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"></path></svg></button>
+    <aside class="sidebar" id="workspace-sidebar">
       <div>
         <div class="eyebrow">LMATS Consulting</div>
         <h1>Tax Dashboard</h1>
       </div>
 
       <div class="nav">
-        <button class="nav-btn active" data-view="matrix-view" data-mobile-hidden="yes"><span class="nav-desktop-label">Operations</span><span class="nav-desktop-subtitle">Recurring</span></button>
-        <button class="nav-btn" data-view="cases-view"><span class="nav-desktop-label">Cases</span><span class="nav-desktop-subtitle">Non-Recurring</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4z"></path><path d="M8 12h8M8 16h5"></path></svg></span><span class="mobile-nav-label">Cases</span></button>
-        <button class="nav-btn" data-view="my-work-view"><span class="nav-desktop-label">My Work</span><span class="nav-desktop-subtitle">Daily Tasks</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="m8.5 12 2.2 2.2 4.8-5"></path></svg></span><span class="mobile-nav-label">My Work</span></button>
-        <button class="nav-btn" data-view="client-management-view"><span class="nav-desktop-label">Clients</span><span class="nav-desktop-subtitle">Master</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"></circle><circle cx="17" cy="9" r="2"></circle><path d="M3.5 19c.5-3 2.5-4.5 5.5-4.5s5 1.5 5.5 4.5M15 15c2.7 0 4.5 1.3 5 3.5"></path></svg></span><span class="mobile-nav-label">Clients</span></button>
-        <button class="nav-btn" data-view="dashboard-view" data-supervisor-only="yes" data-mobile-hidden="yes"><span class="nav-desktop-label">Management</span><span class="nav-desktop-subtitle">Oversight</span></button>
-        <button class="nav-btn" data-view="allocation-view" data-supervisor-only="yes" data-mobile-hidden="yes"><span class="nav-desktop-label">Allocation</span><span class="nav-desktop-subtitle">PIC Update</span></button>
-        <button class="nav-btn mobile-nav-only" data-view="announcement-view" aria-label="Open notifications"><span class="nav-desktop-label">Alerts</span><span class="nav-desktop-subtitle">Notifications</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 17h12l-1.5-2.2V10a4.5 4.5 0 0 0-9 0v4.8z"></path><path d="M10 20h4"></path></svg></span><span class="mobile-nav-label">Alerts</span></button>
-        <button class="nav-btn" data-view="profile-view"><span class="nav-desktop-label">Profile</span><span class="nav-desktop-subtitle">My Scope</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20c.7-3.5 3-5.2 7-5.2s6.3 1.7 7 5.2"></path></svg></span><span class="mobile-nav-label">Profile</span></button>
+        <button class="nav-btn active" data-view="matrix-view" data-mobile-hidden="yes"><span class="nav-desktop-label">Operations</span><span class="nav-desktop-subtitle">Recurring</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="operations"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M4 10h16"></path></svg></span></button>
+        <button class="nav-btn" data-view="cases-view"><span class="nav-desktop-label">Cases</span><span class="nav-desktop-subtitle">Non-Recurring</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="cases"><path d="M3 8V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg></span><span class="mobile-nav-label">Cases</span></button>
+        <button class="nav-btn" data-view="my-work-view"><span class="nav-desktop-label">My Work</span><span class="nav-desktop-subtitle">Daily Tasks</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="my-work"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="m8 12 3 3 5-6"></path></svg></span><span class="mobile-nav-label">My Work</span></button>
+        <button class="nav-btn" data-view="client-management-view"><span class="nav-desktop-label">Clients</span><span class="nav-desktop-subtitle">Master</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="clients"><circle cx="8" cy="8" r="3"></circle><circle cx="17" cy="8" r="2.5"></circle><path d="M3 20v-1a5 5 0 0 1 10 0v1m3-5a4 4 0 0 1 5 4v1"></path></svg></span><span class="mobile-nav-label">Clients</span></button>
+        <button class="nav-btn" data-view="dashboard-view" data-supervisor-only="yes" data-mobile-hidden="yes"><span class="nav-desktop-label">Management</span><span class="nav-desktop-subtitle">Oversight</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="management"><path d="M6 20v-6M12 20V9M18 20V4M4 20h16"></path></svg></span></button>
+        <button class="nav-btn" data-view="allocation-view" data-supervisor-only="yes" data-mobile-hidden="yes"><span class="nav-desktop-label">Allocation</span><span class="nav-desktop-subtitle">PIC Update</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="allocation"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"></path></svg></span></button>
+        <button class="nav-btn mobile-nav-only" data-view="announcement-view" aria-label="Open notifications"><span class="nav-desktop-label">Alerts</span><span class="nav-desktop-subtitle">Notifications</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="alerts"><path d="M6 10a6 6 0 0 1 12 0v4l2 3H4l2-3Z"></path><path d="M10 20h4"></path></svg></span><span class="mobile-nav-label">Alerts</span></button>
+        <button class="nav-btn" data-view="profile-view"><span class="nav-desktop-label">Profile</span><span class="nav-desktop-subtitle">My Scope</span><span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" data-nav-symbol="profile"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M5 20v-1a7 7 0 0 1 14 0v1"></path></svg></span><span class="mobile-nav-label">Profile</span></button>
       </div>
 
       <div class="sidebar-stack">
@@ -3804,6 +3899,33 @@
       <section id="client-view" class="view hidden"></section>
     </main>
   </div>
+
+  <script data-compact-navigation>
+    (() => {
+      const viewport = window.matchMedia("(min-width: 901px) and (max-width: 1100px)");
+      const root = document.documentElement, sidebar = document.getElementById("workspace-sidebar"), toggle = document.getElementById("compact-rail-toggle");
+      let requestedHidden = false;
+      const sync = () => {
+        const available = viewport.matches && !root.classList.contains("cases-fullscreen");
+        const hidden = available && requestedHidden;
+        root.classList.toggle("compact-nav-collapsed", hidden);
+        sidebar.toggleAttribute("inert", hidden);
+        if (hidden) sidebar.setAttribute("aria-hidden", "true"); else sidebar.removeAttribute("aria-hidden");
+        toggle.disabled = !available;
+        toggle.setAttribute("aria-expanded", String(!hidden));
+        toggle.setAttribute("aria-label", hidden ? "Show sidebar" : "Hide sidebar");
+        toggle.title = hidden ? "Show sidebar" : "Hide sidebar";
+        if (hidden && sidebar.contains(document.activeElement)) toggle.focus({ preventScroll: true });
+        else if (!available && document.activeElement === toggle) sidebar.querySelector(".nav-btn.active:not([hidden])")?.focus({ preventScroll: true });
+      };
+      toggle.addEventListener("click", () => {
+        if (!viewport.matches || root.classList.contains("cases-fullscreen")) return;
+        requestedHidden = !requestedHidden; sync();
+      });
+      viewport.addEventListener("change", sync);
+      sync();
+    })();
+  </script>
 
   <input id="client-csv-input" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="hidden" />
   <input id="appearance-my-work-background" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />

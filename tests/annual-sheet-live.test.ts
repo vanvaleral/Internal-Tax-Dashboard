@@ -249,6 +249,30 @@ function pasteAnnualField(d: any, field: string, value: string) {
   d.w.document.getElementById("annual-grid").dispatchEvent(event);
 }
 
+test("localized Annual amounts save as numeric API/database values for both teams and reappear grouped", async () => {
+  for (const team of ["accounting", "tax"]) {
+    const d = await openRefreshFixture({ team, stylesReady: true });
+    try {
+      const bodies: any[] = [], fetch = d.w.fetch;
+      d.w.fetch = (url: string, options: any) => { if (options.method === "POST") bodies.push(JSON.parse(options.body)); return fetch(url, options); };
+      const field = team === "tax" ? "payableAmount" : "paymentValue";
+      pasteAnnualField(d, field, "1.250.000,50"); await d.tick();
+      assert.equal(bodies[0].edits[0].changes[field], 1250000.5);
+      assert.equal(d.db.tables.operational_workspace_state[0].payload[0].paymentAmount, 1250000.5);
+      assert.equal(d.w.AnnualSheetLive.context.rows[0][field], 1250000.5);
+      const c = d.api.columns.findIndex((col: any) => col.field === field), cell = () => d.w.document.querySelector(`td[data-r="0"][data-c="${c}"]`);
+      assert.equal(cell().textContent.trim(), "1.250.000,5");
+      cell().dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "F2", bubbles: true }));
+      const input = cell().querySelector("input"); input.value = "1234567";
+      input.dispatchEvent(new d.w.InputEvent("input", { bubbles: true, inputType: "insertText" })); assert.equal(input.value, "1.234.567");
+      input.dispatchEvent(new d.w.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await d.tick();
+      assert.equal(bodies[1].edits[0].changes[field], 1234567);
+      assert.equal(d.db.tables.operational_workspace_state[0].payload[0].paymentAmount, 1234567);
+      assert.equal(cell().textContent.trim(), "1.234.567");
+    } finally { d.dom.window.close(); }
+  }
+});
+
 test("both live sheets present separate generation sources, reset new-year controls and skip already generated external rows", async () => {
   for (const team of ["accounting", "tax"]) {
     const d = await openRefreshFixture({ team, stylesReady: true });

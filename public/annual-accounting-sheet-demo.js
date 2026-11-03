@@ -186,6 +186,54 @@
   }
   const colLetter = (index) => { let label = ""; for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) label = String.fromCharCode(65 + (n - 1) % 26) + label; return label; };
   function valueAt(row, col) { return col.type === "check" ? row[col.field].includes(col.month) : col.type === "range" ? row[col.field].length : col.type === "summary" ? `${row[col.field].length}/${controlItems(col.group).length}` : row[col.field] ?? ""; }
+  const amountColumn = col => ["paymentValue", "payableAmount"].includes(col?.field);
+  const amountFormat = new Intl.NumberFormat("id-ID", { maximumSignificantDigits: 21 });
+  const displayValue = (row, col) => amountColumn(col) && typeof valueAt(row, col) === "number" ? amountFormat.format(valueAt(row, col)) : valueAt(row, col);
+  function normalizedAmount(value, editing = false) {
+    let text = String(value ?? "").trim();
+    if (!text) return "";
+    const sign = /^[+-]/.test(text) ? text[0] : ""; text = text.slice(sign.length);
+    if (editing && /^\d*(?:\.\d*)*(?:,\d*)?$/.test(text)) text = text.replace(/\./g, "").replace(",", ".");
+    else if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(text) && (text.includes(".") || (text.match(/,/g) || []).length > 1)) text = text.replace(/,/g, "");
+    else if (/^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d*)?$/.test(text)) text = text.replace(/\./g, "").replace(",", ".");
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) || !Number.isFinite(Number(sign + text))) throw new Error("Enter an amount such as 1.250.000 or 1.250.000,50 (comma for decimals).");
+    return sign + text;
+  }
+  function formattedAmountText(text, editing = false) {
+    const normalized = normalizedAmount(text, editing);
+    if (!normalized) return "";
+    const [whole, fraction] = normalized.split(".");
+    const grouped = (whole || "0").replace(/^([+-]?)0+(?=\d)/, "$1").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return grouped + (fraction !== undefined ? `,${fraction}` : "");
+  }
+  function amountInputColumn(input) {
+    if (input === editor?.input) return editor.col;
+    if (input?.id === "cell-value" && !activeDraftCell) return columns[state.selection.c];
+    if (input?.matches?.("input[data-draft-c]")) return columns[Number(input.dataset.draftC)];
+    return null;
+  }
+  document.addEventListener("beforeinput", event => {
+    const input = event.target;
+    if (!amountColumn(amountInputColumn(input)) || input.selectionStart !== input.selectionEnd) return;
+    const caret = input.selectionStart;
+    if (event.inputType === "deleteContentBackward" && input.value[caret - 1] === ".") input.setSelectionRange(caret - 1, caret - 1);
+    if (event.inputType === "deleteContentForward" && input.value[caret] === ".") input.setSelectionRange(caret + 1, caret + 1);
+  }, true);
+  document.addEventListener("input", event => {
+    const input = event.target;
+    if (event.isComposing || !amountColumn(amountInputColumn(input))) return;
+    const original = input.value, start = input.selectionStart, end = input.selectionEnd;
+    try {
+      const formatted = formattedAmountText(original, event.inputType !== "insertFromPaste" && event.inputType !== "insertFromDrop");
+      const position = caret => {
+        if (caret === original.length) return formatted.length;
+        let remaining = (original.slice(0, caret).match(/[\d,+-]/g) || []).length;
+        for (let index = 0; index < formatted.length; index++) if (/[\d,+-]/.test(formatted[index]) && --remaining === 0) return index + 1;
+        return remaining > 0 ? formatted.length : 0;
+      };
+      input.value = formatted; input.setSelectionRange(position(start), position(end));
+    } catch { /* Keep incomplete or invalid text intact for validation when committed. */ }
+  }, true);
   function parseValue(col, value) {
     const text = String(value ?? "").trim();
     if (col.type === "range") {
@@ -200,9 +248,12 @@
     if (col.type === "select") { const match = col.options.find(option => option.toLowerCase() === text.toLowerCase()); if (match === undefined) throw new Error(`Choose a valid ${col.title}.`); return match; }
     if (col.type === "number") {
       if (!text) return "";
+      if (amountColumn(col)) {
+        const amount = typeof value === "number" ? value : Number(normalizedAmount(text));
+        if (!Number.isFinite(amount) || amount < 0) throw new Error("Payment / tax payable cannot be negative. Use 0 for nil or leave unknown amounts blank.");
+        return amount;
+      }
       if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) || !Number.isFinite(Number(text))) throw new Error("Enter a number without thousands separators, e.g. 1250.50.");
-      if (col.field === "payableAmount" && Number(text) < 0) throw new Error("Tax payable cannot be negative. Use 0 for a nil return.");
-      if (col.field === "paymentValue" && Number(text) < 0) throw new Error("Payment value cannot be negative. Use 0 for a nil payment.");
       return Number(text);
     }
     if (col.type === "date" && text && (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(`${text}T00:00:00Z`)) || new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) !== text)) throw new Error("Use a valid date in YYYY-MM-DD format.");
@@ -410,7 +461,7 @@
     colgroup.innerHTML = widths.map(width => `<col style="width:${width}px">`).join("");
     const lockIcon = `<span class="lock-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg></span>`;
     table.querySelector("tbody").innerHTML = visible.map((row, r) => `<tr class="${ownsRow(row) && !isLeadership() ? "row-owned" : ""}"><th class="row-number" scope="row"><button type="button" class="row-number-action" data-row-actions="${escape(row.id)}" aria-label="Actions for row ${r + 1}: ${escape(row.clientName)}" aria-haspopup="menu" aria-expanded="false" ${liveMode && (!liveReady || liveBusy) ? "disabled" : ""}>${r + 1}</button></th>${columns.map((col, c) => {
-      const value = valueAt(row, col); let content = escape(value);
+      const value = valueAt(row, col); let content = escape(displayValue(row, col));
       const editable = canEdit(row, col);
       const statusClass = done(row) ? "done" : ["Review", "Equalization", "Meeting"].includes(row.progress) ? "reviewing" : row.progress !== "Data Request" ? "processing" : "";
       if (col.type === "check") content = value ? "&#10003;" : "&middot;";
@@ -471,7 +522,7 @@
     const { r, c } = state.selection; const row = visible[r]; const col = columns[c];
     if (!row || !col) { $("cell-value").value = ""; $("cell-value").disabled = true; $("cell-address").textContent = "-"; return; }
     const cell = getCell(r, c); cell.classList.add("selected"); cell.tabIndex = 0; cell.setAttribute("aria-selected", "true");
-    const value = valueAt(row, col); $("cell-address").textContent = `${colLetter(c)}${r + 1}`; $("cell-value").value = col.type === "check" ? value ? "TRUE" : "FALSE" : value; $("cell-value").disabled = !canEdit(row, col);
+    const value = valueAt(row, col); $("cell-address").textContent = `${colLetter(c)}${r + 1}`; $("cell-value").value = col.type === "check" ? value ? "TRUE" : "FALSE" : displayValue(row, col); $("cell-value").disabled = !canEdit(row, col); $("cell-value").inputMode = col.type === "number" ? "decimal" : "text";
     $("cell-context").textContent = `${col.group ? col.group.title + " / " : ""}${col.title}${canEdit(row, col) ? "" : " / Read-only"}`;
     let count = 1;
     if (state.range) { const range = state.range; for (let rr = Math.min(range.r1, range.r2); rr <= Math.max(range.r1, range.r2); rr++) for (let cc = Math.min(range.c1, range.c2); cc <= Math.max(range.c1, range.c2); cc++) getCell(rr, cc)?.classList.add("in-range"); count = (Math.abs(range.r2 - range.r1) + 1) * (Math.abs(range.c2 - range.c1) + 1); }
@@ -517,7 +568,8 @@
     if (col.type === "select") { const dropdown = cell.querySelector("select"); dropdown.focus(); try { dropdown.showPicker?.(); } catch { /* Native keyboard selection remains available. */ } return; }
     const input = document.createElement("input"); input.type = col.type === "date" ? "date" : "text";
     if (col.type === "number") input.inputMode = "decimal";
-    input.value = initial === undefined ? valueAt(row, col) : initial; input.setAttribute("aria-label", `Edit ${col.title}`);
+    if (amountColumn(col)) input.title = "Thousands: 1.250.000. Use a comma for decimals: 1.250.000,50.";
+    input.value = initial === undefined ? displayValue(row, col) : initial; input.setAttribute("aria-label", `Edit ${col.title}`);
     editor = { input, cell, row, col, r, c }; cell.classList.add("editing"); cell.append(input); input.focus(); if (input.type === "text") initial === undefined ? input.select() : input.setSelectionRange(input.value.length, input.value.length);
     input.addEventListener("blur", () => { if (editor?.input === input) finishEdit(true); });
   }
@@ -700,7 +752,7 @@
   table.addEventListener("copy", (event) => {
     if (event.target.closest("[data-draft-r]")) return;
     if (editor) return; const { r, c } = state.selection; const range = state.range || { r1: r, r2: r, c1: c, c2: c }; const lines = [];
-    for (let rr = Math.min(range.r1, range.r2); rr <= Math.max(range.r1, range.r2); rr++) { const cells = []; for (let cc = Math.min(range.c1, range.c2); cc <= Math.max(range.c1, range.c2); cc++) cells.push(String(valueAt(visible[rr], columns[cc])).replace(/[\t\r\n]/g, " ")); lines.push(cells.join("\t")); }
+    for (let rr = Math.min(range.r1, range.r2); rr <= Math.max(range.r1, range.r2); rr++) { const cells = []; for (let cc = Math.min(range.c1, range.c2); cc <= Math.max(range.c1, range.c2); cc++) cells.push(String(displayValue(visible[rr], columns[cc])).replace(/[\t\r\n]/g, " ")); lines.push(cells.join("\t")); }
     event.preventDefault(); event.clipboardData.setData("text/plain", lines.join("\n")); notify("Selection copied. Paste into Excel or another cell.");
   });
   table.addEventListener("paste", (event) => {
@@ -793,7 +845,11 @@
     if (col.type === "check") {
       const checked = new Set(draftChecks(draft, col.field)); value ? checked.add(col.month) : checked.delete(col.month);
       draft.checks[col.field] = [...checked].sort((a, b) => a - b); draft.cells[index] = `${checked.size}/3`;
-    } else { draft.cells[index] = String(value); delete draft.checks[col.field]; }
+    } else {
+      let text = String(value);
+      if (amountColumn(col)) { try { text = formattedAmountText(text); } catch { /* Invalid imports remain visible until validation. */ } }
+      draft.cells[index] = text; delete draft.checks[col.field];
+    }
   }
   $("add-annual-rows").addEventListener("click", () => {
     if (!finishEdit(true) || !canAddRows()) return;
