@@ -20,7 +20,7 @@ test("daily tasks persist an authorized optional Case link", () => {
 
 test("existing cases retain their Client Master link when an edit omits clientId", () => {
   assert.match(casesRoute, /payloadFor\(actor: any, input: Record<string, unknown>, fallbackClientId = "", editingAssignedCase = false\)/);
-  assert.match(casesRoute, /select\("client_id, tax_pic_profile_id, accounting_pic_profile_id, tax_pic_name, accounting_pic_name, updated_at"\)/);
+  assert.match(casesRoute, /from\("tax_cases"\)\.select\("\*"\)\.eq\("id", id\)\.is\("deleted_at", null\)/);
   assert.match(casesRoute, /payloadFor\(actor, caseInput, existing\.client_id \|\| "", true\)/);
   assert.match(casesRoute, /update\.tax_pic_profile_id = existing\.tax_pic_profile_id/);
 });

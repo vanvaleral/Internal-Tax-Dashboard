@@ -6,3 +6,6 @@ dev-server-error.log
 .npm-cache/
 tsconfig.tsbuildinfo
 supabase/.temp/
+
+# Sensitive local snapshots are never source-controlled.
+/tmp/private-case-workflow-pre-migration-*.json

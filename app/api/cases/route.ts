@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     if (caseError || !taxCase || !canAccess(actor, taxCase)) {
       return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
     }
-    const [{ data: taskRows, error: taskError }, { data: progressRows, error: progressError }] = await Promise.all([
+    const [{ data: taskRows, error: taskError }, { data: progressRows, error: progressError }, timelineResult] = await Promise.all([
       actor.admin
         .from("my_work_tasks")
         .select("id, title, completed_at, created_at, creator:staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), completer:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name)")
@@ -59,10 +59,14 @@ export async function GET(request: NextRequest) {
         .from("tax_case_progress_entries")
         .select("id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
         .eq("case_id", progressFor)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false }),
+      actor.admin.from("tax_case_task_timeline").select("*").eq("case_id",progressFor).order("occurred_at",{ascending:false})
     ]);
     if (taskError || progressError) return NextResponse.json({ error: taskError?.message || progressError?.message || "Case progress could not be loaded." }, { status: 500 });
+    // Rolling deploy: existing progress remains available until the additive migration is applied.
+    if (timelineResult.error && !["42P01","PGRST205"].includes(timelineResult.error.code)) return NextResponse.json({error:timelineResult.error.message},{status:500});
     return NextResponse.json({
+      taskTimeline: timelineResult.data || [],
       completedTasks: (taskRows || []).map((task: any) => ({
         id: task.id,
         title: task.title,
@@ -147,7 +151,7 @@ export async function PATCH(request: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ data });
     }
-    const { data: existing, error: lookupError } = await actor.admin.from("tax_cases").select("client_id, tax_pic_profile_id, accounting_pic_profile_id, tax_pic_name, accounting_pic_name, updated_at").eq("id", id).is("deleted_at", null).maybeSingle();
+    const { data: existing, error: lookupError } = await actor.admin.from("tax_cases").select("*").eq("id", id).is("deleted_at", null).maybeSingle();
     if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
     if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
     if (body.version !== existing.updated_at) return NextResponse.json({ error: "This case changed in another session. Reload before saving.", code: "VERSION_CONFLICT" }, { status: 409 });
@@ -174,6 +178,9 @@ export async function PATCH(request: Request) {
     const caseInput = body.case || body;
     if (caseInput.clientId && caseInput.clientId !== existing.client_id) return NextResponse.json({ error: "Change the linked client through a separate reviewed action." }, { status: 400 });
     const payload = await payloadFor(actor, caseInput, existing.client_id || "", true);
+    if (existing.case_workflow?.result && (payload.case_category !== existing.case_category || payload.completion_date !== existing.completion_date || payload.stage === "Closed" && !existing.case_workflow.final || existing.case_workflow.final && payload.stage !== "Closed")) {
+      return NextResponse.json({error:"Use the case workflow to close this case. Its BA / SKP, payment and submission history must be preserved."},{status:400});
+    }
     const update: Record<string, unknown> = { ...payload };
     delete update.created_by;
     update.tax_pic_profile_id = existing.tax_pic_profile_id;

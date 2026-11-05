@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { JSDOM, VirtualConsole } from "jsdom";
+import { applyCaseWorkflowAction } from "../lib/case-workflow.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const html = read("public/demo.html");
@@ -9,7 +10,7 @@ const tick = async () => { await new Promise(resolve => setImmediate(resolve)); 
 const dbCase = (id: string, name: string, tax: string, acc: string, category = "Himbauan"): Record<string, any> => ({
   id, client_id: "master-1", client_name: name, case_type: category, case_category: category,
   tax_pic_profile_id: tax, accounting_pic_profile_id: acc, tax_pic_name: tax, accounting_pic_name: acc,
-  letter_number: id, subject: "Original", updated_at: "v1", due_date: "2026-11-20",
+  letter_number: id, subject: "Original", updated_at: "v1", due_date: "2026-11-20", case_workflow:null,
   created_at: `2026-10-${id === "saved-a" ? "01" : id === "saved-b" ? "02" : "03"}T00:00:00Z`
 });
 
@@ -30,6 +31,8 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
+  w.HTMLDialogElement.prototype.showModal = function() { this.setAttribute("open", ""); };
+  w.HTMLDialogElement.prototype.close = function() { this.removeAttribute("open"); };
   const rows = [dbCase("saved-a", "Alpha", "tax-a", "acc-a"), dbCase("saved-b", "Beta", "tax-b", "acc-a"), dbCase("saved-c", "Gamma", "tax-a", "acc-b"), dbCase("saved-d", "Delta", "tax-a", "acc-a", "Pemeriksaan")];
   let hold: ((value: any) => void) | undefined;
   let delay = false, fail = false, failId = "", created = 0, announcementStatus = "delivered";
@@ -41,6 +44,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       if (fail || failId && body.id === failId) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
       const previous = rows.find(row => row.id === body.id) || (body.id ? dbCase(body.id, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory) : { ...dbCase(++created === 1 ? "saved-new" : `saved-new-${created}`, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory), created_at:new Date().toISOString() });
       const data: Record<string, any> = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
+      if (url === "/api/cases/workflow") data.case_workflow = applyCaseWorkflowAction(previous.case_workflow,body.command,{category:previous.case_category,actorId:"tax-a",actorName:"tax-a",taxAllowed:true,now:"2026-11-05T08:00:00Z",closed:false});
       for (const [field, column] of [["letterDate", "letter_date"], ["receivedDate", "received_date"], ["completionDate", "completion_date"], ["sphpDate", "sph_p_date"]]) {
         if (body.case?.[field] !== undefined) data[column] = body.case[field];
       }
@@ -60,9 +64,9 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js"));
+  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js"));
   // Expose closure references in the test source only, never in the served dashboard.
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, loadSharedCases, loadCaseProgress, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__casesTest;
   if (!expectBlocked) assert.ok(api, warnings.join("\n") || w.document.body.textContent.slice(-500));
@@ -73,6 +77,63 @@ const field = (d: any, id: string, name: string) => d.w.document.querySelector(`
 const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-row]")].map((row: any) => row.dataset.caseSheetRow);
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
+const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
+
+test("workflow is embedded without replacing sheet cells, saved widths, scroll or full-screen link",async()=>{
+  const d=await dashboard();try{
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    assert.equal(d.w.document.querySelectorAll('[data-cwf-tab]').length,3);
+    const subject=field(d,"saved-b","subject"),viewport=caseViewport(d),column=d.w.document.querySelector('col[data-case-column="clientName"]');
+    column.style.width="345px";viewport.scrollLeft=420;subject.value="Still typing";subject.focus();
+    d.delay();const save=d.api.saveCaseWorkflow("saved-a",workflowResult());await tick();
+    assert.equal(d.api.getRows()[0].workflow,null,"not published before confirmation");
+    assert.equal(d.w.document.querySelector('[data-case-timeline-key="workflow:43047f51-f5a0-413c-9c86-47ef60302a43"]'),null);
+    d.release();await save;
+    assert.equal(field(d,"saved-b","subject"),subject);assert.equal(subject.value,"Still typing");
+    assert.equal(viewport.scrollLeft,420);assert.equal(column.style.width,"345px");assert.ok(d.w.document.querySelector('[data-case-fullscreen]'));
+    assert.match(d.w.document.querySelector('.case-progress-inline').textContent,/BA-INTEGRATION/);
+    d.w.document.querySelector('[data-cwf-tab="payments"]').click();assert.match(d.w.document.querySelector('.case-progress-inline').textContent,/Rp1\.000/);
+    d.w.document.querySelector('[data-cwf-tab="tax"]').click();assert.equal(d.w.document.querySelector('[data-cwf-action="record-filing"]').disabled,true);
+    assert.equal(d.w.document.querySelector('[data-cwf-action="record-final"]').disabled,true);
+    d.w.document.querySelector('[data-cases-tab="pemeriksaan"]').click();
+    const cached=JSON.parse(d.w.localStorage.getItem('tax-practice-v2:auth-user-1'));
+    assert.deepEqual(cached.collections.taxCases,[],"Live BA/payment records are not a browser cache");
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+test("workflow failure retains confirmed state; cell and workflow writes share a per-case queue",async()=>{
+  const d=await dashboard();try{
+    d.delay();const save=d.api.saveCaseWorkflow("saved-a",workflowResult());await tick();
+    const subject=field(d,"saved-a","subject");subject.value="After BA";const edit=d.api.saveCaseSheetCell(subject);
+    assert.equal(d.writes.length,1);d.release();await save;await edit;
+    assert.equal(d.writes[1].version,"v2");assert.equal(d.api.getRows()[0].subject,"After BA");assert.equal(d.api.getRows()[0].workflow.result.number,"BA-INTEGRATION");
+    d.fail();await assert.rejects(d.api.saveCaseWorkflow("saved-a",{type:"record-response",requestId:d.w.crypto.randomUUID()}));
+    assert.equal(d.api.getRows()[0].workflow.events.length,1);
+  }finally{d.dom.window.close();}
+});
+test("task snapshots merge once with follow-ups and retain completion after reopening",async()=>{
+  const d=await dashboard();try{
+    const item=d.api.getRows()[0];
+    const events=d.api.caseTimeline(item,{completedTasks:[{id:"task-1",title:"Changed title",completedAt:"2026-11-02"}],taskTimeline:[{id:"event-1",task_id:"task-1",title:"Original completed work",actor_name:"tax-a",event_type:"completed",occurred_at:"2026-11-02"},{id:"event-2",task_id:"task-1",title:"Original completed work",actor_name:"My Work",event_type:"reopened",occurred_at:"2026-11-03"}],progressEntries:[{id:"note-1",entry:"Client confirmed",createdAt:"2026-11-01"}]});
+    assert.equal(events.length,3);assert.match(events[0].entry,/Reopened/);assert.match(events[1].entry,/Original completed work/);assert.equal(events.some((e:any)=>e.entry==="Changed title"),false);
+  }finally{d.dom.window.close();}
+});
+test("workflow dialog preserves invalid entries on failure and closes only after confirmed save",async()=>{
+  const d=await dashboard();try{
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    d.w.document.querySelector('[data-cwf-action="record-result"]').click();
+    const dialog=d.w.document.querySelector('#case-workflow-dialog');assert.ok(dialog.hasAttribute('open'));
+    dialog.querySelector('[name="number"]').value="BA-DIALOG";dialog.querySelector('[name="date"]').value="01/11/2026";dialog.querySelector('[name="text"]').value="Agreed";
+    const choice=dialog.querySelector('[data-cwf-product="0"]');choice.checked=true;choice.dispatchEvent(new d.w.Event('change',{bubbles:true}));
+    dialog.querySelector('[name="period-0"]').value="2025";dialog.querySelector('[name="amount-0"]').value="-1000";
+    const submit=()=>dialog.querySelector('form').dispatchEvent(new d.w.Event('submit',{bubbles:true,cancelable:true}));
+    submit();await tick();assert.match(dialog.querySelector('[data-cwf-error]').textContent,/whole rupiah/);assert.equal(d.writes.length,0);assert.equal(dialog.querySelector('[name="number"]').value,"BA-DIALOG");
+    dialog.querySelector('[name="amount-0"]').value="1.000";dialog.querySelector('[name="paymentTarget"]').value="05/11/2026";dialog.querySelector('[name="revisionTarget"]').value="06/11/2026";
+    d.delay();submit();await tick();assert.equal(dialog.querySelector('button[type="submit"]').disabled,true);assert.ok(dialog.isConnected);
+    d.release();await tick();await tick();assert.equal(dialog.isConnected,false);assert.equal(d.api.getRows()[0].workflow.products[0].amount,1000);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 function mockCaseViewportGeometry(d: any) {
   for (const [property, value] of Object.entries({ scrollWidth:2400, clientWidth:900, scrollHeight:1400, clientHeight:500 })) {
     Object.defineProperty(d.w.HTMLElement.prototype, property, { configurable:true, get() { return (this as any).getAttribute("data-virtual-table") === "cases" ? value : 0; } });

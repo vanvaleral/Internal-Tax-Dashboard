@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Cases Workflow Preview | Tax Dashboard</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="cases-workflow-mockup.css" />
+  <script src="cases-workflow-mockup.js" defer></script>
+</head>
+<body>
+  <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 8V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 17h12l-2-3v-4a4 4 0 0 0-8 0v4zM10 20h4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></symbol>
+  </defs></svg>
+  <div class="mock-shell">
+    <aside class="rail" aria-label="Preview navigation">
+      <div class="brand">Tax<br>Dashboard</div>
+      <div class="rail-item current"><svg><use href="#i-folder"/></svg><span>Cases</span></div>
+      <div class="rail-note">Workflow<br>preview</div>
+    </aside>
+    <main>
+      <header class="topbar"><div><div class="eyebrow">LMATS CONSULTING</div><h1>Cases</h1></div><div class="topbar-right"><span class="preview-badge">Sample-only preview</span><span class="asof">03 Nov 2026</span></div></header>
+      <div class="preview-notice"><span><strong>Sample data only.</strong> No live records, payments or notifications are changed. Refresh to reset.</span><button class="text-button" id="reset-demo">Reset demo</button></div>
+      <section class="register" aria-label="Case register">
+        <div class="register-head"><div class="segments" id="category-tabs" role="tablist" aria-label="Case category"></div><button class="secondary" id="open-reminders"><svg><use href="#i-bell"/></svg>Reminder preview <span id="reminder-count" class="count"></span></button></div>
+        <div class="toolbar"><label class="search"><svg><use href="#i-search"/></svg><input id="search" aria-label="Search cases" placeholder="Search client, letter, PIC..." /></label><select id="acc-filter" aria-label="Accounting PIC"><option value="">All ACC PIC</option></select><select id="tax-filter" aria-label="Tax PIC"><option value="">All Tax PIC</option></select><select id="attention-filter" aria-label="Attention filter"><option value="">All cases</option><option value="supervisor">Supervisor attention</option><option value="payment">Payment due / overdue</option><option value="closure">Awaiting SP3P2DK</option></select><button class="text-button" id="reset-filters">Reset</button><span id="visible-count" class="muted"></span></div>
+        <div class="scan-summary" id="scan-summary"></div>
+        <div class="table-frame"><table class="case-table"><colgroup><col style="width:40px"><col style="width:190px"><col style="width:145px"><col style="width:112px"><col style="width:112px"><col style="width:145px"><col style="width:72px"><col style="width:112px"><col style="width:80px"><col style="width:80px"><col style="width:142px"><col style="width:155px"></colgroup><thead><tr><th>No.</th><th>Wajib Pajak</th><th>No Surat</th><th>Tgl Surat</th><th>Tgl Terima</th><th>Perihal</th><th>Tahun</th><th>Jatuh Tempo</th><th>PIC Tax</th><th>PIC ACC</th><th>BA / Hasil</th><th>Status</th></tr></thead><tbody id="case-rows"></tbody></table></div>
+        <footer class="register-footer"><span>Click a row number or client to expand. Sample letter cells can be edited; changes last only until refresh.</span><span class="demo-status">No database connection</span></footer>
+      </section>
+      <p class="design-note">Himbauan: Progress / BA → Payments → Tax Execution → SP3P2DK → Closed. All references and amounts are fictional.</p>
+    </main>
+  </div>
+  <dialog id="entry-dialog" aria-labelledby="dialog-title"><form id="entry-form"><header class="dialog-head"><div><div class="eyebrow" id="dialog-kicker">DEMO ACTION</div><h2 id="dialog-title"></h2></div><button type="button" class="icon-button" data-close-dialog aria-label="Close dialog">&#215;</button></header><div id="dialog-fields"></div><p class="form-error" id="form-error" role="alert"></p><div class="dialog-actions"><span class="muted">Preview only. No database write.</span><button type="button" class="secondary" data-close-dialog>Cancel</button><button type="submit" class="primary" id="submit-entry">Save in demo</button></div></form></dialog>
+  <dialog id="reminder-dialog" aria-labelledby="reminder-title"><header class="dialog-head"><div><div class="eyebrow">SCHEDULE PREVIEW / 03 NOV 2026</div><h2 id="reminder-title">What the PIC would see</h2></div><button type="button" class="icon-button" data-close-dialog aria-label="Close reminder preview">&#215;</button></header><p class="muted">Illustrative reminders calculated from this demo. Nothing is sent. Internal target dates do not replace official deadlines.</p><div id="reminder-list"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -81,7 +81,10 @@ come from the existing appearance settings rather than a separate fixed palette.
 
 ## Persistence And Authorization
 
-No migration or data conversion is required. Existing `/api/cases` endpoints,
+The original sheet editor requires no data conversion. The additive BA/payment/
+Tax execution and retained task timeline extension requires the migration in
+`docs/CASE_WORKFLOW_INTEGRATION.md`; all sheet capabilities above are preserved.
+Existing `/api/cases` endpoints,
 database UUIDs, linked tasks, soft archives and assignment history are retained.
 Due dates continue to be calculated server-side. Only leader, supervisor and
 partner roles can reassign Tax/ACC PICs; the API enforces this independently.
