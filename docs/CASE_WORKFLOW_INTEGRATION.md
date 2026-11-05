@@ -124,3 +124,30 @@ the original column widths/paste/full-screen controls still work.
 Tests: `tests/case-workflow.test.ts`, expanded `tests/case-control-sheet.test.ts`
 and `tests/sql/case-workflow-fixture.sql`. The SQL fixture creates a minimal schema
 and roles and must run only in a fresh disposable LOCAL database, never Supabase.
+
+## Production Rollout: 5 November 2026
+
+Applied to project `kedpcolyklquhfjzimvx` after explicit user approval and a
+verified private local snapshot of the affected tables. The snapshot contains
+16 case records and 4 My Work records, is excluded by `.gitignore`, and remains
+at `tmp/private-case-workflow-pre-migration-20261105.json`. It is an affected-table
+data snapshot, not a full-project backup; no client/task contents are committed.
+
+The hosted migration ledger entry is
+`20261105065156_case_workflow_and_task_timeline`, corresponding to the reviewed
+local file `20261105055510_case_workflow_and_task_timeline.sql`. Do not reapply
+the local file just because its timestamp differs from the hosted ledger.
+
+Post-migration checks confirmed unchanged source-table counts and checksums,
+2 completed-task snapshots with none missing, no initialized workflow on any
+existing case, and no workflow audit entry from the migration itself. Both new
+triggers are enabled. Both history tables have RLS, no anonymous/authenticated
+read or write grants, and only SELECT/INSERT for service_role. Both trigger
+functions are invoker-security with empty search paths and are not directly
+executable by anonymous/authenticated users.
+
+Security advisors added only informational RLS-without-policy findings for the
+two intentionally server-only history tables; the prior warnings about older
+functions and Auth configuration were unchanged. Those existing findings remain
+a separate hardening task. Production verification here used schema/data checks,
+not a synthetic business transaction committed into a real client case.
