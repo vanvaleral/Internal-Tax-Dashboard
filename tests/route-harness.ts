@@ -9,7 +9,7 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
   const context = { exports: {} as Record<string, any>, require(name: string) {
     if (name === "next/server") return { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) }, after: () => {} };
     if (name in bindings) return bindings[name];
-    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement"].includes(name)) {
+    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement", "@/lib/case-access", "@/lib/case-progress-page"].includes(name)) {
       return loadRoute(`${name.replace("@/", "")}.ts`, {
         "@/lib/access": { isLeadership: (role: string) => ["leader", "supervisor", "partner", "admin"].includes(role) },
         ...bindings

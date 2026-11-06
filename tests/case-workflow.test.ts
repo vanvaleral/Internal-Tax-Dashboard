@@ -80,9 +80,11 @@ test("workflow route uses compare-and-swap; concurrent changes are not overwritt
   assert.equal((await d.save(ba())).status,409);assert.equal(d.row.case_workflow,null);
 });
 test("workflow route replays a successful request without duplicating the event",async()=>{
-  const d=fixture(),c=ba();assert.equal((await d.save(c)).status,200);
+  const d=fixture(),c=ba(),saved=await d.save(c);assert.equal(saved.status,200);
+  assert.equal(saved.headers['Cache-Control'],'private, no-store');assert.match(saved.headers['Server-Timing'],/^auth;dur=\d+,data;dur=\d+$/);
   d.row.updated_at="v2";
   const result=await d.save(c);assert.equal(result.status,200);assert.equal(result.body.replayed,true);
+  assert.match(result.headers['Server-Timing'],/^auth;dur=\d+,data;dur=\d+$/);
   assert.equal(d.row.case_workflow.events.length,1);
   assert.equal((await d.save({...c,text:"Different result"})).status,409);
 });

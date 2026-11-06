@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentActor, isLeadership } from "@/lib/access";
+import { isLeadership } from "@/lib/access";
+import { currentCaseActor } from "@/lib/case-access";
+import { applyCaseProgressPage, caseProgressPage, parseCaseProgressPage } from "@/lib/case-progress-page";
 import { createOperationalAnnouncement, notificationEventKey, uniqueProfileIds } from "@/lib/notifications";
 import { calculateHimbauanDueDate } from "@/lib/operational-rules";
 import { readCases } from "@/lib/workspace-reads";
@@ -35,10 +37,15 @@ async function recipients(admin: any, payload: any) {
 }
 
 export async function GET(request: NextRequest) {
-  const actor = await currentActor();
+  const started = Date.now();
+  const actor = await currentCaseActor(request);
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const authenticated = Date.now();
   const progressFor = String(request.nextUrl.searchParams.get("progressFor") || "").trim();
   if (progressFor) {
+    let paging;
+    try { paging = request.nextUrl.searchParams.get("historyPage") === "1" ? parseCaseProgressPage(request.nextUrl.searchParams) : null; }
+    catch { return NextResponse.json({ error: "Invalid case history page." }, { status: 400 }); }
     const { data: taxCase, error: caseError } = await actor.admin
       .from("tax_cases")
       .select("id, tax_pic_profile_id, accounting_pic_profile_id")
@@ -48,26 +55,31 @@ export async function GET(request: NextRequest) {
     if (caseError || !taxCase || !canAccess(actor, taxCase)) {
       return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
     }
+    const page = (query: any, field: string, key: "completedTasks" | "progressEntries" | "taskTimeline") => paging ? applyCaseProgressPage(query, field, paging.cursor[key], paging.limit) : query.order(field, { ascending: false });
     const [{ data: taskRows, error: taskError }, { data: progressRows, error: progressError }, timelineResult] = await Promise.all([
+      page(
       actor.admin
         .from("my_work_tasks")
         .select("id, title, completed_at, created_at, creator:staff_profiles!my_work_tasks_created_by_profile_id_fkey(display_name, full_name), completer:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name)")
         .eq("case_id", progressFor)
-        .eq("is_completed", true)
-        .order("completed_at", { ascending: false }),
+        .eq("is_completed", true), "completed_at", "completedTasks"),
+      page(
       actor.admin
         .from("tax_case_progress_entries")
         .select("id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
-        .eq("case_id", progressFor)
-        .order("created_at", { ascending: false }),
-      actor.admin.from("tax_case_task_timeline").select("*").eq("case_id",progressFor).order("occurred_at",{ascending:false})
+        .eq("case_id", progressFor), "created_at", "progressEntries"),
+      page(actor.admin.from("tax_case_task_timeline").select("id, task_id, title, actor_name, event_type, occurred_at").eq("case_id",progressFor), "occurred_at", "taskTimeline")
     ]);
     if (taskError || progressError) return NextResponse.json({ error: taskError?.message || progressError?.message || "Case progress could not be loaded." }, { status: 500 });
     // Rolling deploy: existing progress remains available until the additive migration is applied.
     if (timelineResult.error && !["42P01","PGRST205"].includes(timelineResult.error.code)) return NextResponse.json({error:timelineResult.error.message},{status:500});
+    const taskPage = caseProgressPage(taskRows || [], "completed_at", paging?.limit || Number.MAX_SAFE_INTEGER);
+    const entryPage = caseProgressPage(progressRows || [], "created_at", paging?.limit || Number.MAX_SAFE_INTEGER);
+    const timelinePage = caseProgressPage(timelineResult.data || [], "occurred_at", paging?.limit || Number.MAX_SAFE_INTEGER);
     return NextResponse.json({
-      taskTimeline: timelineResult.data || [],
-      completedTasks: (taskRows || []).map((task: any) => ({
+      ...(paging ? { pageInfo: { cursor: { completedTasks: taskPage.cursor, progressEntries: entryPage.cursor, taskTimeline: timelinePage.cursor }, hasMore: Boolean(taskPage.cursor || entryPage.cursor || timelinePage.cursor) } } : {}),
+      taskTimeline: timelinePage.data,
+      completedTasks: taskPage.data.map((task: any) => ({
         id: task.id,
         title: task.title,
         completedAt: task.completed_at,
@@ -75,20 +87,20 @@ export async function GET(request: NextRequest) {
         creatorName: task.creator?.display_name || task.creator?.full_name || "Unknown",
         completedByName: task.completer?.display_name || task.completer?.full_name || task.creator?.display_name || task.creator?.full_name || "Unknown"
       })),
-      progressEntries: (progressRows || []).map((entry: any) => ({
+      progressEntries: entryPage.data.map((entry: any) => ({
         id: entry.id,
         entry: entry.entry,
         createdAt: entry.created_at,
         creatorName: entry.staff_profiles?.display_name || entry.staff_profiles?.full_name || "Unknown"
       }))
-    });
+    }, { headers: { "Cache-Control": "private, no-store", "Server-Timing": `auth;dur=${authenticated-started},data;dur=${Date.now()-authenticated}` } });
   }
-  try { return NextResponse.json(await readCases(actor, request.nextUrl.searchParams.get("deleted") === "1")); }
+  try { return NextResponse.json(await readCases(actor, request.nextUrl.searchParams.get("deleted") === "1"), { headers: { "Cache-Control": "private, no-store", "Server-Timing": `auth;dur=${authenticated-started},data;dur=${Date.now()-authenticated}` } }); }
   catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {
-  const actor = await currentActor();
+  const actor = await currentCaseActor(request);
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   try {
     const body = await request.json();
@@ -109,8 +121,10 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const actor = await currentActor();
+  const started = Date.now();
+  const actor = await currentCaseActor(request);
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const authenticated = Date.now();
   const body = await request.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Case id is required." }, { status: 400 });
@@ -140,7 +154,7 @@ export async function PATCH(request: Request) {
           createdAt: data.created_at,
           creatorName: author?.display_name || author?.full_name || "Unknown"
         }
-      });
+      }, { headers: { "Cache-Control": "private, no-store", "Server-Timing": `auth;dur=${authenticated-started},data;dur=${Date.now()-authenticated}` } });
     }
     if (body.action === "restore") {
       let query = actor.admin.from("tax_cases").select("tax_pic_profile_id, accounting_pic_profile_id, deleted_by_profile_id").eq("id", id).not("deleted_at", "is", null);
@@ -196,7 +210,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const actor = await currentActor();
+  const actor = await currentCaseActor(request);
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   const { id } = await request.json().catch(() => ({}));
   if (!id) return NextResponse.json({ error: "Case id is required." }, { status: 400 });

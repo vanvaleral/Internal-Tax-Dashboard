@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentActor, isLeadership } from "@/lib/access";
+import { isLeadership } from "@/lib/access";
+import { currentCaseActor } from "@/lib/case-access";
 import { latestCaseReportProgress, lastCaseReportUpdates, readReportHistory } from "@/lib/case-report-progress";
 
 export async function POST(request: NextRequest) {
-  const actor=await currentActor(request);
+  const started=Date.now();
+  const actor=await currentCaseActor(request);
   if ("error" in actor) return NextResponse.json({error:actor.error},{status:actor.status});
+  const authenticated=Date.now();
   try {
     const body=await request.json();
     if (!body || !Array.isArray(body.caseIds) || !body.caseIds.length || body.caseIds.length>100 || body.caseIds.some((id: unknown)=>typeof id!=="string"||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id))) return NextResponse.json({error:"Choose 1 to 100 valid case IDs per request."},{status:400});
@@ -22,7 +25,7 @@ export async function POST(request: NextRequest) {
     const versionRows=versions||[];
     if (versionRows.length!==cases.length || cases.some((row: any)=>versionRows.find((current: any)=>current.id===row.id)?.updated_at!==row.updated_at)) return NextResponse.json({error:"Cases changed while loading progress. Refresh the case list before printing.",code:"VERSION_CONFLICT"},{status:409});
     const latestById=latestCaseReportProgress(cases,snapshots,entries,tasks);
-    return NextResponse.json({latestById,lastUpdateById:lastCaseReportUpdates(cases,latestById),versionsById:Object.fromEntries(cases.map((row: any)=>[row.id,row.updated_at]))},{headers:{"Cache-Control":"no-store"}});
+    return NextResponse.json({latestById,lastUpdateById:lastCaseReportUpdates(cases,latestById),versionsById:Object.fromEntries(cases.map((row: any)=>[row.id,row.updated_at]))},{headers:{"Cache-Control":"no-store","Server-Timing":`auth;dur=${authenticated-started},data;dur=${Date.now()-authenticated}`}});
   } catch(error) {
     return NextResponse.json({error:error instanceof Error?error.message:"Latest case progress could not be loaded."},{status:error instanceof SyntaxError?400:500});
   }

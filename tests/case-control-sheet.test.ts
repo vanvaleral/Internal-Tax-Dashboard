@@ -46,6 +46,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       const body = JSON.parse(init.body); writes.push(body);
       if (delay) await new Promise(resolve => { hold = resolve; });
       if (fail || failId && body.id === failId) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
+      if (body.action === "add-progress") return { ok:true, status:200, json:async()=>({progressEntry:{id:`note-${writes.length}`,entry:body.entry,creatorName:"tax-a",createdAt:"2026-11-06T08:00:00Z"}}) };
       const previous = rows.find(row => row.id === body.id) || (body.id ? dbCase(body.id, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory) : { ...dbCase(++created === 1 ? "saved-new" : `saved-new-${created}`, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory), created_at:new Date().toISOString() });
       const data: Record<string, any> = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
       if (url === "/api/cases/workflow") data.case_workflow = applyCaseWorkflowAction(previous.case_workflow,body.command,{category:previous.case_category,actorId:"tax-a",actorName:"tax-a",taxAllowed:true,now:"2026-11-05T08:00:00Z",closed:false});
@@ -70,7 +71,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
   // Expose closure references in the test source only, never in the served dashboard.
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, addHimbauanProgress, loadPerformanceLedger, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__casesTest;
   if (!expectBlocked) assert.ok(api, warnings.join("\n") || w.document.body.textContent.slice(-500));
@@ -82,6 +83,137 @@ const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
 const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
+
+test("sidebar hides points without stopping the background ledger or points calculation",async()=>{
+  const d=await dashboard();try{
+    assert.equal(d.w.document.querySelector('.sidebar .points-widget, #sidebar-points-total, #sidebar-points-rank'),null);
+    const fetch=d.w.fetch;
+    d.w.fetch=async(url:string,init:any)=>url==='/api/performance'?{ok:true,json:async()=>({data:[{period_key:'2026-05',points:12,staff_profile_id:'tax-a'}],publications:[]})}:fetch(url,init);
+    await d.api.loadPerformanceLedger(true);
+    assert.equal(d.api.state.performance.ledgerLoaded,true);assert.equal(d.api.state.performance.ledger[0].points,12);
+    assert.match(html,/remainingLoads\.push\(\(\) => loadPerformanceLedger\(true\)\)/);
+    assert.match(html,/loadPerformanceLedger\(true\);\s*\}, 120000\)/);
+    assert.match(html,/function performanceLeaderboard\(/);assert.match(html,/Team Points/);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("opening Cases details preserves the sheet and scroll, and recent reopens reuse cached history",async()=>{
+  const d=await dashboard();try{
+    const viewport=caseViewport(d),subject=field(d,'saved-a','subject'),head=d.w.document.querySelector('#cases-view thead');viewport.scrollLeft=500;
+    const toggle=()=>d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();
+    toggle();await tick();toggle();toggle();await tick();
+    assert.equal(caseViewport(d),viewport);assert.equal(field(d,'saved-a','subject'),subject);assert.equal(d.w.document.querySelector('#cases-view thead'),head);assert.equal(viewport.scrollLeft,500);
+    assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=saved-a')).length,1);
+    d.api.state.caseProgressById['saved-a'].loadedAt=1;toggle();toggle();await tick();
+    assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=saved-a')).length,2);
+  }finally{d.dom.window.close();}
+});
+
+test("unchanged background refreshes keep Cases table nodes and row identities without skipping later changes",async()=>{
+  const d=await dashboard();try{
+    const viewport=caseViewport(d),row=d.api.getRows()[0],cell=field(d,'saved-a','subject');viewport.scrollLeft=650;
+    await d.api.loadSharedCases(true);await d.api.loadSharedCases(true);
+    assert.equal(caseViewport(d),viewport);assert.equal(d.api.getRows()[0],row);assert.equal(field(d,'saved-a','subject'),cell);assert.equal(viewport.scrollLeft,650);
+    d.rows[0].subject='Changed on the server';await d.api.loadSharedCases(true);
+    assert.notEqual(caseViewport(d),viewport);assert.equal(field(d,'saved-a','subject').value,'Changed on the server');assert.equal(caseViewport(d).scrollLeft,650);
+    assert.deepEqual(d.writes,[]);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("overlapping Cases reads share one request but an intervening write starts a fresh protected read",async()=>{
+  const d=await dashboard();try{
+    const fetch=d.w.fetch;const releases:Array<(response:any)=>void>=[];let reads=0;
+    d.w.fetch=async(url:string,init:any)=>url==='/api/cases'&&!init?.method?(reads++,await new Promise(resolve=>releases.push(resolve))):fetch(url,init);
+    const first=d.api.loadSharedCases(true),duplicate=d.api.loadSharedCases(true);await tick();assert.equal(reads,1);
+    const old=structuredClone(d.rows),subject=field(d,'saved-a','subject');subject.value='New confirmed subject';await d.api.saveCaseSheetCell(subject);
+    const fresh=d.api.loadSharedCases(true);await tick();assert.equal(reads,2);
+    releases[1]({ok:true,json:async()=>({data:structuredClone(d.rows)})});await fresh;
+    releases[0]({ok:true,json:async()=>({data:old})});await first;await duplicate;
+    assert.equal(d.api.getRows().find((row:any)=>row.id==='saved-a').subject,'New confirmed subject');
+    assert.equal(field(d,'saved-a','subject').value,'New confirmed subject');assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("malformed or failed Cases refreshes retain confirmed rows and the next refresh can retry",async()=>{
+  const d=await dashboard();try{
+    const fetch=d.w.fetch,viewport=caseViewport(d);const rows=d.api.getRows();
+    d.w.fetch=async(url:string,init:any)=>url==='/api/cases'?{ok:true,json:async()=>({})}:fetch(url,init);
+    assert.equal(await d.api.loadSharedCases(true),false);assert.equal(d.api.getRows(),rows);assert.equal(caseViewport(d),viewport);
+    d.w.fetch=async(url:string,init:any)=>url==='/api/cases'?{ok:false,status:503}:fetch(url,init);
+    assert.equal(await d.api.loadSharedCases(true),false);assert.equal(d.api.getRows(),rows);
+    d.w.fetch=fetch;d.rows[0].subject='Retry succeeded';assert.equal(await d.api.loadSharedCases(true),true);assert.equal(field(d,'saved-a','subject').value,'Retry succeeded');
+  }finally{d.dom.window.close();}
+});
+
+test("a refresh deferred while typing is rendered after editing even if the next server result is unchanged",async()=>{
+  const d=await dashboard();try{
+    const viewport=caseViewport(d),editor=field(d,'saved-a','subject');editor.focus();
+    d.rows[1].subject='Another PIC updated this row';await d.api.loadSharedCases(true);
+    assert.equal(caseViewport(d),viewport);assert.equal(d.w.document.activeElement,editor);assert.equal(field(d,'saved-b','subject').value,'Original');
+    editor.blur();await tick();await d.api.loadSharedCases(true);
+    assert.equal(field(d,'saved-b','subject').value,'Another PIC updated this row');assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("follow-ups remain editable during history reads and a late read cannot erase a confirmed save",async()=>{
+  const d=await dashboard();try{
+    const fetch=d.w.fetch;let release:any,reads=0;
+    d.w.fetch=async(url:string,init:any)=>url.includes('progressFor=')?(reads++,await new Promise(resolve=>{release=resolve;})):fetch(url,init);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    assert.equal(d.w.document.getElementById('himbauan-progress-entry').disabled,false);
+    const duplicate=d.api.loadCaseProgress('saved-a');assert.equal(reads,1);
+    await d.api.addHimbauanProgress('saved-a','Confirmed while history loads');
+    release({ok:true,status:200,json:async()=>({completedTasks:[],taskTimeline:[],progressEntries:[],pageInfo:{hasMore:false}})});await duplicate;await tick();
+    assert.equal(d.api.state.caseProgressById['saved-a'].progressEntries[0].entry,'Confirmed while history loads');
+    assert.match(d.w.document.querySelector('[data-case-followup-status]').textContent,/Saved to database/);
+  }finally{d.dom.window.close();}
+});
+
+test("slow follow-up saves do not lock other rows, overwrite another draft or print unconfirmed work",async()=>{
+  const d=await dashboard();try{
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    d.delay();const saving=d.api.addHimbauanProgress('saved-a','Update A');await tick();
+    assert.equal(field(d,'saved-b','subject').disabled,false);
+    assert.equal(d.w.document.querySelector('[data-add-himbauan-progress]').disabled,true);
+    assert.doesNotMatch(d.w.document.querySelector('[data-case-followup-status]').textContent,/Saved/);
+    const unload=new d.w.Event('beforeunload',{cancelable:true});d.w.dispatchEvent(unload);assert.equal(unload.defaultPrevented,true);
+    assert.equal(d.w.document.querySelector('[data-case-print-report]').disabled,true);
+    const fullscreen=new d.w.MouseEvent('click',{bubbles:true,cancelable:true});d.w.document.querySelector('[data-case-fullscreen]').dispatchEvent(fullscreen);assert.equal(fullscreen.defaultPrevented,true);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-b"]').click();await tick();
+    const input=d.w.document.getElementById('himbauan-progress-entry');input.value='Still typing B';input.dispatchEvent(new d.w.Event('input',{bubbles:true}));
+    d.release();await saving;assert.equal(d.w.document.getElementById('himbauan-progress-entry').value,'Still typing B');
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();assert.equal(d.w.document.getElementById('himbauan-progress-entry').value,'');
+    assert.equal(d.w.document.querySelector('[data-case-print-report]').disabled,false);
+  }finally{d.dom.window.close();}
+});
+
+test("failed follow-ups retain their draft across collapse and navigation, without inventing saved history",async()=>{
+  const d=await dashboard();try{
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();d.fail();
+    const input=d.w.document.getElementById('himbauan-progress-entry');input.value='Do not lose this';input.dispatchEvent(new d.w.Event('input',{bubbles:true}));
+    await assert.rejects(d.api.addHimbauanProgress('saved-a','Do not lose this'),/changed by another user/);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-b"]').click();await tick();
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    assert.equal(d.w.document.getElementById('himbauan-progress-entry').value,'Do not lose this');
+    assert.match(d.w.document.querySelector('[data-case-followup-status]').textContent,/Save not confirmed/);
+    assert.equal(d.api.state.caseProgressById['saved-a'].progressEntries.length,0);
+  }finally{d.dom.window.close();}
+});
+
+test("older timeline pages append once, while permission loss discards cached history",async()=>{
+  const d=await dashboard();try{
+    const fetch=d.w.fetch;let page=0;
+    d.w.fetch=async(url:string,init:any)=>url.includes('progressFor=')?{ok:true,status:200,json:async()=>({completedTasks:[],taskTimeline:[],progressEntries:page++?[{id:'note-1',entry:'Recent'},{id:'note-2',entry:'Older'}]:[{id:'note-1',entry:'Recent'}],pageInfo:{hasMore:page===1,cursor:{completedTasks:false,taskTimeline:false,progressEntries:{at:'2026-11-01T00:00:00Z',id:'00000000-0000-4000-8000-000000000001'}}}})}:fetch(url,init);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    d.w.document.querySelector('[data-case-load-older]').click();await tick();
+    assert.equal(d.api.state.caseProgressById['saved-a'].progressEntries.length,2);assert.equal(d.w.document.querySelector('[data-case-load-older]'),null);
+    d.w.fetch=async()=>({ok:false,status:403,json:async()=>({error:'No longer assigned'})});
+    await d.api.loadCaseProgress('saved-a',{force:true});
+    assert.equal(d.api.state.caseProgressById['saved-a'].progressEntries.length,0);
+    assert.equal(d.w.document.getElementById('himbauan-progress-entry').disabled,true);
+  }finally{d.dom.window.close();}
+});
 
 test("live Cases use concise copy and a neutral default without changing saved stages",async()=>{
   const d=await dashboard();try{

@@ -55,6 +55,21 @@ come from the existing appearance settings rather than a separate fixed palette.
   automatic client-cell saving; progress becomes available after creation.
   Failed progress loads show Retry instead of an endless loading message.
   Progress refreshes replace only the expanded panel, preserving sheet editors.
+  Opening/closing a row inserts/removes only its detail row; the table, column
+  widths, focused sheet editors and native horizontal scroll are not rebuilt.
+  Saved-case follow-ups can be entered while history loads. Recent history is
+  reused for 60 seconds in document memory, with one in-flight read per case.
+  Stale history remains visible while refreshing; explicit Retry bypasses the
+  cache. Changed case versions invalidate freshness, and removed/inaccessible
+  cases discard cached history. My Work completion still invalidates the cache.
+  The first read loads up to 25 entries from each history source; Load older
+  updates follows timestamp/UUID keysets, retaining Postgres timestamp precision.
+  It appends older records without duplicates instead of downloading all history
+  whenever a row opens. The original unpaged API remains compatible.
+  Follow-up saves disable only that case's submit button, not other cells. A
+  confirmed database response is required before adding to history or displaying
+  Saved. Failure retains the draft across collapse/navigation for correction or
+  retry. Pending saves warn before page closure and block report printing.
   Expanded details use the visible table viewport width, not the full column
   span. A sticky inner panel stays visible during horizontal table scrolling;
   container queries stack its sections on narrow sheets, and long text wraps.
@@ -95,6 +110,12 @@ Tax execution and retained task timeline extension requires the migration in
 `docs/CASE_WORKFLOW_INTEGRATION.md`; all sheet capabilities above are preserved.
 Existing `/api/cases` endpoints,
 database UUIDs, linked tasks, soft archives and assignment history are retained.
+The exact Cases, workflow and report handlers perform fresh session, active-staff,
+account-binding and feature-access checks themselves, avoiding duplicate middleware
+checks. Their existing record/PIC authorization remains mandatory. Other routes
+retain middleware protection. No schema migration is needed for these performance
+changes. Timeline reads/follow-up writes include Server-Timing headers for auth
+and data time; production latency still depends on network and database response.
 Due dates continue to be calculated server-side. Only leader, supervisor and
 partner roles can reassign Tax/ACC PICs; the API enforces this independently.
 
@@ -119,6 +140,12 @@ failed edits. New drafts with failed creation remain drafts, not saved records.
 
 Background refreshes preserve draft/pending records. Responses to reads started
 before an intervening edit are ignored to avoid replacing newly saved values.
+Overlapping case-list refreshes share one in-flight request unless a write has
+intervened. A newer read supersedes older responses. Unchanged normalized records
+retain their object identities, and unchanged lists do not rebuild the sheet.
+Actual changes still refresh the view; if typing temporarily defers that refresh,
+it remains queued for a later read rather than being lost when data is unchanged.
+Malformed list responses retain the existing confirmed rows and can be retried.
 When the case table is rebuilt, its current horizontal scroll position is restored
 after column widths are applied. This also covers directory refreshes and direct
 case renders after interactions, in both categories and Full Screen. A delayed
@@ -128,6 +155,29 @@ there is no wheel interception, scrolling animation, timer correction loop or ne
 persisted scroll preference. Existing vertical-scroll handling is unchanged.
 Untouched blank rows do not create database records. Unsaved drafts are not a
 database backup and should be completed before leaving the page.
+
+## Sidebar Points
+
+The monthly-points sidebar widget is removed. Performance ledger reads continue
+in the existing background queue and two-minute visible-page refresh. Point
+awarding/calculation, Profile and Management/Recognition are unchanged; hiding
+the sidebar count does not disable or reset points.
+
+## Checking Cases Speed
+
+Success responses for the case list, timeline, follow-up save, workflow save and
+report include numeric `Server-Timing` auth/data durations. No client names, IDs,
+follow-up text or credentials are placed in timing headers. Private response
+bodies remain non-cacheable, and timing does not replace authorization.
+
+After deployment, use browser DevTools Network while opening a case, reopening
+it within a minute, saving a follow-up, and switching away/back. Compare request
+Duration with the response's `Server-Timing`: auth is identity/profile/access
+verification, data is subsequent server work, and the remaining elapsed time can
+include network/platform overhead. Do not add overlapping history-query times.
+Use repeated samples, not one request, and do not export cookies or full HAR files.
+Local regression tests verify reduced requests/repaints, not a guaranteed live
+under-one-second database response. No hosting-plan or region change is made.
 
 Regression coverage: `tests/case-control-sheet.test.ts` exercises rendering,
 combined filters, sorting/reset, keyboard navigation, role restrictions,

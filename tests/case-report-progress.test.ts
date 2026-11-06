@@ -23,7 +23,7 @@ function fixture(actorId='tax',role='staff'){
   return {db,calls,route,post:(ids:any[])=>route.POST(request({caseIds:ids}))};
 }
 test("report endpoint checks every case before reading progress and rejects archived or invalid IDs",async()=>{
-  const d=fixture();assert.equal((await d.post([id,other])).status,403);assert.deepEqual(d.calls,['tax_cases']);
+  const d=fixture();assert.equal((await d.post([id,other])).status,403);assert.deepEqual(d.calls,['feature_access_settings','tax_cases']);
   assert.equal((await d.post(['invalid'])).status,400);
   d.db.tables.tax_cases[0].deleted_at='2026-11-05';assert.equal((await d.post([id])).status,403);
   assert.equal((await d.post(Array.from({length:101},()=>id))).status,400);
@@ -35,6 +35,7 @@ test("report endpoint returns latest-only progress and current versions without 
   assert.equal(response.status,200);assert.equal(response.body.latestById[id].entry,'Latest report note');
   assert.equal(response.body.lastUpdateById[id].creatorName,'ACC PIC');assert.equal(response.body.versionsById[id],taxCase.updated_at);
   assert.equal(response.headers['Cache-Control'],'no-store');assert.equal(JSON.stringify(d.db.tables),before);
+  assert.match(response.headers['Server-Timing'],/^auth;dur=\d+,data;dur=\d+$/);
 });
 test("report history pagination reads beyond 1000 rows rather than silently truncating",async()=>{
   const rows=Array.from({length:1001},(_,i)=>({id:String(i),case_id:id,entry:`Update ${i}`,created_at:i===1000?'2026-11-05T08:00:00Z':'2026-11-01T00:00:00Z'}));

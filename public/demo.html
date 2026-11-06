@@ -3824,13 +3824,6 @@
           <div class="subline" id="sidebar-user-role">Normal Staff / Tax PIC</div>
         </div>
 
-        <div class="points-widget" aria-label="Monthly performance points">
-          <div class="eyebrow">Monthly Points</div>
-          <div class="points-total" id="sidebar-points-total">0</div>
-          <div class="points-caption">points earned</div>
-          <div class="points-rank" id="sidebar-points-rank">Current month ranking loading...</div>
-        </div>
-
         <div class="quick-link-widget">
           <div class="eyebrow">Attendance</div>
           <div class="profile-name">MyLMATS</div>
@@ -8704,6 +8697,17 @@
       return url.href;
     }
 
+    const caseFollowUpDrafts = new Map();
+    const caseFollowUpPending = new Map();
+    const caseFollowUpStatus = new Map();
+    const caseConfirmedProgress = new Map();
+
+    function rememberCaseFollowUpDraft() {
+      const input = document.getElementById("himbauan-progress-entry");
+      const id = input?.closest("[data-case-progress-id]")?.dataset.caseProgressId;
+      if (id) caseFollowUpDrafts.set(id, input.value);
+    }
+
     function caseTimeline(item, progress) {
       const snapshots = progress?.taskTimeline || [];
       const snapshottedTasks = new Set(snapshots.filter(event => ["completed", "linked_completed"].includes(event.event_type)).map(event => event.task_id));
@@ -8732,7 +8736,8 @@
       const nextActions = (item.nextSteps || []).filter(step => !step.done);
       const completed = progress?.completedTasks || [];
       const timeline = caseTimeline(item, progress);
-      const ready = !draft && Boolean(progress) && !progress.error;
+      const ready = !draft && !progress?.accessDenied;
+      const saving = caseFollowUpPending.has(item.id);
       const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
       return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(formatIsoToDisplayDate(item.dueDate))}</strong></span>` : ""}</div>
         ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Changes are not saved.</div>` : draft ? `<div class="case-progress-notice"><span>Select a Client Master client and leave the cell to save automatically.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
@@ -8741,8 +8746,9 @@
           <section class="case-progress-block"><div class="eyebrow">Open work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No open work in your scope.</div>`)}</div></section>
         </div><div>
           ${progress?.error ? `<div class="case-progress-notice" role="alert"><span>${escapeHtml(progress.error)}</span><button class="tiny-btn" data-case-reload-progress="${escapeAttr(item.id)}">Retry</button></div>` : ""}
-          <div class="eyebrow">Case timeline (${timeline.length})</div><div class="subline">Completed My Work (${completed.length})</div><div class="case-progress-list" data-case-timeline>${timeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div></div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
-          <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready ? "" : "disabled"}>${IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div>
+          <div class="eyebrow">Case timeline (${timeline.length})</div><div class="subline">Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${timeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div></div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
+          ${progress?.pageInfo?.hasMore ? `<button type="button" class="ghost-btn" data-case-load-older="${escapeAttr(item.id)}" ${progress.loading ? "disabled" : ""}>${progress.loading ? "Loading..." : "Load older updates"}</button>` : ""}
+          <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" value="${escapeAttr(caseFollowUpDrafts.get(item.id) || "")}" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready && !saving ? "" : "disabled"}>${saving ? "Saving..." : IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div><div class="subline" data-case-followup-status role="status">${escapeHtml(saving ? "Saving to database..." : caseFollowUpStatus.get(item.id) || "")}</div>
         </div></div></div>`;
     }
 
@@ -8753,11 +8759,11 @@
       if (!caseReportSource || !window.CaseReports) return;
       caseReportSnapshot = caseReportSource();
       const slot = document.querySelector("#cases-view [data-case-report-slot]");
-      if (slot) slot.innerHTML = safeHtml(window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)));
+      if (slot) slot.innerHTML = safeHtml(window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || caseFollowUpPending.size > 0 || taxCases.some(row=>caseSheetPending.get(row)?.count)));
     }
     async function printCaseReport() {
       if (caseReportPrinting) return;
-      if (caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)) { caseSheetMessage("Wait for case saves to finish before printing.",true); return; }
+      if (caseSheetBulkSaving || caseFollowUpPending.size || taxCases.some(row=>caseSheetPending.get(row)?.count)) { caseSheetMessage("Wait for case saves to finish before printing.",true); return; }
       refreshCaseReportSummary();
       if (!caseReportSnapshot?.rows.length) { caseSheetMessage("No saved cases match these filters.",true); return; }
       const snapshot=structuredClone(caseReportSnapshot),revision=caseSheetWriteRevision;
@@ -8780,7 +8786,7 @@
           if (!response.ok) throw new Error(result.error||"Latest progress could not be loaded. Please retry.");
           for (const key of ["latestById","lastUpdateById","versionsById"]) Object.assign(data[key],result[key]||{});
         }
-        if (caseSheetWriteRevision!==revision || caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)) throw new Error("Cases changed while preparing the report. Please print again after saving.");
+        if (caseSheetWriteRevision!==revision || caseSheetBulkSaving || caseFollowUpPending.size || taxCases.some(row=>caseSheetPending.get(row)?.count)) throw new Error("Cases changed while preparing the report. Please print again after saving.");
         const ready=window.CaseReports.withProgress(snapshot,data);
         if (!window.CaseReports.print(ready,popup)) throw new Error("The report window was closed. Please try again.");
       } catch(error) {
@@ -8795,6 +8801,8 @@
     });
 
     function renderCases(rootOverride = null) {
+      rememberCaseFollowUpDraft();
+      if (!rootOverride) caseListViewDirty = false;
       const profileId = bootstrapProfile.profile.id;
       const scopedCases = hasLeadershipAccess()
         ? taxCases
@@ -8859,7 +8867,7 @@
         return date ? `<div class="case-sheet-date">${input}<button type="button" data-case-open-date aria-label="Choose date for ${escapeAttr(label)}" ${saving ? "disabled" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button><input type="date" class="case-sheet-date-picker" data-case-date-picker tabindex="-1" aria-label="Calendar: ${escapeAttr(label)}" value="${escapeAttr(caseSheetValue(item, field))}" ${saving ? "disabled" : ""} /></div>` : input;
       };
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" ${caseSheetPending.get(item)?.count ? "disabled" : ""} aria-label="Archive case ${escapeAttr(item.clientName)}" title="Archive case">${deleteIcon()}</button>`;
-      const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline"><td colspan="13">${renderCaseProgressPanel(item, expandedProgress)}</td></tr>` : "";
+      const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline" data-case-progress-id="${escapeAttr(item.id)}"><td colspan="13">${renderCaseProgressPanel(item, expandedProgress)}</td></tr>` : "";
       const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
       const casePicCell = (item, type) => {
         const isTax = type === "tax";
@@ -8887,7 +8895,7 @@
                 <button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>
               </div>
             </div>
-            <div data-case-report-slot>${caseReportSnapshot ? window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)) : ""}</div>
+            <div data-case-report-slot>${caseReportSnapshot ? window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || caseFollowUpPending.size > 0 || taxCases.some(row=>caseSheetPending.get(row)?.count)) : ""}</div>
             <div class="toolbar case-sheet-tools"><label class="case-search-wrap">${toolIcon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}<input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Find client, letter, or note..." aria-label="Search cases" /></label><div class="case-filter-pair"><select id="case-acc-filter" class="filter-input" aria-label="Filter ACC PIC">${picOptions("accounting", state.caseAccFilter)}</select><select id="case-tax-filter" class="filter-input" aria-label="Filter Tax PIC">${picOptions("tax", state.caseTaxFilter)}</select></div><select id="case-workflow-filter" class="filter-input" aria-label="Filter case workflow">${[["all","All workflow"],["overdue","Payment overdue"],["supervisor","Supervisor attention"],["closure","Awaiting SP3P2DK"]].map(([key,label]) => `<option value="${key}" ${state.caseWorkflowFilter === key ? "selected" : ""}>${label}</option>`).join("")}</select><button class="ghost-btn case-reset" data-case-sheet-reset="yes">${toolIcon('<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>')}Reset</button><span class="case-filter-result"><strong>${caseList.length}</strong> of ${categoryCases.length} cases</span></div>
             <div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" role="grid" aria-multiselectable="true" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col" aria-sort="${sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="createdAt" title="Sort by date added">No.</button></th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
               ${sheetRows}
@@ -9228,22 +9236,6 @@
       });
       window.WorkspaceFeatures.setRole(state.role);
       window.WorkspaceFeatures.chrome(state.currentView);
-      const leaderboard = performanceLeaderboard();
-      const personalPoints = performanceRow(state.selectedPic);
-      const rank = Math.max(1, leaderboard.findIndex((row) => row.pic === state.selectedPic) + 1);
-      const pointsTotal = document.getElementById("sidebar-points-total");
-      const pointsWidget = pointsTotal.closest(".points-widget");
-      const previousTotal = Number(pointsTotal.dataset.score || 0);
-      const wasInitialized = pointsTotal.dataset.initialized === "true";
-      const samePerson = pointsTotal.dataset.pic === state.selectedPic;
-      pointsTotal.textContent = String(personalPoints.total);
-      pointsTotal.dataset.score = String(personalPoints.total);
-      pointsTotal.dataset.pic = state.selectedPic;
-      pointsTotal.dataset.initialized = "true";
-      if (wasInitialized && samePerson && personalPoints.total > previousTotal) {
-        triggerPointsBurst(pointsWidget, pointsTotal, personalPoints.total - previousTotal);
-      }
-      document.getElementById("sidebar-points-rank").textContent = `Rank #${rank} of ${leaderboard.length} · ${state.performance.period}`;
       const mobileUserName = document.getElementById("mobile-user-name");
       const mobileUserRole = document.getElementById("mobile-user-role");
       if (mobileUserName) mobileUserName.textContent = state.selectedPic;
@@ -9595,26 +9587,53 @@
       return result.clientCode;
     }
 
+    let caseListReadSequence = 0;
+    let caseListFlight = null;
+    let caseListViewDirty = false;
     async function loadSharedCases(background = false) {
       if (!window.WorkspaceFeatures.can("cases")) return true;
       if (caseSheetBulkSaving) return true;
-      try {
-        const revision = caseSheetWriteRevision;
+      // Reads may share a request, but never reuse one started before a write.
+      if (caseListFlight?.revision === caseSheetWriteRevision) return caseListFlight.promise;
+      const flight = { revision:caseSheetWriteRevision, sequence:++caseListReadSequence, promise:null };
+      caseListFlight = flight;
+      flight.promise = (async () => { try {
         const response = await appFetch("/api/cases", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared cases...");
         if (!response.ok) return false;
         const result = await response.json();
-        if (revision !== caseSheetWriteRevision) return true;
+        if (flight.sequence !== caseListReadSequence || flight.revision !== caseSheetWriteRevision || !window.WorkspaceFeatures.can("cases")) return true;
+        if (!Array.isArray(result.data)) throw new Error("Case list response was incomplete. Existing rows are retained.");
+        const previousRows = new Map(taxCases.map(item => [item.id, item]));
+        const previousVersions = new Map(taxCases.map(item => [item.id, item.version]));
         const protectedRows = taxCases.filter(item => item.id.startsWith("case-") || caseSheetPending.get(item)?.count);
-        taxCases = [...protectedRows, ...(Array.isArray(result.data) ? result.data : []).map(databaseCaseToDemo).filter(item => !protectedRows.some(row => row.id === item.id))];
+        const protectedIds = new Set(protectedRows.map(item => item.id));
+        const nextRows = [...protectedRows, ...result.data.filter(row => !protectedIds.has(row.id)).map(row => {
+          const incoming = databaseCaseToDemo(row), previous = previousRows.get(incoming.id);
+          return previous && JSON.stringify(previous) === JSON.stringify(incoming) ? previous : incoming;
+        })];
+        const changed = nextRows.length !== taxCases.length || nextRows.some((row,index) => row !== taxCases[index]);
+        taxCases = nextRows;
+        for (const id of Object.keys(state.caseProgressById)) {
+          const current = taxCases.find(item => item.id === id);
+          if (!current) {
+            delete state.caseProgressById[id]; caseConfirmedProgress.delete(id);
+            caseProgressReadRevision.set(id, (caseProgressReadRevision.get(id) || 0) + 1);
+          } else if (previousVersions.get(id) !== current.version) state.caseProgressById[id].loadedAt = 0;
+        }
         casesLoadedFromDatabase = true;
         if (!taxCases.some((item) => item.id === state.selectedCaseId)) state.selectedCaseId = taxCases[0]?.id || "";
-        renderAfterSharedDataUpdate(["cases-view", "client-view"]);
+        caseListViewDirty ||= changed;
+        if (caseListViewDirty && !startupPending && ["cases-view", "client-view"].includes(state.currentView) && !activeEditorSnapshot()) {
+          renderAfterSharedDataUpdate(["cases-view", "client-view"]);
+          caseListViewDirty = false;
+        }
         if (state.currentView === "cases-view" && state.expandedHimbauanId && state.caseProgressById[state.expandedHimbauanId] && !activeEditorSnapshot()) loadCaseProgress(state.expandedHimbauanId);
         return true;
       } catch (error) {
         console.warn("[cases] shared load failed", error);
         return false;
-      }
+      } finally { if (caseListFlight === flight) caseListFlight = null; } })();
+      return flight.promise;
     }
 
     async function loadDeletedCases(background = false) {
@@ -9629,12 +9648,30 @@
       }
     }
 
+    function syncExpandedCaseProgress() {
+      rememberCaseFollowUpDraft();
+      const root = document.getElementById("cases-view");
+      root.querySelectorAll(".case-progress-inline").forEach(panel => { if (panel.dataset.caseProgressId !== state.expandedHimbauanId) panel.remove(); });
+      root.querySelectorAll("[data-toggle-himbauan-progress]").forEach(button => {
+        const expanded = button.dataset.toggleHimbauanProgress === state.expandedHimbauanId;
+        button.setAttribute("aria-expanded", String(expanded));
+        const arrow = button.querySelector('[aria-hidden="true"]'); if (arrow) arrow.textContent = expanded ? "\u25be" : "\u25b8";
+      });
+      const item = taxCases.find(row => row.id === state.expandedHimbauanId);
+      const row = [...root.querySelectorAll("[data-case-sheet-row]")].find(row => row.dataset.caseSheetRow === item?.id);
+      if (!row || row.nextElementSibling?.classList.contains("case-progress-inline")) return;
+      const panel = document.createElement("tr"); panel.className = "case-progress-inline"; panel.dataset.caseProgressId = item.id;
+      const cell = document.createElement("td"); cell.colSpan = row.cells.length;
+      cell.innerHTML = safeHtml(renderCaseProgressPanel(item, state.caseProgressById[item.id])); panel.append(cell); row.after(panel);
+    }
+
     function refreshExpandedCaseProgress(caseId) {
       if (state.currentView !== "cases-view" || state.expandedHimbauanId !== caseId) return;
       const item = taxCases.find(row => row.id === caseId);
       const row = [...document.querySelectorAll("[data-case-sheet-row]")].find(row => row.dataset.caseSheetRow === caseId);
       const panel = row?.nextElementSibling;
       if (item && panel?.classList.contains("case-progress-inline")) {
+        rememberCaseFollowUpDraft();
         const input = panel.querySelector("#himbauan-progress-entry"), value = input?.value || "", focused = document.activeElement === input;
         const selection = focused ? [input.selectionStart,input.selectionEnd] : null;
         panel.firstElementChild.innerHTML = safeHtml(renderCaseProgressPanel(item, state.caseProgressById[caseId]));
@@ -9645,37 +9682,61 @@
     }
 
     const caseProgressReadRevision = new Map();
-    async function loadCaseProgress(caseId) {
+    const caseProgressRequests = new Map();
+    const CASE_PROGRESS_FRESH_MS = 60000;
+    async function loadCaseProgress(caseId, { force = false, more = false } = {}) {
+      if (!caseId) return;
+      const cached = state.caseProgressById[caseId];
+      const flight = caseProgressRequests.get(caseId);
+      if (flight && flight.revision === caseProgressReadRevision.get(caseId)) return flight.promise;
+      if (more && !cached?.pageInfo?.hasMore) return;
+      if (!force && !more && cached?.loadedAt && Date.now() - cached.loadedAt < CASE_PROGRESS_FRESH_MS) return;
       const revision = (caseProgressReadRevision.get(caseId) || 0) + 1;
       caseProgressReadRevision.set(caseId, revision);
       if (IS_OFFLINE_DEMO && caseId) {
         state.caseProgressById[caseId] = {
           completedTasks: state.myWork.filter(task => task.caseId === caseId && task.done),
           taskTimeline: [],
+          loadedAt: Date.now(),
           progressEntries: state.caseProgressById[caseId]?.progressEntries || []
         };
         refreshExpandedCaseProgress(caseId);
         return;
       }
       if (!caseId || caseId.startsWith("case-")) return;
-      try {
-        const response = await appFetch(`/api/cases?progressFor=${encodeURIComponent(caseId)}`, { cache: "no-store", headers: { Accept: "application/json" } }, "", { trackUpdate: false });
+      state.caseProgressById[caseId] = { ...cached, loading: true, error: "" };
+      refreshExpandedCaseProgress(caseId);
+      const pending = (async () => { try {
+        const params = new URLSearchParams({ progressFor: caseId, historyPage: "1", limit: "25" });
+        if (more) params.set("cursor", JSON.stringify(cached.pageInfo.cursor));
+        const response = await appFetch(`/api/cases?${params}`, { cache: "no-store", headers: { Accept: "application/json" } }, "", { trackUpdate: false });
         const result = await response.json().catch(() => ({}));
         if (caseProgressReadRevision.get(caseId) !== revision) return;
-        if (!response.ok) throw new Error(result.error || "Case progress could not be loaded.");
+        if (!response.ok) { const error = new Error(result.error || "Case progress could not be loaded."); error.accessDenied = [401,403].includes(response.status); throw error; }
+        const latest = state.caseProgressById[caseId];
+        const merge = (first, second) => [...new Map([...first, ...second].map((entry,index) => [entry.id || `legacy:${index}`, entry])).values()];
+        const confirmed = caseConfirmedProgress.get(caseId) || new Map();
+        const entries = Array.isArray(result.progressEntries) ? result.progressEntries : [];
+        entries.forEach(entry => confirmed.delete(entry.id));
         state.caseProgressById[caseId] = {
-          completedTasks: Array.isArray(result.completedTasks) ? result.completedTasks : [],
-          taskTimeline: Array.isArray(result.taskTimeline) ? result.taskTimeline : [],
-          progressEntries: Array.isArray(result.progressEntries) ? result.progressEntries : []
+          completedTasks: merge(more ? latest?.completedTasks || [] : [], Array.isArray(result.completedTasks) ? result.completedTasks : []),
+          taskTimeline: merge(more ? latest?.taskTimeline || [] : [], Array.isArray(result.taskTimeline) ? result.taskTimeline : []),
+          progressEntries: merge([...confirmed.values(), ...(more ? latest?.progressEntries || [] : [])], entries),
+          pageInfo: result.pageInfo || { hasMore: false },
+          loadedAt: more ? cached.loadedAt : Date.now(), loading: false
         };
         clearSyncFailure("Case progress");
         refreshExpandedCaseProgress(caseId);
       } catch (error) {
         if (caseProgressReadRevision.get(caseId) !== revision) return;
-        state.caseProgressById[caseId] = { completedTasks:[], progressEntries:[], error:error instanceof Error ? error.message : "Case progress could not be loaded." };
+        const denied = Boolean(error.accessDenied);
+        if (denied) caseConfirmedProgress.delete(caseId);
+        state.caseProgressById[caseId] = { ...(denied ? {completedTasks:[],taskTimeline:[],progressEntries:[]} : state.caseProgressById[caseId]), loading:false, accessDenied:denied, error:error instanceof Error ? error.message : "Case progress could not be loaded." };
         markSyncFailure("Case progress", error);
         refreshExpandedCaseProgress(caseId);
-      }
+      } finally { if (caseProgressRequests.get(caseId)?.revision === revision) caseProgressRequests.delete(caseId); } })();
+      caseProgressRequests.set(caseId, { revision, promise: pending });
+      return pending;
     }
 
     async function saveCaseWorkflow(caseId, command) {
@@ -9701,27 +9762,39 @@
     }
 
     async function addHimbauanProgress(caseId, entry) {
-      if (IS_OFFLINE_DEMO) {
-        const progress = state.caseProgressById[caseId] || { completedTasks:[], progressEntries:[] };
-        progress.progressEntries.unshift({ id:crypto.randomUUID(), entry, creatorName:state.selectedPic || "Demo PIC", createdAt:new Date().toISOString() });
-        state.caseProgressById[caseId] = progress;
-        const input = document.getElementById("himbauan-progress-entry"); if (input) input.value = "";
-        refreshExpandedCaseProgress(caseId);
-        return;
-      }
-      const response = await appFetch("/api/cases", {
+      if (caseFollowUpPending.has(caseId)) return caseFollowUpPending.get(caseId);
+      caseFollowUpDrafts.set(caseId, entry);
+      const pending = (async () => { await Promise.resolve(); try {
+      let saved;
+      if (IS_OFFLINE_DEMO) saved = { id:crypto.randomUUID(), entry, creatorName:state.selectedPic || "Demo PIC", createdAt:new Date().toISOString() };
+      else { const response = await appFetch("/api/cases", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ id: caseId, action: "add-progress", entry })
       }, "", { trackUpdate: false });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Case progress could not be saved.");
+      saved = result.progressEntry;
+      if (!saved?.id) throw new Error("Save confirmation was incomplete. Refresh the timeline before retrying."); }
       const progress = state.caseProgressById[caseId] || { completedTasks: [], progressEntries: [] };
-      progress.progressEntries.unshift(result.progressEntry);
+      progress.progressEntries ||= [];
+      if (!progress.progressEntries.some(item => item.id === saved.id)) progress.progressEntries.unshift(saved);
       state.caseProgressById[caseId] = progress;
-      const input = document.getElementById("himbauan-progress-entry"); if (input) input.value = "";
+      if (!caseConfirmedProgress.has(caseId)) caseConfirmedProgress.set(caseId, new Map());
+      caseConfirmedProgress.get(caseId).set(saved.id, saved);
+      if ((caseFollowUpDrafts.get(caseId) || "").trim() === entry) caseFollowUpDrafts.delete(caseId);
+      const input = document.getElementById("himbauan-progress-entry");
+      if (input?.closest("[data-case-progress-id]")?.dataset.caseProgressId === caseId && input.value.trim() === entry) input.value = "";
+      caseFollowUpStatus.set(caseId, IS_OFFLINE_DEMO ? "Added to demo only." : "Saved to database.");
+      caseSheetWriteRevision++;
       clearSyncFailure("Case progress");
+      } catch (error) { caseFollowUpStatus.set(caseId, `Save not confirmed: ${error.message} Refresh the timeline before retrying.`); throw error; }
+      finally { caseFollowUpPending.delete(caseId); refreshExpandedCaseProgress(caseId); refreshCaseReportSummary(); }
+      })();
+      caseFollowUpPending.set(caseId, pending);
       refreshExpandedCaseProgress(caseId);
+      refreshCaseReportSummary();
+      return pending;
     }
 
     async function deleteCaseFromDatabase(record) {
@@ -10095,7 +10168,7 @@
       });
     }
     window.addEventListener("beforeunload", event => {
-      if (caseSheetBulkSaving || state.allocationApplying) { event.preventDefault(); event.returnValue = ""; }
+      if (caseSheetBulkSaving || caseFollowUpPending.size || state.allocationApplying) { event.preventDefault(); event.returnValue = ""; }
     });
 
     function clearCaseSheetRange() {
@@ -10293,6 +10366,9 @@
       caseSheetMessage(`${message}${announcementIssues ? ` Announcement delivery could not be confirmed for ${announcementIssues} case(s). Do not recreate saved cases; contact management.` : ""}`, Boolean(failed.length || announcementIssues));
     }
 
+    document.addEventListener("input", event => {
+      if (event.target?.id === "himbauan-progress-entry") rememberCaseFollowUpDraft();
+    });
     document.addEventListener("paste", event => {
       const td = event.target.closest?.("[data-case-grid-field]");
       if (!td || !event.clipboardData) return;
@@ -10324,7 +10400,7 @@
       if (fullscreen) {
         const active = document.activeElement;
         if (active?.matches?.("input[data-case-sheet-field]")) saveCaseSheetCell(active);
-        if (caseSheetBulkSaving || taxCases.some(record => caseSheetPending.get(record)?.count)) {
+        if (caseSheetBulkSaving || caseFollowUpPending.size || taxCases.some(record => caseSheetPending.get(record)?.count)) {
           event.preventDefault(); caseSheetMessage("Wait for the current case save to finish, then open Full Screen.", true); return;
         }
         if (!IS_OFFLINE_DEMO && taxCases.some(record => record.id.startsWith("case-"))) {
@@ -10340,7 +10416,9 @@
         return;
       }
       const retryProgress = event.target.closest?.("[data-case-reload-progress]");
-      if (retryProgress) { retryProgress.disabled = true; loadCaseProgress(retryProgress.dataset.caseReloadProgress); return; }
+      if (retryProgress) { retryProgress.disabled = true; loadCaseProgress(retryProgress.dataset.caseReloadProgress, { force: true }); return; }
+      const olderProgress = event.target.closest?.("[data-case-load-older]");
+      if (olderProgress) { void loadCaseProgress(olderProgress.dataset.caseLoadOlder, { more: true }); return; }
       const sort = event.target.closest?.("[data-case-sheet-sort]");
       const reset = event.target.closest?.("[data-case-sheet-reset]");
       if (!sort && !reset) return;
@@ -12123,15 +12201,15 @@
       if (toggleHimbauanProgressTrigger && (!target.closest("input, textarea, select, button") || toggleHimbauanProgressTrigger.matches("button.case-sheet-row-toggle"))) {
         const caseId = toggleHimbauanProgressTrigger.getAttribute("data-toggle-himbauan-progress");
         if (!caseId) return;
+        rememberCaseFollowUpDraft();
         if (state.expandedHimbauanId === caseId) {
           state.expandedHimbauanId = "";
-          renderCases();
+          syncExpandedCaseProgress();
           return;
         }
-        const hadProgress = Boolean(state.caseProgressById[caseId]);
         state.expandedHimbauanId = caseId;
-        renderCases();
-        if (hadProgress || IS_OFFLINE_DEMO || caseId.startsWith("case-")) await loadCaseProgress(caseId);
+        syncExpandedCaseProgress();
+        void loadCaseProgress(caseId);
         return;
       }
 
@@ -12148,7 +12226,7 @@
           await addHimbauanProgress(caseId, entry);
         } catch (error) {
           markSyncFailure("Case progress", error);
-          window.alert(error instanceof Error ? error.message : "Case progress could not be saved.");
+          caseSheetMessage(error instanceof Error ? error.message : "Case progress could not be saved.", true);
         } finally {
           if (addHimbauanProgressTrigger.isConnected) addHimbauanProgressTrigger.disabled = false;
         }

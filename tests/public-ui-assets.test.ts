@@ -42,12 +42,14 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   assert.equal((await run("/favicon.svg")).status, 200);
   assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
   assert.equal((await run("/api/workspace/bootstrap")).status, 200);
+  for (const path of ["/api/cases", "/api/cases/workflow", "/api/cases/report"]) assert.equal((await run(path)).status, 200, "exact Cases handlers authenticate themselves");
   assert.equal((await run("/")).status, 200, "root is only a loader and iframe, never private data");
   assert.equal(clients, 0); assert.equal(authReads, 0); assert.equal(profileReads, 0);
   assert.equal((await run("/demo.html")).status, 307);
   assert.equal((await run("/api/clients")).status, 401);
   assert.equal((await run("/api/annual-sheet/extra")).status, 401);
   assert.equal((await run("/api/workspace/bootstrap/extra")).status, 401);
+  for (const path of ["/api/cases/extra", "/api/cases/report/extra", "/api/cases.css"]) assert.equal((await run(path)).status, 401);
   assert.equal((await run("/api/profile.css")).status, 401);
   user = { id: "current-account" }; active = false;
   assert.equal((await run("/api/clients")).status, 403);
