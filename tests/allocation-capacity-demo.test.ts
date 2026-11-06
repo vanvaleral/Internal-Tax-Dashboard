@@ -19,8 +19,8 @@ test('separate Tax workload, skill mismatch, unknown estimates and ownership are
     assert.match(d.w.document.querySelector('[data-load-planned="tax-citra"]').textContent,/127\.5%/);
     assert.match(d.w.document.querySelector('[data-load-planned="tax-bima"]').textContent,/48%/);
     assert.match(d.w.document.querySelector('[data-staff-row="tax-citra"]').textContent,/3 needs review/);
-    assert.match(d.w.document.querySelector('[data-staff-row="tax-ayu"]').textContent,/At least 82\.9%.*1 hours missing.*1 unrated/s);
-    assert.match(d.w.document.querySelector('#coverage').textContent,/11\/12.*11\/12.*1 no PIC/s);
+    assert.match(d.w.document.querySelector('[data-staff-row="tax-ayu"]').textContent,/At least 82\.9%[\s\S]*1 hours missing[\s\S]*1 unrated/);
+    assert.match(d.w.document.querySelector('#coverage').textContent,/11\/12[\s\S]*11\/12[\s\S]*1 no PIC/);
   }finally{d.dom.window.close();}
 });
 test('staging and reviewing transfers previews capacity without mutating current assignment',()=>{
@@ -29,7 +29,7 @@ test('staging and reviewing transfers previews capacity without mutating current
     assert.equal(d.api.getData().clients[0].tax.pic,'tax-citra');
     assert.match(d.w.document.querySelector('[data-load-planned="tax-citra"]').textContent,/97\.5%/);
     assert.match(d.w.document.querySelector('[data-load-planned="tax-bima"]').textContent,/72%/);
-    d.click('#review-plan');assert.match(d.w.document.querySelector('#review-content').textContent,/102h.*78h.*48h.*72h/s);
+    d.click('#review-plan');assert.match(d.w.document.querySelector('#review-content').textContent,/102h[\s\S]*78h[\s\S]*48h[\s\S]*72h/);
     d.submit();assert.equal(d.api.getData().clients[0].tax.pic,'tax-bima');assert.equal(d.api.changes().length,0);
     const event=d.api.getActivity()[0];assert.equal(event.type,'allocation');assert.equal(event.details.changes[0].from,'tax-citra');assert.equal(event.details.changes[0].assessment.hours,24);
   }finally{d.dom.window.close();}
@@ -61,7 +61,7 @@ test('Tax and Accounting ratings, drafts and not-applicable clients remain indep
     assert.equal(d.w.document.querySelector('[data-client="client-11"][data-assess-field="hours"]').disabled,true);
     assert.match(d.w.document.querySelector('[data-client-row="client-11"]').textContent,/Not applicable/);
     d.change('[data-pic-next="client-2"]','acc-farah');assert.equal(d.api.changes().length,2);
-    d.click('#review-plan');assert.match(d.w.document.querySelector('#review-content').textContent,/Tax.*Accounting/s);
+    d.click('#review-plan');assert.match(d.w.document.querySelector('#review-content').textContent,/Tax[\s\S]*Accounting/);
   }finally{d.dom.window.close();}
 });
 test('No PIC is an explicit pending choice; reset clears hidden-team drafts but retains assessments',()=>{

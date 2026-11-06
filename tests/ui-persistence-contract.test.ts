@@ -111,11 +111,11 @@ test("Profile client scope uses Client Master and permanent PIC profile IDs", as
 test("all current client portfolio views share the strict Active-only scope", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function isActiveClientRecord\(client\) \{[\s\S]*?\.toLowerCase\(\) === "active"/);
-  assert.match(demo, /function activeClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(isActiveClientRecord\);/);
-  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return sortClientMasterRows\(activeClientMasterRecords\(\)/);
+  assert.match(demo, /function activeClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(client => isActiveClientRecord\(client\) && client\.engagementType !== "on_demand"\);/);
+  assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return sortClientMasterRows\(clientMasterClients\.filter\(isActiveClientRecord\)/);
   assert.match(demo, /function clientPortfolioSnapshot\(\) \{\s*const activeClients = activeClientMasterRecords\(\);\s*const portfolio = activeClients;/);
   assert.match(demo, /const regionalCounts = regions\.map\(\(region\) => \(\{ region, count: currentActiveClients\.filter/);
-  assert.match(demo, /<datalist id="case-client-options">\$\{activeClientMasterRecords\(\)\.map/);
+  assert.match(demo, /<datalist id="case-client-options">\$\{clientMasterClients\.filter\(isActiveClientRecord\)\.map/);
   assert.doesNotMatch(demo, /clientStatus !== "Inactive"/);
   assert.doesNotMatch(demo, /const portfolio = activeClients\.length \? activeClients : clients/);
 });
@@ -215,7 +215,7 @@ test("Allocation separates company form from the client name", async () => {
   assert.match(demo, /<th>\$\{sortHeader\("allocation", "form", "Form"\)\}<\/th>\s*<th>\$\{sortHeader\("allocation", "name", "Client Name"\)\}<\/th>/);
   assert.match(demo, /escapeHtml\(identity\.form \|\| "Individual"\)/);
   assert.match(demo, /virtualSpacer\(10, allocationWindow\.top\)/);
-  assert.match(demo, /sortClientMasterRows\(activeClientMasterRecords\(\)/);
+  assert.match(demo, /sortClientMasterRows\(clientMasterClients\.filter\(isActiveClientRecord\)/);
 });
 
 test("Clients and Allocation number their filtered client rows", async () => {
@@ -310,7 +310,8 @@ test("all workspace menus use one canvas background without green or yellow page
 
 test("announcement inbox can be toggled without leaving the current workspace", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /if \(openAnnouncementInboxTrigger\) \{\s*state\.announcementInboxOpen = !state\.announcementInboxOpen;/);
+  assert.match(demo, /if \(openAnnouncementInboxTrigger\) \{[\s\S]*?state\.announcementInboxOpen = !state\.announcementInboxOpen;/);
+  assert.match(demo, /WorkspaceFeatures\.mode\("notifications"\) !== "enabled"/);
   assert.match(demo, /height: calc\(100svh - 190px\)/);
   assert.match(demo, /mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"[^>]*>/);
   assert.match(demo, /settings-btn[\s\S]{0,360}<svg viewBox="0 0 24 24">/);

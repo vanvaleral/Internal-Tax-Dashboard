@@ -3925,6 +3925,8 @@
   <script src="workspace-sync.js"></script>
   <link rel="stylesheet" href="feature-access.css" />
   <script src="feature-access.js"></script>
+  <link rel="stylesheet" href="client-engagement.css" />
+  <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
   <link rel="stylesheet" href="case-workflow-dashboard.css" />
   <script src="case-workflow-dashboard.js"></script>
@@ -4821,6 +4823,7 @@
       allocationQuery: persistedDemoState?.ui?.allocationQuery || "",
       allocationAccFilter: persistedDemoState?.ui?.allocationAccFilter || "all",
       allocationTaxFilter: persistedDemoState?.ui?.allocationTaxFilter || "all",
+      allocationEngagementFilter: persistedDemoState?.ui?.allocationEngagementFilter || "all",
       allocationYear: Number(persistedDemoState?.ui?.allocationYear || new Date().getFullYear()),
       allocationShowChangedOnly: typeof persistedDemoState?.ui?.allocationShowChangedOnly === "boolean" ? persistedDemoState.ui.allocationShowChangedOnly : false,
       allocationDrafts: persistedDemoState?.ui?.allocationDrafts || {},
@@ -4888,7 +4891,7 @@
       monthlyEditMode: false,
       monthlyDeleteSelection: [],
       sorts: {
-        clients: { key: "form", dir: "asc" },
+        clients: { key: "contractStart", dir: "desc" },
         allocation: { key: "form", dir: "asc" },
         monthly: { key: "name", dir: "asc" },
         annualAccounting: { key: "name", dir: "asc" },
@@ -4901,7 +4904,7 @@
       state.currentView = "announcement-view";
     }
 
-    if (!["active", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
+    if (!["active", "on-demand", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
@@ -5078,6 +5081,7 @@
         },
         clients: {
           active: ["Clients / Active Clients", "Clients Workspace", "Client master data remains the source of truth for obligations, fees, dual PIC ownership, and downstream operations."],
+          "on-demand": ["Clients / On Demand Clients", "Clients Workspace", "Annual and occasional work without a recurring contract."],
           inactive: ["Clients / Inactive Clients", "Clients Workspace", "Inactive clients are retained for history but excluded from the active operating list."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
           contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
@@ -5479,7 +5483,7 @@
     }
 
     function activeClientMasterRecords() {
-      return clientMasterClients.filter(isActiveClientRecord);
+      return clientMasterClients.filter(client => isActiveClientRecord(client) && client.engagementType !== "on_demand");
     }
 
     let searchDebounceTimer = 0;
@@ -5585,7 +5589,7 @@
     }
 
     function createMonthlyPeriodRows(month, year) {
-      return structuredClone(clientMasterClients.filter((client) => client.clientStatus === "Active" && client.taxPic === state.selectedPic)).map((client) => {
+      return structuredClone(clientMasterClients.filter((client) => client.clientStatus === "Active" && client.engagementType !== "on_demand" && client.taxPic === state.selectedPic)).map((client) => {
         client.month = month;
         client.year = year;
         client.dataState = "missing";
@@ -6147,7 +6151,7 @@
 
     function allocationRows() {
       const query = state.allocationQuery.trim().toLowerCase();
-      return sortClientMasterRows(activeClientMasterRecords()
+      return sortClientMasterRows(clientMasterClients.filter(isActiveClientRecord)
         .filter((client) => hasLeadershipAccess() || client.taxPic === state.selectedPic || client.accountingPic === state.selectedPic)
         .filter((client) => {
           const draft = state.allocationDrafts[client.id] || {};
@@ -6155,6 +6159,7 @@
           if (state.allocationShowChangedOnly && !changed) return false;
           if (state.allocationAccFilter === "__no_pic__" ? Boolean(client.accountingPic) : state.allocationAccFilter !== "all" && client.accountingPic !== state.allocationAccFilter) return false;
           if (state.allocationTaxFilter === "__no_pic__" ? Boolean(client.taxPic) : state.allocationTaxFilter !== "all" && client.taxPic !== state.allocationTaxFilter) return false;
+          if (state.allocationEngagementFilter !== "all" && (client.engagementType || "contract") !== state.allocationEngagementFilter) return false;
           if (!query) return true;
           return [
             client.clientCode,
@@ -6946,7 +6951,7 @@
       }).sort((left, right) => right.points - left.points || right.monthlyCompleted - left.monthlyCompleted || left.pic.localeCompare(right.pic));
       const currentYear = new Date().getFullYear();
       const growthYears = Array.from({ length: 6 }, (_, index) => currentYear - 5 + index);
-      const growthClients = clientMasterClients;
+      const growthClients = clientMasterClients.filter(client => client.engagementType !== "on_demand");
       const currentActiveClients = activeClientMasterRecords();
       const clientGrowth = growthYears.map((year) => {
         const endOfYear = `${year}-12-31`;
@@ -7235,7 +7240,7 @@
       const selectedIds = new Set(state.allocationSelection);
       const selectAll = `<input type="checkbox" data-allocation-select-all aria-label="Select all visible clients" title="Select all visible clients" ${rows.length && selectedIds.size === rows.length ? "checked" : ""} ${!canEdit || !rows.length ? "disabled" : ""} />`;
       const hasDrafts = Object.keys(state.allocationDrafts).length > 0;
-      const activeAllocationClients = activeClientMasterRecords();
+      const activeAllocationClients = clientMasterClients.filter(isActiveClientRecord);
       const allocationAccOptions = [...new Set([...ACC_PICS, ...activeAllocationClients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
       const allocationTaxOptions = [...new Set([...TAX_PICS, ...activeAllocationClients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
       const allocationWindow = windowedRows(rows, "allocation-clients", 48);
@@ -7261,6 +7266,7 @@
                 <select id="allocation-acc-filter" class="filter-select" aria-label="Filter by ACC PIC"><option value="all">All ACC PIC</option><option value="__no_pic__" ${state.allocationAccFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationAccOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationAccFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <select id="allocation-tax-filter" class="filter-select" aria-label="Filter by Tax PIC"><option value="all">All Tax PIC</option><option value="__no_pic__" ${state.allocationTaxFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationTaxOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationTaxFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <select id="allocation-order" class="filter-select" aria-label="Allocation row order" title="Date added means the original Client Master creation date, not the latest PIC update."><option value="form" ${allocationOrder === "form" ? "selected" : ""}>Company form / name</option><option value="oldest" ${allocationOrder === "oldest" ? "selected" : ""}>Oldest added first</option><option value="newest" ${allocationOrder === "newest" ? "selected" : ""}>Newest added first</option>${allocationOrder === "column" ? '<option value="column" selected disabled>Column sort</option>' : ""}</select>
+                <select id="allocation-engagement-filter" class="filter-select" aria-label="Filter client engagement">${[["all","All engagements"],["contract","Contract clients only"],["on_demand","On Demand clients only"]].map(([value,label]) => `<option value="${value}" ${state.allocationEngagementFilter === value ? "selected" : ""}>${label}</option>`).join("")}</select>
                 <input id="allocation-query" class="filter-input" type="text" placeholder="Search client, code, current PIC, next PIC" value="${state.allocationQuery}" />
               </div>
               <div class="toolbar-right">
@@ -7473,7 +7479,7 @@
       const annualFees = feeModel(activeSample.annualFee || annualFeeFromMonthly(activeSample.serviceFee), true, false);
       const managedClients = clientMasterClients;
       const activeManagedClients = activeClientMasterRecords();
-      const contractClients = managedClients.filter((client) => {
+      const contractClients = managedClients.filter(client => client.engagementType !== "on_demand").filter((client) => {
         const health = contractHealth(client);
         return state.contractFilter === "all"
           || (state.contractFilter === "renewal" && health.label === "Expiring soon")
@@ -7482,10 +7488,12 @@
       });
       const clientSearch = state.clientSearch.trim().toLowerCase();
       const viewingInactiveClients = state.clientManagementTab === "inactive";
-      const picFilterOptions = [...new Set((viewingInactiveClients ? managedClients.filter((client) => !isActiveClientRecord(client)) : activeManagedClients).flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
+      const viewingOnDemandClients = state.clientManagementTab === "on-demand";
+      const clientTabRecords = managedClients.filter(client => viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client) && (viewingOnDemandClients ? client.engagementType === "on_demand" : client.engagementType !== "on_demand"));
+      const picFilterOptions = [...new Set(clientTabRecords.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
       if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
       const activeClientRows = sortClientMasterRows([...managedClients].filter((client) => {
-        const matchesStatus = viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client);
+        const matchesStatus = clientTabRecords.includes(client);
         const matchesPic = state.clientPicFilter === "all" || client.taxPic === state.clientPicFilter || client.accountingPic === state.clientPicFilter;
         return matchesStatus && matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
       }), "clients");
@@ -7501,6 +7509,7 @@
             <div class="toolbar">
               <div class="workspace-tabs">
                 <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
+                <button class="${viewingOnDemandClients ? "solid-btn" : "ghost-btn"}" data-client-tab="on-demand">On Demand Clients</button>
                 ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
@@ -7512,13 +7521,13 @@
             </div>
           </section>
 
-          ${["active", "inactive"].includes(state.clientManagementTab) ? `
+          ${["active", "on-demand", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
             <div class="panel">
               <div class="section-title">
                 <div>
-                  <h3>${viewingInactiveClients ? "Inactive Clients" : "Active Clients"}</h3>
-                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : "Client master overview. Select a client to review or update its operational profile."}</p>
+                  <h3>${viewingInactiveClients ? "Inactive Clients" : viewingOnDemandClients ? "On Demand Clients" : "Active Clients"}</h3>
+                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : viewingOnDemandClients ? "Annual and occasional work without a recurring contract." : "Contract clients, newest contract first by default. Unknown dates appear last."}</p>
                 </div>
                 <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="client-sort-controls"><select id="client-order" class="filter-select" aria-label="Sort clients" title="Contract order uses Contract Start, or Engagement Start for older records. Unknown dates appear last.">${clientSortOptions.map(([key, label]) => `<option value="${key}" ${clientSortValue === key ? "selected" : ""}>${label}</option>`).join("")}${clientSortOptions.some(([key]) => key === clientSortValue) ? "" : `<option value="column" selected disabled>Column sort</option>`}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
               </div>
@@ -7562,6 +7571,7 @@
                         <td>${identity.form || "Individual"}</td>
                         <td class="client-name-cell" title="${client.name}">
                           <button class="client-link" data-open-client="${client.id}">${identity.name}</button>
+                          <small class="client-contract-date">Contract: ${escapeHtml(formatIsoToDisplayDate(client.contractStartedAt || client.engagementStart || "") || "Not recorded")}</small>
                         </td>
                         <td>${client.npwp || "-"}</td>
                         <td>${escapeHtml(client.taxPic || "No PIC yet")} / ${escapeHtml(client.accountingPic || "No PIC yet")}</td>
@@ -7920,6 +7930,7 @@
           <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" title="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</button>
         </div>
       `);
+      window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : "active"; commitWorkspaceNavigation("replace"); } });
     }
 
     function renderMatrix() {
@@ -8884,7 +8895,7 @@
             <div class="case-sheet-footer"><span>${caseList.length} / ${categoryCases.length} cases · Drag / Shift+click: select range · Ctrl+C / V: copy / paste · No.: date added</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
           </section>
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Archived Cases</h3><p>Archived cases retain their task links and progress history. They can be restored later.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · archived ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No archived cases.</div>`}</div></section>` : ""}
-          <datalist id="case-client-options">${activeClientMasterRecords().map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
+          <datalist id="case-client-options">${clientMasterClients.filter(isActiveClientRecord).map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
       applyCaseColumnWidths(root);
@@ -9420,6 +9431,7 @@
       }, { useDefaults: false });
       client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
       client.databaseId = row.id;
+      client.engagementType = row.engagement_type === "on_demand" ? "on_demand" : "contract";
       client.createdAt = row.created_at || "";
       client.taxPicProfileId = row.tax_pic_profile_id || "";
       client.accountingPicProfileId = row.accounting_pic_profile_id || "";
@@ -11123,6 +11135,7 @@
               allocationQuery: state.allocationQuery,
               allocationAccFilter: state.allocationAccFilter,
               allocationTaxFilter: state.allocationTaxFilter,
+              allocationEngagementFilter: state.allocationEngagementFilter,
               allocationYear: state.allocationYear,
               allocationShowChangedOnly: state.allocationShowChangedOnly,
               allocationDrafts: state.allocationDrafts,
@@ -11257,7 +11270,7 @@
         operationsTab: ["active", "history", "claim", "archive"],
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan"],
-        clientManagementTab: ["active", "inactive", "proposal", "contracts"],
+        clientManagementTab: ["active", "on-demand", "inactive", "proposal", "contracts"],
         managementTab: ["overview", "trends", "portfolio", "workload", "recognition", "report", "announcements", "access"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
@@ -11399,6 +11412,7 @@
         allocationQuery: state.allocationQuery,
         allocationAccFilter: state.allocationAccFilter,
         allocationTaxFilter: state.allocationTaxFilter,
+        allocationEngagementFilter: state.allocationEngagementFilter,
         allocationShowChangedOnly: state.allocationShowChangedOnly,
         allocationDrafts: JSON.parse(JSON.stringify(state.allocationDrafts)),
         allocationDraftEpoch: state.allocationDraftEpoch,
@@ -11440,6 +11454,7 @@
       state.performance = { ...state.performance, ...(snapshot.performance || {}) };
       state.announcements = Array.isArray(snapshot.announcements) ? snapshot.announcements : state.announcements;
       state.allocationQuery = snapshot.allocationQuery || "";
+      state.allocationEngagementFilter = ["all", "contract", "on_demand"].includes(snapshot.allocationEngagementFilter) ? snapshot.allocationEngagementFilter : "all";
       state.allocationShowChangedOnly = typeof snapshot.allocationShowChangedOnly === "boolean" ? snapshot.allocationShowChangedOnly : state.allocationShowChangedOnly;
       if (snapshot.allocationDraftEpoch === state.allocationDraftEpoch) state.allocationDrafts = snapshot.allocationDrafts || state.allocationDrafts;
       state.allocationLastReport = snapshot.allocationLastReport || state.allocationLastReport;
@@ -13453,9 +13468,10 @@
         return;
       }
 
-      if (target instanceof HTMLSelectElement && ["allocation-acc-filter", "allocation-tax-filter"].includes(target.id)) {
+      if (target instanceof HTMLSelectElement && ["allocation-acc-filter", "allocation-tax-filter", "allocation-engagement-filter"].includes(target.id)) {
         if (target.id === "allocation-acc-filter") state.allocationAccFilter = target.value || "all";
         if (target.id === "allocation-tax-filter") state.allocationTaxFilter = target.value || "all";
+        if (target.id === "allocation-engagement-filter") state.allocationEngagementFilter = target.value || "all";
         state.tableViewport["allocation-clients"] = 0;
         state.virtualScrollTop = { ...(state.virtualScrollTop || {}), "allocation-clients": 0 };
         commitUi("replace");

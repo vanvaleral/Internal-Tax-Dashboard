@@ -18,22 +18,25 @@ async function clients(mobile = false, ui: Record<string, any> = {}) {
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
+  w.confirm = () => true;
   const rows = [
     { id: "a", client_code: "CL-00001", legal_name: "Newer", contract_started_at: "2024-06-01", engagement_start: "2010-01-01", tax_pic_name: "Denny" },
     { id: "b", client_code: "CL-00002", legal_name: "Oldest", contract_started_at: "2018-01-01", tax_pic_name: "Budi" },
     { id: "c", client_code: "CL-00003", legal_name: "Legacy", engagement_start: "2020-01-01", tax_pic_name: "Denny" },
     { id: "d", client_code: "CL-00004", legal_name: "Unknown", tax_pic_name: "Budi" },
     { id: "e", client_code: "CL-00005", legal_name: "Archived", status: "Inactive", contract_started_at: "2010-01-01", tax_pic_name: "Budi" },
-    { id: "f", client_code: "CL-00006", legal_name: "Future", contract_started_at: "2030-01-01", tax_pic_name: "Budi" }
+    { id: "f", client_code: "CL-00006", legal_name: "Future", contract_started_at: "2030-01-01", tax_pic_name: "Budi" },
+    { id: "g", client_code: "CL-00007", legal_name: "Annual Only", engagement_type: "on_demand", tax_pic_name: "Denny" }
   ].map(row => ({ status: "Active", company_form: "PT", ...row }));
   const staff = ["Denny", "Budi"].map(name => ({ id: name, display_name: name, full_name: name, role: "staff", team_division: "Tax Team", directory_active: true }));
   w.fetch = async (url: string, init: any = {}) => {
     if (init.method && init.method !== "GET") writes.push(`${init.method} ${url}`);
+    if (url === "/api/clients/engagement") return { ok: true, status: 200, json: async () => ({ updated: JSON.parse(init.body).clients.length }) };
     const body = url === "/api/profile" ? { user: { id: "user-1" }, profile: { id: "supervisor", role: "supervisor", display_name: "Supervisor", directory_active: true } }
       : url === "/api/clients" ? { data: rows } : url === "/api/staff" ? { staff } : { data: [], staff: [], tasks: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
+  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/client-engagement.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
   await w.eval(read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1]); await tick();
   const choose = (id: string, value: string) => { const input = w.document.getElementById(id); assert.ok(input); input.value = value; input.dispatchEvent(new w.Event("change", { bubbles: true })); };
   const order = () => Array.from(w.document.querySelectorAll(mobile ? "#client-management-view .client-mobile-name .client-link" : '#client-management-view tr[data-keyboard-row="client"] .client-link'), (element: any) => element.textContent.replace(/^\d+\. /, ""));
@@ -72,5 +75,26 @@ test("contract order composes with PIC/search filters and keeps inactive clients
     assert.deepEqual(d.order(), ["Archived"]);
     assert.equal(d.w.document.getElementById("client-order").value, "contract-newest");
     assert.deepEqual(d.writes, []); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("On Demand clients have a separate tab, can move to contracts, and Allocation engagement/PIC filters compose", async () => {
+  const d = await clients();
+  try {
+    assert.equal(d.w.document.getElementById("client-order").value, "contract-newest");
+    assert.equal(d.order().includes("Annual Only"), false);
+    d.w.document.querySelector('[data-client-tab="on-demand"]').click();
+    assert.deepEqual(d.order(), ["Annual Only"]);
+    d.w.document.querySelector('.nav-btn[data-view="allocation-view"]').click();
+    d.choose('allocation-engagement-filter','on_demand');
+    assert.equal(d.w.document.querySelectorAll('#allocation-view [data-allocation-select]').length,1);
+    d.choose('allocation-tax-filter','Budi');
+    assert.equal(d.w.document.querySelectorAll('#allocation-view [data-allocation-select]').length,0);
+    d.w.document.querySelector('.nav-btn[data-view="client-management-view"]').click();
+    d.w.document.querySelector('[data-client-tab="on-demand"]').click();
+    d.w.document.querySelector('[data-client-select-all]').click();d.w.document.querySelector('[data-move-client-engagement]').click();await tick();
+    assert.equal(d.writes.length,1);assert.equal(d.order().includes('Annual Only'),true);
+    d.w.document.querySelector('[data-client-tab="on-demand"]').click();assert.deepEqual(d.order(),[]);
+    assert.deepEqual(d.warnings,[]);
   } finally { d.dom.window.close(); }
 });

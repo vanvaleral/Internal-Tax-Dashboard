@@ -151,6 +151,7 @@ export async function POST(request: Request) {
     .from("client_master")
     .select("id, client_code, legal_name, company_form, npwp, industry, address, status, tax_pic_name, accounting_pic_name, partner_name, supervisor_name, tax_pic_profile_id, accounting_pic_profile_id, service_package, engagement_start, engagement_end, contract_started_at, tax_office_region, notes, monthly_fee, annual_fee, has_pph21, has_unifikasi, has_pph25_pp55, has_pb1, has_ppn")
     .eq("status", "Active")
+    .eq("engagement_type", "contract")
     .eq("tax_pic_profile_id", targetProfileId)
     .order("legal_name");
   if (clientsError) return NextResponse.json({ error: clientsError.message }, { status: 500 });

@@ -14,6 +14,8 @@ const PUBLIC_UI_ASSETS = new Set([
   "/workspace-startup.js",
   "/feature-access.js",
   "/feature-access.css",
+  "/client-engagement.js",
+  "/client-engagement.css",
   "/submenu-tabs.css",
   "/claim-values.js",
   "/push-sw.js",

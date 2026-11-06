@@ -36,7 +36,7 @@ test("both tables expose clickable sort controls without sorting the numbering c
   assert.match(demo, /sortHeader\("allocation", "nextTaxPic", "Next TAX PIC"\)/);
   assert.match(demo, /sortHeader\("allocation", "status", "Status"\)/);
   assert.match(demo, /const activeClientRows = sortClientMasterRows\(\[\.\.\.managedClients\]\.filter/);
-  assert.match(demo, /return sortClientMasterRows\(activeClientMasterRecords\(\)/);
+  assert.match(demo, /return sortClientMasterRows\(clientMasterClients\.filter\(isActiveClientRecord\)/);
 });
 
 test("Allocation sorting recognizes explicit empty PIC drafts as pending removals", () => {
