@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isPublicUiAsset } from "./lib/public-ui-assets";
+import { canManageAccess, readFeatureSettings, requestAccessError, requiredRequestFeature } from "./lib/feature-access";
 
 type CookieMutation = {
   name: string;
@@ -56,11 +57,22 @@ export async function middleware(request: NextRequest) {
   if (user && !publicPath && !pathname.startsWith("/_next/")) {
     const workspaceUser = request.headers.get("x-workspace-user");
     if (workspaceUser && workspaceUser !== user.id) return NextResponse.json({ error: "The signed-in account changed. Reload before continuing." }, { status: 409 });
-    const { data: profile, error } = await supabase.from("staff_profiles").select("directory_active").eq("auth_user_id", user.id).maybeSingle();
+    const { data: profile, error } = await supabase.from("staff_profiles").select("directory_active, role").eq("auth_user_id", user.id).maybeSingle();
     if (error || profile?.directory_active !== true) {
       return pathname.startsWith("/api/")
         ? NextResponse.json({ error: "Active staff access is required." }, { status: 403 })
         : NextResponse.redirect(new URL("/login?error=staff-access-disabled", request.url));
+    }
+    if (!canManageAccess(profile.role) && (requiredRequestFeature(pathname, request.method) || pathname === "/api/staff" && request.nextUrl.searchParams.get("includeInactive") === "1")) {
+      try {
+        const settings = await readFeatureSettings(supabase);
+        const denied = requestAccessError(profile.role, settings.policy, pathname, request.method);
+        if (denied || pathname === "/api/staff" && request.nextUrl.searchParams.get("includeInactive") === "1") {
+          return NextResponse.json({ error: denied || "Only a Supervisor or Partner can view archived staff.", code: "FEATURE_RESTRICTED" }, { status: 403, headers: { "Cache-Control": "no-store" } });
+        }
+      } catch {
+        return NextResponse.json({ error: "Feature access could not be verified. Please retry." }, { status: 503 });
+      }
     }
   }
 

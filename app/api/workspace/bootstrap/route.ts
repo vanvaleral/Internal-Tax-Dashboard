@@ -3,6 +3,7 @@ import { currentActor } from "@/lib/access";
 import { readClients, readCases, readOperations, readStaff } from "@/lib/workspace-reads";
 import { readMyWork } from "@/lib/my-work-read";
 import { annualContext, annualResponseData } from "@/lib/annual-sheet-read";
+import { allowedView, canUseFeature, readFeatureSettings } from "@/lib/feature-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,9 @@ export async function GET(request: Request) {
     if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status, headers: headers() });
     const params = new URL(request.url).searchParams;
     const requestedView = params.get("view") || "matrix-view";
-    const view = views.has(requestedView) ? requestedView : "matrix-view";
+    const featureAccess = await readFeatureSettings(actor.admin);
+    const allowed = (feature: Parameters<typeof canUseFeature>[2]) => canUseFeature(actor.profile.role, featureAccess.policy, feature);
+    const view = allowedView(actor.profile.role, featureAccess.policy, views.has(requestedView) ? requestedView : "matrix-view");
     const annualTeam = params.get("team") === "tax" ? "tax" : "accounting";
     const annual = view === "matrix-view" && params.get("mode") === "annual";
     const packets: Record<string, unknown> = {};
@@ -43,12 +46,12 @@ export async function GET(request: Request) {
     if (view === "matrix-view" && !annual) {
       loads.push(collect("/api/operations?scope=monthly_compliance", "monthly", () => readOperations(actor, "monthly_compliance")));
     }
-    if (["client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/operations", "operations", () => readOperations(actor, null)));
-    if (["cases-view", "my-work-view", "client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/cases", "cases", () => readCases(actor)));
-    if (["my-work-view", "client-view"].includes(view)) loads.push(collect("/api/my-work", "tasks", () => readMyWork(actor.admin, actor.profile)));
+    if (allowed("operations") && ["client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/operations", "operations", () => readOperations(actor, null)));
+    if (allowed("cases") && ["cases-view", "my-work-view", "client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/cases", "cases", () => readCases(actor)));
+    if (allowed("myWork") && ["my-work-view", "client-view"].includes(view)) loads.push(collect("/api/my-work", "tasks", () => readMyWork(actor.admin, actor.profile)));
     if (annual) loads.push(collect(`annual:${annualTeam}`, "annual", async () => annualResponseData(actor, annualTeam, await annualContext(actor, annualTeam))));
     await Promise.all(loads);
-    return NextResponse.json({ user: { id: actor.userId }, profile: actor.profile, view, packets, timings }, { headers: headers() });
+    return NextResponse.json({ user: { id: actor.userId }, profile: actor.profile, featureAccess, view, packets, timings }, { headers: headers() });
   } catch (error) {
     console.error("[workspace bootstrap] failed", error);
     return NextResponse.json({ error: "Workspace data could not be loaded. Please retry." }, { status: 503, headers: headers() });

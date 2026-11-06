@@ -47,7 +47,7 @@ async function allocation(mobile = false, role = "supervisor") {
       : { data:[], staff:[], tasks:[], announcements:[] };
     return { ok:true, json:async () => structuredClone(body) };
   };
-  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
+  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
   const script = read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__allocationTest = { state, renderAllocation, allocationRows, loadSharedClients, loadStaffDirectory, getClients:() => clientMasterClients };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__allocationTest; assert.ok(api, warnings.join("\n")); api.state.currentView = "allocation-view"; api.renderAllocation();

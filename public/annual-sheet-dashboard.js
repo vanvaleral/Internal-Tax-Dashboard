@@ -25,7 +25,7 @@
   }
   function canPreload() {
     const connection = navigator.connection;
-    return pageActive && !!expectedUserId && document.visibilityState === "visible"
+    return pageActive && !!expectedUserId && window.WorkspaceFeatures?.can("operations") !== false && document.visibilityState === "visible"
       && !window.matchMedia?.("(max-width: 900px)").matches
       && !connection?.saveData && !["slow-2g", "2g"].includes(connection?.effectiveType)
       && !(navigator.deviceMemory && navigator.deviceMemory <= 2);
@@ -133,7 +133,7 @@
   }
   function syncVisibility(state) {
     for (const [team, sheet] of sheets) {
-      const show = state.currentView === "matrix-view" && state.operationsMode === "annual" && (state.annualTeam === "tax" ? "tax" : "accounting") === team;
+      const show = window.WorkspaceFeatures?.can("operations") !== false && state.currentView === "matrix-view" && state.operationsMode === "annual" && (state.annualTeam === "tax" ? "tax" : "accounting") === team;
       if (show && sheet.section.hidden && sheet.activated && !sheet.directoryToken) sheet.frame.contentWindow.postMessage({ type: "annual-sheet:refresh" }, location.origin);
       sheet.section.hidden = !show;
       if (show) refreshDirectory(sheet);

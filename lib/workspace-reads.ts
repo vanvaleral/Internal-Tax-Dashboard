@@ -1,5 +1,6 @@
 import { isLeadership, type CurrentActor } from "@/lib/access";
 import { scopedWorkspace } from "@/lib/workspace-security";
+import { canManageAccess } from "@/lib/feature-access";
 
 export async function readStaff(actor: CurrentActor, includeInactive = false) {
   let query = actor.admin.from("staff_profiles").select("*").order("display_name");
@@ -8,7 +9,7 @@ export async function readStaff(actor: CurrentActor, includeInactive = false) {
   if (error) throw new Error(error.message);
   return { staff: (data || []).map(profile => {
     const base = { id: profile.id, full_name: profile.full_name, display_name: profile.display_name || profile.full_name, team_division: profile.team_division, role: profile.role };
-    return isLeadership(actor.profile.role)
+    return canManageAccess(actor.profile.role)
       ? { ...base, employment_title: profile.employment_title || null, auth_user_id: profile.auth_user_id || null, claimed_at: profile.claimed_at || null, directory_active: profile.directory_active !== false, archived_at: profile.archived_at || null, access_deletion_started_at: profile.access_deletion_started_at || null, access_deleted_at: profile.access_deleted_at || null }
       : base;
   }) };

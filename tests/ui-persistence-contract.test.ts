@@ -281,7 +281,7 @@ test("My Work demo mode previews every task section without touching shared data
   assert.match(demo, /makeTask\("demo-completed-1"/);
   assert.match(demo, /makeTask\("demo-archive-1"/);
   assert.match(demo, /Preview data · not saved/);
-  assert.match(demo, /async function loadSharedMyWork\(background = false\) \{\s*if \(myWorkDemoMode\) return true;/);
+  assert.match(demo, /async function loadSharedMyWork\(background = false\) \{\s*if \(!window\.WorkspaceFeatures\.can\("myWork"\)\) return true;\s*if \(myWorkDemoMode\) return true;/);
   assert.match(demo, /function saveMyWorkTaskToDatabase\(task, extra = \{\}\) \{\s*if \(myWorkDemoMode\) return;/);
   assert.match(demo, /myWork: myWorkDemoMode \? \[\] : state\.myWork/);
 });

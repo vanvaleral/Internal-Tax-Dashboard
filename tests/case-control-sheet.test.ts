@@ -38,6 +38,10 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   let delay = false, fail = false, failId = "", created = 0, announcementStatus = "delivered";
   const announcements: any[] = [];
   w.fetch = async (url: string, init: any = {}) => {
+    if (url === "/api/cases/report") {
+      reads.push(url);const ids=JSON.parse(init.body).caseIds;
+      return {ok:true,status:200,json:async()=>({latestById:Object.fromEntries(ids.map((id:string)=>[id,{entry:"Latest saved PIC follow-up",creatorName:"tax-a",createdAt:"2026-11-05T07:00:00Z",source:"Follow-up"}])),lastUpdateById:Object.fromEntries(ids.map((id:string)=>[id,{creatorName:"tax-a",createdAt:"2026-11-05T07:00:00Z",source:"Follow-up"}])),versionsById:Object.fromEntries(ids.map((id:string)=>[id,rows.find(row=>row.id===id)?.updated_at]))})};
+    }
     if (init.method && init.method !== "GET") {
       const body = JSON.parse(init.body); writes.push(body);
       if (delay) await new Promise(resolve => { hold = resolve; });
@@ -64,7 +68,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js"));
+  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
   // Expose closure references in the test source only, never in the served dashboard.
   const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script); await tick();
@@ -78,6 +82,87 @@ const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
 const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
+
+test("live Cases use concise copy and a neutral default without changing saved stages",async()=>{
+  const d=await dashboard();try{
+    d.rows[0].stage="Waiting Client Docs";await d.api.loadSharedCases(true);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    const panel=d.w.document.querySelector('.case-progress-inline');
+    assert.match(panel.textContent,/In Progress/);assert.equal(d.api.getRows()[0].stage,"Waiting Client Docs");
+    assert.doesNotMatch(panel.textContent,/Waiting Client Docs|Demo preview|separate workflow mockup|This concludes discussion|No duplicate follow-up|Follow-up log/);
+    assert.equal((panel.textContent.match(/Case timeline/g)||[]).length,1);
+    assert.match(panel.textContent,/Completed My Work \(1\)/);assert.match(panel.textContent,/20\/11\/2026/);
+    d.w.document.querySelector('[data-cwf-action="record-result"]').click();
+    const dialog=d.w.document.querySelector('#case-workflow-dialog');
+    assert.doesNotMatch(dialog.textContent,/Saved only after database confirmation|Save to database/);
+    assert.equal(dialog.querySelector('button[type="submit"]').textContent,"Save");
+    const summary=d.w.CaseWorkflowUI.summary;
+    assert.equal(summary({stage:"Document Review"}),"Document Review");
+    assert.equal(summary({stage:"Closed"}),"Closed");
+    assert.equal(summary({workflow:{final:{number:"SP3"}}}),"Closed");
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("case summary and printed report follow category, PIC and search scope without including drafts",async()=>{
+  const d=await dashboard("staff");try{
+    const count=(key:string)=>d.w.document.querySelector(`[data-case-report-metric="${key}"] strong`).textContent;
+    const summary=d.w.document.querySelector('[data-case-report-slot]'),tools=d.w.document.querySelector('.case-sheet-tools');
+    assert.ok(summary.compareDocumentPosition(tools)&d.w.Node.DOCUMENT_POSITION_FOLLOWING,"Summary precedes search and filters");
+    assert.equal(count("handled"),"2");assert.equal(count("progress"),"2");
+    let printed="",prints=0;
+    d.w.open=()=>({opener:d.w,document:{open(){},write(value:string){printed=value;},close(){}},focus(){},print(){prints++;}});
+    d.w.document.querySelector('[data-case-print-report]').click();await tick();assert.equal(prints,1);
+    assert.match(printed,/Alpha|Gamma/);assert.doesNotMatch(printed,/>Beta</);assert.doesNotMatch(printed,/>Delta</);
+    d.w.document.querySelector('#case-search').value="Alpha";d.w.document.querySelector('#case-search').dispatchEvent(new d.w.Event('input',{bubbles:true}));await tick();
+    assert.equal(count("handled"),"1");d.w.document.querySelector('[data-case-print-report]').click();await tick();assert.match(printed,/Search: Alpha/);assert.doesNotMatch(printed,/>Gamma</);
+    d.w.document.querySelector('[data-new-case]').click();
+    assert.equal(d.w.document.querySelector('#case-search').value,"");
+    assert.equal(count("handled"),"2","New Case resets filters, but its unsaved draft must not be counted");
+    assert.equal(d.api.getRows().filter((row:any)=>row.id.startsWith('case-')).length,1);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("printing fetches fresh progress for unopened rows with PIC and WITA time, not cached history",async()=>{
+  const d=await dashboard();try{
+    let printed="",prints=0;
+    d.w.open=()=>({opener:d.w,document:{open(){},write(value:string){printed=value;},close(){}},focus(){},print(){prints++;},close(){}});
+    d.api.state.caseProgressById['saved-a']={completedTasks:[],progressEntries:[{entry:"Stale cached follow-up",createdAt:"2026-10-01"}]};
+    d.w.document.querySelector('[data-case-print-report]').click();await tick();
+    assert.equal(prints,1);assert.ok(d.reads.includes('/api/cases/report'));
+    assert.match(printed,/Latest saved PIC follow-up/);assert.doesNotMatch(printed,/Stale cached follow-up/);
+    assert.match(printed,/Last update: 05\/11\/2026, 15:00 WITA \/ tax-a/);
+    assert.match(printed,/Latest Progress \/ Last Update/);assert.equal(d.writes.length,0);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+test("a failed progress read never prints a partial report or substitutes cached progress",async()=>{
+  const d=await dashboard();try{
+    let prints=0,closes=0;
+    d.w.open=()=>({closed:false,opener:d.w,document:{open(){},write(){},close(){}},focus(){},print(){prints++;},close(){closes++;this.closed=true;}});
+    const fetch=d.w.fetch;
+    d.w.fetch=(url:string,init:any)=>url==='/api/cases/report'?Promise.resolve({ok:false,status:500,json:async()=>({error:'Progress unavailable'})}):fetch(url,init);
+    d.w.document.querySelector('[data-case-print-report]').click();await tick();
+    assert.equal(prints,0);assert.equal(closes,1);assert.match(d.w.document.querySelector('#cases-view').textContent,/Report not printed: Progress unavailable/);
+    assert.equal(d.w.document.querySelector('[data-case-print-report]').disabled,false);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+test("summary waits for confirmed workflow changes and blocks printing during queued saves",async()=>{
+  const d=await dashboard();try{
+    const before=field(d,"saved-b","subject");before.value="Still typing";
+    d.delay();const save=d.api.saveCaseWorkflow("saved-a",workflowResult());await tick();
+    assert.equal(d.w.document.querySelector('[data-case-print-report]').disabled,true);
+    assert.equal(d.w.document.querySelector('[data-case-report-metric="payment"] strong').textContent,"0");
+    d.release();await save;
+    assert.equal(d.w.document.querySelector('[data-case-report-metric="payment"] strong').textContent,"1");
+    assert.equal(d.w.document.querySelector('[data-case-report-metric="handled"] strong').textContent,"3");
+    assert.equal(d.w.document.querySelector('[data-case-print-report]').disabled,false);
+    assert.equal(field(d,"saved-b","subject"),before);assert.equal(before.value,"Still typing");
+    d.w.open=()=>null;d.w.document.querySelector('[data-case-print-report]').click();assert.match(d.w.document.querySelector('#cases-view').textContent,/Allow pop-ups to print/);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 test("workflow is embedded without replacing sheet cells, saved widths, scroll or full-screen link",async()=>{
   const d=await dashboard();try{

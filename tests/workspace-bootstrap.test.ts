@@ -3,6 +3,7 @@ import test from "node:test";
 import { loadRoute, mockDatabase } from "./route-harness.ts";
 import * as security from "../lib/workspace-security.ts";
 import * as annual from "../lib/annual-sheet.ts";
+import * as featureAccess from "../lib/feature-access.ts";
 
 function fixture(role = "staff") {
   let authCalls = 0;
@@ -23,6 +24,8 @@ function fixture(role = "staff") {
     "@/lib/staff-directory": { canImportClientMaster: () => false },
     "@/lib/workspace-security": security, "@/lib/annual-sheet": annual
   };
+  const policy = featureAccess.defaultFeaturePolicy(); policy.associate.operations.mode = "enabled";
+  db.tables.feature_access_settings = [{ id: true, version: 1, policy }];
   bindings["@/lib/access"] = loadRoute("lib/access.ts", bindings);
   const route = loadRoute("app/api/workspace/bootstrap/route.ts", bindings);
   return { route, db, authCalls: () => authCalls, signOut: () => { user = null; } };
@@ -102,6 +105,7 @@ test("required startup reads launch together", async () => {
     },
     "@/lib/my-work-read": { readMyWork: async () => { started.push("tasks"); return { tasks: [] }; } },
     "@/lib/annual-sheet-read": {}
+    ,"@/lib/feature-access": { ...featureAccess, readFeatureSettings: async () => ({ policy: featureAccess.defaultFeaturePolicy(), version: 1, ready: true }) }
   });
   const loading = route.GET(request("my-work-view"));
   await new Promise(resolve => setImmediate(resolve));
@@ -116,7 +120,8 @@ test("a failed required reader returns no partial startup data", async () => {
       readStaff: async () => ({ staff: [] }), readClients: async () => ({ data: [{ name: "Must not be exposed" }] }),
       readCases: async () => { throw new Error("Simulated read failure"); }
     },
-    "@/lib/my-work-read": {}, "@/lib/annual-sheet-read": {}
+    "@/lib/my-work-read": {}, "@/lib/annual-sheet-read": {},
+    "@/lib/feature-access": { ...featureAccess, readFeatureSettings: async () => ({ policy: featureAccess.defaultFeaturePolicy(), version: 1, ready: true }) }
   });
   const result = await route.GET(request("cases-view"));
   assert.equal(result.status, 503);

@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { currentActor, isLeadership, type CurrentActor } from "@/lib/access";
+import { currentActor, type CurrentActor } from "@/lib/access";
 import { STAFF_DIRECTORY_TEAMS, isStaffDirectoryRole, canManageDirectoryRole } from "@/lib/staff-directory";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { readStaff } from "@/lib/workspace-reads";
+import { canManageAccess } from "@/lib/feature-access";
 
 async function notifyLeadershipOfDirectoryChange(actor: CurrentActor, action: string, subject: string) {
   const { data: recipients, error } = await actor.admin
     .from("staff_profiles")
     .select("id")
     .eq("directory_active", true)
-    .in("role", ["leader", "partner"]);
+    .in("role", ["supervisor", "partner", "admin"]);
   if (error || !(recipients || []).length) return;
   await createOperationalAnnouncement({
     title: `PIC Access: ${action}`,
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   const includeInactive = new URL(request.url).searchParams.get("includeInactive") === "1";
-  if (includeInactive && !isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can view archived staff profiles." }, { status: 403 });
+  if (includeInactive && !canManageAccess(actor.profile.role)) return NextResponse.json({ error: "Only a Supervisor or Partner can view archived staff profiles." }, { status: 403 });
 
   try { return NextResponse.json(await readStaff(actor, includeInactive)); }
   catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can add a staff profile." }, { status: 403 });
+  if (!canManageAccess(actor.profile.role)) return NextResponse.json({ error: "Only a Supervisor or Partner can add a staff profile." }, { status: 403 });
 
   const body = await request.json();
   const fullName = String(body.fullName || "").trim();

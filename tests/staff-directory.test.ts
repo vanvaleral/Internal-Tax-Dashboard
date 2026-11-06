@@ -5,6 +5,7 @@ import { canImportClientMaster, canManageDirectoryRole, isStaffDirectoryRole } f
 
 test("only leadership can manage the staff directory and Partner controls Partner roles", () => {
   assert.equal(canManageDirectoryRole("staff", "staff", "staff"), false);
+  assert.equal(canManageDirectoryRole("leader", "staff", "leader"), false);
   assert.equal(canManageDirectoryRole("supervisor", "staff", "leader"), true);
   assert.equal(canManageDirectoryRole("leader", "staff", "partner"), false);
   assert.equal(canManageDirectoryRole("supervisor", "partner", "staff"), false);

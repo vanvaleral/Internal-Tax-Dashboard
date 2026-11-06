@@ -60,7 +60,7 @@ test("confirmed PIC Access changes invalidate old directory reads even if the fo
     return { ok: !failed, json: async () => failed ? { error: "Follow-up read failed" } : { staff: [{ id: "a", display_name: "Saved name", directory_active: true }] } };
   };
   const run = new Function("appFetch", "notifyAnnualDirectoryChanged", "window", "console", `let staffDirectory = [{id:"a",display_name:"Old name"}],staffDirectoryRevision=0; const syncOperationalPicLists=()=>{},rerender=()=>{}; ${accept}; ${load}; return {accept:acceptStaffAccessChange,load:loadStaffAccessDirectory,get rows(){return staffDirectory;}};`);
-  const directory = run(fetch, (rows: any[]) => notices.push(structuredClone(rows)), { alert: (error: any) => alerts.push(error) }, { warn() {} });
+  const directory = run(fetch, (rows: any[]) => notices.push(structuredClone(rows)), { WorkspaceFeatures: { manager: () => true }, alert: (error: any) => alerts.push(error) }, { warn() {} });
   const oldRead = directory.load();
   directory.accept({ id: "a", display_name: "Saved name", directory_active: true });
   await directory.load();

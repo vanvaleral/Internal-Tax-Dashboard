@@ -22,6 +22,7 @@ async function openDashboard(preview: boolean) {
   w.structuredClone = structuredClone;
   w.eval(readFileSync(new URL("../public/vendor/purify.min.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/workspace-sync.js", import.meta.url), "utf8"));
+  w.eval(readFileSync(new URL("../public/feature-access.js", import.meta.url), "utf8"));
   const append = w.document.head.append.bind(w.document.head);
   w.document.head.append = (...nodes: any[]) => {
     for (const node of nodes) {

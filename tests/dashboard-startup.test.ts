@@ -28,7 +28,7 @@ async function openDashboard(view = "matrix-view", mode = "monthly", savedUi: Re
       : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/annual-sheet-dashboard.js"));
+  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js"));
   await w.eval(html.match(/<script>([\s\S]*?)<\/script>/)![1]); await tick(); await tick();
   return { dom, w, requests, warnings, cache };
 }

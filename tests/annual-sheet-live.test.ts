@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import * as rules from "../lib/annual-sheet.ts";
 import { scopedWorkspace } from "../lib/workspace-security.ts";
 import { loadRoute, mockDatabase, request } from "./route-harness.ts";
+import { defaultFeaturePolicy } from "../lib/feature-access.ts";
 
 const staff = [
   { id: "acc-1", display_name: "Real Acc", full_name: "Real Acc", directory_active: true, team_division: "Accounting Team" },
@@ -15,6 +16,8 @@ const actor = { ...staff[0], role: "staff" };
 const raw = () => ({ id: "existing-work", annualWorkId: "11111111-1111-4111-8111-111111111111", clientId: "client-1", clientName: "Actual Client", taxYear: 2025, accountingPic: "Real Acc", accountingPicProfileId: "acc-1", taxPic: "Real Tax", taxPicProfileId: "tax-1", progress: "Data Request", notes: "Old note", technicalAdminMonths: [0, 1], dataMonths: [], reportPreparationMonths: [], paymentAmount: "", ntpe: "-", unknownLegacyField: "preserve me" });
 function setup(profile: any = actor) {
   const db = mockDatabase({ staff_profiles: structuredClone(staff), client_master: [{ id: "client-1", legal_name: "Actual Client", status: "Active", accounting_pic_name: "Real Acc", accounting_pic_profile_id: "acc-1", tax_pic_name: "Real Tax", tax_pic_profile_id: "tax-1" }], annual_sheet_columns: [], operational_workspace_state: [{ scope: "annual_accounting", version: 1, payload: [raw()] }], operational_workspace_audit: [] });
+  const policy = defaultFeaturePolicy(); policy.associate.operations.mode = "enabled"; policy.leader.operations.mode = "enabled";
+  db.tables.feature_access_settings = [{ id: true, version: 1, policy }];
   const route = loadRoute("app/api/annual-sheet/route.ts", { "@/lib/access": { currentActor: async () => ({ profile, userId: "auth-user-1", admin: db }), isLeadership: (role: string) => ["supervisor", "partner", "leader", "admin"].includes(role) }, "@/lib/annual-sheet": rules });
   return { db, route };
 }
@@ -40,7 +43,7 @@ test("initial annual load skips Client Master and lazy generation reads only cur
   const candidates = await route.GET(request({}, "?team=accounting&part=clients"));
   assert.deepEqual(Array.from(candidates.body.clients, (row: any) => row.clientId), ["client-1"]);
   assert.equal(candidates.body.clients[0].accountingPicId, "acc-1");
-  assert.deepEqual(calls, ["client_master"]);
+  assert.deepEqual(calls, ["feature_access_settings", "client_master"]);
   const legacy = await route.GET(request({}, "?team=accounting"));
   assert.equal(legacy.body.clients.length, 1, "older open tabs must retain their legacy initial candidates until reloaded");
 });

@@ -31,7 +31,7 @@
       owner = data.user.id; receivedAt = Date.now();
       for (const [key, value] of Object.entries(data.packets)) packets.set(key, value);
       metrics.requestMs = Math.round(performance.now() - started); metrics.server = data.timings || {};
-      return { user: data.user, profile: data.profile };
+      return { user: data.user, profile: data.profile, featureAccess: data.featureAccess, view: data.view };
     }).finally(() => window.clearTimeout(timeout));
     pending.catch(() => {});
     return pending;

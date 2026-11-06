@@ -4,6 +4,7 @@ import vm from "node:vm";
 import test from "node:test";
 import ts from "typescript";
 import { isPublicUiAsset } from "../lib/public-ui-assets.ts";
+import * as featureAccess from "../lib/feature-access.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
   for (const path of ["/favicon.svg", "/annual-sheet-live.js", "/annual-accounting-sheet-demo.css", "/submenu-tabs.css", "/vendor/purify.min.js", "/workspace-sync.js", "/images/lmats-logo-official.png"]) {
@@ -23,6 +24,7 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const context = { exports: {} as Record<string, any>, URL, console, process: { env: { NEXT_PUBLIC_SUPABASE_URL: "https://test.invalid", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test" } }, require(name: string) {
     if (name === "./lib/public-ui-assets") return { isPublicUiAsset };
+    if (name === "./lib/feature-access") return featureAccess;
     if (name === "next/server") return { NextResponse: {
       next: () => ({ status: 200, cookies: { set() {} } }),
       redirect: (url: URL) => ({ status: 307, location: url.pathname }),

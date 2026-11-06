@@ -33,7 +33,7 @@ async function clients(mobile = false, ui: Record<string, any> = {}) {
       : url === "/api/clients" ? { data: rows } : url === "/api/staff" ? { staff } : { data: [], staff: [], tasks: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
+  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
   await w.eval(read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1]); await tick();
   const choose = (id: string, value: string) => { const input = w.document.getElementById(id); assert.ok(input); input.value = value; input.dispatchEvent(new w.Event("change", { bubbles: true })); };
   const order = () => Array.from(w.document.querySelectorAll(mobile ? "#client-management-view .client-mobile-name .client-link" : '#client-management-view tr[data-keyboard-row="client"] .client-link'), (element: any) => element.textContent.replace(/^\d+\. /, ""));

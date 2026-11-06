@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Allocation Capacity Preview | Tax Dashboard</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="allocation-capacity-demo.css">
+  <script src="allocation-capacity-demo.js" defer></script>
+</head>
+<body>
+  <main class="workspace">
+    <header class="topbar">
+      <div><div class="eyebrow">LMATS CONSULTING / TAX DASHBOARD</div><h1>Allocation <span>/ Difficulty &amp; Capacity</span></h1></div>
+      <div class="header-actions"><span class="sample-label">Interactive preview</span><button id="reset-demo" class="quiet">Reset demo</button></div>
+    </header>
+    <div class="demo-notice"><span><strong>Fictional clients and staff.</strong> Estimates only; changes stay in this preview and reset on refresh.</span><label>View as <select id="role" aria-label="Demo role"><option value="manager">Supervisor</option><option value="reviewer">Senior reviewer</option><option value="staff">Staff / read only</option></select></label></div>
+
+    <section class="panel" aria-labelledby="capacity-title">
+      <div class="panel-heading"><div class="team-tabs" role="tablist" aria-label="Work discipline"><button id="tax-tab" role="tab" aria-selected="true" aria-controls="team-content" data-team="tax">Tax team</button><button id="acc-tab" role="tab" aria-selected="false" aria-controls="team-content" data-team="acc">Accounting team</button></div><span class="period">Monthly planning / November 2026</span></div>
+      <div id="team-content" role="tabpanel" aria-labelledby="tax-tab">
+        <div class="section-heading"><div><h2 id="capacity-title">Team capacity</h2><p class="subline">Click a PIC to filter the client sheet.</p></div><div id="coverage" class="coverage"></div></div>
+        <div class="table-scroll"><table class="capacity-table"><thead><tr><th>PIC</th><th>Independent level</th><th>Available h</th><th>Other work h</th><th>Client h</th><th>Estimated load</th><th>Support needed</th><th>Missing data</th></tr></thead><tbody id="staff-rows"></tbody></table></div>
+        <div class="board-foot"><span>Available hours are delivery capacity after leave and internal duties. Other work is a separate estimate for Cases / Annual / support.</span><span>Difficulty is not a performance score.</span></div>
+      </div>
+    </section>
+
+    <section class="panel client-panel" aria-labelledby="clients-title">
+      <div class="section-heading"><div><h2 id="clients-title">Client assessment &amp; allocation</h2><p class="subline">Rate the work, then compare a proposed PIC with the current allocation.</p></div><div class="actions"><button id="reset-plan" class="quiet" disabled>Reset unsaved PIC changes</button><button id="review-plan" class="primary" disabled>Review changes <span id="pending-count">0</span></button></div></div>
+      <div class="filters"><label class="search-label"><span class="sr-only">Find a client</span><input id="search" type="search" placeholder="Find client or assessment note..."></label><label><span class="sr-only">PIC filter</span><select id="pic-filter" aria-label="PIC filter"></select></label><label><span class="sr-only">Attention filter</span><select id="attention" aria-label="Attention filter"><option value="all">All clients</option><option value="support">Needs support</option><option value="unrated">Difficulty unrated</option><option value="unestimated">Hours missing</option><option value="unassigned">No PIC</option><option value="changed">PIC changes only</option></select></label><button id="reset-filters" class="quiet">Reset filters</button><span id="visible-count" class="subline"></span></div>
+      <div class="bulk" id="bulk-actions" hidden><span id="selected-count"></span><label>Assign selected to <select id="bulk-pic" aria-label="Assign selected clients"></select></label><button id="clear-selection" class="quiet">Clear selection</button></div>
+      <div class="table-scroll"><table class="client-table"><colgroup><col style="width:36px"><col style="width:40px"><col style="width:220px"><col style="width:155px"><col style="width:95px"><col style="width:100px"><col style="width:125px"><col style="width:190px"><col style="width:140px"></colgroup><thead><tr><th><input id="select-all" type="checkbox" aria-label="Select visible applicable clients"></th><th>No.</th><th>Client</th><th>Difficulty</th><th>Monthly h</th><th>Current PIC</th><th>Next PIC</th><th>Assessment note</th><th>Fit / ownership</th></tr></thead><tbody id="client-rows"></tbody></table></div>
+      <div class="sheet-foot"><span id="scope-note"></span><span>1 Routine / 2 Standard / 3 Moderate / 4 Complex / 5 Specialist</span></div>
+    </section>
+
+    <details class="activity panel"><summary>Preview activity <span id="activity-count">0</span></summary><div id="activity-list"></div></details>
+    <p class="bottom-note">This is an allocation planning prototype, not payroll, timesheet tracking or an automatic assignment engine.</p>
+  </main>
+
+  <dialog id="review-dialog" aria-labelledby="review-title">
+    <form id="apply-form">
+      <div class="dialog-heading"><div><div class="eyebrow">ALLOCATION PREVIEW</div><h2 id="review-title">Review proposed changes</h2></div><button type="button" class="quiet" data-close-review>Close</button></div>
+      <div id="review-content"></div>
+      <label class="reason-label">Reason / support plan <textarea id="reason" maxlength="500" placeholder="For example: Bima has capacity; Ayu will review the first two cycles."></textarea></label>
+      <p id="review-error" class="error" role="alert"></p>
+      <div class="dialog-actions"><span class="subline">Preview only. No Client Master or database record is changed.</span><button type="button" class="quiet" data-close-review>Cancel</button><button class="primary" id="apply-plan" type="submit">Apply in demo</button></div>
+    </form>
+  </dialog>
+  <p id="status" role="status" aria-live="polite" class="status"></p>
+</body>
+</html>

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { currentActor, isLeadership, type CurrentActor, type StaffRole } from "@/lib/access";
+import { currentActor, type CurrentActor, type StaffRole } from "@/lib/access";
 import { STAFF_DIRECTORY_TEAMS, isStaffDirectoryRole, canManageDirectoryRole } from "@/lib/staff-directory";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { canManageAccess } from "@/lib/feature-access";
 
 type Context = { params: Promise<{ id: string }> };
 
 async function notifyLeadership(actor: CurrentActor, action: string, subject: string) {
-  const { data: recipients, error } = await actor.admin.from("staff_profiles").select("id").eq("directory_active", true).in("role", ["leader", "partner"]);
+  const { data: recipients, error } = await actor.admin.from("staff_profiles").select("id").eq("directory_active", true).in("role", ["supervisor", "partner", "admin"]);
   if (error || !(recipients || []).length) return;
   await createOperationalAnnouncement({
     title: `PIC Access: ${action}`,
@@ -22,7 +23,7 @@ async function notifyLeadership(actor: CurrentActor, action: string, subject: st
 export async function PATCH(request: Request, context: Context) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can change PIC Access." }, { status: 403 });
+  if (!canManageAccess(actor.profile.role)) return NextResponse.json({ error: "Only a Supervisor or Partner can change PIC Access." }, { status: 403 });
   const { id } = await context.params;
   const { data: existing, error: existingError } = await actor.admin.from("staff_profiles").select("id, full_name, display_name, employment_title, team_division, role, directory_active, auth_user_id, archived_at, access_deletion_started_at, access_deleted_at").eq("id", id).maybeSingle();
   if (existingError || !existing) return NextResponse.json({ error: existingError?.message || "Staff profile was not found." }, { status: 404 });
@@ -83,7 +84,7 @@ export async function PATCH(request: Request, context: Context) {
 export async function DELETE(_request: Request, context: Context) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can archive a staff profile." }, { status: 403 });
+  if (!canManageAccess(actor.profile.role)) return NextResponse.json({ error: "Only a Supervisor or Partner can archive a staff profile." }, { status: 403 });
   const { id } = await context.params;
   if (id === actor.profile.id) return NextResponse.json({ error: "You cannot archive your own profile." }, { status: 400 });
   const { data: existing, error: existingError } = await actor.admin.from("staff_profiles").select("id, full_name, display_name, role, directory_active").eq("id", id).maybeSingle();

@@ -172,7 +172,7 @@ test("a cancelled annual preload handoff cannot replace a newer confirmed transp
 
 test("dashboard schedules annual speculation after startup outside standalone Cases and clears it on successful logout", () => {
   const html = readFileSync(new URL("../public/demo.html", import.meta.url), "utf8");
-  assert.match(html, /const backgroundComplete = \(\) => \{\s*if \(!IS_CASES_FULLSCREEN\) window\.AnnualDashboardSheets\?\.preload\(state\.teamDivision\);/);
+  assert.match(html, /const backgroundComplete = \(\) => \{\s*if \(!IS_CASES_FULLSCREEN && window\.WorkspaceFeatures\.can\("operations"\)\) window\.AnnualDashboardSheets\?\.preload\(state\.teamDivision\);/);
   assert.match(html, /WorkspaceStartup\.backgroundQueue\(remainingLoads, backgroundComplete\)/);
   const logout = html.slice(html.indexOf("if (logoutTrigger) {"), html.indexOf("if (openAppearanceSettingsTrigger)"));
   assert.ok(logout.indexOf("if (!response.ok)") < logout.indexOf("AnnualDashboardSheets?.clear()"));

@@ -2,11 +2,20 @@ import { after, NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
 import { annualContext, annualResponseData } from "@/lib/annual-sheet-read";
 import { addAnnualRows, annualIndividualClient, annualPreviousCandidates, annualScope, annualTeam, applyAnnualEdits, manageAnnualRow, type AnnualTeam } from "@/lib/annual-sheet";
+import { canUseFeature, readFeatureSettings } from "@/lib/feature-access";
+
+async function annualAccess(actor: Exclude<Awaited<ReturnType<typeof currentActor>>, { error: string }>) {
+  try {
+    const settings = await readFeatureSettings(actor.admin);
+    return canUseFeature(actor.profile.role, settings.policy, "operations") ? null : NextResponse.json({ error: "Operations is not available for your access level.", code: "FEATURE_RESTRICTED" }, { status: 403 });
+  } catch { return NextResponse.json({ error: "Feature access could not be verified." }, { status: 503 }); }
+}
 
 export async function GET(request: Request) {
   const started = Date.now();
   const actor = await currentActor(request);
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const denied = await annualAccess(actor); if (denied) return denied;
   let team: AnnualTeam;
   const params = new URL(request.url).searchParams;
   try { team = annualTeam(params.get("team")); }
@@ -36,6 +45,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const actor = await currentActor(request);
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
+  const denied = await annualAccess(actor); if (denied) return denied;
   const body = await request.json().catch(() => ({}));
   let team: AnnualTeam;
   try { team = annualTeam(body.team); } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }

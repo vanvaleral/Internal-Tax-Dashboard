@@ -3863,6 +3863,7 @@
         </div>
       </section>
 
+      <div id="feature-notice-root"></div>
       <section id="matrix-view" class="view"></section>
       <section id="cases-view" class="view hidden"></section>
       <section id="my-work-view" class="view hidden"></section>
@@ -3922,9 +3923,12 @@
   <link rel="stylesheet" href="client-overview.css" media="print" onload="this.media='all'" />
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
+  <link rel="stylesheet" href="feature-access.css" />
+  <script src="feature-access.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
   <link rel="stylesheet" href="case-workflow-dashboard.css" />
   <script src="case-workflow-dashboard.js"></script>
+  <script src="case-report.js"></script>
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
@@ -4901,6 +4905,8 @@
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
+    window.WorkspaceFeatures.init({ settings: bootstrapProfile.featureAccess, role: state.role, offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), roleChanged: role => { state.role = String(role || "staff").toLowerCase(); }, changed: () => rerender() });
+    if (!IS_OFFLINE_DEMO && bootstrapProfile.view) state.currentView = bootstrapProfile.view;
     state.selectedPic = bootstrapProfile.profile.display_name || bootstrapProfile.profile.full_name || state.selectedPic;
     state.username = bootstrapProfile.profile.username || "";
     state.teamDivision = bootstrapProfile.profile.team_division || state.teamDivision;
@@ -6811,6 +6817,7 @@
     }
 
     function renderAnnouncementInbox() {
+      if (!window.WorkspaceFeatures.can("notifications")) { document.getElementById("announcement-inbox-root").replaceChildren(); return; }
       const root = document.getElementById("announcement-inbox-root");
       document.querySelector("[data-open-announcement-inbox]")?.setAttribute("aria-expanded", String(state.announcementInboxOpen));
       const badge = document.getElementById("announcement-unread-count");
@@ -6965,7 +6972,7 @@
                 <button class="${state.managementTab === "overview" ? "solid-btn" : "ghost-btn"}" data-management-tab="overview">KPI Overview</button>
                 <button class="${state.managementTab === "trends" ? "solid-btn" : "ghost-btn"}" data-management-tab="trends">Client Growth</button>
                 <button class="${state.managementTab === "portfolio" ? "solid-btn" : "ghost-btn"}" data-management-tab="portfolio">Portfolio Dashboard</button>
-                <button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button>
+                ${window.WorkspaceFeatures.manager() ? `<button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button>` : ""}
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
                 <button class="${state.managementTab === "report" ? "solid-btn" : "ghost-btn"}" data-management-tab="report">Monthly Report</button>
                 <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Notifications</button>
@@ -7049,9 +7056,10 @@
             <section class="panel"><div class="section-title"><div><h3>Regional Tax Office (KPP) Client Distribution</h3><p>Active portfolio by registered tax office region.</p></div></div><div class="compact-grid-4">${regionalCounts.map((row) => `<div class="detail-card"><div class="eyebrow">${row.region}</div><strong>${row.count} clients</strong><div class="subline">${clientGrowth.at(-1)?.active ? (row.count / clientGrowth.at(-1).active * 100).toFixed(1) : "0.0"}% share of portfolio</div></div>`).join("")}</div></section>
           ` : ``}
 
-          ${state.managementTab === "workload" ? `
+          ${state.managementTab === "workload" && window.WorkspaceFeatures.manager() ? `
+            ${window.WorkspaceFeatures.editor()}
             <section class="panel">
-              <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff directory roles, operational teams, and access status. Every change notifies active Partners and Leaders.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
+              <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff roles, teams, and account access. Changes notify Supervisors and Partners.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
               <div class="workspace-tabs submenu-secondary" style="margin-bottom:16px;" role="group" aria-label="PIC access status">
                 <button class="${state.staffAccessTab === "active" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="active">Active <span class="submenu-count">${staffDirectory.filter((staff) => staff.directory_active !== false).length}</span></button>
                 <button class="${state.staffAccessTab === "deleted" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="deleted">Recently Deleted <span class="submenu-count">${staffDirectory.filter((staff) => staff.directory_active === false && !staff.access_deleted_at).length}</span></button>
@@ -7062,7 +7070,7 @@
                 <div class="client-field"><label for="staff-new-display-name">Display Name</label><input class="field" id="staff-new-display-name" placeholder="PIC name shown in the app" /></div>
                 <div class="client-field"><label for="staff-new-title">Position Title</label><input class="field" id="staff-new-title" placeholder="Example: Junior Tax Associate" /></div>
                 <div class="client-field"><label for="staff-new-team">Team</label><select class="field" id="staff-new-team"><option value="Tax Team">Tax Team</option><option value="Accounting Team">Accounting Team</option></select></div>
-                <div class="client-field"><label for="staff-new-role">Access Role</label><select class="field" id="staff-new-role"><option value="staff">Staff</option><option value="leader">Leader</option><option value="supervisor">Supervisor</option><option value="partner">Partner</option></select></div>
+                <div class="client-field"><label for="staff-new-role">Access Role</label><select class="field" id="staff-new-role"><option value="staff">Associate</option><option value="leader">Leader</option><option value="supervisor">Supervisor</option><option value="partner">Partner</option></select></div>
                 <div class="client-field" style="align-self:end;"><button class="solid-btn" data-create-staff="yes">Add Staff Profile</button></div>
               </div>
               ${latestStaffClaimCode ? `<div class="detail-card" style="margin-bottom:16px;"><div class="section-title"><div><div class="eyebrow">Claim code for ${escapeHtml(latestStaffClaimFor)}</div><strong>${escapeHtml(latestStaffClaimCode)}</strong></div><button class="ghost-btn" data-dismiss-staff-claim="yes">Hide code</button></div><div class="subline">Copy this code now and share it privately with this employee. Any previous code for this profile is invalid.</div></div>` : ""}
@@ -7086,7 +7094,7 @@
                         <td><input class="field" data-staff-display-name="${staff.id}" value="${escapeAttr(staff.display_name || staff.full_name || "")}" /></td>
                         <td><input class="field" data-staff-title="${staff.id}" value="${escapeAttr(staff.employment_title || "")}" placeholder="Position" /></td>
                         <td><select class="field" data-staff-team="${staff.id}"><option value="Tax Team" ${staff.team_division === "Tax Team" ? "selected" : ""}>Tax Team</option><option value="Accounting Team" ${staff.team_division === "Accounting Team" ? "selected" : ""}>Accounting Team</option></select></td>
-                        <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner"].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select></td>
+                        <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner"].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role === "staff" ? "Associate" : role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select></td>
                         <td><span class="pill ${staff.auth_user_id ? "accent" : "neutral"}">${staff.auth_user_id ? "Registered" : "Pending"}</span></td>
                         <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${!staff.auth_user_id && (!["partner", "admin"].includes(staff.role) || ["partner", "admin"].includes(state.role)) ? `<button class="ghost-btn" data-regenerate-staff-claim="${staff.id}" aria-label="Regenerate claim code for ${escapeAttr(staff.display_name || staff.full_name)}">Regenerate code</button>` : ""}<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">${deleteIcon()}</button></div></td>
                       </tr>
@@ -8712,22 +8720,68 @@
       const pendingTasks = state.myWork.filter(task => task.caseId === item.id && !task.done);
       const nextActions = (item.nextSteps || []).filter(step => !step.done);
       const completed = progress?.completedTasks || [];
-      const entries = progress?.progressEntries || [];
       const timeline = caseTimeline(item, progress);
       const ready = !draft && Boolean(progress) && !progress.error;
       const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
-      return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><strong>${escapeHtml(item.stage || "Not started")}</strong><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(item.dueDate)}</strong></span>` : ""}</div>
-        ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Follow-ups entered here do not update the database.</div>` : draft ? `<div class="case-progress-notice"><span>New case draft. Choose a Client Master client, then leave the cell to save automatically before adding follow-ups.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
+      return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(formatIsoToDisplayDate(item.dueDate))}</strong></span>` : ""}</div>
+        ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Changes are not saved.</div>` : draft ? `<div class="case-progress-notice"><span>Select a Client Master client and leave the cell to save automatically.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
         ${item.notes ? `<p class="case-progress-context">${escapeHtml(item.notes)}</p>` : ""}
         <div class="case-progress-grid"><div>
-          <section class="case-progress-block"><div class="eyebrow">Next actions / open linked work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No next action or open linked task recorded in your current access scope.</div>`)}</div></section>
-          <p class="subline">Completed My Work (${completed.length}) is included automatically in the case timeline. No duplicate follow-up is needed.</p>
-        </div><div><div class="eyebrow">Follow-up log (${entries.length})</div>
+          <section class="case-progress-block"><div class="eyebrow">Open work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No open work in your scope.</div>`)}</div></section>
+        </div><div>
           ${progress?.error ? `<div class="case-progress-notice" role="alert"><span>${escapeHtml(progress.error)}</span><button class="tiny-btn" data-case-reload-progress="${escapeAttr(item.id)}">Retry</button></div>` : ""}
-          <div class="eyebrow">Case timeline</div><div class="case-progress-list" data-case-timeline>${timeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div></div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
+          <div class="eyebrow">Case timeline (${timeline.length})</div><div class="subline">Completed My Work (${completed.length})</div><div class="case-progress-list" data-case-timeline>${timeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div></div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
           <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready ? "" : "disabled"}>${IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div>
         </div></div></div>`;
     }
+
+    let caseReportSource = null;
+    let caseReportSnapshot = null;
+    let caseReportPrinting = false;
+    function refreshCaseReportSummary() {
+      if (!caseReportSource || !window.CaseReports) return;
+      caseReportSnapshot = caseReportSource();
+      const slot = document.querySelector("#cases-view [data-case-report-slot]");
+      if (slot) slot.innerHTML = safeHtml(window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)));
+    }
+    async function printCaseReport() {
+      if (caseReportPrinting) return;
+      if (caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)) { caseSheetMessage("Wait for case saves to finish before printing.",true); return; }
+      refreshCaseReportSummary();
+      if (!caseReportSnapshot?.rows.length) { caseSheetMessage("No saved cases match these filters.",true); return; }
+      const snapshot=structuredClone(caseReportSnapshot),revision=caseSheetWriteRevision;
+      const popup=window.CaseReports.open();
+      if (!popup) { caseSheetMessage("Allow pop-ups to print the report.",true); return; }
+      caseReportPrinting=true;refreshCaseReportSummary();
+      try {
+        const data={latestById:{},lastUpdateById:{},versionsById:{}};
+        if (IS_OFFLINE_DEMO) {
+          for (const row of snapshot.rows) {
+            const item=taxCases.find(item=>item.id===row.id);
+            const progress=caseTimeline(item,{...state.caseProgressById[row.id],completedTasks:state.myWork.filter(task=>task.caseId===row.id&&task.done)})[0]||null;
+            data.latestById[row.id]=progress;
+            data.lastUpdateById[row.id]=progress?{createdAt:progress.createdAt,creatorName:progress.creatorName}:null;
+            data.versionsById[row.id]=row.version;
+          }
+        } else for (let offset=0;offset<snapshot.rows.length;offset+=100) {
+          const response=await appFetch("/api/cases/report",{method:"POST",cache:"no-store",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({caseIds:snapshot.rows.slice(offset,offset+100).map(row=>row.id)})},"",{trackUpdate:false});
+          const result=await response.json().catch(()=>({}));
+          if (!response.ok) throw new Error(result.error||"Latest progress could not be loaded. Please retry.");
+          for (const key of ["latestById","lastUpdateById","versionsById"]) Object.assign(data[key],result[key]||{});
+        }
+        if (caseSheetWriteRevision!==revision || caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)) throw new Error("Cases changed while preparing the report. Please print again after saving.");
+        const ready=window.CaseReports.withProgress(snapshot,data);
+        if (!window.CaseReports.print(ready,popup)) throw new Error("The report window was closed. Please try again.");
+      } catch(error) {
+        if (!popup.closed) popup.close();
+        caseSheetMessage(`Report not printed: ${error instanceof Error?error.message:"Could not load the latest progress."}`,true);
+      } finally {
+        caseReportPrinting=false;refreshCaseReportSummary();
+      }
+    }
+    document.addEventListener("click",event=>{
+      if (event.target.closest?.("[data-case-print-report]")) void printCaseReport();
+    });
 
     function renderCases(rootOverride = null) {
       const profileId = bootstrapProfile.profile.id;
@@ -8748,11 +8802,12 @@
         const matches = staffDirectory.filter(person => person.team_division === (type === "tax" ? "Tax Team" : "Accounting Team") && String(person.display_name || person.full_name || "").trim().toLowerCase() === name);
         return matches.length === 1 ? matches[0].id.toLowerCase() : name || "unassigned";
       };
-      const caseList = categoryCases.filter((item) =>
+      const matchesCase = (item) =>
         (state.caseAccFilter === "all" || casePicKey(item, "accounting") === state.caseAccFilter)
         && (state.caseTaxFilter === "all" || casePicKey(item, "tax") === state.caseTaxFilter)
         && (!window.CaseWorkflowUI || window.CaseWorkflowUI.matches(item,state.caseWorkflowFilter))
-        && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes, item.inspectorPic, item.completionNotes, item.taxYear].join(" ").toLowerCase().includes(caseQuery)));
+        && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes, item.inspectorPic, item.completionNotes, item.taxYear].join(" ").toLowerCase().includes(caseQuery));
+      const caseList = categoryCases.filter(matchesCase);
       const columns = category === "Himbauan"
         ? [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["dueDate", "Jatuh Tempo", "derived"], ["deadline", "Deadline", "derived"], ["completionDate", "Tgl Selesai", "date"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["notes", "Note"]]
         : [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["taxYear", "Tahun Pajak"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["inspectorPic", "PIC Pemeriksa"], ["sphpDate", "Tgl SPHP", "date"], ["completionNotes", "Penyelesaian"]];
@@ -8770,6 +8825,12 @@
         categoryCases.forEach(item => { const key = casePicKey(item, type); if (!entries.has(key)) entries.set(key, item[`${type}Pic`] || "Unassigned"); });
         return `<option value="all">All ${type === "tax" ? "Tax" : "ACC"} PIC</option>${[...entries].sort((a, b) => a[1].localeCompare(b[1])).map(([key, label]) => `<option value="${escapeAttr(key)}" ${key === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}`;
       };
+      const reportPicLabel = (type,key) => key === "all" ? `All ${type === "tax" ? "Tax" : "ACC"} PIC` : key === "unassigned" ? "Unassigned" : staffDirectory.find(person=>person.id.toLowerCase()===key)?.display_name || staffDirectory.find(person=>person.id.toLowerCase()===key)?.full_name || categoryCases.find(item=>casePicKey(item,type)===key)?.[`${type}Pic`] || key;
+      caseReportSource = () => window.CaseReports?.build(categoryCases.filter(matchesCase), {
+        category,offline:IS_OFFLINE_DEMO,numberFor:id=>caseNumbers.get(id),
+        filters:[reportPicLabel("accounting",state.caseAccFilter),reportPicLabel("tax",state.caseTaxFilter),...(caseQuery?[`Search: ${state.caseSearch}`]:[]),...(state.caseWorkflowFilter !== "all"?[({overdue:"Payment overdue",supervisor:"Supervisor attention",closure:"Awaiting SP3P2DK"})[state.caseWorkflowFilter]]:[])]
+      });
+      caseReportSnapshot = caseReportSource();
       const caseWindow = windowedRows(caseList, "cases", 36);
       const expandedHimbauan = caseList.find((item) => item.id === state.expandedHimbauanId);
       const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
@@ -8815,6 +8876,7 @@
                 <button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>
               </div>
             </div>
+            <div data-case-report-slot>${caseReportSnapshot ? window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || taxCases.some(row=>caseSheetPending.get(row)?.count)) : ""}</div>
             <div class="toolbar case-sheet-tools"><label class="case-search-wrap">${toolIcon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}<input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Find client, letter, or note..." aria-label="Search cases" /></label><div class="case-filter-pair"><select id="case-acc-filter" class="filter-input" aria-label="Filter ACC PIC">${picOptions("accounting", state.caseAccFilter)}</select><select id="case-tax-filter" class="filter-input" aria-label="Filter Tax PIC">${picOptions("tax", state.caseTaxFilter)}</select></div><select id="case-workflow-filter" class="filter-input" aria-label="Filter case workflow">${[["all","All workflow"],["overdue","Payment overdue"],["supervisor","Supervisor attention"],["closure","Awaiting SP3P2DK"]].map(([key,label]) => `<option value="${key}" ${state.caseWorkflowFilter === key ? "selected" : ""}>${label}</option>`).join("")}</select><button class="ghost-btn case-reset" data-case-sheet-reset="yes">${toolIcon('<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>')}Reset</button><span class="case-filter-result"><strong>${caseList.length}</strong> of ${categoryCases.length} cases</span></div>
             <div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" role="grid" aria-multiselectable="true" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col" aria-sort="${sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="createdAt" title="Sort by date added">No.</button></th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
               ${sheetRows}
@@ -9153,6 +9215,8 @@
       document.querySelectorAll("[data-supervisor-only]").forEach((element) => {
         element.hidden = !hasLeadershipAccess();
       });
+      window.WorkspaceFeatures.setRole(state.role);
+      window.WorkspaceFeatures.chrome(state.currentView);
       const leaderboard = performanceLeaderboard();
       const personalPoints = performanceRow(state.selectedPic);
       const rank = Math.max(1, leaderboard.findIndex((row) => row.pic === state.selectedPic) + 1);
@@ -9172,7 +9236,7 @@
       const mobileUserName = document.getElementById("mobile-user-name");
       const mobileUserRole = document.getElementById("mobile-user-role");
       if (mobileUserName) mobileUserName.textContent = state.selectedPic;
-      if (mobileUserRole) mobileUserRole.textContent = hasLeadershipAccess() ? (state.role === "partner" ? "Partner" : "Supervisor") : "Normal Staff";
+      if (mobileUserRole) mobileUserRole.textContent = state.role === "staff" ? "Associate" : state.role.replace(/^./, letter => letter.toUpperCase());
     }
 
     function renderNotesPopup() {
@@ -9468,6 +9532,7 @@
     }
 
     async function loadSharedOperationalWorkspaces(background = false, scope = "") {
+      if (!window.WorkspaceFeatures.can("operations")) return true;
       try {
         const response = await appFetch(`/api/operations${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`, { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared operations...");
         if (!response.ok) return false;
@@ -9519,6 +9584,7 @@
     }
 
     async function loadSharedCases(background = false) {
+      if (!window.WorkspaceFeatures.can("cases")) return true;
       if (caseSheetBulkSaving) return true;
       try {
         const revision = caseSheetWriteRevision;
@@ -9607,6 +9673,7 @@
       let pending = caseSheetPending.get(record);
       if (!pending) { pending = {values:new Map(),count:0,queue:Promise.resolve()}; caseSheetPending.set(record,pending); }
       pending.count++; caseSheetWriteRevision++;
+      refreshCaseReportSummary();
       const save = pending.queue.then(async () => {
         const response = await appFetch("/api/cases/workflow", {method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:record.id,version:record.version,command})}, "", {trackUpdate:false});
         const result = await response.json().catch(() => ({}));
@@ -9901,6 +9968,7 @@
         if (due) due.textContent = formatIsoToDisplayDate(record.dueDate) || "-";
         if (deadline) deadline.textContent = record.dueDate ? `${Math.ceil((new Date(`${record.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-";
       });
+      refreshCaseReportSummary();
     }
 
     function saveCaseSheetCell(cell) {
@@ -10410,6 +10478,7 @@
     }
 
     async function loadSharedMyWork(background = false) {
+      if (!window.WorkspaceFeatures.can("myWork")) return true;
       if (myWorkDemoMode) return true;
       try {
         const response = await appFetch("/api/my-work", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading My Work...");
@@ -10533,6 +10602,7 @@
 
     let announcementReadRevision = 0;
     async function loadSharedAnnouncements(background = false) {
+      if (!window.WorkspaceFeatures.can("notifications")) return true;
       const revision = ++announcementReadRevision;
       try {
         const response = await appFetch("/api/announcements", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading announcements...");
@@ -10620,6 +10690,7 @@
         state.username = profile.username || state.username;
         state.teamDivision = profile.team_division || state.teamDivision;
         state.role = String(profile.role || "staff").toLowerCase();
+        window.WorkspaceFeatures.accept(result.featureAccess, state.role);
         await loadStaffDirectory(background);
         rerender();
       } catch (error) {
@@ -10736,6 +10807,7 @@
     }
 
     async function loadStaffAccessDirectory() {
+      if (!window.WorkspaceFeatures.manager()) return;
       const revision = ++staffDirectoryRevision;
       try {
         const response = await appFetch("/api/staff?includeInactive=1", { cache: "no-store", headers: { Accept: "application/json" } });
@@ -11191,6 +11263,9 @@
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
       for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
       if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
+      window.WorkspaceFeatures.setRole(state.role);
+      state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
+      if (state.managementTab === "workload" && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
     }
 
     function normalizeMobileWorkspaceView() {
@@ -11199,10 +11274,12 @@
         state.currentView = "my-work-view";
         state.clientManagementTab = "active";
       }
+      state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
     }
 
     function renderActiveView() {
       normalizeMobileWorkspaceView();
+      if (window.WorkspaceFeatures.blocked(state.currentView)) return;
       if (state.currentView === "matrix-view") return renderMatrix();
       if (state.currentView === "cases-view") return renderCases();
       if (state.currentView === "my-work-view") return renderMyWork();
@@ -11222,9 +11299,7 @@
       }
       // Keep supervisor-only views inaccessible even when a staff user follows
       // an old link or clicks an embedded management shortcut.
-      if ((viewId === "dashboard-view" || viewId === "allocation-view") && !hasLeadershipAccess()) {
-        viewId = "matrix-view";
-      }
+      viewId = window.WorkspaceFeatures.normalize(viewId);
       if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)) {
         viewId = "my-work-view";
       }
@@ -11239,6 +11314,7 @@
       renderActiveView();
       renderShellChrome();
       restoreVirtualTableScrollPositions();
+      if (!window.WorkspaceFeatures.can(window.WorkspaceFeatures.featureForView(viewId))) return;
       if (viewId === "cases-view" && !casesLoadedFromDatabase) loadSharedCases(true);
       if (viewId === "matrix-view" && state.operationsMode !== "annual" && !operationalScopesLoaded.has("monthly_compliance")) loadSharedOperationalWorkspaces(true, "monthly_compliance");
       if (viewId === "dashboard-view") {
@@ -11771,6 +11847,7 @@
       }
 
       if (openAnnouncementInboxTrigger) {
+        if (window.WorkspaceFeatures.mode("notifications") !== "enabled") { switchView("announcement-view"); commitUi("push"); return; }
         state.announcementInboxOpen = !state.announcementInboxOpen;
         renderAnnouncementInbox();
         if (state.announcementInboxOpen) loadSharedAnnouncements(true);
@@ -12300,6 +12377,7 @@
       }
 
       if (managementTabTrigger) {
+        if (managementTabTrigger.getAttribute("data-management-tab") === "workload" && !window.WorkspaceFeatures.manager()) return;
         if (managementTabTrigger.getAttribute("data-management-tab") !== "workload") {
           latestStaffClaimCode = "";
           latestStaffClaimFor = "";
@@ -14133,7 +14211,7 @@
       const initialView = state.currentView;
       const initialLoads = [loadSharedClients(true)];
       if (window.WorkspaceStartup) initialLoads.push(loadStaffDirectory(true));
-      const initialAnnualTeam = initialView === "matrix-view" && state.operationsMode === "annual" ? (state.annualTeam === "tax" ? "tax" : "accounting") : "";
+      const initialAnnualTeam = window.WorkspaceFeatures.can("operations") && initialView === "matrix-view" && state.operationsMode === "annual" ? (state.annualTeam === "tax" ? "tax" : "accounting") : "";
       const initialOperationScope = initialView === "matrix-view" && !initialAnnualTeam ? "monthly_compliance"
         : initialView === "annual-accounting-view" ? "annual_accounting"
         : initialView === "annual-tax-view" ? "annual_tax" : "";
@@ -14186,7 +14264,7 @@
       remainingLoads.push(() => refreshDatabaseStatus(true));
       if (!IS_CASES_FULLSCREEN) remainingLoads.push(() => loadPerformanceLedger(true));
       const backgroundComplete = () => {
-        if (!IS_CASES_FULLSCREEN) window.AnnualDashboardSheets?.preload(state.teamDivision);
+        if (!IS_CASES_FULLSCREEN && window.WorkspaceFeatures.can("operations")) window.AnnualDashboardSheets?.preload(state.teamDivision);
       };
       if (window.WorkspaceStartup) window.WorkspaceStartup.backgroundQueue(remainingLoads, backgroundComplete);
       else Promise.allSettled(remainingLoads.map(load => load())).then(backgroundComplete);
@@ -14194,6 +14272,7 @@
     window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (IS_CASES_FULLSCREEN) return;
+      window.WorkspaceFeatures.refresh().catch(error => console.warn("[feature access] refresh failed", error));
       loadSharedAnnouncements(true);
       loadPerformanceLedger(true);
     }, 120000);
@@ -14203,6 +14282,7 @@
     }, 300000);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
+      window.WorkspaceFeatures.refresh().catch(error => console.warn("[feature access] refresh failed", error));
       loadSharedClients(true);
       loadSharedCases(true);
       loadSharedMyWork(true);

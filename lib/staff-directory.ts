@@ -14,6 +14,6 @@ export function canImportClientMaster(role: string | null | undefined) {
 /** Partners retain final control over Partner/Admin identities. */
 export function canManageDirectoryRole(actorRole: StaffRole, targetRole: StaffRole, nextRole: StaffRole) {
   if (["partner", "admin"].includes(actorRole)) return true;
-  if (!["leader", "supervisor"].includes(actorRole)) return false;
+  if (actorRole !== "supervisor") return false;
   return !["partner", "admin"].includes(targetRole) && !["partner", "admin"].includes(nextRole);
 }

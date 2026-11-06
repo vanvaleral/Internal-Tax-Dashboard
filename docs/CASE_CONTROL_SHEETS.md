@@ -38,6 +38,15 @@ come from the existing appearance settings rather than a separate fixed palette.
   once; subsequent explicit sorts remain saved.
 - Row numbers open progress below the row, including completed linked My Work
   tasks. Editing cells does not expand progress.
+- A compact summary counts the current category/filter scope by progress,
+  payment/instalments, revision and completion. Print Report opens an A4 report
+  of those saved records and the browser print dialog. See `docs/CASE_REPORTS.md`.
+- Live Cases use concise action labels and a single timeline heading, without
+  mockup instructions or repeated workflow explanations. Offline sample warnings,
+  unsaved-draft notices, access/save errors and payment/closure safeguards remain.
+  The legacy default Waiting Client Docs displays as In Progress, not an inferred
+  missing-document blocker. Saved stages and explicit non-default stages are
+  unchanged; the duplicate stage label below the workflow tabs is omitted.
 - The expanded panel combines stage/PIC/due-date context, existing notes,
   outstanding case next actions, open linked tasks visible to the user, completed
   linked work, and a dated follow-up log. Live follow-ups use the existing case

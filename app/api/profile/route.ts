@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { readFeatureSettings } from "@/lib/feature-access";
 
 const profileFields = "id, full_name, display_name, username, team_division, role, auth_user_id";
 
@@ -19,7 +20,8 @@ export async function GET() {
   if ("error" in context) return NextResponse.json({ error: context.error }, { status: context.status });
   const { data, error } = await context.admin.from("staff_profiles").select(profileFields).eq("auth_user_id", context.user.id).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: { "Cache-Control": "no-store" } });
-  return NextResponse.json({ user: { id: context.user.id, email: context.user.email }, profile: data }, { headers: { "Cache-Control": "no-store" } });
+  try { return NextResponse.json({ user: { id: context.user.id, email: context.user.email }, profile: data, featureAccess: await readFeatureSettings(context.admin) }, { headers: { "Cache-Control": "no-store" } }); }
+  catch { return NextResponse.json({ error: "Feature access could not be verified." }, { status: 503 }); }
 }
 
 export async function POST(request: Request) {
