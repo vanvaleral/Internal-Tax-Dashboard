@@ -117,6 +117,47 @@ come from the existing appearance settings rather than a separate fixed palette.
 
 ## Persistence And Authorization
 
+### Fast Follow-Up Saves
+
+Timeline follow-ups now call `save_case_progress_fast` to perform the final active
+profile/PIC/archive checks and immutable insert in one database request, rather
+than a case lookup followed by a separate insert. Fresh API session/account and
+feature checks remain mandatory. The function is SECURITY INVOKER, service-role
+only, with an empty search path and short lock timeout. Shared row locks prevent
+case reassignment/archival and staff deactivation racing the save.
+
+Apply `20261107031759_fast_case_progress_save.sql` before deploying the API.
+This matches the hosted migration version applied on 7 November 2026.
+It adds one function and execution grants only; existing records, tables and RLS
+policies are unchanged. The old checked save path remains available solely when
+the function is absent during a rolling deployment, never after denial or an
+uncertain/failed write. Removing the new function restores that fallback; no
+history needs reverting. Do not delete saved progress entries to roll back code.
+
+Each new follow-up gets a UUID before dispatch, retained in document memory for
+retries of unchanged text until acknowledgement. Replaying that ID returns the
+same saved entry; reusing it for different case/author/text is rejected. No
+history is updated or overwritten. Older clients without an ID remain compatible.
+Reloading loses unconfirmed request IDs, so refresh history before retrying after
+a page reload or ambiguous network failure.
+
+Starting a save updates the existing button/status without replacing the expanded
+editor. Users can keep typing or work in other rows. Saved history, stale-row
+colors and report availability update only after database confirmation. Failures
+retain the draft; nothing pending is represented as confirmed work.
+
+Supabase validation used a service-role transaction rolled back in full: repeated
+IDs returned one entry, changed text/invalid actors/unassigned staff/archived cases
+were rejected, and all five original follow-ups remained unchanged. Anonymous and
+authenticated roles have no function execution privilege. This removes a data
+round trip, not a guarantee of sub-second platform/network latency.
+
+The post-migration security advisor reported no finding naming this function.
+Unrelated existing notices remain for [mutable function search paths](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable),
+[authenticated SECURITY DEFINER helpers](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable),
+and [disabled leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+Those settings/functions were not changed as part of this performance update.
+
 The original sheet editor requires no data conversion. The additive BA/payment/
 Tax execution and retained task timeline extension requires the migration in
 `docs/CASE_WORKFLOW_INTEGRATION.md`; all sheet capabilities above are preserved.

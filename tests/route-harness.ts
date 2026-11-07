@@ -24,7 +24,7 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
 export const request = (body: any = {}, search = "") => ({ url: `http://test.local/api/operations${search}`, json: async () => body });
 
 export function mockDatabase(tables: Record<string, any[]>) {
-  const db = { tables, beforeWrite: null as (() => void) | null, from(table: string) {
+  const db = { tables, rpc: async (_name: string, _args: any): Promise<any> => ({data:null,error:{code:"PGRST202",message:"Synthetic missing function"}}), beforeWrite: null as (() => void) | null, from(table: string) {
     let filters: Array<(row: any) => boolean> = [], action = "read", input: any, single = false, bounds: number[] | null = null;
     const query: any = {
       select() { return query; }, order() { return query; }, limit() { return query; },
@@ -46,7 +46,7 @@ export function mockDatabase(tables: Record<string, any[]>) {
       let result = rows.filter(row => filters.every(filter => filter(row)));
       if (action === "insert") {
         const added = (Array.isArray(input) ? input : [input]).map(item => ({ id: `test-${rows.length + 1}`, created_at: "2026-09-16T00:00:00Z", updated_at: "2026-09-16T00:00:00Z", ...structuredClone(item) }));
-        if (added.some(item => rows.some(row => table === "operational_workspace_state" ? row.scope === item.scope : item.client_request_id && row.client_request_id === item.client_request_id && row.created_by_profile_id === item.created_by_profile_id))) return { data: null, error: { code: "23505", message: "duplicate" } };
+        if (added.some(item => rows.some(row => table === "operational_workspace_state" ? row.scope === item.scope : row.id === item.id || item.client_request_id && row.client_request_id === item.client_request_id && row.created_by_profile_id === item.created_by_profile_id))) return { data: null, error: { code: "23505", message: "duplicate" } };
         rows.push(...added); result = added;
       }
       if (action === "update") result.forEach(row => Object.assign(row, structuredClone(input), table === "my_work_tasks" ? { updated_at: `${row.updated_at}+1` } : {}));

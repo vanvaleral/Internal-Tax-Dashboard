@@ -133,6 +133,15 @@ export async function PATCH(request: Request) {
       const entry = String(body.entry || "").trim();
       if (!entry) return NextResponse.json({ error: "Enter a progress update first." }, { status: 400 });
       if (entry.length > 1000) return NextResponse.json({ error: "Keep a progress update within 1,000 characters." }, { status: 400 });
+      const entryId = body.entryId || crypto.randomUUID();
+      if (typeof entryId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) return NextResponse.json({error:"Invalid follow-up request ID."},{status:400});
+      const fast = await actor.admin.rpc("save_case_progress_fast",{p_case_id:id,p_actor_profile_id:actor.profile.id,p_entry:entry,p_entry_id:entryId});
+      if (!fast.error) {
+        if (!fast.data?.id) return NextResponse.json({error:"Save confirmation was incomplete. Refresh before retrying."},{status:500});
+        return NextResponse.json({progressEntry:fast.data},{headers:{"Cache-Control":"private, no-store","Server-Timing":`auth;dur=${authenticated-started},data;dur=${Date.now()-authenticated}`}});
+      }
+      // Rolling deploy only: never fall back after a denied, failed or uncertain write.
+      if (!["PGRST202","42883"].includes(fast.error.code)) return NextResponse.json({error:fast.error.message || "Follow-up could not be saved."},{status:fast.error.code === "42501" ? 403 : fast.error.code === "22023" ? 400 : 503});
       const { data: taxCase, error: caseError } = await actor.admin
         .from("tax_cases")
         .select("id, tax_pic_profile_id, accounting_pic_profile_id")
@@ -140,19 +149,23 @@ export async function PATCH(request: Request) {
         .is("deleted_at", null)
         .maybeSingle();
       if (caseError || !taxCase || !canAccess(actor, taxCase)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
-      const { data, error } = await actor.admin
+      let { data, error } = await actor.admin
         .from("tax_case_progress_entries")
-        .insert({ case_id: id, entry, created_by_profile_id: actor.profile.id })
-        .select("id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
+        .insert({ id:entryId, case_id: id, entry, created_by_profile_id: actor.profile.id })
+        .select("id, entry, created_at")
         .single();
+      if (error?.code === "23505") {
+        const replay = await actor.admin.from("tax_case_progress_entries").select("id, entry, created_at")
+          .eq("id",entryId).eq("case_id",id).eq("created_by_profile_id",actor.profile.id).eq("entry",entry).maybeSingle();
+        data = replay.data; error = replay.error;
+      }
       if (error || !data) return NextResponse.json({ error: error?.message || "Case progress could not be saved." }, { status: 500 });
-      const author = Array.isArray(data.staff_profiles) ? data.staff_profiles[0] : data.staff_profiles;
       return NextResponse.json({
         progressEntry: {
           id: data.id,
           entry: data.entry,
           createdAt: data.created_at,
-          creatorName: author?.display_name || author?.full_name || "Unknown"
+          creatorName: actor.profile.display_name || actor.profile.full_name || "Unknown"
         }
       }, { headers: { "Cache-Control": "private, no-store", "Server-Timing": `auth;dur=${authenticated-started},data;dur=${Date.now()-authenticated}` } });
     }

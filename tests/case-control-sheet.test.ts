@@ -194,6 +194,24 @@ test('failed speculative loads are quiet and timing snapshots stay bounded, isol
   }finally{d.dom.window.close();}
 });
 
+test('follow-up save keeps editor nodes in place and retries unconfirmed text with the same request ID',async()=>{
+  const d=await dashboard();try{
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    const input=d.w.document.getElementById('himbauan-progress-entry');input.value='Keep my text';input.focus();
+    d.delay();const saving=d.api.addHimbauanProgress('saved-a','Keep my text');await tick();
+    assert.equal(d.w.document.getElementById('himbauan-progress-entry'),input);assert.equal(d.w.document.activeElement,input);assert.equal(input.disabled,false);
+    d.release();await saving;
+    const fetch=d.w.fetch;let failed=true;const ids:string[]=[];
+    d.w.fetch=async(url:string,init:any)=>{
+      const body=init?.body?JSON.parse(init.body):{};
+      if(body.action==='add-progress'){ids.push(body.entryId);if(failed){failed=false;throw new Error('Response lost');}}
+      return fetch(url,init);
+    };
+    await assert.rejects(d.api.addHimbauanProgress('saved-a','Retry safely'),/Response lost/);
+    await d.api.addHimbauanProgress('saved-a','Retry safely');assert.equal(ids.length,2);assert.equal(ids[0],ids[1]);assert.match(ids[0],/^[a-f0-9-]{36}$/);
+  }finally{d.dom.window.close();}
+});
+
 test("sidebar hides points without stopping the background ledger or points calculation",async()=>{
   const d=await dashboard();try{
     assert.equal(d.w.document.querySelector('.sidebar .points-widget, #sidebar-points-total, #sidebar-points-rank'),null);

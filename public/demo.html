@@ -8704,6 +8704,7 @@
 
     const caseFollowUpDrafts = new Map();
     const caseFollowUpPending = new Map();
+    const caseFollowUpRequests = new Map();
     const caseFollowUpStatus = new Map();
     const caseConfirmedProgress = new Map();
 
@@ -9878,6 +9879,8 @@
 
     async function addHimbauanProgress(caseId, entry) {
       if (caseFollowUpPending.has(caseId)) return caseFollowUpPending.get(caseId);
+      if (caseFollowUpRequests.get(caseId)?.entry !== entry) caseFollowUpRequests.set(caseId,{entry,id:crypto.randomUUID()});
+      const requestId = caseFollowUpRequests.get(caseId).id;
       caseFollowUpDrafts.set(caseId, entry);
       const pending = (async () => { await Promise.resolve(); try {
       let saved;
@@ -9885,12 +9888,13 @@
       else { const response = await caseTimedFetch("/api/cases", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ id: caseId, action: "add-progress", entry })
+        body: JSON.stringify({ id: caseId, action: "add-progress", entry, entryId:requestId })
       }, "follow-up");
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Case progress could not be saved.");
       saved = result.progressEntry;
       if (!saved?.id) throw new Error("Save confirmation was incomplete. Refresh the timeline before retrying."); }
+      caseFollowUpRequests.delete(caseId);
       const progress = state.caseProgressById[caseId] || { completedTasks: [], progressEntries: [] };
       progress.progressEntries ||= [];
       if (!progress.progressEntries.some(item => item.id === saved.id)) progress.progressEntries.unshift(saved);
@@ -9910,7 +9914,10 @@
       finally { caseFollowUpPending.delete(caseId); refreshExpandedCaseProgress(caseId); refreshCaseReportSummary(); }
       })();
       caseFollowUpPending.set(caseId, pending);
-      refreshExpandedCaseProgress(caseId);
+      const button = document.querySelector(`[data-add-himbauan-progress="${escapeAttr(caseId)}"]`);
+      if (button) { button.disabled = true; button.textContent = "Saving..."; }
+      const status = button?.closest("[data-case-progress-id]")?.querySelector("[data-case-followup-status]");
+      if (status) status.textContent = "Saving to database...";
       refreshCaseReportSummary();
       return pending;
     }
