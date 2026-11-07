@@ -62,10 +62,22 @@ come from the existing appearance settings rather than a separate fixed palette.
   Stale history remains visible while refreshing; explicit Retry bypasses the
   cache. Changed case versions invalidate freshness, and removed/inaccessible
   cases discard cached history. My Work completion still invalidates the cache.
-  The first read loads up to 25 entries from each history source; Load older
+  The first read loads up to 10 entries from each history source; Load older
   updates follows timestamp/UUID keysets, retaining Postgres timestamp precision.
   It appends older records without duplicates instead of downloading all history
   whenever a row opens. The original unpaged API remains compatible.
+  The combined timeline initially renders the ten newest loaded events (including
+  workflow events), not every loaded record. Load older updates increases the
+  visible window by ten. When a source has more history, its next page is fetched
+  before expanding that window so a busy source cannot be skipped behind older
+  cached events. Fully cached history can be revealed without another request.
+  Fine-pointer hover or keyboard focus on a saved case schedules a preload after
+  300 ms. Leaving cancels the timer. Only one speculative read runs at a time;
+  opening that case shares the request and recently prefetched history uses the
+  same 60-second cache. No bulk preloading of the register is performed. Offline,
+  hidden, Data Saver and 2G contexts skip speculation, as do unsaved draft rows.
+  Pending follow-up, cell and workflow saves also suppress speculative reads.
+  A failed unused preload does not raise a global save/connection warning.
   Follow-up saves disable only that case's submit button, not other cells. A
   confirmed database response is required before adding to history or displaying
   Saved. Failure retains the draft across collapse/navigation for correction or
@@ -165,10 +177,44 @@ the sidebar count does not disable or reset points.
 
 ## Checking Cases Speed
 
+### Assigned Warmup And Stale Rows
+
+After Cases opens, a 1.5-second low-priority timer may warm up to three distinct
+unfinished cases assigned to the signed-in profile: the one they last personally
+worked, the newest created assigned case, and the oldest assigned case inactive
+for 30+ days. This is a per-document cap, not a loop through the whole portfolio.
+Reads run sequentially using the existing speculative-read gate, skip active
+editing/saves and constrained/hidden/offline contexts, and share hover/click reads.
+Supervisor visibility alone does not add other PICs' cases to this shortlist.
+
+Unfinished saved rows are light yellow at 30+ WITA calendar days since activity
+and light red at 60+. Completed, archived, draft and unknown-age rows are not
+highlighted. The row-number tooltip states age; selection/focus stays distinct.
+Colors refresh on rendering, confirmed updates, visibility changes and a visible
+one-minute UI timer, without wheel interception or database polling.
+
+Activity includes the case record, follow-ups, workflow events, retained linked
+My Work events and legacy task completions. Case-list/bootstrap reads embed only
+the newest timestamp per source (plus the current PIC's newest contributions),
+not timeline bodies. Parent ownership scope is unchanged. Missing old-schema
+relationships fall back to scoped case rows with unknown activity, not guessed
+stale warnings. Permission/query failures do not fall back. No migration is needed.
+The personalized timestamps are ranking hints, never permissions or task awards.
+
 Success responses for the case list, timeline, follow-up save, workflow save and
 report include numeric `Server-Timing` auth/data durations. No client names, IDs,
 follow-up text or credentials are placed in timing headers. Private response
 bodies remain non-cacheable, and timing does not replace authorization.
+
+In the dashboard iframe console, `casePerformanceSnapshot()` returns up to 30
+recent history/prefetch/follow-up request samples: operation, request duration,
+HTTP status (0 if no response), and numeric auth/data server timings if present.
+It returns copies, stays in document memory, and stores no URLs, case IDs,
+client names, follow-up text or credentials. Request duration stops at response
+headers; it is not a full click-to-render measurement. Compare browser Network
+and rendering traces as well before deciding to change hosting or database code.
+The current history queries already run concurrently; this change does not remove
+fresh identity, feature or record/PIC checks to make a benchmark look faster.
 
 After deployment, use browser DevTools Network while opening a case, reopening
 it within a minute, saving a follow-up, and switching away/back. Compare request

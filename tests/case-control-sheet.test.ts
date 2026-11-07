@@ -72,7 +72,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
   // Expose closure references in the test source only, never in the served dashboard.
   const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, addHimbauanProgress, loadPerformanceLedger, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
-  await w.eval(script); await tick();
+  await w.eval(script.replace('window.__casesTest = { state,','window.__casesTest = { resetAssignedPreload:()=>{assignedCasePreloadTimer=null;assignedCasePreloadAttempts.clear();}, scheduleAssignedCasePreload, assignedCasePreloadIds, caseInactivity, refreshCaseActivityAppearance, state,')); await tick();
   const api = w.__casesTest;
   if (!expectBlocked) assert.ok(api, warnings.join("\n") || w.document.body.textContent.slice(-500));
   return { dom, w, api, rows, writes, reads, warnings, announcements, announcementStatus:(value: string) => { announcementStatus = value; }, delay: () => { delay = true; }, fail: () => { fail = true; }, failCase: (id: string) => { failId = id; }, release: () => { delay = false; hold?.(null); } };
@@ -83,6 +83,116 @@ const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
 const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
+
+function prefetchControls(d:any) {
+  let next=0;const timers=new Map<number,()=>any>();
+  d.w.setTimeout=(fn:()=>any,ms:number)=>{if(ms!==300)return 0;timers.set(++next,fn);return next;};
+  d.w.clearTimeout=(id:number)=>timers.delete(id);
+  d.w.matchMedia=(query:string)=>({matches:query.includes('hover: hover'),addEventListener(){},removeEventListener(){}});
+  const row=(id:string)=>d.w.document.querySelector(`[data-case-sheet-row="${id}"]`);
+  const hover=(id:string)=>row(id).dispatchEvent(new d.w.MouseEvent('pointerover',{bubbles:true}));
+  const leave=(id:string)=>row(id).dispatchEvent(new d.w.MouseEvent('pointerout',{bubbles:true}));
+  const run=async()=>{const callbacks=[...timers.values()];timers.clear();for(const fn of callbacks)await fn();await tick();};
+  return {row,hover,leave,run,timers};
+}
+
+test('assigned warmup selects last personally worked, newest and stale cases, caps at three, and excludes other PICs',async()=>{
+  const d=await dashboard();try{
+    const now=Date.now(),ago=(days:number)=>new Date(now-days*86400000).toISOString();
+    const rows=d.api.getRows();
+    Object.assign(rows[0],{createdAt:ago(90),version:ago(40),lastActivityAt:ago(40),myLastActivityAt:ago(1),activityAvailable:true});
+    Object.assign(rows[1],{createdAt:ago(0),version:ago(0),lastActivityAt:ago(0),myLastActivityAt:ago(0),activityAvailable:true});
+    Object.assign(rows[2],{createdAt:ago(0),version:ago(0),lastActivityAt:ago(0),myLastActivityAt:'',activityAvailable:true});
+    Object.assign(rows[3],{createdAt:ago(120),version:ago(80),lastActivityAt:ago(80),myLastActivityAt:'',activityAvailable:true});
+    assert.deepEqual(Array.from(d.api.assignedCasePreloadIds()),['saved-a','saved-c','saved-d']);
+    d.api.resetAssignedPreload();const timers:Array<()=>any>=[];
+    d.w.setTimeout=(fn:()=>any,ms:number)=>{if(ms===1500)timers.push(fn);return timers.length;};
+    d.api.scheduleAssignedCasePreload();
+    for(let i=0;i<4;i++){const fn=timers.shift();if(fn)await fn();await tick();}
+    assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=')).length,3);
+    assert.equal(d.reads.some((url:string)=>url.includes('progressFor=saved-b')),false);
+    d.api.scheduleAssignedCasePreload();const last=timers.shift();if(last)await last();
+    assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=')).length,3);
+  }finally{d.dom.window.close();}
+});
+
+test('stale age uses WITA dates, excludes done and unknown records and resets on confirmed follow-up only',async()=>{
+  const d=await dashboard();try{
+    const item=d.api.getRows()[0],now=Date.UTC(2026,10,7,0),ago=(days:number)=>new Date(now-days*86400000).toISOString();
+    Object.assign(item,{createdAt:ago(100),version:ago(61),lastActivityAt:ago(30),activityAvailable:true});
+    assert.equal(d.api.caseInactivity(item,now),30);
+    item.lastActivityAt=ago(60);assert.equal(d.api.caseInactivity(item,now),60);
+    item.lastActivityAt='2026-11-06T15:59:59Z';assert.equal(d.api.caseInactivity(item,Date.parse('2026-11-06T16:00:00Z')),1);
+    item.stage='Closed';assert.equal(d.api.caseInactivity(item,now),null);item.stage='In Progress';
+    item.activityAvailable=false;assert.equal(d.api.caseInactivity(item,now),null);item.activityAvailable=true;
+    const current=Date.now();item.version=new Date(current-70*86400000).toISOString();item.lastActivityAt=item.version;item.createdAt=item.version;
+    d.api.refreshCaseActivityAppearance();assert.equal(d.w.document.querySelector('[data-case-sheet-row="saved-a"]').dataset.caseInactivity,'60');
+    d.delay();const saving=d.api.addHimbauanProgress('saved-a','Verified activity');await tick();d.api.refreshCaseActivityAppearance();
+    assert.equal(d.w.document.querySelector('[data-case-sheet-row="saved-a"]').dataset.caseInactivity,'60');
+    d.release();await saving;assert.equal(d.w.document.querySelector('[data-case-sheet-row="saved-a"]').dataset.caseInactivity,'recent');
+  }finally{d.dom.window.close();}
+});
+
+test('intent prefetch waits 300ms, cancels when leaving, and reuses the result without replacing the sheet',async()=>{
+  const d=await dashboard();try{
+    const c=prefetchControls(d),viewport=caseViewport(d);c.hover('saved-a');assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=')).length,0);
+    c.leave('saved-a');await c.run();assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=')).length,0);
+    c.hover('saved-a');await c.run();assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=saved-a')).length,1);assert.match(d.reads.at(-1) || '',/limit=10/);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=saved-a')).length,1);assert.equal(caseViewport(d),viewport);assert.deepEqual(d.writes,[]);
+    const samples=d.w.casePerformanceSnapshot();assert.equal(samples[0].operation,'prefetch');assert.equal(typeof samples[0].requestMs,'number');assert.doesNotMatch(JSON.stringify(samples),/saved-a|Linked completed task|tax-a/);
+  }finally{d.dom.window.close();}
+});
+
+test('only one speculative read runs and expanding its case shares the in-flight read',async()=>{
+  const d=await dashboard();try{
+    const c=prefetchControls(d),fetch=d.w.fetch;let release:any,reads=0;
+    d.w.fetch=async(url:string,init:any)=>url.includes('progressFor=')?(reads++,await new Promise(resolve=>{release=resolve;})):fetch(url,init);
+    c.hover('saved-a');const preload=c.run();await tick();assert.equal(reads,1);
+    c.hover('saved-b');await c.run();assert.equal(reads,1);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();assert.equal(reads,1);assert.equal(d.w.document.getElementById('himbauan-progress-entry').disabled,false);
+    release({ok:true,status:200,headers:new Headers({'Server-Timing':'auth;dur=12,data;dur=20'}),json:async()=>({progressEntries:[],completedTasks:[],taskTimeline:[]})});await preload;await tick();
+    assert.deepEqual(JSON.parse(JSON.stringify(d.w.casePerformanceSnapshot()[0].server)),{auth:12,data:20});
+  }finally{d.dom.window.close();}
+});
+
+test('preload skips constrained, hidden, offline and touch contexts while keyboard focus can preload',async()=>{
+  const d=await dashboard();try{
+    const c=prefetchControls(d);
+    Object.defineProperty(d.w.navigator,'connection',{configurable:true,value:{saveData:true}});c.hover('saved-a');await c.run();
+    d.w.navigator.connection.saveData=false;d.w.navigator.connection.effectiveType='2g';c.hover('saved-a');await c.run();
+    d.w.navigator.connection.effectiveType='4g';Object.defineProperty(d.w.navigator,'onLine',{configurable:true,value:false});c.hover('saved-a');await c.run();
+    Object.defineProperty(d.w.navigator,'onLine',{value:true});Object.defineProperty(d.w.document,'visibilityState',{configurable:true,value:'hidden'});c.hover('saved-a');await c.run();
+    Object.defineProperty(d.w.document,'visibilityState',{value:'visible'});
+    const touch=new d.w.MouseEvent('pointerover',{bubbles:true});Object.defineProperty(touch,'pointerType',{value:'touch'});c.row('saved-a').dispatchEvent(touch);await c.run();
+    assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=')).length,0);
+    c.row('saved-a').querySelector('button').focus();await c.run();assert.equal(d.reads.filter((url:string)=>url.includes('progressFor=')).length,1);
+  }finally{d.dom.window.close();}
+});
+
+test('timeline renders ten recent events and reveals cached older events without a new request',async()=>{
+  const d=await dashboard();try{
+    const fetch=d.w.fetch;
+    d.w.fetch=async(url:string,init:any)=>url.includes('progressFor=')?{ok:true,status:200,json:async()=>({completedTasks:[],taskTimeline:[],progressEntries:Array.from({length:24},(_,index)=>({id:`entry-${index}`,entry:`Update ${index}`,createdAt:new Date(Date.UTC(2026,10,7,0,0,24-index)).toISOString()})),pageInfo:{hasMore:false}})}:fetch(url,init);
+    d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').click();await tick();
+    assert.equal(d.w.document.querySelectorAll('[data-case-timeline-key]').length,10);assert.match(d.w.document.querySelector('[data-case-timeline]').textContent,/Update 0/);assert.doesNotMatch(d.w.document.querySelector('[data-case-timeline]').textContent,/Update 10/);
+    d.w.document.querySelector('[data-case-load-older]').click();await tick();assert.equal(d.w.document.querySelectorAll('[data-case-timeline-key]').length,20);
+    d.w.document.querySelector('[data-case-load-older]').click();await tick();assert.equal(d.w.document.querySelectorAll('[data-case-timeline-key]').length,24);assert.equal(d.w.document.querySelector('[data-case-load-older]'),null);
+  }finally{d.dom.window.close();}
+});
+
+test('failed speculative loads are quiet and timing snapshots stay bounded, isolated and content-free',async()=>{
+  const d=await dashboard();try{
+    const c=prefetchControls(d),fetch=d.w.fetch;
+    d.w.fetch=async(url:string,init:any)=>url.includes('progressFor=')?{ok:false,status:503,json:async()=>({error:'History temporarily unavailable'})}:fetch(url,init);
+    c.hover('saved-a');await c.run();assert.doesNotMatch(d.w.document.getElementById('database-status-chip').textContent,/needs attention/);
+    d.w.fetch=fetch;
+    for(let i=0;i<32;i++)await d.api.loadCaseProgress('saved-a',{force:true});
+    const samples=d.w.casePerformanceSnapshot();assert.equal(samples.length,30);samples[0].operation='modified';samples[0].server.auth=999;
+    assert.notEqual(d.w.casePerformanceSnapshot()[0].operation,'modified');assert.equal(d.w.casePerformanceSnapshot()[0].server.auth,undefined);
+    assert.doesNotMatch(JSON.stringify(d.w.casePerformanceSnapshot()),/saved-a|progressFor|tax-a|Linked completed task/);
+  }finally{d.dom.window.close();}
+});
 
 test("sidebar hides points without stopping the background ledger or points calculation",async()=>{
   const d=await dashboard();try{

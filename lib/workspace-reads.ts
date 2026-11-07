@@ -1,6 +1,7 @@
 import { isLeadership, type CurrentActor } from "@/lib/access";
 import { scopedWorkspace } from "@/lib/workspace-security";
 import { canManageAccess } from "@/lib/feature-access";
+import { caseActivityQuery, caseActivitySelect, withCaseActivity } from "@/lib/case-activity";
 
 export async function readStaff(actor: CurrentActor, includeInactive = false) {
   let query = actor.admin.from("staff_profiles").select("*").order("display_name");
@@ -29,17 +30,26 @@ export async function readClients(actor: CurrentActor, params = new URLSearchPar
 }
 
 export async function readCases(actor: CurrentActor, includeDeleted = false) {
-  let query = actor.admin.from("tax_cases").select("*").order("updated_at", { ascending: false });
-  if (includeDeleted) {
-    query = query.not("deleted_at", "is", null);
-    if (!isLeadership(actor.profile.role)) query = query.eq("deleted_by_profile_id", actor.profile.id);
-  } else {
-    query = query.is("deleted_at", null);
-    if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
+  const build = (enriched: boolean) => {
+    let query = actor.admin.from("tax_cases").select(enriched ? caseActivitySelect : "*");
+    if (enriched) query = caseActivityQuery(query,actor.profile.id);
+    query = query.order("updated_at", { ascending: false });
+    if (includeDeleted) {
+      query = query.not("deleted_at", "is", null);
+      if (!isLeadership(actor.profile.role)) query = query.eq("deleted_by_profile_id", actor.profile.id);
+    } else {
+      query = query.is("deleted_at", null);
+      if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
+    }
+    return query;
+  };
+  let result = await build(true), available = true;
+  if (result.error && ["42P01","PGRST200","PGRST205"].includes(result.error.code)) {
+    available = false; result = await build(false);
   }
-  const { data, error } = await query;
+  const {data,error} = result;
   if (error) throw new Error(error.message);
-  return { data: data || [] };
+  return { data: (data || []).map((row: any) => available ? withCaseActivity(row,actor.profile.id,actor.userId) : {...row,activity_available:false}) };
 }
 
 export async function readOperations(actor: CurrentActor, scope: string | null) {
