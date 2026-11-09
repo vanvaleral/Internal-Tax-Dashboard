@@ -4,6 +4,15 @@ Himbauan and Pemeriksaan now use a compact inline spreadsheet presentation in
 `public/demo.html`. They remain tax cases, not annual or monthly workspace rows.
 Both sheets retain their previous column names and category-specific fields.
 
+SKP & STP and Penalty Removal are now sibling controls derived from Pemeriksaan
+workflow products, not duplicate cases or compliance rows. Their compact parent
+registers retain native horizontal scrolling and saved column widths; expanded
+documents wrap into labeled cards on narrow viewports. Existing case-sheet
+range paste remains specific to Himbauan/Pemeriksaan fields. Assessment cells
+save individually through the version-checked financial workflow, rather than
+allowing bulk paste to bypass receipt/PSA safeguards. See
+`docs/CASE_WORKFLOW_INTEGRATION.md` for SPHP closure and PSA rules.
+
 The register uses one integrated panel for category tabs, archive/add actions,
 search and PIC filters. Explicit column widths prioritize client names and notes;
 subtle header tones separate reference, tracking and ownership fields. The client

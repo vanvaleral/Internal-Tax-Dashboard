@@ -18,6 +18,7 @@ const PUBLIC_UI_ASSETS = new Set([
   "/client-engagement.css",
   "/submenu-tabs.css",
   "/claim-values.js",
+  "/case-assessment-dashboard.js",
   "/push-sw.js",
   "/client-overview.css",
   "/startup-orbit.css",

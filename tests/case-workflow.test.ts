@@ -56,9 +56,10 @@ test("instalments preserve totals and month ends; Tax-only actions enforce assig
 test("Pemeriksaan response and SKP stay distinct; no revision is implied by tax assessment",()=>{
   const response=run(null,command("record-response",{number:"SPHP response",date:"2026-11-01"}),{category:"Pemeriksaan"});
   assert.equal(response.result,null);
-  const skp=run(response,{...ba(),products:[{tax:"PPN",period:"2025",amount:0,revise:false}]},{category:"Pemeriksaan"});
-  assert.equal(skp.result!.kind,"SKP");assert.equal(domain.caseWorkflowStatus(skp).executed,true);
-  assert.equal(run(skp,command("record-final",{number:"Examination closure",date:"2026-11-05"}),{category:"Pemeriksaan"}).final!.number,"Examination closure");
+  assert.throws(()=>run(response,ba(),{category:"Pemeriksaan"}),/Record SPHP/);
+  const closed=run(response,command("close-examination",{number:"SPHP",date:"2026-11-01"}),{category:"Pemeriksaan"});
+  const skp=run(closed,command("record-assessment",{kind:"SKP",number:"SKP",date:"2026-11-02",tax:"PPN",period:"2025",principal:0,penalty:0}),{category:"Pemeriksaan",closed:true});
+  assert.equal(skp.result!.kind,"SPHP");assert.equal(domain.caseWorkflowStatus(skp).executed,true);assert.equal(skp.final,null);assert.equal(skp.products[0].revise,false);
 });
 function fixture(id="tax",role="staff",migrated=true){
   const row:any={id:"case",case_category:"Himbauan",stage:"Working",updated_at:"v1",tax_pic_profile_id:"tax",accounting_pic_profile_id:"acc",...(migrated?{case_workflow:null}:{})};

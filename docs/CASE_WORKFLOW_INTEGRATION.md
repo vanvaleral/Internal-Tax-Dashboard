@@ -151,3 +151,73 @@ two intentionally server-only history tables; the prior warnings about older
 functions and Auth configuration were unchanged. Those existing findings remain
 a separate hardening task. Production verification here used schema/data checks,
 not a synthetic business transaction committed into a real client case.
+
+## SPHP, Assessments And PSA Extension
+
+The approved assessment mockup is integrated into the existing Cases renderer,
+not embedded as a separate demo. The original Himbauan and Pemeriksaan column
+sets, ranges/paste, native scroll, width preferences, filters and account-bound
+Full Screen remain. Two sibling tabs expose SKP & STP and Penalty Removal with
+combined PIC/search/outcome filters, sortable parent controls and saved widths.
+Both registries derive from the same accessible case workflow records.
+
+For new Pemeriksaan, `close-examination` requires SPHP No.; the actual SPHP date
+is optional. It marks the examination stage Closed, preserving its reference in
+`examinationClosure`. Optional staged assessments commit atomically with closure;
+issued documents may also be recorded later. This is NOT `workflow.final`: the
+assigned PICs can still add/edit assessments and the Tax PIC/leadership can
+record payments and PSA. Generic case POST/PATCH cannot bypass SPHP closure or
+rewrite its date/category. New `record-result` SKP commands are rejected with a
+refresh/workflow explanation; Himbauan BA and final SP3P2DK remain unchanged.
+
+An assessment is metadata on exactly one existing workflow product, with its
+stable product ID, type, issue reference/date, principal, penalty and optional
+PSA application. `product.amount = principal + penalty`; the existing schedule
+and receipt machinery continues to reference that product ID. A repeated tax
+type is allowed across different assessment documents. Duplicate type/reference
+pairs within the case, invalid/future dates and unsafe totals are rejected.
+New documents start as inline draft rows. They are clearly unsaved until Save
+new row succeeds; invalid or failed drafts remain editable and can be cancelled.
+Drafts live only in memory, block opening a misleading Full Screen copy, and
+trigger an unload warning. Confirmed cell edits serialize through the same case
+queue; a neighbouring editor's text/caret survive saves and history refreshes.
+
+Existing SKP results, products, schedules, receipts and final closures are not
+rewritten or automatically copied. An open legacy workflow can record SPHP and
+explicitly classify an existing product into the register. Classification must
+preserve its total and IDs, including receipts. Previously finalized legacy
+workflows remain read-only, pending a separately reviewed correction process.
+This avoids creating another payable balance from an old SKP record.
+
+PSA routing is atomic per case and preserves source documents. Requested amounts
+cannot exceed their assessed penalties. Submitted applications require reference
+and actual date; their original details cannot be overwritten or reset to Draft.
+Draft routing may be returned. Decisions require reference/date and a matching
+full, partial or zero (rejected) grant. Decisions cannot be overwritten. The
+per-case PSA pane and Penalty Removal read the same application, including
+ongoing/successful/rejected counts. Requests and decisions do not automatically
+reduce assessed liabilities or verified payment balances. Multiple attempts,
+appeals, cancellations and monetary adjustments require future audited actions.
+
+Manual follow-ups can be removed as incorrect by their author or leadership,
+provided they still have case access. The endpoint loads the original entry from
+the same case, records reason/actor/time and retained text in `removedProgress`,
+and appends a workflow event. Restore is separately audited. The original
+`tax_case_progress_entries` row is never deleted. Hidden entries are excluded
+from the active timeline and report progress; removal/restoration history stays
+visible. My Work, payment, filing and closure events have no deletion control.
+
+All new actions use the existing per-case compare-and-swap queue, request IDs,
+fingerprints and atomic workflow audit trigger. No local business-data fallback,
+new dependency, point award, notification dispatch or database migration is
+introduced. Only UI preferences are saved locally. A read-only hosted schema
+check confirmed `case_workflow` is JSONB and the workflow/task-history triggers
+are enabled; no hosted business record was changed for verification.
+
+Rollout: deploy the API and renderer together, then refresh open dashboard tabs.
+Test with an authorized synthetic case locally/staging, never fabricate a client
+assessment/payment in production. Review before rollback: the old API does not
+understand `examinationClosure` or PSA fields and must not be used to mutate new
+workflow records. Retain the new server guards if rolling back presentation.
+Automated coverage: `case-assessment-live`, expanded `case-control-sheet`,
+`case-workflow`, `case-report-progress` and existing follow-up/My Work tests.

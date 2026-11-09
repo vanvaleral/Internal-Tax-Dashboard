@@ -10,12 +10,13 @@
   const status=w=>{
     const total=w.products.reduce((s,p)=>s+p.amount,0),paid=w.payments.filter(p=>p.verified).reduce((s,p)=>s+p.amount,0);
     const settled=Boolean(w.result)&&total===paid,executed=settled&&w.products.every(p=>!p.revise||p.filing);
-    return {total,paid,settled,executed,attention:settled&&!executed&&!w.final};
+    return {total,paid,settled,executed,attention:settled&&!executed&&!w.final&&!w.examinationClosure};
   };
   const button=(item,action,label,disabled=false,key="")=>`<button type="button" class="tiny-btn" data-cwf-case="${esc(item.id)}" data-cwf-action="${action}" data-cwf-key="${esc(key)}" ${disabled?"disabled":""}>${esc(label)}</button>`;
   const block=(title,html)=>`<section class="case-workflow-block"><h4>${esc(title)}</h4>${html}</section>`;
   function summary(item){
     const w=item.workflow;
+    if(w?.examinationClosure){const s=status(w),psa=w.products.some(p=>window.CaseAssessmentUI?.ongoing(p.assessment?.psa));return !s.settled?'SPHP closed / payment pending':psa?'SPHP closed / PSA ongoing':'Examination closed at SPHP';}
     if(w?.final||item.stage==="Closed")return "Closed";
     if(!w?.result)return !item.stage||item.stage==="Waiting Client Docs"?"In Progress":item.stage;
     const s=status(w);
@@ -23,20 +24,26 @@
   }
   function render(item,progressHtml,host){
     hosts.set(item.id,{item,...host});
+    window.CaseAssessmentUI?.registerHost(item,host);
     const w=item.workflow||initial(),s=status(w),tab=tabs.get(item.id)||"progress";
-    const available=item.workflowAvailable&&!host.offline&&!item.id.startsWith("case-");
-    const closed=item.stage==="Closed"||Boolean(w.final),canTax=available&&host.canTax&&!closed;
-    const controls=`<div class="case-workflow-tabs" role="tablist" aria-label="Case workflow">${[["progress","Progress"],["payments","Payments & Instalments"],["tax","Tax Execution"]].map(([key,label])=>`<button type="button" role="tab" data-cwf-case="${esc(item.id)}" data-cwf-tab="${key}" aria-selected="${tab===key}">${label}</button>`).join("")}<span class="pill ${s.attention?"warning":"neutral"}">${esc(summary(item))}</span></div>`;
+    const available=item.workflowAvailable&&host.canManage!==false&&!host.offline&&!item.id.startsWith("case-");
+    const examination=item.caseCategory==="Pemeriksaan",closed=(item.stage==="Closed"&&!w.examinationClosure)||Boolean(w.final),canTax=available&&host.canTax&&!closed;
+    const stageAction=examination?!w.examinationClosure?window.CaseAssessmentUI?.action(item,'close-examination','Record SPHP & close examination','',!available||closed)||'':'':!w.result?button(item,'record-result','Record BA & close discussion',!available||closed):'';
+    const controls=`<div class="case-workflow-tabs" role="tablist" aria-label="Case workflow">${[["progress","Progress"],["payments","Payments & Instalments"],[examination?"psa":"tax",examination?"PSA":"Tax Execution"]].map(([key,label])=>`<button type="button" role="tab" data-cwf-case="${esc(item.id)}" data-cwf-tab="${key}" aria-selected="${tab===key}">${label}</button>`).join("")}<div class="case-workflow-status">${stageAction}<span class="pill ${s.attention&&!examination?"warning":"neutral"}">${esc(summary(item))}</span></div></div>`;
     let body="";
     if(tab==="progress"){
-      const result=w.result?`<div class="case-workflow-result"><strong>${esc(w.result.kind)} ${esc(w.result.number)}</strong><span>${date(w.result.date)}</span><span>${esc(w.result.text)}</span><strong>${money(s.total)}</strong></div>`:`${button(item,"record-result",item.caseCategory==="Pemeriksaan"?"Record SKP result":"Record BA & close discussion",!available||closed)}`;
-      const response=item.caseCategory==="Pemeriksaan"?`${item.sphpDate?`<p class="subline">SPHP: ${date(item.sphpDate)}</p>`:""}${w.response?`<p class="subline">Response: ${esc(w.response.number)} / ${date(w.response.date)}</p>`:""}${!w.response?button(item,"record-response","Record SPHP response",!available||closed):""}`:"";
+      const result=w.examinationClosure?`<div class="case-workflow-result"><strong>SPHP ${esc(w.examinationClosure.number)}</strong><span>${date(w.examinationClosure.date)}</span><span>Examination stage closed. Assessments, payments and PSA remain active.</span></div>`:w.result?`<div class="case-workflow-result"><strong>${esc(w.result.kind)} ${esc(w.result.number)}</strong><span>${date(w.result.date)}</span><span>${esc(w.result.text)}</span><strong>${money(s.total)}</strong></div>`:'';
+      const response=item.caseCategory==="Pemeriksaan"?`${item.sphpDate?`<p class="subline">SPHP: ${date(item.sphpDate)}</p>`:""}${w.response?`<p class="subline">Response: ${esc(w.response.number)} / ${date(w.response.date)}</p>`:""}${!w.response&&!w.examinationClosure?button(item,"record-response","Record SPHP response",!available||closed):""}`:"";
       const note=!available&&!host.offline?`<p class="case-progress-notice">${item.id.startsWith("case-")?"Save this case to enable workflow actions.":"Workflow unavailable. Database update required."}</p>`:"";
-      const insertion=controls+block("Discussion result",note+result+response);
+      const documents=examination&&w.examinationClosure?window.CaseAssessmentUI?.documents(item,host)||'':'';
+      const insertion=controls+block(examination?"Examination / SPHP":"Discussion result",note+result+response)+documents;
       body=progressHtml.replace('<div class="case-progress-viewport">','<div class="case-progress-viewport">'+insertion);
     }else if(tab==="payments"){
       const paidBy=id=>w.payments.filter(p=>p.verified&&p.scheduleId===id).reduce((s,p)=>s+p.amount,0);
       body=block("Payments & Instalments",!w.result?'<p class="subline">Record BA / SKP in Progress first.</p>':`<div class="case-workflow-totals"><span>Payable <strong>${money(s.total)}</strong></span><span>Verified paid <strong>${money(s.paid)}</strong></span><span>Remaining <strong>${money(s.total-s.paid)}</strong></span>${button(item,"set-plan","Set instalments",!available||closed||!s.total)}</div><div class="case-workflow-scroll"><table><thead><tr><th>Tax byproduct</th><th>Period</th><th>Internal target</th><th>Scheduled</th><th>Verified paid</th><th>Remaining</th><th>Action</th></tr></thead><tbody>${w.schedule.map(row=>{const p=w.products.find(p=>p.id===row.productId),remaining=row.amount-paidBy(row.id),reserved=w.payments.filter(p=>p.scheduleId===row.id).reduce((s,p)=>s+p.amount,0);return `<tr><td>${esc(p.tax)}</td><td>${esc(p.period)}</td><td>${date(row.due)}${remaining>0&&row.due<today()?'<span class="pill warning">Overdue</span>':""}</td><td>${money(row.amount)}</td><td>${money(paidBy(row.id))}</td><td>${money(remaining)}</td><td>${remaining>0?button(item,"record-payment","Record payment",!canTax||reserved>=row.amount,row.id):"Paid"}</td></tr>`;}).join("")||'<tr><td colspan="7">No payment required.</td></tr>'}</tbody></table></div><p class="subline">Only verified receipts reduce the balance.</p><details><summary>Receipts (${w.payments.length})</summary><div class="case-workflow-receipts">${w.payments.map(p=>`<div>${money(p.amount)} / ${date(p.date)} / ${esc(p.proof||"Reference pending")} <span class="pill ${p.verified?"accent":"warning"}">${p.verified?"Verified":"Unverified"}</span>${!p.verified?button(item,"verify-payment","Verify receipt",!canTax,p.id):""}</div>`).join("")}</div></details>`);
+    }else if(tab==='psa'&&examination){
+      const counts=window.CaseAssessmentUI?.count([item]);
+      body=`<div class="case-assessment-heading"><p class="subline">${counts?.ongoing||0} ongoing / ${counts?.successful||0} successful / ${counts?.rejected||0} rejected</p><button type="button" class="tiny-btn" data-cwf-case="${esc(item.id)}" data-cwf-penalty>Open in Penalty Removal</button></div>`+(window.CaseAssessmentUI?.documents(item,host,'psa')||'');
     }else{
       body=block("Tax Execution",!w.result?'<p class="subline">Record BA / SKP first.</p>':`${s.attention?`<p class="case-progress-notice"><strong>Supervisor attention:</strong> Revisions pending with ${esc(item.taxPic||"the Tax PIC")}. Target: ${date(w.revisionTarget)}.</p>`:!s.settled?'<p class="case-progress-notice">Verify all payments before recording SPT submissions.</p>':""}<div class="case-workflow-scroll"><table><thead><tr><th>Tax byproduct</th><th>Period</th><th>Payable</th><th>Revision / submission receipt</th></tr></thead><tbody>${w.products.map(p=>`<tr><td>${esc(p.tax)}</td><td>${esc(p.period)}</td><td>${money(p.amount)}</td><td>${p.revise?p.filing?`${esc(p.filing.number)} / ${date(p.filing.date)}`:button(item,"record-filing","Record revised SPT",!canTax||!s.settled,p.id):"Revision not required"}</td></tr>`).join("")||'<tr><td colspan="4">No tax byproducts.</td></tr>'}</tbody></table></div><div class="case-workflow-final">${w.final?`<strong>Closed / ${esc(w.final.number)} / ${date(w.final.date)}</strong>`:button(item,"record-final",item.caseCategory==="Pemeriksaan"?"Record examination closure":"Record SP3P2DK & close case",!canTax||!s.executed)}${!s.executed?'<p class="subline">Complete payments and required revisions to close.</p>':""}</div>`);
     }
@@ -100,14 +107,16 @@
   document.addEventListener("click",event=>{
     const target=event.target.closest?.("[data-cwf-case]");if(!target)return;
     const host=hosts.get(target.dataset.cwfCase);if(!host)return;
+    if(target.hasAttribute('data-cwf-penalty')){host.onPenalty?.();return;}
     if(target.dataset.cwfTab){tabs.set(host.item.id,target.dataset.cwfTab);host.onRefresh();return;}
     if(target.disabled||!host.item.workflowAvailable||host.offline)return;
     const taxAction=["record-payment","verify-payment","record-filing","record-final"].includes(target.dataset.cwfAction);
-    if(taxAction&&!host.canTax||host.item.stage==="Closed"||host.item.workflow?.final)return;
+    if(taxAction&&!host.canTax||host.item.stage==="Closed"&&!host.item.workflow?.examinationClosure||host.item.workflow?.final)return;
     open(host,target.dataset.cwfAction,target.dataset.cwfKey);
   });
   function matches(item,filter){
     if(!filter||filter==="all")return true;
+    if(filter.startsWith('psa-'))return item.workflow?.products.some(p=>filter==='psa-ongoing'?window.CaseAssessmentUI?.ongoing(p.assessment?.psa):filter==='psa-successful'?window.CaseAssessmentUI?.success(p.assessment?.psa):p.assessment?.psa?.status==='Ditolak')||false;
     const w=item.workflow;if(!w?.result||w.final)return false;
     const s=status(w);
     if(filter==="supervisor")return s.attention;
@@ -116,6 +125,7 @@
   }
   function bucket(item){
     const w=item.workflow;
+    if(w?.examinationClosure){const s=status(w);return !s.settled?'payment':w.products.some(p=>window.CaseAssessmentUI?.ongoing(p.assessment?.psa))?'progress':'done';}
     if(w?.final||item.stage==="Closed"||item.closedAt||(!w?.result&&item.completionDate))return "done";
     if(!w?.result)return "progress";
     const s=status(w);

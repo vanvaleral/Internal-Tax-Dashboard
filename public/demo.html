@@ -3927,6 +3927,7 @@
   <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
   <link rel="stylesheet" href="case-workflow-dashboard.css" />
+  <script src="case-assessment-dashboard.js"></script>
   <script src="case-workflow-dashboard.js"></script>
   <script src="case-report.js"></script>
   <script>
@@ -4913,7 +4914,7 @@
     state.teamDivision = bootstrapProfile.profile.team_division || state.teamDivision;
     if (IS_CASES_FULLSCREEN) {
       state.currentView = "cases-view";
-      if (["himbauan", "pemeriksaan"].includes(casePageParams.get("casesTab"))) state.casesTab = casePageParams.get("casesTab");
+      if (["himbauan", "pemeriksaan", "register", "psa"].includes(casePageParams.get("casesTab"))) state.casesTab = casePageParams.get("casesTab");
     }
     if (IS_ANNUAL_SHEET_PREVIEW) {
       state.currentView = "matrix-view"; state.operationsMode = "annual"; state.annualTeam = "accounting";
@@ -5074,6 +5075,8 @@
           active: ["Cases / Active Cases", "Cases Workspace", "Non-recurring tax work uses case queues and milestone progression, not the recurring compliance matrix."],
           sp2dk: ["Cases / SP2DK", "Cases Workspace", "Focused case lane for SP2DK handling and follow-through."],
           pemeriksaan: ["Cases / Pemeriksaan", "Cases Workspace", "Inspection-oriented view with clearer ownership and stage visibility."],
+          register: ["Cases / SKP & STP", "Assessment Register", "Source assessments linked to their examination and payment records."],
+          psa: ["Cases / Penalty Removal", "Penalty Removal", "Track ongoing applications and recorded PSA decisions across examinations."],
           restitusi: ["Cases / Restitusi", "Cases Workspace", "Restitusi work stays separate from routine monthly obligations."],
           closed: ["Cases / Closed Cases", "Cases Workspace", "Closed case history for reference without cluttering active case flow."]
         },
@@ -8718,7 +8721,7 @@
       const snapshots = progress?.taskTimeline || [];
       const snapshottedTasks = new Set(snapshots.filter(event => ["completed", "linked_completed"].includes(event.event_type)).map(event => event.task_id));
       const events = [
-        ...(progress?.progressEntries || []).map((entry, index) => ({ ...entry, key:`progress:${entry.id || index}`, source:"Follow-up" })),
+        ...(progress?.progressEntries || []).filter(entry=>!item.workflow?.removedProgress?.some(removed=>removed.id===entry.id&&!removed.restoredAt)).map((entry, index) => ({ ...entry, key:`progress:${entry.id || index}`, source:"Follow-up" })),
         ...snapshots.map(event => ({ key:`task-event:${event.id}`, entry:`${event.event_type === "reopened" ? "Reopened: " : event.event_type === "unlinked" ? "Link removed: " : event.event_type === "linked_completed" ? "Linked completed task: " : "Completed: "}${event.title}`, creatorName:event.actor_name, createdAt:event.occurred_at, source:"My Work", taskId:event.task_id })),
         ...(progress?.completedTasks || []).filter(task => !snapshottedTasks.has(task.id)).map((task, index) => ({ key:`task:${task.id || index}`, entry:task.title, creatorName:task.completedByName || task.creatorName, createdAt:task.completedAt, source:"My Work", taskId:task.id })),
         ...(item.workflow?.events || []).map(event => ({ key:`workflow:${event.id}`, entry:event.text, creatorName:event.actor, createdAt:event.at, source:"Case action" }))
@@ -8728,12 +8731,18 @@
 
     function renderCaseProgressPanel(item, progress) {
       const original = renderCaseProgressContent(item, progress);
-      return window.CaseWorkflowUI ? window.CaseWorkflowUI.render(item, original, {
+      return window.CaseWorkflowUI ? window.CaseWorkflowUI.render(item, original, caseWorkflowHost(item)) : original;
+    }
+    function caseWorkflowHost(item) {
+      return {
         offline:IS_OFFLINE_DEMO,
+        canManage:hasLeadershipAccess() || [item.taxPicProfileId,item.accountingPicProfileId].includes(bootstrapProfile.profile.id),
         canTax:hasLeadershipAccess() || item.taxPicProfileId === bootstrapProfile.profile.id,
         onSave:command => saveCaseWorkflow(item.id, command),
-        onRefresh:() => refreshExpandedCaseProgress(item.id)
-      }) : original;
+        onRefresh:() => ["register","psa"].includes(state.casesTab)?renderCases():refreshExpandedCaseProgress(item.id),
+        onError:message=>caseSheetMessage(message,true),
+        onPenalty:()=>{state.casesTab="psa";state.caseSearch="";state.caseWorkflowFilter="all";state.expandedHimbauanId=item.id;commitWorkspaceNavigation("push");}
+      };
     }
 
     function renderCaseProgressContent(item, progress) {
@@ -8746,6 +8755,8 @@
       const ready = !draft && !progress?.accessDenied;
       const saving = caseFollowUpPending.has(item.id);
       const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
+      const removal=(entry,restore=false)=>window.CaseAssessmentUI&&entry.id&&(hasLeadershipAccess()||entry.creatorProfileId===bootstrapProfile.profile.id)?window.CaseAssessmentUI.action(item,restore?"restore-progress":"remove-progress",restore?"Restore":"Remove incorrect update",entry.id,IS_OFFLINE_DEMO||!item.workflowAvailable):"";
+      const removed=(item.workflow?.removedProgress||[]).filter(entry=>!entry.restoredAt);
       return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(formatIsoToDisplayDate(item.dueDate))}</strong></span>` : ""}</div>
         ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Changes are not saved.</div>` : draft ? `<div class="case-progress-notice"><span>Select a Client Master client and leave the cell to save automatically.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
         ${item.notes ? `<p class="case-progress-context">${escapeHtml(item.notes)}</p>` : ""}
@@ -8753,7 +8764,8 @@
           <section class="case-progress-block"><div class="eyebrow">Open work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No open work in your scope.</div>`)}</div></section>
         </div><div>
           ${progress?.error ? `<div class="case-progress-notice" role="alert"><span>${escapeHtml(progress.error)}</span><button class="tiny-btn" data-case-reload-progress="${escapeAttr(item.id)}">Retry</button></div>` : ""}
-          <div class="eyebrow">Case timeline</div><div class="subline">Showing ${visibleTimeline.length} loaded updates · Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${visibleTimeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div></div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
+          <div class="eyebrow">Case timeline</div><div class="subline">Showing ${visibleTimeline.length} loaded updates · Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${visibleTimeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div>${entry.source==="Follow-up"?removal(entry):""}</div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
+          ${removed.length?`<details class="case-removed-progress"><summary>Removed updates (${removed.length})</summary>${removed.map(entry=>`<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.reason)} · Removed ${timestamp(entry.at)}</div></div>${removal({...entry,creatorProfileId:entry.creatorId},true)}</div>`).join("")}</details>`:""}
           ${progress?.pageInfo?.hasMore || timeline.length > visibleTimeline.length ? `<button type="button" class="ghost-btn" data-case-load-older="${escapeAttr(item.id)}" ${progress?.loading ? "disabled" : ""}>${progress?.loading ? "Loading..." : "Load older updates"}</button>` : ""}
           <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" value="${escapeAttr(caseFollowUpDrafts.get(item.id) || "")}" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready && !saving ? "" : "disabled"}>${saving ? "Saving..." : IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div><div class="subline" data-case-followup-status role="status">${escapeHtml(saving ? "Saving to database..." : caseFollowUpStatus.get(item.id) || "")}</div>
         </div></div></div>`;
@@ -8810,15 +8822,18 @@
     function renderCases(rootOverride = null) {
       scheduleAssignedCasePreload();
       rememberCaseFollowUpDraft();
+      const assessmentEditor=activeEditorSnapshot();
       if (!rootOverride) caseListViewDirty = false;
       const profileId = bootstrapProfile.profile.id;
       const scopedCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => (profileId && [item.taxPicProfileId, item.accountingPicProfileId].includes(profileId)) || (!item.taxPicProfileId && String(item.taxPic || "").toLowerCase() === state.selectedPic.toLowerCase()) || (!item.accountingPicProfileId && String(item.accountingPic || "").toLowerCase() === state.selectedPic.toLowerCase()) || (item.id === state.selectedCaseId && item.id.startsWith("case-")));
       const caseQuery = state.caseSearch.trim().toLowerCase();
-      const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
-      const categoryCases = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category);
-      const addedOrder = [...categoryCases].sort((a, b) => {
+      const assessmentTab=["register","psa"].includes(state.casesTab)&&Boolean(window.CaseAssessmentUI);
+      const category = state.casesTab === "pemeriksaan" || assessmentTab ? "Pemeriksaan" : "Himbauan";
+      const allCategoryCases = scopedCases.filter((item) => (item.caseCategory || "Himbauan") === category);
+      const categoryCases=allCategoryCases.filter(item=>!assessmentTab||(state.casesTab==="psa"?item.workflow?.products.some(p=>p.assessment?.psa):item.workflow?.examinationClosure||item.workflow?.result?.kind==="SKP"));
+      const addedOrder = [...allCategoryCases].sort((a, b) => {
         const x = a.createdAt || "", y = b.createdAt || "";
         return (Date.parse(x) || 0) - (Date.parse(y) || 0) || x.localeCompare(y) || categoryCases.indexOf(a) - categoryCases.indexOf(b);
       });
@@ -8833,13 +8848,18 @@
         (state.caseAccFilter === "all" || casePicKey(item, "accounting") === state.caseAccFilter)
         && (state.caseTaxFilter === "all" || casePicKey(item, "tax") === state.caseTaxFilter)
         && (!window.CaseWorkflowUI || window.CaseWorkflowUI.matches(item,state.caseWorkflowFilter))
-        && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes, item.inspectorPic, item.completionNotes, item.taxYear].join(" ").toLowerCase().includes(caseQuery));
-      const caseList = categoryCases.filter(matchesCase);
+        && (!caseQuery || [item.clientName, item.letterNumber, item.subject, item.taxPic, item.accountingPic, item.notes, item.inspectorPic, item.completionNotes, item.taxYear,item.workflow?.examinationClosure?.number,...(item.workflow?.products||[]).flatMap(p=>[p.tax,p.period,p.assessment?.number,p.assessment?.psa?.application])].join(" ").toLowerCase().includes(caseQuery));
+      const assessmentProducts=item=>window.CaseAssessmentUI?.scopedProducts(item,state.casesTab,caseQuery,state.caseWorkflowFilter)||[];
+      const caseList = categoryCases.filter(matchesCase).filter(item=>!assessmentTab||assessmentProducts(item).length||state.casesTab==='register'&&!item.workflow?.products.length&&state.caseWorkflowFilter==='all');
       const columns = category === "Himbauan"
         ? [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["dueDate", "Jatuh Tempo", "derived"], ["deadline", "Deadline", "derived"], ["completionDate", "Tgl Selesai", "date"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["notes", "Note"]]
         : [["clientName", "Wajib Pajak"], ["letterNumber", "No Surat"], ["letterDate", "Tgl Surat", "date"], ["receivedDate", "Tgl Terima", "date"], ["subject", "Perihal"], ["taxYear", "Tahun Pajak"], ["taxPic", "PIC Tax", "pic"], ["accountingPic", "PIC ACC", "pic"], ["inspectorPic", "PIC Pemeriksa"], ["sphpDate", "Tgl SPHP", "date"], ["completionNotes", "Penyelesaian"]];
       const sort = state.caseSheetSort;
       if (sort.key === "createdAt") caseList.sort((a, b) => (caseNumbers.get(a.id) - caseNumbers.get(b.id)) * (sort.direction === "desc" ? -1 : 1));
+      else if(assessmentTab&&["documents","assessmentTotal","assessmentStatus"].includes(sort.key))caseList.sort((a,b)=>{
+        const value=item=>{const rows=assessmentProducts(item);return sort.key==='documents'?rows.length:sort.key==='assessmentTotal'?rows.reduce((n,p)=>n+(state.casesTab==='psa'?p.assessment.psa.requested:p.amount),0):rows.map(p=>p.assessment?.psa?.status||'Registered').join(' ');};
+        const x=value(a),y=value(b);return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*(sort.direction==='desc'?-1:1)||caseNumbers.get(a.id)-caseNumbers.get(b.id);
+      });
       else if (columns.some(([key]) => key === sort.key)) caseList.sort((a, b) => {
         const key = sort.key === "deadline" ? "dueDate" : sort.key;
         const x = String(a[key] || ""), y = String(b[key] || "");
@@ -8862,8 +8882,9 @@
       const expandedHimbauan = caseList.find((item) => item.id === state.expandedHimbauanId);
       const expandedProgress = expandedHimbauan ? state.caseProgressById[expandedHimbauan.id] : null;
       const root = rootOverride || document.getElementById("cases-view");
-      const previousViewport = root.querySelector('[data-virtual-table="cases"]');
+      const previousViewport = root.querySelector('[data-virtual-table="cases"],[data-case-assessment-viewport]');
       const previousScrollLeft = previousViewport?.scrollLeft || 0;
+      const previousAssessmentTop=previousViewport?.hasAttribute('data-case-assessment-viewport')?previousViewport.scrollTop:0;
       const toolIcon = (path) => `<svg class="case-tool-icon" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
       const columnGroup = (field) => ["taxPic", "accountingPic", "inspectorPic"].includes(field) ? "ownership" : ["dueDate", "deadline", "completionDate", "taxYear", "sphpDate", "completionNotes"].includes(field) ? "tracking" : "reference";
       const groupStart = (index) => index > 0 && columnGroup(columns[index][0]) !== columnGroup(columns[index - 1][0]);
@@ -8887,28 +8908,32 @@
         const field = isTax ? "taxPicProfileId" : "accountingPicProfileId";
         return `<select class="inline-select" data-case-sheet-id="${escapeAttr(item.id)}" data-case-sheet-field="${field}" aria-label="${division} case PIC" ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""}><option value="">Unassigned</option>${currentId && !people.some(person => person.id === currentId) ? `<option value="${escapeAttr(currentId)}" selected>${escapeHtml(currentName || "Historical PIC")}</option>` : ""}${!currentId && currentName ? `<option value="legacy" selected disabled>${escapeHtml(currentName)}</option>` : ""}${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === caseSheetValue(item, field) ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
       };
-      const sheetRows = caseWindow.rows.map((item) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${caseNumbers.get(item.id)}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td data-case-grid-field="${type === "pic" ? `${field}ProfileId` : field}" role="gridcell" tabindex="-1" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
+      const sheetRows = assessmentTab ? "" : caseWindow.rows.map((item) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${caseNumbers.get(item.id)}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td data-case-grid-field="${type === "pic" ? `${field}ProfileId` : field}" role="gridcell" tabindex="-1" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
+      const workflowFilters=assessmentTab?[["all","All controls"],["overdue","Payment overdue"],["psa-ongoing","PSA ongoing"],["psa-successful","PSA successful"],["psa-rejected","PSA rejected"]]:[["all","All workflow"],["overdue","Payment overdue"],["supervisor","Supervisor attention"],["closure","Awaiting SP3P2DK"]];
+      const assessmentCounts=assessmentTab?window.CaseAssessmentUI.count(caseList.map(item=>({workflow:{products:assessmentProducts(item)}}))):null;
 
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-cases">
           <section class="panel case-sheet-panel">
             <div class="toolbar case-sheet-nav">
               <div class="workspace-tabs case-mobile-tabs">
-                <button class="${category === "Himbauan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="himbauan" aria-pressed="${category === "Himbauan"}">Himbauan <span class="case-tab-count">${categoryCount("Himbauan")}</span></button>
-                <button class="${category === "Pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan" aria-pressed="${category === "Pemeriksaan"}">Pemeriksaan <span class="case-tab-count">${categoryCount("Pemeriksaan")}</span></button>
+                <button class="${state.casesTab === "himbauan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="himbauan" aria-pressed="${state.casesTab === "himbauan"}">Himbauan <span class="case-tab-count">${categoryCount("Himbauan")}</span></button>
+                <button class="${state.casesTab === "pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan" aria-pressed="${state.casesTab === "pemeriksaan"}">Pemeriksaan <span class="case-tab-count">${categoryCount("Pemeriksaan")}</span></button>
+                <button class="${state.casesTab === "register" ? "solid-btn" : "ghost-btn"}" data-cases-tab="register" aria-pressed="${state.casesTab === "register"}">SKP &amp; STP <span class="case-tab-count">${window.CaseAssessmentUI?.count(scopedCases).documents||0}</span></button>
+                <button class="${state.casesTab === "psa" ? "solid-btn" : "ghost-btn"}" data-cases-tab="psa" aria-pressed="${state.casesTab === "psa"}">Penalty Removal <span class="case-tab-count">${window.CaseAssessmentUI?.count(scopedCases).psa||0}</span></button>
               </div>
               <div class="toolbar-right case-mobile-actions">
                 ${IS_CASES_FULLSCREEN ? `<a class="case-fullscreen-link" href="${IS_OFFLINE_DEMO ? "./demo.html" : "/dashboard"}" aria-label="Back to Dashboard">${toolIcon('<path d="m10 5-7 7 7 7M3 12h18"/>')}Dashboard</a>` : `<a class="case-fullscreen-link" data-case-fullscreen="yes" href="${escapeAttr(caseFullScreenUrl())}" target="_blank" rel="noopener noreferrer" aria-label="Open Cases in full screen">${toolIcon('<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>')}Full Screen</a>`}
                 <button class="ghost-btn" data-toggle-case-trash="yes" aria-expanded="${state.caseTrashOpen}" aria-label="Archived Cases">${toolIcon('<path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/>')}Archived Cases${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
-                <button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>
+                ${assessmentTab?'':`<button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>`}
               </div>
             </div>
-            <div data-case-report-slot>${caseReportSnapshot ? window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || caseFollowUpPending.size > 0 || taxCases.some(row=>caseSheetPending.get(row)?.count)) : ""}</div>
-            <div class="toolbar case-sheet-tools"><label class="case-search-wrap">${toolIcon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}<input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Find client, letter, or note..." aria-label="Search cases" /></label><div class="case-filter-pair"><select id="case-acc-filter" class="filter-input" aria-label="Filter ACC PIC">${picOptions("accounting", state.caseAccFilter)}</select><select id="case-tax-filter" class="filter-input" aria-label="Filter Tax PIC">${picOptions("tax", state.caseTaxFilter)}</select></div><select id="case-workflow-filter" class="filter-input" aria-label="Filter case workflow">${[["all","All workflow"],["overdue","Payment overdue"],["supervisor","Supervisor attention"],["closure","Awaiting SP3P2DK"]].map(([key,label]) => `<option value="${key}" ${state.caseWorkflowFilter === key ? "selected" : ""}>${label}</option>`).join("")}</select><button class="ghost-btn case-reset" data-case-sheet-reset="yes">${toolIcon('<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>')}Reset</button><span class="case-filter-result"><strong>${caseList.length}</strong> of ${categoryCases.length} cases</span></div>
-            <div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" role="grid" aria-multiselectable="true" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col" aria-sort="${sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="createdAt" title="Sort by date added">No.</button></th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+            ${assessmentTab?`<div class="case-assessment-summary"><strong>${state.casesTab==='psa'?'Penalty Removal':'SKP & STP register'}</strong><span>${assessmentCounts.documents} assessments</span><span>${assessmentCounts.ongoing} PSA ongoing</span><span>${assessmentCounts.successful} successful</span><span>${assessmentCounts.rejected} rejected</span><p class="subline">Linked from Pemeriksaan. Expand a client to edit its source documents; no duplicated payment balances.</p></div>`:`<div data-case-report-slot>${caseReportSnapshot ? window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || caseFollowUpPending.size > 0 || taxCases.some(row=>caseSheetPending.get(row)?.count)) : ""}</div>`}
+            <div class="toolbar case-sheet-tools"><label class="case-search-wrap">${toolIcon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>')}<input id="case-search" class="filter-input" type="search" value="${escapeAttr(state.caseSearch)}" placeholder="Find client, letter, assessment, or note..." aria-label="Search cases" /></label><div class="case-filter-pair"><select id="case-acc-filter" class="filter-input" aria-label="Filter ACC PIC">${picOptions("accounting", state.caseAccFilter)}</select><select id="case-tax-filter" class="filter-input" aria-label="Filter Tax PIC">${picOptions("tax", state.caseTaxFilter)}</select></div><select id="case-workflow-filter" class="filter-input" aria-label="Filter case workflow">${workflowFilters.map(([key,label]) => `<option value="${key}" ${state.caseWorkflowFilter === key ? "selected" : ""}>${label}</option>`).join("")}</select><button class="ghost-btn case-reset" data-case-sheet-reset="yes">${toolIcon('<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>')}Reset</button><span class="case-filter-result"><strong>${caseList.length}</strong> of ${categoryCases.length} cases</span></div>
+            ${assessmentTab?window.CaseAssessmentUI.registry(caseList,{mode:state.casesTab,expanded:state.expandedHimbauanId,hostFor:caseWorkflowHost,numberFor:id=>caseNumbers.get(id),query:caseQuery,filter:state.caseWorkflowFilter,sort}):`<div class="table-wrap" data-virtual-table="cases" data-row-height="36" tabindex="0" aria-label="${category} spreadsheet, scroll for more columns"><table class="case-sheet" role="grid" aria-multiselectable="true" aria-label="${category} control sheet"><colgroup><col class="case-col-number" data-case-column="_number" />${columns.map(([key]) => `<col class="case-col-${key}" data-case-column="${key}" />`).join("")}<col class="case-col-actions" data-case-column="_actions" /></colgroup><thead><tr><th scope="col" aria-sort="${sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="createdAt" title="Sort by date added">No.</button></th>${columns.map(([key, title], colIndex) => `<th scope="col" data-case-column-group="${columnGroup(key)}" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""} aria-sort="${sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}"><button class="case-sheet-sort" data-case-sheet-sort="${key}">${title}<span aria-hidden="true">${sort.key === key ? (sort.direction === "asc" ? "&#8593;" : "&#8595;") : "&#8597;"}</span></button><span class="case-sheet-column-resize" data-case-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Resize ${title} column" aria-valuemin="72" aria-valuemax="640" tabindex="0" title="Drag to resize. Double-click to reset. Arrow keys adjust width."></span></th>`).join("")}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>
               ${sheetRows}
-            </tbody></table></div>
-            <div class="case-sheet-footer"><span>${caseList.length} / ${categoryCases.length} cases · Yellow: 30+ days · Red: 60+ days without activity · Drag / Shift+click: select · Ctrl+C / V: copy / paste</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
+            </tbody></table></div>`}
+            <div class="case-sheet-footer"><span>${assessmentTab?'Source documents stay linked to their examination and payment history.':`${caseList.length} / ${categoryCases.length} cases · Yellow: 30+ days · Red: 60+ days without activity · Drag / Shift+click: select · Ctrl+C / V: copy / paste`}</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
           </section>
           ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Archived Cases</h3><p>Archived cases retain their task links and progress history. They can be restored later.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · archived ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No archived cases.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${clientMasterClients.filter(isActiveClientRecord).map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
@@ -8921,9 +8946,11 @@
       const fullScreenLink = root.querySelector("[data-case-fullscreen]");
       if (fullScreenLink) { fullScreenLink.target = "_blank"; fullScreenLink.rel = "noopener noreferrer"; }
       // Restore after column widths are applied; native scrolling clamps narrower layouts.
-      const viewport = root.querySelector('[data-virtual-table="cases"]');
+      const viewport = root.querySelector('[data-virtual-table="cases"],[data-case-assessment-viewport]');
       if (viewport && previousViewport) viewport.scrollLeft = previousScrollLeft;
-      if (expandedHimbauan && !expandedProgress && !expandedHimbauan.id.startsWith("case-")) loadCaseProgress(expandedHimbauan.id);
+      if(viewport?.hasAttribute('data-case-assessment-viewport'))viewport.scrollTop=previousAssessmentTop;
+      if(assessmentEditor?.assessment)restoreActiveEditor(assessmentEditor);
+      if (!assessmentTab && expandedHimbauan && !expandedProgress && !expandedHimbauan.id.startsWith("case-")) loadCaseProgress(expandedHimbauan.id);
     }
 
     function renderClientView() {
@@ -9618,7 +9645,8 @@
         if (!Array.isArray(result.data)) throw new Error("Case list response was incomplete. Existing rows are retained.");
         const previousRows = new Map(taxCases.map(item => [item.id, item]));
         const previousVersions = new Map(taxCases.map(item => [item.id, item.version]));
-        const protectedRows = taxCases.filter(item => item.id.startsWith("case-") || caseSheetPending.get(item)?.count);
+        const assessmentEditor=activeEditorSnapshot();
+        const protectedRows = taxCases.filter(item => item.id.startsWith("case-") || caseSheetPending.get(item)?.count || assessmentEditor?.assessment&&assessmentEditor.inlineId===item.id);
         const protectedIds = new Set(protectedRows.map(item => item.id));
         const nextRows = [...protectedRows, ...result.data.filter(row => !protectedIds.has(row.id)).map(row => {
           const incoming = databaseCaseToDemo(row), previous = previousRows.get(incoming.id);
@@ -9663,6 +9691,7 @@
 
     function syncExpandedCaseProgress() {
       rememberCaseFollowUpDraft();
+      if(["register","psa"].includes(state.casesTab)){renderCases();return;}
       const root = document.getElementById("cases-view");
       root.querySelectorAll(".case-progress-inline").forEach(panel => { if (panel.dataset.caseProgressId !== state.expandedHimbauanId) panel.remove(); });
       root.querySelectorAll("[data-toggle-himbauan-progress]").forEach(button => {
@@ -9680,17 +9709,20 @@
 
     function refreshExpandedCaseProgress(caseId) {
       if (state.currentView !== "cases-view" || state.expandedHimbauanId !== caseId) return;
+      if(["register","psa"].includes(state.casesTab)){renderCases();return;}
       const item = taxCases.find(row => row.id === caseId);
       const row = [...document.querySelectorAll("[data-case-sheet-row]")].find(row => row.dataset.caseSheetRow === caseId);
       const panel = row?.nextElementSibling;
       if (item && panel?.classList.contains("case-progress-inline")) {
         rememberCaseFollowUpDraft();
+        const assessmentEditor=activeEditorSnapshot();
         const input = panel.querySelector("#himbauan-progress-entry"), value = input?.value || "", focused = document.activeElement === input;
         const selection = focused ? [input.selectionStart,input.selectionEnd] : null;
         panel.firstElementChild.innerHTML = safeHtml(renderCaseProgressPanel(item, state.caseProgressById[caseId]));
         const restored = panel.querySelector("#himbauan-progress-entry");
         if (restored && value) restored.value = value;
         if (restored && focused) { restored.focus({preventScroll:true}); restored.setSelectionRange(...selection); }
+        if(assessmentEditor?.assessment)restoreActiveEditor(assessmentEditor);
       }
     }
 
@@ -9894,6 +9926,7 @@
       if (!response.ok) throw new Error(result.error || "Case progress could not be saved.");
       saved = result.progressEntry;
       if (!saved?.id) throw new Error("Save confirmation was incomplete. Refresh the timeline before retrying."); }
+      saved.creatorProfileId ||= bootstrapProfile.profile.id;
       caseFollowUpRequests.delete(caseId);
       const progress = state.caseProgressById[caseId] || { completedTasks: [], progressEntries: [] };
       progress.progressEntries ||= [];
@@ -10019,7 +10052,7 @@
     let caseSheetStatus = "Changes save to the database when you leave a cell.";
     let caseSheetRange = null, caseSheetRangeDrag = null, caseSheetBulkSaving = false;
     let caseAnnouncementRefreshPending = false;
-    const caseDefaultColumnWidths = { _number:44, _actions:38, clientName:220, letterNumber:110, subject:150, letterDate:118, receivedDate:118, dueDate:118, completionDate:118, sphpDate:118, deadline:88, taxYear:88, taxPic:104, accountingPic:104, inspectorPic:130, notes:160, completionNotes:160 };
+    const caseDefaultColumnWidths = { _number:44, _actions:38, clientName:220, letterNumber:110, subject:150, letterDate:118, receivedDate:118, dueDate:118, completionDate:118, sphpDate:118, deadline:88, taxYear:88, taxPic:104, accountingPic:104, inspectorPic:130, notes:160, completionNotes:160,documents:100,assessmentTotal:150,assessmentStatus:220 };
     let caseColumnDrag = null;
 
     function caseColumnWidth(key, value) {
@@ -10059,7 +10092,7 @@
         const incoming = JSON.parse(event.newValue)?.ui?.caseColumnWidths;
         if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return;
         const widths = {};
-        for (const category of ["himbauan", "pemeriksaan"]) {
+        for (const category of ["himbauan", "pemeriksaan", "register", "psa"]) {
           const values = incoming[category];
           if (!values || typeof values !== "object" || Array.isArray(values)) continue;
           widths[category] = Object.fromEntries(Object.entries(values).filter(([key]) => Object.hasOwn(caseDefaultColumnWidths, key)).map(([key, value]) => [key, caseColumnWidth(key, value)]));
@@ -10525,6 +10558,7 @@
       }
       const fullscreen = event.target.closest?.("[data-case-fullscreen]");
       if (fullscreen) {
+        if(window.CaseAssessmentUI?.hasDrafts()){event.preventDefault();caseSheetMessage("Save or cancel assessment draft rows before opening Full Screen.",true);return;}
         const active = document.activeElement;
         if (active?.matches?.("input[data-case-sheet-field]")) saveCaseSheetCell(active);
         if (caseSheetBulkSaving || caseFollowUpPending.size || taxCases.some(record => caseSheetPending.get(record)?.count)) {
@@ -11474,7 +11508,7 @@
         operationsMode: ["monthly", "annual"],
         operationsTab: ["active", "history", "claim", "archive"],
         annualTeam: ["accounting", "tax"],
-        casesTab: ["himbauan", "pemeriksaan"],
+        casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
         clientManagementTab: ["active", "on-demand", "inactive", "proposal", "contracts"],
         managementTab: ["overview", "trends", "portfolio", "workload", "recognition", "report", "announcements", "access"]
       };
@@ -11702,6 +11736,7 @@
       const active = document.activeElement;
       if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement)) return null;
       const id = active.id;
+      if(active.hasAttribute("data-ca-edit")||active.hasAttribute("data-ca-draft-field"))return active.disabled?null:{id:"",inlineId:active.dataset.caCase,field:active.dataset.caEdit||active.dataset.caDraftField,productId:active.dataset.caKey,assessment:true,draftAssessment:active.hasAttribute("data-ca-draft-field"),value:active.value,start:"selectionStart"in active?active.selectionStart:null,end:"selectionEnd"in active?active.selectionEnd:null};
       const sheet = active.hasAttribute("data-case-sheet-id");
       const inlineId = active.getAttribute(sheet ? "data-case-sheet-id" : "data-case-inline");
       const field = active.getAttribute(sheet ? "data-case-sheet-field" : "data-case-field");
@@ -11721,9 +11756,10 @@
       const escapedId = window.CSS?.escape ? window.CSS.escape(snapshot.id || "") : snapshot.id;
       const selector = snapshot.id
         ? `#${escapedId}`
-        : snapshot.sheet ? `[data-case-sheet-id="${escapeAttr(snapshot.inlineId)}"][data-case-sheet-field="${escapeAttr(snapshot.field)}"]` : `[data-case-inline="${escapeAttr(snapshot.inlineId)}"][data-case-field="${escapeAttr(snapshot.field)}"]`;
+        : snapshot.assessment ? `[data-ca-case="${escapeAttr(snapshot.inlineId)}"][data-ca-key="${escapeAttr(snapshot.productId)}"][${snapshot.draftAssessment?'data-ca-draft-field':'data-ca-edit'}="${escapeAttr(snapshot.field)}"]` : snapshot.sheet ? `[data-case-sheet-id="${escapeAttr(snapshot.inlineId)}"][data-case-sheet-field="${escapeAttr(snapshot.field)}"]` : `[data-case-inline="${escapeAttr(snapshot.inlineId)}"][data-case-field="${escapeAttr(snapshot.field)}"]`;
       const field = document.querySelector(selector);
       if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
+      if(snapshot.assessment)field.value=snapshot.value;
       field.focus({ preventScroll: true });
       if (snapshot.start !== null && "setSelectionRange" in field) field.setSelectionRange(snapshot.start, snapshot.end);
     }
@@ -12309,6 +12345,7 @@
 
       if (casesTabTrigger) {
         state.casesTab = casesTabTrigger.getAttribute("data-cases-tab");
+        state.caseWorkflowFilter="all";
         const visible = hasLeadershipAccess()
           ? taxCases
           : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
@@ -12336,7 +12373,7 @@
         }
         state.expandedHimbauanId = caseId;
         syncExpandedCaseProgress();
-        void loadCaseProgress(caseId);
+        if(!["register","psa"].includes(state.casesTab))void loadCaseProgress(caseId);
         return;
       }
 

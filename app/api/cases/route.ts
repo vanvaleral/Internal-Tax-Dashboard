@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       page(
       actor.admin
         .from("tax_case_progress_entries")
-        .select("id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
+        .select("id, entry, created_at, created_by_profile_id, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
         .eq("case_id", progressFor), "created_at", "progressEntries"),
       page(actor.admin.from("tax_case_task_timeline").select("id, task_id, title, actor_name, event_type, occurred_at").eq("case_id",progressFor), "occurred_at", "taskTimeline")
     ]);
@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
       progressEntries: entryPage.data.map((entry: any) => ({
         id: entry.id,
         entry: entry.entry,
+          creatorProfileId:entry.created_by_profile_id,
         createdAt: entry.created_at,
         creatorName: entry.staff_profiles?.display_name || entry.staff_profiles?.full_name || "Unknown"
       }))
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = await payloadFor(actor, body.case || body);
+    if(payload.case_category==="Pemeriksaan"&&payload.stage==="Closed")return NextResponse.json({error:"Create Pemeriksaan as an open case, then record SPHP through its workflow to close it."},{status:400});
     const { data, error } = await actor.admin.from("tax_cases").insert(payload).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     let announcementStatus = "delivered";
@@ -205,7 +207,8 @@ export async function PATCH(request: Request) {
     const caseInput = body.case || body;
     if (caseInput.clientId && caseInput.clientId !== existing.client_id) return NextResponse.json({ error: "Change the linked client through a separate reviewed action." }, { status: 400 });
     const payload = await payloadFor(actor, caseInput, existing.client_id || "", true);
-    if (existing.case_workflow?.result && (payload.case_category !== existing.case_category || payload.completion_date !== existing.completion_date || payload.stage === "Closed" && !existing.case_workflow.final || existing.case_workflow.final && payload.stage !== "Closed")) {
+    if(existing.case_category==="Pemeriksaan"&&existing.stage!=="Closed"&&payload.stage==="Closed"&&!existing.case_workflow?.examinationClosure&&!existing.case_workflow?.final)return NextResponse.json({error:"Record SPHP through the case workflow before closing Pemeriksaan."},{status:400});
+    if (existing.case_workflow?.result && (payload.case_category !== existing.case_category || payload.completion_date !== existing.completion_date || payload.stage === "Closed" && !existing.case_workflow.final && !existing.case_workflow.examinationClosure || (existing.case_workflow.final || existing.case_workflow.examinationClosure) && payload.stage !== "Closed" || existing.case_workflow.examinationClosure && payload.sph_p_date !== existing.sph_p_date)) {
       return NextResponse.json({error:"Use the case workflow to close this case. Its BA / SKP, payment and submission history must be preserved."},{status:400});
     }
     const update: Record<string, unknown> = { ...payload };

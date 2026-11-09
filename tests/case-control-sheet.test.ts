@@ -50,6 +50,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       const previous = rows.find(row => row.id === body.id) || (body.id ? dbCase(body.id, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory) : { ...dbCase(++created === 1 ? "saved-new" : `saved-new-${created}`, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory), created_at:new Date().toISOString() });
       const data: Record<string, any> = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
       if (url === "/api/cases/workflow") data.case_workflow = applyCaseWorkflowAction(previous.case_workflow,body.command,{category:previous.case_category,actorId:"tax-a",actorName:"tax-a",taxAllowed:true,now:"2026-11-05T08:00:00Z",closed:false});
+      if(data.case_workflow?.examinationClosure&&body.command?.type==='close-examination'){data.stage='Closed';data.completion_date=data.case_workflow.examinationClosure.date||'2026-11-05';data.sph_p_date=data.case_workflow.examinationClosure.date||null;data.closed_at=data.completion_date;}
       for (const [field, column] of [["letterDate", "letter_date"], ["receivedDate", "received_date"], ["completionDate", "completion_date"], ["sphpDate", "sph_p_date"]]) {
         if (body.case?.[field] !== undefined) data[column] = body.case[field];
       }
@@ -69,7 +70,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
+  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-assessment-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
   // Expose closure references in the test source only, never in the served dashboard.
   const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, addHimbauanProgress, loadPerformanceLedger, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script.replace('window.__casesTest = { state,','window.__casesTest = { resetAssignedPreload:()=>{assignedCasePreloadTimer=null;assignedCasePreloadAttempts.clear();}, scheduleAssignedCasePreload, assignedCasePreloadIds, caseInactivity, refreshCaseActivityAppearance, state,')); await tick();
@@ -83,6 +84,72 @@ const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
 const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
+
+test('SPHP integration preserves the original sheet while linking editable assessments into both registers',async()=>{
+  const d=await dashboard('supervisor',{casesTab:'pemeriksaan'});try{
+    const q=(selector:string)=>d.w.document.querySelector(selector),fill=(name:string,value:string)=>{q(`#case-assessment-dialog [name="${name}"]`).value=value;};
+    q('[data-toggle-himbauan-progress="saved-d"]').click();await tick();const viewport=caseViewport(d);
+    assert.deepEqual([...d.w.document.querySelectorAll('[data-cwf-tab]')].map((e:any)=>e.dataset.cwfTab),['progress','payments','psa']);
+    q('[data-ca-action="close-examination"]').click();fill('number','SPHP/LIVE');fill('date','30/10/2026');
+    q('[data-ca-stage="STP"]').click();fill('stage-0-period','2025');fill('stage-0-number','STP/LIVE');fill('stage-0-date','01/11/2026');fill('stage-0-principal','0');fill('stage-0-penalty','200.000');fill('stage-0-paymentTarget','05/11/2026');
+    q('#case-assessment-dialog form').dispatchEvent(new d.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+    assert.equal(q('#case-assessment-dialog'),null);assert.equal(d.api.getRows().find((r:any)=>r.id==='saved-d').stage,'Closed');assert.equal(caseViewport(d),viewport);
+    assert.equal(q('[data-ca-edit="number"]').value,'STP/LIVE');const product=d.api.getRows().find((r:any)=>r.id==='saved-d').workflow.products[0];
+    q('[data-ca-edit="number"]').value='STP/REVISED';q('[data-ca-edit="number"]').dispatchEvent(new d.w.Event('change',{bubbles:true}));await tick();
+    assert.equal(product.assessment.number,'STP/LIVE','old object is not mutated before server confirmation');
+    assert.equal(d.api.getRows().find((r:any)=>r.id==='saved-d').workflow.products[0].assessment.number,'STP/REVISED');
+    q('[data-cases-tab="register"]').click();await tick();assert.equal(d.api.state.casesTab,'register');assert.equal(q('[data-ca-edit="number"]').value,'STP/REVISED');
+    assert.equal(q('[data-case-fullscreen]').href.includes('casesTab=register'),true);assert.ok(q('[data-case-resize="assessmentTotal"]'));
+    const selection=q('[data-ca-select]');selection.checked=true;selection.dispatchEvent(new d.w.Event('change',{bubbles:true}));q('[data-ca-action="psa-route"]').click();
+    q('#case-assessment-dialog form').dispatchEvent(new d.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+    q('[data-cases-tab="psa"]').click();await tick();assert.equal(d.api.state.casesTab,'psa');assert.match(q('.case-assessment-register').textContent,/STP\/REVISED/);assert.match(q('.case-assessment-register').textContent,/Draft/);
+    assert.equal(d.api.getRows().find((r:any)=>r.id==='saved-d').workflow.products.length,1);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test('assessment registers retain confirmed state on failed cell edits and combine PIC filters with PSA outcomes',async()=>{
+  const d=await dashboard('supervisor',{casesTab:'pemeriksaan'});try{
+    const row=d.api.getRows().find((r:any)=>r.id==='saved-d');
+    await d.api.saveCaseWorkflow(row.id,{type:'close-examination',requestId:d.w.crypto.randomUUID(),number:'SPHP',date:'2026-10-30',assessments:[{kind:'SKP',number:'SKP/CONTROL',date:'2026-11-01',tax:'PPN',period:'2025',principal:1000,penalty:200,paymentTarget:'2026-11-05'}]});
+    const id=row.workflow.products[0].id;
+    await d.api.saveCaseWorkflow(row.id,{type:'psa-route',requestId:d.w.crypto.randomUUID(),productIds:[id]});
+    await d.api.saveCaseWorkflow(row.id,{type:'psa-edit',requestId:d.w.crypto.randomUUID(),productId:id,requested:200,application:'PSA/LIVE',date:'2026-11-02',status:'Diajukan',note:''});
+    await d.api.saveCaseWorkflow(row.id,{type:'psa-decision',requestId:d.w.crypto.randomUUID(),productId:id,number:'KEP/LIVE',date:'2026-11-04',outcome:'Disetujui sebagian',amount:100});
+    d.api.state.casesTab='psa';d.api.state.expandedHimbauanId=row.id;d.api.state.caseWorkflowFilter='psa-successful';d.api.renderCases();
+    assert.deepEqual(visible(d),['saved-d']);assert.match(d.w.document.querySelector('.case-assessment-summary').textContent,/1 successful/);assert.match(d.w.document.querySelector('.case-assessment-table').textContent,/KEP\/LIVE/);
+    d.api.state.caseAccFilter='acc-b';d.api.renderCases();assert.deepEqual(visible(d),[]);d.api.state.caseAccFilter='all';d.api.state.caseWorkflowFilter='psa-ongoing';d.api.renderCases();assert.deepEqual(visible(d),[]);
+    d.api.state.casesTab='register';d.api.state.caseWorkflowFilter='all';d.api.renderCases();assert.equal(d.w.document.querySelector('[data-ca-edit="principal"]').disabled,true,'submitted source references are protected');
+    assert.equal(row.workflow.products[0].amount,1200);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test('manual removal integrates with retained timeline entries without offering deletion of automatic events',async()=>{
+  const d=await dashboard();try{
+    const row=d.api.getRows()[0],entry={id:'manual-note',entry:'Wrong case note',creatorProfileId:'tax-a',creatorName:'tax-a',createdAt:'2026-11-01T00:00:00Z'};
+    d.api.state.expandedHimbauanId=row.id;d.api.state.caseProgressById[row.id]={progressEntries:[entry],completedTasks:[],taskTimeline:[],loadedAt:Date.now()};d.api.renderCases();
+    assert.ok(d.w.document.querySelector('[data-ca-action="remove-progress"]'));
+    row.workflow={result:null,products:[],schedule:[],payments:[],events:[],removedProgress:[{id:entry.id,entry:entry.entry,creatorId:'tax-a',reason:'Wrong client',at:'2026-11-05T00:00:00Z',actorId:'tax-a'}]};d.api.renderCases();
+    assert.equal(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'),null);assert.match(d.w.document.querySelector('.case-removed-progress').textContent,/Wrong case note/);assert.ok(d.w.document.querySelector('[data-ca-action="restore-progress"]'));
+    row.workflow.removedProgress[0].restoredAt='2026-11-05T01:00:00Z';d.api.renderCases();assert.ok(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'));assert.equal(d.w.document.querySelector('.case-removed-progress'),null);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test('inline assessment drafts require confirmed saves and another save cannot erase a neighbouring editor',async()=>{
+  const d=await dashboard('supervisor',{casesTab:'pemeriksaan'});try{
+    const row=d.api.getRows().find((r:any)=>r.id==='saved-d'),q=(s:string)=>d.w.document.querySelector(s);
+    await d.api.saveCaseWorkflow(row.id,{type:'close-examination',requestId:d.w.crypto.randomUUID(),number:'SPHP',date:'2026-10-30'});
+    d.api.state.casesTab='register';d.api.state.caseSearch='Delta';d.api.renderCases();assert.deepEqual(visible(d),['saved-d'],'an awaiting-documents control remains searchable');
+    d.api.state.casesTab='pemeriksaan';d.api.state.caseSearch='';d.api.state.expandedHimbauanId=row.id;d.api.renderCases();q('[data-ca-action="add-SKP"]').click();assert.equal(q('#case-assessment-dialog'),null);
+    assert.equal(d.w.CaseAssessmentUI.hasDrafts(),true);assert.equal(row.workflow.products.length,0);
+    for(const [key,value]of Object.entries({number:'SKP/INLINE',period:'2025',date:'01/11/2026',principal:'1.000',penalty:'200'})){const input=q(`[data-ca-draft-field="${key}"]`);input.value=value;input.dispatchEvent(new d.w.Event('input',{bubbles:true}));}
+    q('[data-ca-action="save-draft"]').click();await tick();assert.equal(row.workflow.products.length,1);assert.equal(d.w.CaseAssessmentUI.hasDrafts(),false);assert.equal(q('[data-ca-draft]'),null);
+    q('[data-ca-action="add-STP"]').click();const draftId=q('[data-ca-draft]').dataset.caDraft;
+    d.delay();const edit=q('[data-ca-edit="number"]');edit.value='SKP/UPDATED';edit.dispatchEvent(new d.w.Event('change',{bubbles:true}));await tick();
+    const typing=q('[data-ca-draft-field="number"]');typing.focus();typing.value='STP still typing';typing.setSelectionRange(5,5);typing.dispatchEvent(new d.w.Event('input',{bubbles:true}));
+    d.release();await tick();assert.equal(q('[data-ca-draft-field="number"]').value,'STP still typing');assert.equal(d.w.document.activeElement.dataset.caDraftField,'number');assert.equal(d.w.document.activeElement.selectionStart,5);
+    q(`[data-ca-action="discard-draft"][data-ca-key="${draftId}"]`).click();assert.equal(d.w.CaseAssessmentUI.hasDrafts(),false);assert.equal(row.workflow.products.length,1);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 function prefetchControls(d:any) {
   let next=0;const timers=new Map<number,()=>any>();

@@ -2,6 +2,43 @@
 .case-workflow-tabs button { padding:7px 11px; border-radius:6px; color:var(--muted); background:transparent; font-size:12px; }
 .case-workflow-tabs button[aria-selected=true] { color:var(--accent-strong); background:var(--accent-soft); font-weight:700; }
 .case-workflow-tabs .pill { margin-left:auto; }
+.case-workflow-status { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-left:auto; }
+.case-workflow-status .pill { margin-left:0; }
+.case-assessment-heading { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:10px; margin:14px 0 10px; }
+.case-assessment-summary { display:flex; align-items:baseline; flex-wrap:wrap; gap:12px 22px; padding:18px 14px; font-size:12px; }
+.case-assessment-summary strong { font-size:15px; color:var(--accent-strong); }
+.case-assessment-summary p { flex-basis:100%; }
+.case-assessment-table { width:100%; table-layout:fixed; border-collapse:collapse; }
+.case-assessment-table th,.case-assessment-table td { position:static!important; padding:6px!important; border:1px solid var(--line); font-size:11px; white-space:normal; overflow-wrap:anywhere; }
+.case-assessment-table th { background:var(--neutral-soft); }
+.case-assessment-table th:first-child { width:35px; }
+.case-assessment-table .field { width:100%; min-width:0; padding:6px 3px; font-size:11px; }
+.case-assessment-table .tiny-btn { white-space:normal; font-size:10px; }
+.case-assessment-table td:first-child { text-align:center; }
+.case-assessment-cell:focus { background:var(--panel-solid); outline:2px solid var(--accent); }
+.case-assessment-draft { background:var(--accent-soft); }
+.case-assessment-register { min-width:1250px; }
+.case-assessment-register col[data-case-column="_number"] { width:44px; }
+.case-assessment-register col[data-case-column="clientName"],.case-assessment-register col[data-case-column="assessmentStatus"] { width:220px; }
+.case-assessment-register col[data-case-column="letterNumber"] { width:170px; }
+.case-assessment-register col[data-case-column="taxYear"] { width:88px; }
+.case-assessment-register col[data-case-column="taxPic"],.case-assessment-register col[data-case-column="accountingPic"],.case-assessment-register col[data-case-column="documents"] { width:104px; }
+.case-assessment-register col[data-case-column="assessmentTotal"] { width:150px; }
+.case-assessment-register .subline { white-space:normal; }
+.case-assessment-stage-tools,[data-ca-staged] { grid-column:1/-1; }
+.case-assessment-staged { margin:12px 0; border:1px solid var(--line); border-radius:8px; padding:12px; }
+.case-assessment-staged legend { color:var(--accent-strong); font-size:12px; padding:0 5px; }
+.case-assessment-staged>.tiny-btn { margin-top:12px; }
+.case-removed-progress { margin:12px 0; color:var(--muted); font-size:12px; }
+[data-ca-error] { color:var(--danger,#b42318); font-size:12px; }
+@container case-sheet-viewport (max-width:1050px) {
+  .case-assessment-table thead { display:none; }
+  .case-assessment-table,.case-assessment-table tbody { display:block; width:100%; }
+  .case-assessment-table tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); margin:8px 0; border-radius:6px; }
+  .case-assessment-table td { display:block; min-width:0; border:0; }
+  .case-assessment-table td::before { content:attr(data-label); display:block; color:var(--muted); font-size:10px; margin-bottom:3px; }
+  .case-assessment-table td:first-child { text-align:left; }
+}
 .case-sheet-panel > [data-case-report-slot] { padding:14px 14px 16px; flex-shrink:0; }
 .case-sheet-panel .case-sheet-tools { padding:12px 14px; gap:12px; }
 .case-report-summary { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; }

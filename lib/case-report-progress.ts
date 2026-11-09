@@ -13,6 +13,8 @@ export function latestCaseReportProgress(cases: any[], snapshots: any[], entries
   }
   // Equal timestamps use the same source priority as the expanded case timeline.
   for (const row of entries) {
+    const owner=cases.find(item=>item.id===row.case_id);
+    if(owner?.case_workflow?.removedProgress?.some((entry:any)=>entry.id===row.id&&!entry.restoredAt))continue;
     const author=person(row.staff_profiles);
     add(row.case_id,row.entry,author?.display_name||author?.full_name,row.created_at,"Follow-up");
   }
