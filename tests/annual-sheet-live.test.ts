@@ -18,6 +18,26 @@ function setup(profile: any = actor) {
   const db = mockDatabase({ staff_profiles: structuredClone(staff), client_master: [{ id: "client-1", legal_name: "Actual Client", status: "Active", accounting_pic_name: "Real Acc", accounting_pic_profile_id: "acc-1", tax_pic_name: "Real Tax", tax_pic_profile_id: "tax-1" }], annual_sheet_columns: [], operational_workspace_state: [{ scope: "annual_accounting", version: 1, payload: [raw()] }], operational_workspace_audit: [] });
   const policy = defaultFeaturePolicy(); policy.associate.operations.mode = "enabled"; policy.leader.operations.mode = "enabled";
   db.tables.feature_access_settings = [{ id: true, version: 1, policy }];
+  // Model the RPC response/atomic CAS contract here; SQL invariants are also tested in PostgreSQL.
+  db.rpc = async (name, args) => {
+    assert.equal(name, "commit_annual_external_clients");
+    const current = db.tables.operational_workspace_state.find(row => row.scope === args.p_scope);
+    if ((current?.version || 0) !== args.p_expected_version) return { data: { saved: false }, error: null };
+    const masterBefore = structuredClone(db.tables.client_master), payload = structuredClone(args.p_payload);
+    for (const id of args.p_registration_ids) {
+      const row = payload.find((row: any) => row.id === id);
+      let client = db.tables.client_master.find(item => row.registeredClientId ? item.id === row.registeredClientId : item.legal_name.toLowerCase() === row.clientName.toLowerCase());
+      if (!client) {
+        client = { id: `registered-${db.tables.client_master.length}`, legal_name: row.clientName, engagement_type: "on_demand", status: "Active", accounting_pic_profile_id: null, tax_pic_profile_id: null };
+        db.tables.client_master.push(client);
+      }
+      row.registeredClientId = client.id;
+    }
+    const state = { scope: args.p_scope, payload, version: args.p_expected_version + 1, updated_by_profile_id: args.p_actor_id };
+    const result = current ? await db.from("operational_workspace_state").update(state).eq("scope", args.p_scope).eq("version", args.p_expected_version).maybeSingle() : await db.from("operational_workspace_state").insert(state).maybeSingle();
+    if (!result.data || result.error) { db.tables.client_master = masterBefore; return { data: { saved: false }, error: result.error }; }
+    return { data: { saved: true, payload, version: state.version }, error: null };
+  };
   const route = loadRoute("app/api/annual-sheet/route.ts", { "@/lib/access": { currentActor: async () => ({ profile, userId: "auth-user-1", admin: db }), isLeadership: (role: string) => ["supervisor", "partner", "leader", "admin"].includes(role) }, "@/lib/annual-sheet": rules });
   return { db, route };
 }
@@ -86,7 +106,11 @@ test("both Annual generation sources use today's Master PIC and previous-year li
     assert.equal(team === "accounting" ? stored[4].annualClientId : stored[4].subjectId, team === "accounting" ? external.annualWorkId : external.subjectId);
     const repeat = await route.POST(request({ team, action: "commit", edits: [], creates: creates.map((row: any, i: number) => ({ ...row, id: `${i + 5}5555555-5555-4555-8555-555555555555` })) }));
     assert.equal(repeat.status, 200); assert.equal(db.tables.operational_workspace_state[0].payload.length, 5);
-    assert.equal(JSON.stringify(db.tables.client_master), masters);
+    assert.equal(JSON.stringify(db.tables.client_master.slice(0, 2)), masters, "existing clients and allocations are unchanged");
+    assert.equal(db.tables.client_master[2].engagement_type, "on_demand");
+    assert.equal(db.tables.client_master[2].accounting_pic_profile_id, null);
+    assert.equal(db.tables.client_master[2].tax_pic_profile_id, null);
+    assert.equal(stored[4].registeredClientId, db.tables.client_master[2].id);
     const changed = db.tables.operational_workspace_state[0].payload[1];
     if (team === "accounting") changed.accountingPicProfileId = "acc-1"; else changed.taxPicProfileId = "tax-1";
     db.tables.client_master[0][primaryField] = team === "accounting" ? "acc-1" : "tax-1";
@@ -666,7 +690,9 @@ test("live bulk rows stay drafts until a single confirmed POST, preserving row d
     d.w.document.getElementById("save-new-rows").click(); await d.tick(); await d.tick();
     const imported = d.api.state.rows.find((row: any) => row.clientName === "External Imported Client");
     assert.ok(imported); assert.equal(imported.dataMonths.length, 7); assert.equal(imported.accountingPicId, "acc-1");
-    assert.equal(imported.clientId, ""); assert.equal(d.db.tables.client_master.length, 1);
+    assert.equal(imported.clientId, ""); assert.equal(d.db.tables.client_master.length, 2);
+    assert.equal(d.db.tables.client_master[1].accounting_pic_profile_id, null);
+    assert.match(d.w.document.querySelector("#outside-dialog .dialog-head p").textContent, /On Demand/);
     assert.equal(d.requests.filter(url => url.startsWith("POST")).length, 1);
     assert.equal(d.w.document.getElementById("bulk-rows-dialog"), null);
     input(0, "clientName", "Invalid Import"); input(0, "dataMonths", "15");
@@ -926,7 +952,9 @@ test("annual tax subjects remain independent and completion requires real filing
   const completed = await save({ progress: "Done", filing: [0, 2], filingDate: "2026-03-20", ntpe: "00022-BPE", payableAmount: 0 }, { progress: "Data Request", filing: [], filingDate: "", ntpe: "", payableAmount: "" });
   assert.equal(completed.status, 200);
   assert.equal(db.tables.operational_workspace_state.find((item: any) => item.scope === "annual_tax").payload[0].reported, true);
-  assert.equal(db.tables.client_master.length, 1);
+  assert.equal(db.tables.client_master.length, 2);
+  assert.equal(db.tables.client_master[1].legal_name, "Director Name");
+  assert.equal(db.tables.client_master[1].tax_pic_profile_id, null);
 });
 
 test("production dashboard keeps live frames stable, ignores untrusted messages and never changes account roles", () => {
@@ -935,7 +963,7 @@ test("production dashboard keeps live frames stable, ignores untrusted messages 
   try {
     w.eval(readFileSync(new URL("../public/annual-sheet-dashboard.js", import.meta.url), "utf8"));
     const api = w.AnnualDashboardSheets, root = w.document.getElementById("matrix-view");
-    let saves = 0; api.configure(() => saves++);
+    let saves = 0, clientsChanged = false; api.configure((_team: string, change: any) => { saves++; clientsChanged = change.clientsChanged; });
     const state = { currentView: "matrix-view", operationsMode: "annual", annualTeam: "accounting", role: "staff" };
     api.render(root, state);
     const frame = w.document.querySelector("iframe"); assert.match(frame.src, /embedded=1&live=1&theme=light&accent=%23087f8d$/);
@@ -957,6 +985,9 @@ test("production dashboard keeps live frames stable, ignores untrusted messages 
     assert.equal(saves, 0);
     w.dispatchEvent(new w.MessageEvent("message", { origin: "http://localhost", source: frame.contentWindow, data }));
     assert.equal(saves, 1); assert.equal(state.role, "staff");
+    assert.equal(clientsChanged, false, "ordinary cell saves must not trigger Master refreshes");
+    w.dispatchEvent(new w.MessageEvent("message", { origin: "http://localhost", source: frame.contentWindow, data: { ...data, clientsChanged: true } }));
+    assert.equal(saves, 2); assert.equal(clientsChanged, true, "confirmed external registration refreshes the registry");
     api.render(root, { ...state, annualTeam: "tax" });
     assert.equal(w.document.querySelectorAll("iframe").length, 2);
     assert.equal(frame.parentElement.hidden, true);
@@ -993,7 +1024,75 @@ test("annual generation rechecks active Client Master ownership, preserves years
   assert.equal((await route.POST(request({ ...body, creates: [{ ...create, id: "33333333-3333-4333-8333-333333333333", year: 2027 }] }))).status, 403);
   const clientCopy = JSON.stringify(db.tables.client_master);
   assert.equal((await route.POST(request({ ...body, creates: [{ ...create, id: "44444444-4444-4444-8444-444444444444", clientId: "", clientName: "Outside entity" }] }))).status, 200);
-  assert.equal(JSON.stringify(db.tables.client_master), clientCopy);
+  assert.equal(JSON.stringify(db.tables.client_master.slice(0, 1)), clientCopy);
+  assert.equal(db.tables.client_master[1].engagement_type, "on_demand");
+  assert.equal(db.tables.client_master[1].accounting_pic_profile_id, null);
+});
+
+test("new external Accounting and Tax rows use one registration transaction and ignore forged registry links", async () => {
+  for (const team of ["accounting", "tax"]) {
+    const { route, db } = setup(team === "tax" ? { ...staff[2], role: "staff" } : actor);
+    const commit = db.rpc; let registrations = 0;
+    db.rpc = async (name, args) => {
+      registrations++;
+      assert.equal(args.p_scope, `annual_${team}`);
+      assert.equal(args.p_actor_id, team === "tax" ? "tax-1" : "acc-1");
+      const row = args.p_payload.find((row: any) => args.p_registration_ids.includes(row.id));
+      assert.equal(row.registeredClientId, undefined, "browser-supplied Master links must never be trusted");
+      assert.equal(row.clientId, ""); assert.equal(row.sourceClientId || "", "");
+      return commit(name, args);
+    };
+    const body = { team, action: "commit", edits: [], creates: [{ id: "66666666-6666-4666-8666-666666666666", clientName: "External New", year: 2026, registeredClientId: "forged", subjectType: "Individual" }] };
+    const saved = await route.POST(request(body));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.rows.find((row: any) => row.clientName === "External New").registeredClientId, "registered-1");
+    assert.equal(db.tables.client_master[1].tax_pic_profile_id, null);
+    assert.equal((await route.POST(request(body))).status, 200);
+    assert.equal(registrations, 1, "uncertain-response retries do not register twice");
+    assert.equal(db.tables.client_master.length, 2);
+  }
+});
+
+test("external registration fails closed without its migration or when the database rejects a batch", async () => {
+  for (const error of [{ code: "PGRST202", message: "Missing function" }, { code: "22023", message: "Multiple Client Master records match this annual client." }]) {
+    const { route, db } = setup(), before = JSON.stringify(db.tables);
+    db.rpc = async () => ({ data: null, error });
+    const result = await route.POST(request({ team: "accounting", action: "commit", edits: [], creates: [{ id: "66666666-6666-4666-8666-666666666666", clientName: "New Client", year: 2026 }] }));
+    assert.equal(result.status, error.code === "PGRST202" ? 503 : 400);
+    assert.equal(JSON.stringify(db.tables), before, "no independent workspace/Master fallback write");
+  }
+});
+
+test("ordinary cell edits skip registration and conflicting external saves rebase before retrying", async () => {
+  const { route, db } = setup(), registration = db.rpc;
+  db.rpc = async () => { throw new Error("Cell edits must not run registration"); };
+  assert.equal((await route.POST(request({ team: "accounting", action: "commit", creates: [], edits: [{ id: "existing-work", before: { notes: "Old note" }, changes: { notes: "Cell edit" } }] }))).status, 200);
+  let calls = 0;
+  db.rpc = async (name, args) => {
+    if (!calls++) {
+      const state = db.tables.operational_workspace_state[0]; state.version++;
+      state.payload[0].notes = "Concurrent update";
+      return { data: { saved: false }, error: null };
+    }
+    assert.equal(args.p_payload[0].notes, "Concurrent update");
+    return registration(name, args);
+  };
+  const saved = await route.POST(request({ team: "accounting", action: "commit", edits: [], creates: [{ id: "66666666-6666-4666-8666-666666666666", clientName: "New Client", year: 2026 }] }));
+  assert.equal(saved.status, 200); assert.equal(calls, 2);
+  assert.equal(db.tables.operational_workspace_state[0].payload[0].notes, "Concurrent update");
+  assert.equal(db.tables.client_master.length, 2);
+});
+
+test("previous-year external generation carries only the trusted registry link without changing Annual ownership", () => {
+  const original = { ...raw(), id: "old-external", clientId: "", annualClientId: "external-identity", registeredClientId: "master-external", clientName: "Renamed Annual Label" };
+  const master = [{ id: "master-external", status: "Active", legal_name: "Original Name", accounting_pic_profile_id: null, tax_pic_profile_id: null }];
+  const [candidate] = rules.annualPreviousCandidates([original], 2025, "accounting", actor, staff, master);
+  assert.equal(candidate.registeredClientId, "master-external"); assert.equal(candidate.clientId, "");
+  const added = rules.addAnnualRows([original], [{ ...candidate, id: "66666666-6666-4666-8666-666666666666", year: 2026, registeredClientId: "forged" }], "accounting", actor, staff, master);
+  assert.equal(added[1].registeredClientId, "master-external");
+  assert.equal(added[1].accountingPicProfileId, actor.id); assert.equal(added[1].clientId, "");
+  assert.equal(added[1].annualClientId, original.annualClientId);
+  assert.deepEqual(added[0], original);
 });
 
 test("live sheet never seeds samples, uses authenticated roster and waits for database confirmation", async () => {

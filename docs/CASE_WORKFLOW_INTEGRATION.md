@@ -92,17 +92,66 @@ assignment/favorite writes. Checklist snapshots are deep-copied so toggling a
 local step cannot mutate the last confirmed comparison baseline. Failed saves
 retain edits with Retry/Review rather than leaving the drawer on Saving.
 
-Only confirmed parent completion/reopening or case relinking invalidates timeline
-history. Ordinary checklist/title/note/preference saves do not discard its cache.
-These are frontend fixes only; the existing task timeline trigger still records
-parent-task lifecycle events, not individual checklist completion.
+My Work keeps one compact, consistently sized save-status row for Saved, Saving
+and Retry/Review; it never becomes a padded task card. The viewport-height desktop
+panel and its independently scrolling detail drawer prevent status changes or long
+task checklists from stretching the page. Mobile retains its existing overlay and
+viewport-height rules. Status changes do not replace task inputs or move focus.
 
-Proposed next phase, not enabled: stable subtask IDs and immutable, attributed
-completion/reopen events, with the parent task shown as context rather than the
-sole progress signal. Existing checked steps have no trustworthy completion date
-or actor; do not fabricate historical dates or backfill them as new work without
-an explicit, reviewed policy. Do not award case points for each checked step by
-default. This requires an additive database change and separate validation.
+Confirmed parent/step completion, reopening or case relinking invalidates timeline
+history. Title/note/preference saves and adding unchecked steps retain its cache.
+The queue still drains without self-enqueueing; the subtask extension below does
+not add separate per-step API requests or block the rest of the task drawer.
+
+### Completed Subtasks
+
+Apply `20261110080458_case_subtask_timeline.sql` before deploying the corresponding
+My Work/Cases API update. Existing task contents are not rewritten. New steps have
+stable IDs; legacy steps project deterministic `legacy:<task-id>:<index>` identities
+until their first ordinary save. Case timelines use the existing history query and
+pagination, not an extra subtask query. Subtask history does not require the parent
+task to be completed, and never marks the parent complete automatically.
+
+The server validates IDs/titles/checkboxes, discards client-supplied history/actors,
+and stamps the verified actor plus a fresh `step_change_id` into the same task
+UPDATE. A security-invoker AFTER trigger writes immutable completion/reopen events
+into `tax_case_task_timeline` in that transaction. All existing task authorization
+and version/CAS checks stay in place. No-op step saves, task title/note changes,
+step renames/reordering, and parent completion do not duplicate checked-step events.
+Repeating tasks start with new, unchecked step identities rather than copying old
+completion credit. Deleting a step or unlinking the task retains recorded history.
+
+Previously checked steps are snapshotted once as `step_snapshot`, with null event
+date and explicit unknown completion PIC. This preserves evidence that they were
+already checked without claiming today's date or attributing work to the creator.
+The case timeline labels these historical entries and shows the parent task as
+context. Unknown-date snapshots neither reset case inactivity nor become the newest
+dated progress in printed reports. Actual new step completions do appear in report
+progress, including parent context and the completing PIC/date.
+
+Relinking a task retains old-case history; already completed steps appear as
+undated historical snapshots in the new case, not fresh work. An old server that
+does not stamp the new transition token cannot reuse a previous writer's identity;
+the trigger records Unknown PIC for an otherwise observable transition. No extra
+points, announcements or notifications are awarded for checking steps.
+
+Migration risk: the short DDL lock can briefly wait for active task writes; a
+five-second lock timeout prevents an unbounded wait. The timeline event identity
+index now includes the step ID so checking multiple steps atomically cannot collapse
+them into one event. Existing parent events, source rows and server-only RLS/grants
+are preserved. Rollback application presentation only if needed; retain the new
+history and IDs, and never delete recorded work to reverse this feature.
+
+Coverage: `my-work-subtask-timeline`, updated `my-work-save-queue`, case reporting,
+and the rolled-back PostgreSQL fixture `tests/my-work-subtask-timeline.sql`.
+
+Hosted rollout on 10 November 2026: explicitly approved migration
+`20261110082221_case_subtask_timeline` corresponds to the local migration above.
+Verified the existing five tasks, Case records and four parent timeline events
+retain their original checksums. Three checked steps received undated historical
+snapshots, with none missing. Transactional fixture tests passed locally and on
+Supabase; all synthetic task/events were rolled back. Application deployment is
+still required for the new timeline rendering and attributed future step saves.
 
 ## Migration And Rollout
 

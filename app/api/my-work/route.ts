@@ -3,6 +3,7 @@ import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notif
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readMyWork, taskResponse, TASK_SELECT, type TaskRow } from "@/lib/my-work-read";
+import { taskSteps, validateTaskSteps } from "@/lib/my-work-steps";
 
 
 async function currentProfile() {
@@ -70,7 +71,7 @@ async function createFollowUpTask(admin: NonNullable<ReturnType<typeof createAdm
   const { data: created, error } = await admin.from("my_work_tasks").insert({
     title: task.title,
     notes: task.notes,
-    steps: task.steps,
+    steps: taskSteps(task.steps, task.id).map(step => ({ ...step, id: crypto.randomUUID(), done: false })),
     reminder_at: null,
     due_date: isCustom ? repeatAt.toISOString().slice(0, 10) : task.due_date,
     repeat_rule: isCustom ? "none" : task.repeat_rule,
@@ -103,6 +104,9 @@ export async function POST(request: Request) {
   const requestId = String(body.clientRequestId || "").trim();
   if (!/^[a-zA-Z0-9-]{8,100}$/.test(requestId)) return NextResponse.json({ error: "A stable task creation ID is required. Reload your workspace." }, { status: 400 });
   if (!title) return NextResponse.json({ error: "Task title is required." }, { status: 400 });
+  let steps;
+  try { steps = validateTaskSteps(body.steps ?? [], [], requestId); }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
   const repeatRule = ["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule) ? body.repeatRule : "none";
   let caseId: string | null;
   try {
@@ -115,7 +119,9 @@ export async function POST(request: Request) {
     client_request_id: requestId,
     title,
     notes: String(body.note || ""),
-    steps: Array.isArray(body.steps) ? body.steps : [],
+    steps,
+    step_change_actor_profile_id: current.profile.id,
+    step_change_id: crypto.randomUUID(),
     reminder_at: body.reminder || null,
     due_date: body.dueDate || null,
     repeat_rule: repeatRule,
@@ -178,7 +184,14 @@ export async function PATCH(request: Request) {
   const update: Record<string, unknown> = {};
   if (typeof body.title === "string" && body.title.trim()) update.title = body.title.trim();
   if (typeof body.note === "string") update.notes = body.note;
-  if (Array.isArray(body.steps)) update.steps = body.steps;
+  if (body.steps !== undefined) {
+    try { update.steps = validateTaskSteps(body.steps, task.steps, id); }
+    catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
+    if (JSON.stringify(update.steps) !== JSON.stringify(taskSteps(task.steps, id))) {
+      update.step_change_actor_profile_id = current.profile.id;
+      update.step_change_id = crypto.randomUUID();
+    }
+  }
   if (typeof body.reminder === "string") update.reminder_at = body.reminder || null;
   if (typeof body.dueDate === "string") update.due_date = body.dueDate || null;
   if (["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule)) {

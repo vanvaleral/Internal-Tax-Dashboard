@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     if (error) throw new Error(error.message);
     if (cases?.length!==ids.length || cases.some((row: any)=>!isLeadership(actor.profile.role)&&![row.tax_pic_profile_id,row.accounting_pic_profile_id].includes(actor.profile.id))) return NextResponse.json({error:"One or more cases are no longer available in your access scope. Refresh the case list."},{status:403});
     const [snapshots,entries,tasks]=await Promise.all([
-      readReportHistory(actor.admin,"tax_case_task_timeline","id, case_id, task_id, title, actor_name, event_type, occurred_at",ids,"occurred_at"),
+      readReportHistory(actor.admin,"tax_case_task_timeline","id, case_id, task_id, title, step_id, step_title, actor_name, event_type, occurred_at",ids,"occurred_at"),
       readReportHistory(actor.admin,"tax_case_progress_entries","id, case_id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)",ids,"created_at"),
       readReportHistory(actor.admin,"my_work_tasks","id, case_id, title, completed_at, completer:staff_profiles!my_work_tasks_completed_by_profile_id_fkey(display_name, full_name)",ids,"completed_at",true)
     ]);

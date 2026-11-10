@@ -265,7 +265,7 @@
     }
 
     .my-work-shell { max-width: none; padding: 0; }
-    .my-work-panel { min-height: calc(100dvh - 132px); display:grid; grid-template-columns:minmax(0, 1fr); overflow:hidden; border-radius:20px; }
+    .my-work-panel { height: calc(100dvh - 132px); min-height:0; display:grid; grid-template-columns:minmax(0, 1fr); overflow:hidden; border-radius:20px; }
     .my-work-panel.has-detail { grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); }
     .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, var(--my-work-overlay-start), var(--my-work-overlay-end)), var(--my-work-image); background-position:center; background-size:cover; }
     .my-work-list h2 { font-size:28px; color:#fff; }
@@ -301,7 +301,8 @@
     .my-work-empty { padding:22px 12px; color:rgba(255,255,255,.82); text-align:center; }
     .my-work-composer { display:flex; flex:0 0 auto; gap:10px; margin-top:12px; padding:12px; background:rgba(232,237,255,.65); border-radius:5px; backdrop-filter:blur(8px); }
     .my-work-composer input { flex:1; border:0; background:transparent; outline:0; }
-    .my-work-detail { position:relative; display:flex; flex-direction:column; padding:52px 22px 28px; background:#fff; }
+    .my-work-detail { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; overflow-y:auto; scrollbar-gutter:stable; padding:52px 22px 28px; background:#fff; }
+    .my-work-detail > * { flex-shrink:0; }
     .my-work-detail.is-opening { animation:drawerIn 260ms ease both; }
     .my-work-detail-back { display:none; }
     .my-work-detail-close { position:absolute; top:12px; right:14px; display:grid; width:32px; height:32px; place-items:center; padding:0; border-radius:9px; color:var(--muted); background:transparent; }
@@ -331,6 +332,9 @@
     .my-work-assignees { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 12px; }
     .my-work-assignee-chip { padding:4px 8px; border-radius:999px; color:#31517d; background:#e8f0ff; font-size:12px; }
     .my-work-meta { margin-top:auto; padding-top:16px; color:#7a8493; font-size:12px; }
+    .my-work-save-status { display:flex; align-items:center; gap:8px; min-height:32px; margin:0; padding:0; border:0; color:var(--muted); font-size:12px; line-height:20px; }
+    .my-work-save-status .ghost-btn { flex:0 0 auto; min-height:28px; padding:4px 8px; font-size:12px; line-height:20px; }
+    .my-work-save-status .ghost-btn:hover { transform:none; }
     .my-work-time-dialog-backdrop { position:fixed; z-index:70; inset:0; display:grid; place-items:center; padding:20px; background:rgba(28,36,54,.32); }
     .my-work-time-dialog { width:min(360px, 100%); padding:18px; border:1px solid #d9dfeb; border-radius:12px; background:#fff; box-shadow:0 20px 50px rgba(25,34,54,.25); }
     .my-work-time-dialog h3 { margin:0 0 12px; font-size:18px; }
@@ -4903,7 +4907,7 @@
       state.currentView = "announcement-view";
     }
 
-    if (!["active", "on-demand", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
+    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
@@ -5083,6 +5087,7 @@
         clients: {
           active: ["Clients / Active Clients", "Clients Workspace", "Client master data remains the source of truth for obligations, fees, dual PIC ownership, and downstream operations."],
           "on-demand": ["Clients / On Demand Clients", "Clients Workspace", "Annual and occasional work without a recurring contract."],
+          "free-of-charge": ["Clients / Free of Charge", "Clients Workspace", "Recurring monthly work without a fee; separate from the paid client portfolio."],
           inactive: ["Clients / Inactive Clients", "Clients Workspace", "Inactive clients are retained for history but excluded from the active operating list."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
           contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
@@ -5484,6 +5489,9 @@
     }
 
     function activeClientMasterRecords() {
+      return clientMasterClients.filter(client => isActiveClientRecord(client) && !["on_demand","free_of_charge"].includes(client.engagementType));
+    }
+    function recurringClientMasterRecords() {
       return clientMasterClients.filter(client => isActiveClientRecord(client) && client.engagementType !== "on_demand");
     }
 
@@ -5591,6 +5599,7 @@
 
     function createMonthlyPeriodRows(month, year) {
       return structuredClone(clientMasterClients.filter((client) => client.clientStatus === "Active" && client.engagementType !== "on_demand" && client.taxPic === state.selectedPic)).map((client) => {
+        if(client.engagementType==="free_of_charge"){client.serviceFee=0;client.annualFee=0;}
         client.month = month;
         client.year = year;
         client.dataState = "missing";
@@ -6952,7 +6961,7 @@
       }).sort((left, right) => right.points - left.points || right.monthlyCompleted - left.monthlyCompleted || left.pic.localeCompare(right.pic));
       const currentYear = new Date().getFullYear();
       const growthYears = Array.from({ length: 6 }, (_, index) => currentYear - 5 + index);
-      const growthClients = clientMasterClients.filter(client => client.engagementType !== "on_demand");
+      const growthClients = clientMasterClients.filter(client => !["on_demand","free_of_charge"].includes(client.engagementType));
       const currentActiveClients = activeClientMasterRecords();
       const clientGrowth = growthYears.map((year) => {
         const endOfYear = `${year}-12-31`;
@@ -7267,7 +7276,7 @@
                 <select id="allocation-acc-filter" class="filter-select" aria-label="Filter by ACC PIC"><option value="all">All ACC PIC</option><option value="__no_pic__" ${state.allocationAccFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationAccOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationAccFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <select id="allocation-tax-filter" class="filter-select" aria-label="Filter by Tax PIC"><option value="all">All Tax PIC</option><option value="__no_pic__" ${state.allocationTaxFilter === "__no_pic__" ? "selected" : ""}>No PIC</option>${allocationTaxOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.allocationTaxFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select>
                 <select id="allocation-order" class="filter-select" aria-label="Allocation row order" title="Date added means the original Client Master creation date, not the latest PIC update."><option value="form" ${allocationOrder === "form" ? "selected" : ""}>Company form / name</option><option value="oldest" ${allocationOrder === "oldest" ? "selected" : ""}>Oldest added first</option><option value="newest" ${allocationOrder === "newest" ? "selected" : ""}>Newest added first</option>${allocationOrder === "column" ? '<option value="column" selected disabled>Column sort</option>' : ""}</select>
-                <select id="allocation-engagement-filter" class="filter-select" aria-label="Filter client engagement">${[["all","All engagements"],["contract","Contract clients only"],["on_demand","On Demand clients only"]].map(([value,label]) => `<option value="${value}" ${state.allocationEngagementFilter === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+                <select id="allocation-engagement-filter" class="filter-select" aria-label="Filter client engagement">${[["all","All engagements"],["contract","Contract clients only"],["free_of_charge","Free of Charge clients only"],["on_demand","On Demand clients only"]].map(([value,label]) => `<option value="${value}" ${state.allocationEngagementFilter === value ? "selected" : ""}>${label}</option>`).join("")}</select>
                 <input id="allocation-query" class="filter-input" type="text" placeholder="Search client, code, current PIC, next PIC" value="${state.allocationQuery}" />
               </div>
               <div class="toolbar-right">
@@ -7476,11 +7485,11 @@
       const isMobileWorkspace = window.matchMedia("(max-width: 900px)").matches;
       const activeSample = clientFormTarget();
       const portfolio = clientPortfolioSnapshot();
-      const monthlyFees = feeModel(activeSample.serviceFee, true, true);
-      const annualFees = feeModel(activeSample.annualFee || annualFeeFromMonthly(activeSample.serviceFee), true, false);
+      const monthlyFees = feeModel(activeSample.engagementType==="free_of_charge"?0:activeSample.serviceFee, true, true);
+      const annualFees = feeModel(activeSample.engagementType==="free_of_charge"?0:activeSample.annualFee || annualFeeFromMonthly(activeSample.serviceFee), true, false);
       const managedClients = clientMasterClients;
       const activeManagedClients = activeClientMasterRecords();
-      const contractClients = managedClients.filter(client => client.engagementType !== "on_demand").filter((client) => {
+      const contractClients = managedClients.filter(client => !["on_demand","free_of_charge"].includes(client.engagementType)).filter((client) => {
         const health = contractHealth(client);
         return state.contractFilter === "all"
           || (state.contractFilter === "renewal" && health.label === "Expiring soon")
@@ -7490,7 +7499,8 @@
       const clientSearch = state.clientSearch.trim().toLowerCase();
       const viewingInactiveClients = state.clientManagementTab === "inactive";
       const viewingOnDemandClients = state.clientManagementTab === "on-demand";
-      const clientTabRecords = managedClients.filter(client => viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client) && (viewingOnDemandClients ? client.engagementType === "on_demand" : client.engagementType !== "on_demand"));
+      const viewingFreeClients = state.clientManagementTab === "free-of-charge";
+      const clientTabRecords = managedClients.filter(client => viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client) && (viewingOnDemandClients ? client.engagementType === "on_demand" : viewingFreeClients ? client.engagementType === "free_of_charge" : !["on_demand","free_of_charge"].includes(client.engagementType)));
       const picFilterOptions = [...new Set(clientTabRecords.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
       if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
       const activeClientRows = sortClientMasterRows([...managedClients].filter((client) => {
@@ -7511,6 +7521,7 @@
               <div class="workspace-tabs">
                 <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
                 <button class="${viewingOnDemandClients ? "solid-btn" : "ghost-btn"}" data-client-tab="on-demand">On Demand Clients</button>
+                <button class="${viewingFreeClients ? "solid-btn" : "ghost-btn"}" data-client-tab="free-of-charge">Free of Charge</button>
                 ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
@@ -7522,13 +7533,13 @@
             </div>
           </section>
 
-          ${["active", "on-demand", "inactive"].includes(state.clientManagementTab) ? `
+          ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
             <div class="panel">
               <div class="section-title">
                 <div>
-                  <h3>${viewingInactiveClients ? "Inactive Clients" : viewingOnDemandClients ? "On Demand Clients" : "Active Clients"}</h3>
-                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : viewingOnDemandClients ? "Annual and occasional work without a recurring contract." : "Contract clients, newest contract first by default. Unknown dates appear last."}</p>
+                  <h3>${viewingInactiveClients ? "Inactive Clients" : viewingOnDemandClients ? "On Demand Clients" : viewingFreeClients ? "Free of Charge Clients" : "Active Clients"}</h3>
+                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : viewingOnDemandClients ? "Annual and occasional work without a recurring contract." : viewingFreeClients ? "Recurring monthly tax work without a fee. Excluded from the paid Active Clients portfolio; stored fee history is retained." : "Contract clients, newest contract first by default. Unknown dates appear last."}</p>
                 </div>
                 <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="client-sort-controls"><select id="client-order" class="filter-select" aria-label="Sort clients" title="Contract order uses Contract Start, or Engagement Start for older records. Unknown dates appear last.">${clientSortOptions.map(([key, label]) => `<option value="${key}" ${clientSortValue === key ? "selected" : ""}>${label}</option>`).join("")}${clientSortOptions.some(([key]) => key === clientSortValue) ? "" : `<option value="column" selected disabled>Column sort</option>`}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
               </div>
@@ -7579,8 +7590,8 @@
                         <td class="client-industry-cell" title="${client.industry}">${client.industry}</td>
                         <td class="client-obligation-cell" title="${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").map((key) => OBLIGATION_LABELS[key]).join(", ")}">${OBLIGATIONS.filter((key) => client.obligations[key].status !== "na").map((key) => OBLIGATION_LABELS[key]).join(", ")}</td>
                         <td>${client.clientStatus}</td>
-                        <td>${currency(client.serviceFee)}</td>
-                        <td>${currency(client.annualFee)}</td>
+                        <td>${currency(client.engagementType==="free_of_charge"?0:client.serviceFee)}</td>
+                        <td>${currency(client.engagementType==="free_of_charge"?0:client.annualFee)}</td>
                         <td class="client-action-cell"><button class="client-action-icon" data-client-master-toggle="${client.id}" aria-expanded="${clientExpanded}" aria-label="${clientExpanded ? "Collapse" : "Expand"} ${escapeAttr(identity.name)}" title="${clientExpanded ? "Collapse obligations" : "Quick-edit obligations"}"><svg class="client-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg></button><button class="client-action-icon ${viewingInactiveClients ? "client-reactivate" : "client-deactivate"}" data-toggle-client-status="${client.id}" aria-label="${viewingInactiveClients ? "Reactivate" : "Move to inactive"} ${escapeAttr(identity.name)}" title="${viewingInactiveClients ? "Reactivate client" : "Move to inactive"}">${viewingInactiveClients ? "↥" : "↧"}</button><button class="client-action-icon" data-edit-client="${client.id}" aria-label="Edit ${escapeAttr(identity.name)}" title="Edit client">&#9998;</button></td>
                       </tr>
                       ${clientExpanded ? `<tr class="client-obligation-quick-row"><td colspan="11"><div class="client-obligation-quick-panel"><span class="eyebrow">Monthly obligations</span>${OBLIGATIONS.map((key) => { const active = client.obligations[key].status !== "na"; return `<label class="client-obligation-quick-option ${active ? "active" : ""}"><input type="checkbox" data-client-obligation="${client.id}|${key}" ${active ? "checked" : ""} ${hasLeadershipAccess() ? "" : "disabled"} />${OBLIGATION_LABELS[key]}</label>`; }).join("")}${hasLeadershipAccess() ? `<span class="subline">Changes save automatically.</span>` : `<span class="subline">Leadership access is required to modify Client Master.</span>`}</div></td></tr>` : ""}
@@ -7660,6 +7671,7 @@
 
                 <section class="client-form-section">
                   <div class="client-form-section-title"><strong>Commercial Terms</strong><span>Fees before tax</span></div>
+                  ${activeSample.engagementType==="free_of_charge"?'<p class="subline">Free of Charge: stored fees below are retained reference values, not current charges. New monthly work uses zero fees.</p>':''}
                   <div class="detail-grid-2">
                     <div class="client-field"><label for="client-form-monthly-fee">Monthly Fee</label><input id="client-form-monthly-fee" class="field" value="${activeSample.serviceFee}" type="number" placeholder="0" /></div>
                     <div class="client-field"><label for="client-form-annual-fee">Annual Fee</label><input id="client-form-annual-fee" class="field" value="${activeSample.annualFee}" type="number" placeholder="0" /></div>
@@ -7931,7 +7943,7 @@
           <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" title="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</button>
         </div>
       `);
-      window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : "active"; commitWorkspaceNavigation("replace"); } });
+      window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : type === "free_of_charge" ? "free-of-charge" : "active"; commitWorkspaceNavigation("replace"); } });
     }
 
     function renderMatrix() {
@@ -8722,7 +8734,7 @@
       const snapshottedTasks = new Set(snapshots.filter(event => ["completed", "linked_completed"].includes(event.event_type)).map(event => event.task_id));
       const events = [
         ...(progress?.progressEntries || []).filter(entry=>!item.workflow?.removedProgress?.some(removed=>removed.id===entry.id&&!removed.restoredAt)).map((entry, index) => ({ ...entry, key:`progress:${entry.id || index}`, source:"Follow-up" })),
-        ...snapshots.map(event => ({ key:`task-event:${event.id}`, entry:`${event.event_type === "reopened" ? "Reopened: " : event.event_type === "unlinked" ? "Link removed: " : event.event_type === "linked_completed" ? "Linked completed task: " : "Completed: "}${event.title}`, creatorName:event.actor_name, createdAt:event.occurred_at, source:"My Work", taskId:event.task_id })),
+        ...snapshots.map(event => event.step_id ? ({ key:`task-event:${event.id}`, entry:`${event.event_type === "step_reopened" ? "Reopened step: " : event.event_type === "step_snapshot" ? "Previously completed step: " : "Completed step: "}${event.step_title}`, taskTitle:event.title, historical:event.event_type === "step_snapshot", creatorName:event.actor_name, createdAt:event.occurred_at, source:"My Work step", taskId:event.task_id }) : ({ key:`task-event:${event.id}`, entry:`${event.event_type === "reopened" ? "Reopened: " : event.event_type === "unlinked" ? "Link removed: " : event.event_type === "linked_completed" ? "Linked completed task: " : "Completed: "}${event.title}`, creatorName:event.actor_name, createdAt:event.occurred_at, source:"My Work", taskId:event.task_id })),
         ...(progress?.completedTasks || []).filter(task => !snapshottedTasks.has(task.id)).map((task, index) => ({ key:`task:${task.id || index}`, entry:task.title, creatorName:task.completedByName || task.creatorName, createdAt:task.completedAt, source:"My Work", taskId:task.id })),
         ...(item.workflow?.events || []).map(event => ({ key:`workflow:${event.id}`, entry:event.text, creatorName:event.actor, createdAt:event.at, source:"Case action" }))
       ];
@@ -8764,7 +8776,7 @@
           <section class="case-progress-block"><div class="eyebrow">Open work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No open work in your scope.</div>`)}</div></section>
         </div><div>
           ${progress?.error ? `<div class="case-progress-notice" role="alert"><span>${escapeHtml(progress.error)}</span><button class="tiny-btn" data-case-reload-progress="${escapeAttr(item.id)}">Retry</button></div>` : ""}
-          <div class="eyebrow">Case timeline</div><div class="subline">Showing ${visibleTimeline.length} loaded updates · Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${visibleTimeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${timestamp(entry.createdAt)}${entry.taskId ? ` · ${escapeHtml(entry.taskId)}` : ""}</div>${entry.source==="Follow-up"?removal(entry):""}</div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
+          <div class="eyebrow">Case timeline</div><div class="subline">Showing ${visibleTimeline.length} loaded updates · Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${visibleTimeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong>${entry.taskTitle ? `<div class="subline">Task: ${escapeHtml(entry.taskTitle)}</div>` : ""}<div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${entry.historical ? "Completion date not recorded" : timestamp(entry.createdAt)}${entry.taskId && !entry.taskTitle ? ` · ${escapeHtml(entry.taskId)}` : ""}</div>${entry.source==="Follow-up"?removal(entry):""}</div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
           ${removed.length?`<details class="case-removed-progress"><summary>Removed updates (${removed.length})</summary>${removed.map(entry=>`<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.reason)} · Removed ${timestamp(entry.at)}</div></div>${removal({...entry,creatorProfileId:entry.creatorId},true)}</div>`).join("")}</details>`:""}
           ${progress?.pageInfo?.hasMore || timeline.length > visibleTimeline.length ? `<button type="button" class="ghost-btn" data-case-load-older="${escapeAttr(item.id)}" ${progress?.loading ? "disabled" : ""}>${progress?.loading ? "Loading..." : "Load older updates"}</button>` : ""}
           <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" value="${escapeAttr(caseFollowUpDrafts.get(item.id) || "")}" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready && !saving ? "" : "disabled"}>${saving ? "Saving..." : IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div><div class="subline" data-case-followup-status role="status">${escapeHtml(saving ? "Saving to database..." : caseFollowUpStatus.get(item.id) || "")}</div>
@@ -9087,7 +9099,7 @@
         if (accountingMatch) return "PIC ACC";
         return "";
       };
-      const assignedClients = activeClientMasterRecords().filter((client) => assignmentRole(client) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
+      const assignedClients = recurringClientMasterRecords().filter((client) => assignmentRole(client) && (!profileClientQuery || [displayClientName(client), client.npwp, client.taxPic, client.accountingPic].join(" ").toLowerCase().includes(profileClientQuery)));
       root.innerHTML = safeHtml(`
         <div class="workspace-frame">
           <section class="panel">
@@ -9111,11 +9123,11 @@
                 <input class="field" id="profile-confirm-password" type="password" autocomplete="new-password" placeholder="Confirm new password" style="margin-top:8px;" />
                 <div class="inline-controls" style="margin-top:10px;"><button class="ghost-btn" data-change-password="yes">Update Password</button></div>
               </div>
-              <div class="detail-card"><div class="eyebrow">Assigned Clients</div><strong>${assignedClients.length}</strong><div class="subline">Based on PIC ACC or PIC TAX.</div></div>
+              <div class="detail-card"><div class="eyebrow">Assigned Clients</div><strong>${assignedClients.length}</strong><div class="subline">Based on PIC ACC or PIC TAX. Includes ${assignedClients.filter(client=>client.engagementType==='free_of_charge').length} Free of Charge client(s); separate from the paid portfolio.</div></div>
             </div>
             <div ${state.profileTab === "clients" ? "" : "hidden"}><div class="toolbar compact-toolbar" style="margin-top:16px;"><input id="profile-client-search" class="filter-input" type="search" value="${escapeAttr(state.profileClientSearch)}" placeholder="Search my clients..." /></div>
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>No.</th><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
-              ${assignedClients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
+              ${assignedClients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}${client.engagementType==='free_of_charge'?' · Free of Charge':''}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
             <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
@@ -9247,7 +9259,7 @@
                 <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
                 <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>
-                <div class="${selected.pendingSync?'my-work-card':'subline'}" role="status" data-my-work-save-status>${myWorkSaveStatus(selected)}</div>` : `<div class="empty-state">Select a task to open details.</div>`}
+                <div class="my-work-save-status" data-sync-state="${myWorkSaveState(selected)}" role="status" aria-atomic="true" data-my-work-save-status>${myWorkSaveStatus(selected)}</div>` : `<div class="empty-state">Select a task to open details.</div>`}
               ${selected ? `<div class="my-work-meta">Created by ${escapeHtml(selected.creatorName || state.selectedPic)} · ${selected.createdAtText ? new Date(selected.createdAtText).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : new Date(selected.createdAt || Date.now()).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>` : ""}
             </aside>` : ""}
           </section>
@@ -9459,7 +9471,7 @@
       }, { useDefaults: false });
       client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
       client.databaseId = row.id;
-      client.engagementType = row.engagement_type === "on_demand" ? "on_demand" : "contract";
+      client.engagementType = ["on_demand","free_of_charge"].includes(row.engagement_type) ? row.engagement_type : "contract";
       client.createdAt = row.created_at || "";
       client.taxPicProfileId = row.tax_pic_profile_id || "";
       client.accountingPicProfileId = row.accounting_pic_profile_id || "";
@@ -9599,8 +9611,9 @@
       } catch (error) { console.warn("[operations] shared load failed", error); return false; }
     }
 
-    if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.configure(team => {
+    if (!IS_OFFLINE_DEMO) window.AnnualDashboardSheets?.configure((team, change) => {
       loadSharedOperationalWorkspaces(true, team === "tax" ? "annual_tax" : "annual_accounting");
+      if (change?.clientsChanged) loadSharedClients(true);
     }, bootstrapProfile.user.id);
 
     async function saveClientToDatabase(client, { showLoading = true } = {}) {
@@ -10708,6 +10721,7 @@
     }
 
     function myWorkValues(task) {
+      (task.steps || []).forEach((step, index) => { step.id ||= task.id?.startsWith("task-") ? crypto.randomUUID() : `legacy:${task.id}:${index}`; });
       return {
         title: task.title,
         note: task.note || "",
@@ -10760,13 +10774,16 @@
 
     const myWorkSaveQueues = new WeakMap();
 
+    function myWorkSaveState(task) {
+      return !task.pendingSync ? "saved" : task.saving ? "saving" : "unsaved";
+    }
     function myWorkSaveStatus(task) {
       return !task.pendingSync ? "Saved" : task.saving ? "Saving..." : `Changes not saved <button class="ghost-btn" data-retry-task="${escapeAttr(task.id)}">${task.syncConflict?"Review conflict":"Retry"}</button>`;
     }
     function refreshMyWorkSaveStatus(task) {
       if(state.selectedMyWorkId!==task.id)return;
       const status=document.querySelector('#my-work-view [data-my-work-save-status]');
-      if(status){status.className=task.pendingSync?'my-work-card':'subline';status.innerHTML=safeHtml(myWorkSaveStatus(task));}
+      if(status){status.className="my-work-save-status";status.dataset.syncState=myWorkSaveState(task);status.innerHTML=safeHtml(myWorkSaveStatus(task));}
     }
 
     function saveMyWorkTaskToDatabase(task, extra = {}) {
@@ -10839,7 +10856,9 @@
           }
           Object.assign(task, restored.value);
           task.version = result.task.version;
-          const timelineChanged=previousCaseId!==(result.task.caseId||"")||Boolean(task.serverBase?.done)!==Boolean(result.task.done);
+          const oldSteps = new Map((task.serverBase?.steps || []).map(step => [step.id,Boolean(step.done)]));
+          const stepCompletionChanged = (result.task.steps || []).some(step => Boolean(step.done) !== (oldSteps.get(step.id) || false));
+          const timelineChanged=previousCaseId!==(result.task.caseId||"")||Boolean(task.serverBase?.done)!==Boolean(result.task.done)||stepCompletionChanged;
           task.serverBase = myWorkValues(result.task);
           for (const caseId of timelineChanged?new Set([previousCaseId,result.task.caseId].filter(Boolean)):[]) {
             caseProgressReadRevision.set(caseId,(caseProgressReadRevision.get(caseId) || 0) + 1);
@@ -11527,7 +11546,7 @@
         operationsTab: ["active", "history", "claim", "archive"],
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
-        clientManagementTab: ["active", "on-demand", "inactive", "proposal", "contracts"],
+        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"],
         managementTab: ["overview", "trends", "portfolio", "workload", "recognition", "report", "announcements", "access"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
@@ -11711,7 +11730,7 @@
       state.performance = { ...state.performance, ...(snapshot.performance || {}) };
       state.announcements = Array.isArray(snapshot.announcements) ? snapshot.announcements : state.announcements;
       state.allocationQuery = snapshot.allocationQuery || "";
-      state.allocationEngagementFilter = ["all", "contract", "on_demand"].includes(snapshot.allocationEngagementFilter) ? snapshot.allocationEngagementFilter : "all";
+      state.allocationEngagementFilter = ["all", "contract", "free_of_charge", "on_demand"].includes(snapshot.allocationEngagementFilter) ? snapshot.allocationEngagementFilter : "all";
       state.allocationShowChangedOnly = typeof snapshot.allocationShowChangedOnly === "boolean" ? snapshot.allocationShowChangedOnly : state.allocationShowChangedOnly;
       if (snapshot.allocationDraftEpoch === state.allocationDraftEpoch) state.allocationDrafts = snapshot.allocationDrafts || state.allocationDrafts;
       state.allocationLastReport = snapshot.allocationLastReport || state.allocationLastReport;
@@ -14427,7 +14446,7 @@
         const task = state.myWork.find((item) => item.id === state.selectedMyWorkId);
         const title = event.target.value.trim();
         if (task && title) {
-          task.steps.push({ title, done: false });
+          task.steps.push({ id: crypto.randomUUID(), title, done: false });
           state.addingMyWorkStepId = "";
           commitUi("replace");
           saveMyWorkTaskToDatabase(task);

@@ -9,7 +9,7 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
   const context = { exports: {} as Record<string, any>, require(name: string) {
     if (name === "next/server") return { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) }, after: () => {} };
     if (name in bindings) return bindings[name];
-    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement", "@/lib/case-access", "@/lib/case-progress-page", "@/lib/case-activity"].includes(name)) {
+    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/my-work-steps", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement", "@/lib/case-access", "@/lib/case-progress-page", "@/lib/case-activity"].includes(name)) {
       return loadRoute(`${name.replace("@/", "")}.ts`, {
         "@/lib/access": { isLeadership: (role: string) => ["leader", "supervisor", "partner", "admin"].includes(role) },
         ...bindings
@@ -32,7 +32,7 @@ export function mockDatabase(tables: Record<string, any[]>) {
       not(key: string, _op: string, value: any) { filters.push(row => (row[key] ?? null) !== value); return query; },
       eq(key: string, value: any) { if (/^(latest_completion|my_completion|my_followup|my_task)\./.test(key)) return query; filters.push(row => (table === "client_master" && key === "engagement_type" && row[key] === undefined ? "contract" : row[key]) === value); return query; },
       is(key: string, value: any) { filters.push(row => (row[key] ?? null) === value); return query; },
-      in(key: string, values: any[]) { filters.push(row => values.includes(row[key])); return query; },
+      in(key: string, values: any[]) { filters.push(row => values.includes(table === "client_master" && key === "engagement_type" && row[key] === undefined ? "contract" : row[key])); return query; },
       or(expression: string) { const parts = expression.split(",").map(item => item.split(".eq.")); filters.push(row => parts.some(([key, value]) => row[key] === value)); return query; },
       insert(value: any) { action = "insert"; input = value; return query; },
       update(value: any) { action = "update"; input = value; return query; },

@@ -37,7 +37,7 @@
     if (response && !response.ok || boundUser && data.userId && data.userId !== boundUser) { clientsCache = null; const error = new Error(data.error || (!response || response.ok ? "Annual workspace access changed. Reload and retry." : "Annual request failed. Please retry.")); error.status = !response || response.ok ? 409 : response.status; throw error; }
     if (options.clients) return data.clients || [];
     context = data;
-    if (window.parent !== window) window.parent.postMessage({ type: "annual-sheet:state", team, year: data.rows?.[0]?.year || 0, version: data.version, saved: !!body }, location.origin);
+    if (window.parent !== window) window.parent.postMessage({ type: "annual-sheet:state", team, year: data.rows?.[0]?.year || 0, version: data.version, saved: !!body, clientsChanged: !!body && data.registeredExternalClients === true }, location.origin);
     return data;
   }
   function load() {

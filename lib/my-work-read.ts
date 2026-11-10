@@ -1,5 +1,6 @@
 import { isLeadership, type CurrentActor } from "@/lib/access";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { taskSteps } from "@/lib/my-work-steps";
 
 export type TaskRow = {
   id: string;
@@ -33,7 +34,7 @@ export function taskResponse(task: TaskRow, preference?: { favorite?: boolean | 
     version: task.updated_at,
     title: task.title,
     note: task.notes || "",
-    steps: Array.isArray(task.steps) ? task.steps : [],
+    steps: taskSteps(task.steps, task.id),
     reminder: task.reminder_at ? task.reminder_at.slice(0, 16) : "",
     dueDate: task.due_date || "",
     repeatRule: task.repeat_rule || "none",

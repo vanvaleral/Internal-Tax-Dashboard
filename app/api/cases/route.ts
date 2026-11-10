@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
         .from("tax_case_progress_entries")
         .select("id, entry, created_at, created_by_profile_id, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)")
         .eq("case_id", progressFor), "created_at", "progressEntries"),
-      page(actor.admin.from("tax_case_task_timeline").select("id, task_id, title, actor_name, event_type, occurred_at").eq("case_id",progressFor), "occurred_at", "taskTimeline")
+      page(actor.admin.from("tax_case_task_timeline").select("id, task_id, title, step_id, step_title, actor_name, event_type, occurred_at").eq("case_id",progressFor), "occurred_at", "taskTimeline")
     ]);
     if (taskError || progressError) return NextResponse.json({ error: taskError?.message || progressError?.message || "Case progress could not be loaded." }, { status: 500 });
     // Rolling deploy: existing progress remains available until the additive migration is applied.

@@ -3,7 +3,7 @@ const person = (value: any) => Array.isArray(value) ? value[0] : value;
 
 export function latestCaseReportProgress(cases: any[], snapshots: any[], entries: any[], completedTasks: any[]) {
   const result: Record<string, ReportProgress | null> = Object.fromEntries(cases.map(row=>[row.id,null]));
-  const snapshotsByTask = new Set(snapshots.map(row=>`${row.case_id}:${row.task_id}`));
+  const snapshotsByTask = new Set(snapshots.filter(row=>["completed","linked_completed"].includes(row.event_type)).map(row=>`${row.case_id}:${row.task_id}`));
   function add(caseId: string, entry: unknown, creatorName: unknown, at: unknown, source: string) {
     if (!Object.hasOwn(result,caseId) || typeof entry !== "string" || !entry.trim()) return;
     const date = typeof at === "string" && Number.isFinite(Date.parse(at)) ? at : null;
@@ -19,6 +19,12 @@ export function latestCaseReportProgress(cases: any[], snapshots: any[], entries
     add(row.case_id,row.entry,author?.display_name||author?.full_name,row.created_at,"Follow-up");
   }
   for (const row of snapshots) {
+    // Undated historical checkmarks are visible in Cases, not claimed as fresh PIC activity.
+    if (row.event_type === "step_snapshot") continue;
+    if (row.step_id) {
+      add(row.case_id,`${row.event_type === "step_reopened" ? "Reopened step" : "Completed step"}: ${row.step_title} (Task: ${row.title})`,row.actor_name,row.occurred_at,"My Work step");
+      continue;
+    }
     const prefix=row.event_type==="reopened"?"Reopened: ":row.event_type==="unlinked"?"Link removed: ":row.event_type==="linked_completed"?"Linked completed task: ":"Completed: ";
     add(row.case_id,prefix+row.title,row.actor_name,row.occurred_at,"My Work");
   }

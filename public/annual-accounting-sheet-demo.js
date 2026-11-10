@@ -1358,6 +1358,9 @@
       $(id).value = id === "pic-filter" ? state.pic : state.taxPic;
     }
     const form = $("outside-form");
+    $("outside-dialog").querySelector(".dialog-head p").textContent = "New external clients are also registered under Clients > On Demand. These PICs apply to Annual work only; Client Master PICs stay unassigned.";
+    $("tax-subject-dialog").querySelector(".dialog-head p").textContent = "New taxpayers are also registered under Clients > On Demand, separately from any linked company. Existing client categories and Master PICs stay unchanged.";
+    $("save-new-rows").title = "New external names are also registered as On Demand clients. Annual PICs stay separate from Client Master allocations.";
     for (const [field, names] of [["accountingPic", accPics], ["taxPic", taxPics]]) form.elements[field].innerHTML = `<option value="">Unassigned</option>${names.map(name => `<option>${escape(name)}</option>`).join("")}`;
     liveReady = true;
     if (firstLoad && window.requestIdleCallback) window.requestIdleCallback(warmGenerationCandidates, { timeout: 2000 });

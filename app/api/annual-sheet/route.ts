@@ -70,7 +70,22 @@ export async function POST(request: Request) {
       if (!rowAction && body.creates.length) payload = addAnnualRows(payload, body.creates, team, actor.profile, ctx.staff, ctx.clients, ctx.columns);
       const version = (current?.version || 0) + 1;
       const nextState = { scope: annualScope(team), payload, version, updated_by_profile_id: actor.profile.id, updated_at: new Date().toISOString() };
-      const result = current
+      const storedIds = new Set(stored.map((row: any) => String(row.id || row.annualWorkId)));
+      const externalIds = payload.filter((row: any) => !storedIds.has(String(row.id || row.annualWorkId)) && !row.clientId && !row.sourceClientId).map((row: any) => String(row.id || row.annualWorkId));
+      let result;
+      if (externalIds.length) {
+        // No separate Client Master insert: a failed/conflicting save must leave neither record behind.
+        const registration = await actor.admin.rpc("commit_annual_external_clients", {
+          p_scope: annualScope(team), p_expected_version: current?.version || 0,
+          p_payload: payload, p_registration_ids: externalIds, p_actor_id: actor.profile.id
+        });
+        if (registration.error?.code === "PGRST202" || registration.error?.code === "42883") return NextResponse.json({ error: "Apply the annual external-client registration migration before adding external clients.", code: "MIGRATION_REQUIRED" }, { status: 503 });
+        if (registration.error?.code === "40001" || !registration.error && registration.data?.saved === false) continue;
+        if (registration.error) throw new Error(registration.error.message);
+        if (!registration.data?.saved || !Array.isArray(registration.data.payload) || registration.data.version !== version) throw new Error("Annual client registration was not confirmed. Refresh before retrying.");
+        payload = registration.data.payload;
+        result = { data: { version }, error: null };
+      } else result = current
         ? await actor.admin.from("operational_workspace_state").update(nextState).eq("scope", annualScope(team)).eq("version", current.version).select("version").maybeSingle()
         : await actor.admin.from("operational_workspace_state").insert(nextState).select("version").maybeSingle();
       if (result.error?.code === "23505" || !result.error && !result.data) continue;
@@ -83,7 +98,7 @@ export async function POST(request: Request) {
         } catch (error) { console.warn("[annual-sheet] summary audit failed", error); }
       });
       ctx.workspace = { payload, version };
-      return NextResponse.json({ ...annualResponseData(actor, team, ctx), clients: undefined });
+      return NextResponse.json({ ...annualResponseData(actor, team, ctx), clients: undefined, registeredExternalClients: externalIds.length > 0 });
     }
     return NextResponse.json({ error: "Annual work is busy. Refresh and retry.", code: "RETRY_REQUIRED" }, { status: 409 });
   } catch (error) {

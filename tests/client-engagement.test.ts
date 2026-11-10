@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
-import {engagementType,validateEngagementChange} from '../lib/client-engagement.ts';
+import {engagementType,validateEngagementChange,MONTHLY_ENGAGEMENT_TYPES} from '../lib/client-engagement.ts';
 import {loadRoute} from './route-harness.ts';
 const read=(file:string)=>readFileSync(new URL(`../${file}`,import.meta.url),'utf8');
 const id='11111111-1111-4111-8111-111111111111';
 test('engagement classification validates stable client IDs and keeps omitted legacy values contracted',()=>{
   assert.equal(engagementType(undefined),'contract');assert.equal(engagementType('on_demand'),'on_demand');
+  assert.equal(engagementType('free_of_charge'),'free_of_charge');assert.deepEqual([...MONTHLY_ENGAGEMENT_TYPES],['contract','free_of_charge']);
+  assert.deepEqual(validateEngagementChange({engagementType:'free_of_charge',clients:[{id,beforeType:'on_demand'}]}),[{id,before_type:'on_demand'}]);
   assert.deepEqual(validateEngagementChange({engagementType:'on_demand',clients:[{id,beforeType:'contract'}]}),[{id,before_type:'contract'}]);
   for(const body of [{},{engagementType:'other',clients:[]},{engagementType:'on_demand',clients:[{id:'name',beforeType:'contract'}]},{engagementType:'on_demand',clients:[{id,beforeType:'contract'},{id,beforeType:'contract'}]}])assert.throws(()=>validateEngagementChange(body));
 });
@@ -24,7 +26,7 @@ function sheet(allowed=true){
   w.confirm=()=>true;const alerts:string[]=[];w.alert=(s:string)=>alerts.push(s);w.eval(read('public/client-engagement.js'));
   const rows=[{id:'one',databaseId:id,engagementType:'contract',taxPic:'Tax A',contractStartedAt:'2020-01-01'},{id:'two',databaseId:'22222222-2222-4222-8222-222222222222',engagementType:'contract'}];
   let visible=rows,tab='active',fail=false,release:any;const writes:any[]=[];
-  const render=()=>{w.document.querySelector('#client-management-view').innerHTML='<div class="table-wrap"><table class="client-table"><thead><tr><th>No.</th></tr></thead><tbody>'+visible.map((r,i)=>`<tr data-client-master-toggle="${r.id}"><td>${i+1}</td></tr>`).join('')+'</tbody></table></div>';w.ClientEngagement.enhance({rows:visible,tab,canManage:allowed,offline:false,render,moved:(type:string)=>{tab=type==='on_demand'?'on-demand':'active';},fetch:async(_url:string,options:any)=>{writes.push(JSON.parse(options.body));await new Promise(resolve=>release=resolve);return {ok:!fail,json:async()=>fail?{error:'Conflict; refresh'}:{updated:visible.length}};}});};render();
+  const render=()=>{w.document.querySelector('#client-management-view').innerHTML='<div class="table-wrap"><table class="client-table"><thead><tr><th>No.</th></tr></thead><tbody>'+visible.map((r,i)=>`<tr data-client-master-toggle="${r.id}"><td>${i+1}</td></tr>`).join('')+'</tbody></table></div>';w.ClientEngagement.enhance({rows:visible,tab,canManage:allowed,offline:false,render,moved:(type:string)=>{tab=type==='on_demand'?'on-demand':type==='free_of_charge'?'free-of-charge':'active';},fetch:async(_url:string,options:any)=>{writes.push(JSON.parse(options.body));await new Promise(resolve=>release=resolve);return {ok:!fail,json:async()=>fail?{error:'Conflict; refresh'}:{updated:visible.length}};}});};render();
   return {dom,w,rows,writes,alerts,render,filter:()=>{visible=[rows[0]];render();},fail:()=>{fail=true;},release:()=>release(),tab:()=>tab};
 }
 test('filtered bulk selection waits for confirmation and preserves PIC/contract dates when moved',async()=>{
@@ -38,10 +40,26 @@ test('failed moves retain confirmed classifications and staff cannot select/move
   const d=sheet();try{d.fail();d.w.document.querySelector('[data-client-select-all]').click();d.w.document.querySelector('[data-move-client-engagement]').click();d.release();await new Promise(resolve=>setImmediate(resolve));assert.equal(d.rows[0].engagementType,'contract');assert.match(d.alerts[0],/Conflict/);}finally{d.dom.window.close();}
   const staff=sheet(false);try{assert.equal(staff.w.document.querySelector('[data-client-select]'),null);assert.equal(staff.w.document.querySelector('[data-move-client-engagement]'),null);}finally{staff.dom.window.close();}
 });
-test('migration changes only engagement and audits atomically; monthly generation excludes non-contract clients',()=>{
+test('migration changes only engagement and audits atomically; monthly generation includes FOC but not On Demand',()=>{
   const sql=read('supabase/migrations/202611060002_client_engagement_type.sql'),ui=read('public/demo.html');
   assert.match(sql,/default 'contract'/);assert.match(sql,/for update/);assert.match(sql,/40001/);assert.match(sql,/client_engagement_changed/);assert.match(sql,/revoke all on function.*from public,anon,authenticated/);
   assert.doesNotMatch(sql,/delete from|update public\.(tax_cases|operational_workspace_state)|set.*pic/i);
-  assert.match(read('app/api/operations/route.ts'),/\.eq\("engagement_type", "contract"\)/);
+  assert.match(read('app/api/operations/route.ts'),/\.in\("engagement_type", \[\.\.\.MONTHLY_ENGAGEMENT_TYPES\]\)/);
   assert.match(ui,/clients: \{ key: "contractStart", dir: "desc" \}/);assert.match(ui,/data-client-tab="on-demand"/);assert.match(ui,/allocation-engagement-filter/);
+});
+
+test('leadership can move selected clients to Free of Charge and back without changing historical details',async()=>{
+  const d=sheet();try{
+    d.filter();d.w.document.querySelector('[data-client-select-all]').click();const select=d.w.document.querySelector('[data-client-engagement-target]');select.value='free_of_charge';select.dispatchEvent(new d.w.Event('change',{bubbles:true}));
+    d.w.document.querySelector('[data-move-client-engagement]').click();assert.equal(d.writes[0].engagementType,'free_of_charge');assert.equal(d.rows[0].engagementType,'contract');d.release();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(d.rows[0].engagementType,'free_of_charge');assert.equal(d.tab(),'free-of-charge');assert.equal(d.rows[0].taxPic,'Tax A');assert.equal(d.rows[0].contractStartedAt,'2020-01-01');
+    d.w.document.querySelector('[data-client-select-all]').click();d.w.document.querySelector('[data-move-client-engagement]').click();assert.equal(d.writes[1].engagementType,'contract');assert.equal(d.writes[1].clients[0].beforeType,'free_of_charge');d.release();await new Promise(resolve=>setImmediate(resolve));assert.equal(d.rows[0].engagementType,'contract');
+  }finally{d.dom.window.close();}
+});
+
+test('Free of Charge schema extension preserves fees/history and keeps bulk updates server-only',()=>{
+  const sql=read('supabase/migrations/20261110072359_free_of_charge_clients.sql');
+  assert.match(sql,/check \(engagement_type in \('contract','on_demand','free_of_charge'\)\)/);assert.match(sql,/security invoker set search_path = ''/);assert.match(sql,/for update/);assert.match(sql,/client_engagement_changed/);
+  assert.doesNotMatch(sql,/delete from|drop table|set (monthly_fee|annual_fee|status|tax_pic)|security definer/i);
+  assert.match(sql,/from public,anon,authenticated/);assert.match(sql,/to service_role/);
 });

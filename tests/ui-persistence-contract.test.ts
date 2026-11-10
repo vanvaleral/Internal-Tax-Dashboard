@@ -10,7 +10,8 @@ test("My Work uses a per-task save queue and avoids stale full-record replacemen
   assert.match(demo, /rapid create \+ edit sequence into POST then PATCH/);
   assert.doesNotMatch(demo, /Object\.assign\(task, result\.task\)/);
   assert.doesNotMatch(demo, /if \(creating\) saveMyWorkTaskToDatabase\(task\)/);
-  assert.match(demo, /if \(task\.pendingSync\) saveMyWorkTaskToDatabase\(task\)/);
+  assert.doesNotMatch(demo, /if \(task\.pendingSync\) saveMyWorkTaskToDatabase\(task\)/);
+  assert.match(demo, /WorkspaceSync\.equal\(sent,task\.serverBase\)/);
   assert.match(demo, /typeof task\.pendingFavorite === "boolean"/);
 });
 
@@ -100,7 +101,7 @@ test("KPI Overview counts only active Client Master records", async () => {
 
 test("Profile client scope uses Client Master and permanent PIC profile IDs", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /const assignedClients = activeClientMasterRecords\(\)\.filter/);
+  assert.match(demo, /const assignedClients = recurringClientMasterRecords\(\)\.filter/);
   assert.match(demo, /client\.taxPicProfileId \|\| ""/);
   assert.match(demo, /client\.accountingPicProfileId \|\| ""/);
   assert.match(demo, /PIC TAX & PIC ACC/);
@@ -111,7 +112,8 @@ test("Profile client scope uses Client Master and permanent PIC profile IDs", as
 test("all current client portfolio views share the strict Active-only scope", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /function isActiveClientRecord\(client\) \{[\s\S]*?\.toLowerCase\(\) === "active"/);
-  assert.match(demo, /function activeClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(client => isActiveClientRecord\(client\) && client\.engagementType !== "on_demand"\);/);
+  assert.match(demo, /function activeClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(client => isActiveClientRecord\(client\) && !\["on_demand","free_of_charge"\]\.includes\(client\.engagementType\)\);/);
+  assert.match(demo, /function recurringClientMasterRecords\(\) \{\s*return clientMasterClients\.filter\(client => isActiveClientRecord\(client\) && client\.engagementType !== "on_demand"\);/);
   assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return sortClientMasterRows\(clientMasterClients\.filter\(isActiveClientRecord\)/);
   assert.match(demo, /function clientPortfolioSnapshot\(\) \{\s*const activeClients = activeClientMasterRecords\(\);\s*const portfolio = activeClients;/);
   assert.match(demo, /const regionalCounts = regions\.map\(\(region\) => \(\{ region, count: currentActiveClients\.filter/);
@@ -296,7 +298,7 @@ test("My Work returns to a full-width list when moving from mobile to desktop", 
 test("desktop workspaces keep a stable width when tall menus add scrolling", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /html \{\s*scrollbar-gutter: stable;/);
-  assert.match(demo, /\.my-work-panel \{ min-height: calc\(100dvh - 132px\)/);
+  assert.match(demo, /\.my-work-panel \{ height: calc\(100dvh - 132px\); min-height:0;/);
   assert.match(demo, /\.main > \.panel,\s*\.main > \.view \{\s*width: 100%;\s*max-width: var\(--workspace-width\);/);
 });
 

@@ -17,8 +17,9 @@ batch generation and selected-year Excel export. Staff exports include only rows
 they are authorized to read; they are not firm-wide exports.
 
 The toolbar uses **Add Client** with **Generate Clients** and **Add Ext Client**
-actions. These retain the existing generation review and annual-only external
-work/subject forms. **Full Screen** replaces Add Column and opens a standalone
+actions. These retain the existing generation review and external work/subject
+forms; newly saved external clients also enter the On Demand registry below.
+**Full Screen** replaces Add Column and opens a standalone
 new tab using the whole page, with Accounting/Tax team navigation. It retains the
 year, status, PIC/search filters, active view and standard-column sort. Live mode
 and the account binding are carried over; embedded mode and demo actor switching
@@ -165,11 +166,13 @@ unchanged. Prior-source row/year and the creating actor are recorded in its audi
 
 Accounting external work uses an Annual-only `annualClientId` to retain identity
 across generated years. Legacy external rows fall back to their existing work ID
-without rewriting history. Tax keeps its existing stable subject ID. Neither source
-creates Client Master clients or changes Allocation/PIC portfolio counts.
+without rewriting history. Tax keeps its existing stable subject ID. A separate
+`registeredClientId` links new external work to Client Master without changing its
+Annual-only identity or treating its Annual PIC as a Master allocation.
 
-This uses additive metadata in the existing Annual JSON records. No database schema
-migration, destructive update, new dependency or automatic regeneration is needed.
+Generation uses additive metadata in the existing Annual JSON records. External
+registration requires the transaction migration documented below; no destructive
+update, new dependency or automatic regeneration is needed.
 
 ## Bulk Entry And Individual Subjects
 
@@ -207,9 +210,10 @@ Blank drafts are never persisted or counted. Named rows are validated as one
 batch, then confirmed with one POST. Invalid data, duplicates, unauthorized PIC
 assignments/deadlines or incomplete Tax filing evidence reject the whole batch.
 Accounting names matching one eligible Client Master candidate link to that client;
-other names create annual-only external work. Individual Tax names can link to
-their eligible Master candidate; other subjects remain annual-only. Neither flow
-writes Client Master or adds a PIC portfolio allocation. The primary PIC is required
+other names create external Annual work and register it as On Demand. Individual
+Tax names can link to their eligible Master candidate; other subjects are registered
+independently of their linked company. Neither flow adds a Master PIC allocation.
+The primary PIC is required
 for bulk work. Staff can create their own work, not assign it to another PIC.
 
 Stable UUID request IDs support retry without duplicates. Initial values use the
@@ -224,8 +228,50 @@ An Individual Master candidate stores `sourceClientId` and a stable `subjectId`
 inside its annual JSON row, plus a separate unique work ID for each year. Current
 Master PIC assignments are snapshotted when generating a new year; earlier work
 and historical PICs are not rewritten. Outside directors and people remain separate
-subjects. No SQL migration is needed: these are additive keys in the existing
-workspace payload, with operational history preserved.
+subjects. Existing historical workspace payloads and PIC ownership are preserved.
+
+## External Client Registration
+
+Apply `20261110074339_annual_external_on_demand_registration.sql` followed by
+`20261110075519_annual_external_registration_team_type.sql` before deploying. The
+second function-only migration handles the existing PostgreSQL team-division enum.
+Only new external rows use the service-role-only, security-invoker
+`commit_annual_external_clients` transaction. It compares/locks the workspace
+version, registers the clients, records Master activity, and saves the linked Annual
+payload atomically. A failed batch or version conflict cannot leave orphan clients;
+missing migrations block external creation rather than falling back to partial saves.
+Normal cell edits, archive/restore, and Master generation retain their existing save
+path and do not run registration queries.
+
+New Master records have a unique client code, Active lifecycle, On Demand engagement,
+blank Master PICs, no inferred contract dates/fees, and false monthly obligations.
+Annual amounts are tax payments, not client fees, and are not copied into Master.
+Annual PICs and access stay on the Annual row. They never add to paid portfolio totals.
+Previous-year external generation retains its registry link and Annual ownership,
+even when its Annual display name changes; that label never silently renames Master.
+Deleting an Annual row does not delete its registered client.
+
+Case/whitespace/punctuation-normalized names are matched conservatively, respecting
+known company forms and Individual Tax subjects. A single existing active match is
+reused without changing its category, PICs, fees or dates. Multiple matches and
+inactive/prospective matches block the batch for leadership review. No fuzzy name or
+company-group matching is used. The short registration transaction serializes with
+Master writes to prevent concurrent import/registration duplicate races.
+
+Blank drafts and edits to pre-existing external rows do not register anything.
+Historical external rows are not backfilled automatically; generating a new year
+from them registers the new work. Retries use saved work UUIDs and cannot register
+the same confirmed row twice. Rollback retains Master records, registry links and
+audit history; reverting only application code must not delete registered clients.
+
+Hosted rollout on 10 November 2026: initial migration ledger version
+`20261110075425`, followed by enum-correction version `20261110075533`. Rolled-back PostgreSQL tests
+verify actual client creation, reuse, per-year identity, audit entries, stale-write
+rejection, ambiguous/inactive matches, all-or-nothing failure and RPC privileges.
+The 222 existing clients, their activity records and operational workspace checksums
+were unchanged by migration/testing. Code allocations in rollback tests can leave
+normal sequence gaps; existing codes are never reused even if an imported dataset
+has left the shared sequence behind. No private data export was needed.
 
 Clicking a spreadsheet row number opens **Delete Row**. Deletion requires a
 confirmation and is available only to that team's primary PIC or leadership;

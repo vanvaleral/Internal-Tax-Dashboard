@@ -48,7 +48,7 @@ export function annualToSheet(row: Row, team: AnnualTeam, staff: Row[], columns:
   const accId = profileId(row, "accounting", staff), taxId = profileId(row, "tax", staff);
   const assignedName = (id: string, fallback: any) => label(staff.find(person => person.id === id) || {}) || text(fallback);
   const output: Row = {
-    id: String(row.id || row.annualWorkId || ""), subjectId: String(row.subjectId || row.annualWorkId || row.id || ""), annualClientId: String(row.annualClientId || row.annualWorkId || row.id || ""), clientId: text(row.clientId), clientName: text(row.clientName),
+    id: String(row.id || row.annualWorkId || ""), subjectId: String(row.subjectId || row.annualWorkId || row.id || ""), annualClientId: String(row.annualClientId || row.annualWorkId || row.id || ""), clientId: text(row.clientId), registeredClientId: text(row.registeredClientId), clientName: text(row.clientName),
     year: Number(row.taxYear || row.year) || 0, outside: ["Lepas", "Outside contract"].includes(row.contractType) || !row.clientId,
     accountingPic: assignedName(accId, row.accountingPic || row.reportPic), accountingPicId: accId,
     taxPic: assignedName(taxId, row.taxPic), taxPicId: taxId, assistantIds: row.assistantProfileIds || [],
@@ -94,7 +94,7 @@ export function annualPreviousCandidates(stored: Row[], sourceYear: number, team
     if (!key || candidates.has(key)) continue;
     candidates.set(key, {
       clientId: team === "accounting" ? row.clientId : row.subjectId, annualClientId: row.annualClientId,
-      subjectId: row.subjectId, sourceClientId: team === "tax" ? masterId : "", linkedClientId: row.clientId,
+      subjectId: row.subjectId, sourceClientId: team === "tax" ? masterId : "", linkedClientId: row.clientId, registeredClientId: row.registeredClientId,
       name: client?.legal_name || row.clientName, active: true, outside: !masterId,
       accountingPic: acc ? label(acc) : "", accountingPicId: acc?.id || "", taxPic: tax ? label(tax) : "", taxPicId: tax?.id || "",
       subjectType: client ? "Individual" : row.subjectType, groupName: client ? "" : row.groupName, recordMethod: row.recordMethod,
@@ -248,6 +248,8 @@ export function addAnnualRows(stored: Row[], creates: Row[], team: AnnualTeam, a
     if (team === "accounting") raw.annualClientId = previous?.annualClientId || input.id;
     if (previous) {
       raw.generationSource = "previous-annual"; raw.generatedFromAnnualRowId = previous.sourceAnnualRowId; raw.generatedFromAnnualYear = previous.sourceAnnualYear;
+      // This registry link is not an Allocation assignment or a generation ownership source.
+      if (previous.registeredClientId) raw.registeredClientId = previous.registeredClientId;
       Object.assign(raw.changeLog[0], { sourceAnnualRowId: previous.sourceAnnualRowId, sourceAnnualYear: previous.sourceAnnualYear });
     }
     if (input.initialValues && !(team === "accounting" ? raw.accountingPicProfileId : raw.taxPicProfileId)) throw new Error("Choose an active primary PIC for imported annual work.");

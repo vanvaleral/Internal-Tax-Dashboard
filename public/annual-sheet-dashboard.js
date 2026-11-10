@@ -153,7 +153,7 @@
     if (!sheet || event.source !== sheet.frame.contentWindow) return;
     sendAppearance(sheet);
     if (event.data.type === "annual-sheet:mounted") sheet.loading.remove();
-    else { sheet.ready = true; refreshDirectory(sheet); if (event.data.saved) { discardPreload(); onSaved(event.data.team); } }
+    else { sheet.ready = true; refreshDirectory(sheet); if (event.data.saved) { discardPreload(); onSaved(event.data.team, { clientsChanged: event.data.clientsChanged === true }); } }
   });
   window.addEventListener("load", schedulePreload);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") { cancelIdle(); discardPreload(); } else schedulePreload(); });

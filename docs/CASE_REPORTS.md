@@ -39,6 +39,11 @@ record edit occurred after that progress entry, both times appear separately.
 Unknown payable amounts stay unknown, not zero; unknown update authors are not
 guessed from the current Tax/ACC assignment.
 
+Confirmed My Work subtask completions/reopens are also eligible latest progress,
+including their parent task title and actual PIC/date. Historical checked-step
+snapshots without a known completion date remain visible in the case timeline,
+but never become fresh report activity or suppress a separate parent completion.
+
 Printing waits for pending case writes. Counts and report values update only
 after database confirmation, without replacing sheet editors or widths. A blocked
 popup produces a clear retry message. The report uses the authorized filtered
