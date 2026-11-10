@@ -9247,7 +9247,7 @@
                 <datalist id="my-work-pic-options">${[...new Set([...ACC_PICS, ...TAX_PICS])].map((pic) => `<option value="${escapeAttr(pic)}"></option>`).join("")}</datalist>
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
                 <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>
-                ${selected.pendingSync ? `<div class="my-work-card" role="status">${selected.saving ? "Saving..." : "Changes not saved"} ${!selected.saving ? `<button class="ghost-btn" data-retry-task="${escapeAttr(selected.id)}">${selected.syncConflict ? "Review conflict" : "Retry"}</button>` : ""}</div>` : `<div class="subline" role="status">Saved</div>`}` : `<div class="empty-state">Select a task to open details.</div>`}
+                <div class="${selected.pendingSync?'my-work-card':'subline'}" role="status" data-my-work-save-status>${myWorkSaveStatus(selected)}</div>` : `<div class="empty-state">Select a task to open details.</div>`}
               ${selected ? `<div class="my-work-meta">Created by ${escapeHtml(selected.creatorName || state.selectedPic)} · ${selected.createdAtText ? new Date(selected.createdAtText).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : new Date(selected.createdAt || Date.now()).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>` : ""}
             </aside>` : ""}
           </section>
@@ -10711,7 +10711,7 @@
       return {
         title: task.title,
         note: task.note || "",
-        steps: task.steps || [],
+        steps: structuredClone(task.steps || []),
         reminder: task.reminder || "",
         dueDate: task.dueDate || "",
         caseId: task.caseId || "",
@@ -10760,6 +10760,15 @@
 
     const myWorkSaveQueues = new WeakMap();
 
+    function myWorkSaveStatus(task) {
+      return !task.pendingSync ? "Saved" : task.saving ? "Saving..." : `Changes not saved <button class="ghost-btn" data-retry-task="${escapeAttr(task.id)}">${task.syncConflict?"Review conflict":"Retry"}</button>`;
+    }
+    function refreshMyWorkSaveStatus(task) {
+      if(state.selectedMyWorkId!==task.id)return;
+      const status=document.querySelector('#my-work-view [data-my-work-save-status]');
+      if(status){status.className=task.pendingSync?'my-work-card':'subline';status.innerHTML=safeHtml(myWorkSaveStatus(task));}
+    }
+
     function saveMyWorkTaskToDatabase(task, extra = {}) {
       if (myWorkDemoMode) return;
       task.clientRequestId ||= crypto.randomUUID();
@@ -10775,6 +10784,7 @@
         const previousId = task.id;
         if (task.syncConflict) return;
         task.saving = true;
+        refreshMyWorkSaveStatus(task);
         try {
           // Build the payload after the previous save completes. This turns a
           // rapid create + edit sequence into POST then PATCH, never two POSTs.
@@ -10782,6 +10792,11 @@
           const previousCaseId = task.serverBase?.caseId || "";
           if (creating) task.creationBase ||= structuredClone(sent);
           const assigneesSent = [...task.pendingAssignees];
+          if(!creating&&task.serverBase&&WorkspaceSync.equal(sent,task.serverBase)&&!assigneesSent.length&&typeof task.pendingFavorite!=="boolean"){
+            task.pendingSync=revision!==task.syncRevision;
+            clearSyncFailure(`Task ${task.title || "untitled"}`);
+            return;
+          }
           let payload = myWorkPayload(task);
           let result;
           for (let attempt = 0; attempt < 3; attempt++) {
@@ -10824,8 +10839,9 @@
           }
           Object.assign(task, restored.value);
           task.version = result.task.version;
+          const timelineChanged=previousCaseId!==(result.task.caseId||"")||Boolean(task.serverBase?.done)!==Boolean(result.task.done);
           task.serverBase = myWorkValues(result.task);
-          for (const caseId of new Set([previousCaseId,result.task.caseId].filter(Boolean))) {
+          for (const caseId of timelineChanged?new Set([previousCaseId,result.task.caseId].filter(Boolean)):[]) {
             caseProgressReadRevision.set(caseId,(caseProgressReadRevision.get(caseId) || 0) + 1);
             delete state.caseProgressById[caseId];
             if (state.currentView === "cases-view" && state.expandedHimbauanId === caseId) loadCaseProgress(caseId);
@@ -10836,7 +10852,8 @@
           clearSyncFailure(`Task ${task.title || "untitled"}`);
           persistDemoState();
           if (state.currentView === "my-work-view" && !activeEditorSnapshot()) rerender();
-          if (task.pendingSync) saveMyWorkTaskToDatabase(task);
+          // Every edit already enqueues a save. Never recursively enqueue here:
+          // doing so makes older revisions perpetually schedule newer revisions.
         } catch (error) {
           task.pendingSync = true;
           markSyncFailure(`Task ${task.title || "untitled"}`, error);
@@ -10845,6 +10862,7 @@
         } finally {
           task.saving = false;
           persistDemoState();
+          refreshMyWorkSaveStatus(task);
         }
       });
       myWorkSaveQueues.set(task, nextSave);

@@ -82,6 +82,28 @@ remain the fallback before migration. Snapshot task IDs prevent double-rendering
 the same current completion. Successful My Work saves invalidate affected case
 progress caches; unconfirmed local completions do not enter the live timeline.
 
+### Rapid My Work Edits
+
+The browser save queue must not schedule a new revision merely because an older
+queued revision finishes while another edit is pending. Each user edit already
+enqueues its save; self-enqueueing here creates an unbounded POST/PATCH chain.
+The queue now drains existing work, skips confirmed no-op payloads, and preserves
+assignment/favorite writes. Checklist snapshots are deep-copied so toggling a
+local step cannot mutate the last confirmed comparison baseline. Failed saves
+retain edits with Retry/Review rather than leaving the drawer on Saving.
+
+Only confirmed parent completion/reopening or case relinking invalidates timeline
+history. Ordinary checklist/title/note/preference saves do not discard its cache.
+These are frontend fixes only; the existing task timeline trigger still records
+parent-task lifecycle events, not individual checklist completion.
+
+Proposed next phase, not enabled: stable subtask IDs and immutable, attributed
+completion/reopen events, with the parent task shown as context rather than the
+sole progress signal. Existing checked steps have no trustworthy completion date
+or actor; do not fabricate historical dates or backfill them as new work without
+an explicit, reviewed policy. Do not award case points for each checked step by
+default. This requires an additive database change and separate validation.
+
 ## Migration And Rollout
 
 Apply `supabase/migrations/20261105055510_case_workflow_and_task_timeline.sql`
