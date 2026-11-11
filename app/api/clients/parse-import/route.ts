@@ -20,6 +20,6 @@ export async function POST(request: Request) {
     rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false }) as Record<string, unknown>[];
   }
   if (!rows.length) return NextResponse.json({ error: "The selected file has no data rows." }, { status: 422 });
-  const validation = validateClientImportRows(rows);
+  const validation = validateClientImportRows(rows, { allowMissingCodes: true });
   return NextResponse.json({ rows, validation, valid: validation.filter((entry) => !entry.errors.length).length });
 }

@@ -649,6 +649,12 @@
     .client-editor-save-status { flex:1; min-width:0; margin-right:auto; font-size:12px; line-height:1.5; color:var(--muted); }
     .client-editor-save-status[data-state="saved"] { color:var(--accent); }
     .client-editor-save-status[data-state="error"] { color:var(--danger); }
+    .client-date-field { position:relative; display:flex; align-items:center; gap:6px; }
+    .client-date-field > .field { flex:1; min-width:0; }
+    .client-calendar-button { display:grid; place-items:center; flex:0 0 34px; height:34px; padding:7px; border-radius:8px; background:var(--neutral-soft); color:var(--ink); }
+    .client-calendar-button svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; }
+    .client-calendar-button:hover:not(:disabled) { transform:none; background:var(--accent-soft); }
+    .client-date-picker { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 
     .import-preview-modal { width: min(1120px, 100%); }
     .import-preview-summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -6676,6 +6682,14 @@
       return `${year}-${month}-${day}`;
     }
 
+    function parseDayFirstDate(text) {
+      if (!text) return "";
+      const local = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
+      const value = local ? `${local[3]}-${local[2].padStart(2, "0")}-${local[1].padStart(2, "0")}` : text;
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 ? new Date(`${value}T00:00:00Z`) : null;
+      return date && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+    }
+
     function ledgerDateDisplayValue(item) {
       return item.paidDateDraft || formatIsoToDisplayDate(item.paidDate) || "";
     }
@@ -7682,8 +7696,8 @@
                     <div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field">${optionsMarkup(SUPERVISORS, activeSample.supervisor)}</select></div>
                   </div>
                   <div class="detail-grid-2">
-                    <div class="client-field"><label for="client-form-start-date">Contract Start</label><input id="client-form-start-date" class="field" type="date" value="${activeSample.contractStartedAt || activeSample.engagementStart || ""}" /></div>
-                    <div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${activeSample.engagementEnd || ""}" /></div>
+                    <div class="client-field"><label for="client-form-start-date">Contract Start (dd/mm/yyyy)</label>${clientContractDateField("client-form-start-date", activeSample.contractStartedAt || activeSample.engagementStart || "", "Contract Start")}</div>
+                    <div class="client-field"><label for="client-form-end-date">Engagement End (dd/mm/yyyy)</label>${clientContractDateField("client-form-end-date", activeSample.engagementEnd || "", "Engagement End")}</div>
                   </div>
                 </section>
 
@@ -7914,8 +7928,8 @@
                         return `
                         <tr>
                           <td>${client.name}</td>
-                          <td>${client.engagementStart || "-"}${client.engagementEnd ? ` → ${client.engagementEnd}` : ""}</td>
-                          <td>${client.engagementEnd || "Open-ended"}</td>
+                          <td>${formatIsoToDisplayDate(client.engagementStart) || "-"}${client.engagementEnd ? ` → ${formatIsoToDisplayDate(client.engagementEnd)}` : ""}</td>
+                          <td>${formatIsoToDisplayDate(client.engagementEnd) || "Open-ended"}</td>
                           <td><span class="pill ${health.className}">${timing}</span></td>
                           <td>${client.servicePackage}</td>
                           <td>${client.taxPic}</td>
@@ -7939,7 +7953,7 @@
                         <div class="mobile-card-header">
                           <div>
                             <div class="mobile-card-title">${client.name}</div>
-                            <div class="subline">${client.engagementStart || "-"}${client.engagementEnd ? ` → ${client.engagementEnd}` : ""}</div>
+                            <div class="subline">${formatIsoToDisplayDate(client.engagementStart) || "-"}${client.engagementEnd ? ` → ${formatIsoToDisplayDate(client.engagementEnd)}` : ""}</div>
                           </div>
                           <span class="pill ${health.className}">${timing}</span>
                         </div>
@@ -7947,7 +7961,7 @@
                           <div class="mobile-meta-box"><div class="eyebrow">Tax PIC</div><strong>${client.taxPic}</strong></div>
                           <div class="mobile-meta-box"><div class="eyebrow">Acc PIC</div><strong>${client.accountingPic}</strong></div>
                           <div class="mobile-meta-box"><div class="eyebrow">Package</div><strong>${client.servicePackage}</strong></div>
-                          <div class="mobile-meta-box"><div class="eyebrow">Renewal</div><strong>${client.engagementEnd || "Open-ended"}</strong></div>
+                          <div class="mobile-meta-box"><div class="eyebrow">Renewal</div><strong>${formatIsoToDisplayDate(client.engagementEnd) || "Open-ended"}</strong></div>
                         </div>
                       </div>
                     `;
@@ -10216,11 +10230,7 @@
     }
 
     function parseCaseSheetDate(text) {
-      if (!text) return "";
-      const local = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
-      const value = local ? `${local[3]}-${local[2].padStart(2, "0")}-${local[1].padStart(2, "0")}` : text;
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 ? new Date(`${value}T00:00:00Z`) : null;
-      return date && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+      return parseDayFirstDate(text);
     }
 
     function caseSheetMessage(message, error = false) {
@@ -11307,7 +11317,7 @@
               <section class="client-form-section">
                 <div class="client-form-section-title"><strong>PIC & Scope</strong><span>Ownership and obligations</span></div>
                 <div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}">PIC Tax</label><select id="${isProposal ? "proposal-tax-pic" : "client-form-tax-pic"}" class="field"><option value="">No PIC yet</option>${optionsMarkup(TAX_PICS, taxPic)}</select></div><div class="client-field"><label for="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}">PIC ACC</label><select id="${isProposal ? "proposal-acc-pic" : "client-form-accounting-pic"}" class="field"><option value="">No PIC yet</option>${optionsMarkup(ACC_PICS, accountingPic)}</select></div></div>
-                ${isProposal ? `<div class="client-field"><label for="proposal-status">Proposal Status</label><select id="proposal-status" class="field">${optionsMarkup(PROPOSAL_STATUSES, record.status)}</select></div>` : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field"><option value="">Select partner</option>${optionsMarkup(PARTNERS, record.partner)}</select></div><div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field"><option value="">Select supervisor</option>${optionsMarkup(SUPERVISORS, record.supervisor)}</select></div></div><div class="detail-grid-2"><div class="client-field"><label for="client-form-start-date">Contract Start</label><input id="client-form-start-date" class="field" type="date" value="${record.contractStartedAt || record.engagementStart || ""}" /></div><div class="client-field"><label for="client-form-end-date">Engagement End</label><input id="client-form-end-date" class="field" type="date" value="${record.engagementEnd || ""}" /></div></div><div class="client-field"><label for="client-form-package">Service Package</label><select id="client-form-package" class="field"><option value="">Select package</option>${optionsMarkup(SERVICE_PACKAGES, record.servicePackage)}</select></div>`}
+                ${isProposal ? `<div class="client-field"><label for="proposal-status">Proposal Status</label><select id="proposal-status" class="field">${optionsMarkup(PROPOSAL_STATUSES, record.status)}</select></div>` : `<div class="detail-grid-2"><div class="client-field"><label for="client-form-partner">Partner</label><select id="client-form-partner" class="field"><option value="">Select partner</option>${optionsMarkup(PARTNERS, record.partner)}</select></div><div class="client-field"><label for="client-form-supervisor">Supervisor</label><select id="client-form-supervisor" class="field"><option value="">Select supervisor</option>${optionsMarkup(SUPERVISORS, record.supervisor)}</select></div></div><div class="detail-grid-2"><div class="client-field"><label for="client-form-start-date">Contract Start (dd/mm/yyyy)</label>${clientContractDateField("client-form-start-date", record.contractStartedAt || record.engagementStart || "", "Contract Start")}</div><div class="client-field"><label for="client-form-end-date">Engagement End (dd/mm/yyyy)</label>${clientContractDateField("client-form-end-date", record.engagementEnd || "", "Engagement End")}</div></div><div class="client-field"><label for="client-form-package">Service Package</label><select id="client-form-package" class="field"><option value="">Select package</option>${optionsMarkup(SERVICE_PACKAGES, record.servicePackage)}</select></div>`}
                 <div class="chips">${OBLIGATIONS.map((key) => `<label class="pill ${selectedObligations.includes(key) ? "accent" : "neutral"}"><input id="${isProposal ? "proposal-ob" : "client-ob"}-${key}" type="checkbox" ${selectedObligations.includes(key) ? "checked" : ""} /> ${OBLIGATION_LABELS[key]}</label>`).join("")}</div>
               </section>
               <section class="client-form-section"><div class="client-form-section-title"><strong>Fee & Note</strong><span>Optional commercial context</span></div><div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}">Monthly Fee</label><input id="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}" class="field" type="number" value="${isProposal ? record.monthlyFee || 0 : record.serviceFee || 0}" /></div><div class="client-field"><label for="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}">Annual Fee</label><input id="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}" class="field" type="number" value="${record.annualFee || 0}" /></div></div><div class="client-field"><label for="${isProposal ? "proposal-notes" : "client-form-notes"}">Note</label><textarea id="${isProposal ? "proposal-notes" : "client-form-notes"}" class="inline-textarea">${record.notes || ""}</textarea></div></section>
@@ -11322,6 +11332,41 @@
     function clientEditorField(id) {
       return document.querySelector(`#client-editor-root [id="${id}"]`);
     }
+
+    function clientContractDateField(id, value, label) {
+      return `<div class="client-date-field"><input id="${id}" class="field" type="text" inputmode="numeric" data-client-date-text placeholder="dd/mm/yyyy" aria-label="${label} (dd/mm/yyyy)" value="${escapeAttr(formatIsoToDisplayDate(value || ""))}" /><button type="button" class="client-calendar-button" data-open-client-date aria-label="Choose ${label} date"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button><input type="date" class="client-date-picker" data-client-date-picker tabindex="-1" aria-label="Calendar: ${label}" value="${escapeAttr(parseDayFirstDate(value || "") || "")}" /></div>`;
+    }
+    function parseClientContractDate(value) {
+      const raw = String(value || "").trim();
+      return parseDayFirstDate(/^\d{8}$/.test(raw) ? formatDateDraft(raw) : raw);
+    }
+    document.addEventListener("click", event => {
+      const button = event.target.closest?.("[data-open-client-date]");
+      if (!button || button.disabled) return;
+      const wrap = button.closest(".client-date-field"), field = wrap.querySelector("[data-client-date-text]"), picker = wrap.querySelector("[data-client-date-picker]");
+      if (field.disabled) return;
+      picker.value = parseClientContractDate(field.value) || "";
+      if (typeof picker.showPicker === "function") picker.showPicker(); else picker.click();
+    });
+    document.addEventListener("input", event => {
+      if (event.target.matches?.("[data-client-date-text]")) { event.target.setCustomValidity(""); event.target.removeAttribute("aria-invalid"); }
+    });
+    document.addEventListener("change", event => {
+      const target = event.target;
+      if (target.matches?.("[data-client-date-picker]")) {
+        const field = target.closest(".client-date-field").querySelector("[data-client-date-text]");
+        field.value = formatIsoToDisplayDate(target.value);
+        field.dispatchEvent(new Event("input", { bubbles:true }));
+      } else if (target.matches?.("[data-client-date-text]")) {
+        const iso = parseClientContractDate(target.value);
+        target.setCustomValidity(iso === null ? "Use a valid dd/mm/yyyy date." : "");
+        target.setAttribute("aria-invalid", String(iso === null));
+        if (iso !== null) {
+          target.value = formatIsoToDisplayDate(iso);
+          target.closest(".client-date-field").querySelector("[data-client-date-picker]").value = iso;
+        }
+      }
+    });
 
     function refreshClientEditorSaveStatus() {
       const editor = state.clientEditor;
@@ -11363,7 +11408,7 @@
       root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client import preview">
-            <div class="client-editor-head"><div><div class="eyebrow">Client Master Import</div><h3>Review changes before importing</h3><p class="subline">${escapeHtml(preview.fileName || "Selected file")}. Existing client codes will update matching records only after confirmation.</p></div><button class="ghost-btn" data-close-import-preview="yes">Close</button></div>
+            <div class="client-editor-head"><div><div class="eyebrow">Client Master Import</div><h3>Review changes before importing</h3><p class="subline">${escapeHtml(preview.fileName || "Selected file")}. Match by existing code, NPWP, or unique client name and form. Existing IDs and history stay unchanged. Missing columns are preserved; blank cells clear their fields, including PIC assignments.</p></div><button class="ghost-btn" data-close-import-preview="yes" ${preview.saving ? "disabled" : ""}>Close</button></div>
             <div class="import-preview-summary">
               <div class="detail-card"><div class="eyebrow">Rows</div><strong>${summary.total || 0}</strong></div>
               <div class="detail-card"><div class="eyebrow">New Clients</div><strong>${summary.created || 0}</strong></div>
@@ -11371,8 +11416,9 @@
               <div class="detail-card"><div class="eyebrow">Needs Fixing</div><strong class="${invalid ? "import-preview-warning" : ""}">${invalid}</strong></div>
             </div>
             ${invalid ? `<p class="import-preview-warning">&#9888; ${invalid} row(s) contain errors. Correct the file and upload it again; import is disabled to protect the client master.</p>` : `<p class="subline">All rows passed validation. Confirming will create ${summary.created || 0} and update ${summary.updated || 0} client record(s).</p>`}
-            <div class="import-preview-table"><table><thead><tr><th>Row</th><th>Client Code</th><th>Client</th><th>PIC Tax / ACC</th><th>Result</th></tr></thead><tbody>${preview.clients.map((client, index) => { const validation = validationByRow.get(index + 2); const errors = validation?.errors || []; return `<tr class="${errors.length ? "import-preview-error-row" : ""}"><td>${index + 2}</td><td>${escapeHtml(client.clientCode || "-")}</td><td>${escapeHtml(displayClientName(client) || client.name || "-")}</td><td>${escapeHtml(client.taxPic || "-")} / ${escapeHtml(client.accountingPic || "-")}</td><td>${errors.length ? `<span class="import-preview-error">! ${escapeHtml(errors.join(" "))}</span>` : `<span class="pill accent">Ready</span>`}</td></tr>`; }).join("")}</tbody></table></div>
-            <div class="client-editor-actions"><button class="ghost-btn" data-close-import-preview="yes">Cancel</button><button class="solid-btn" data-confirm-client-import="yes" ${invalid ? "disabled" : ""}>Confirm Import</button></div>
+            <div class="import-preview-table"><table><thead><tr><th>Row</th><th>File Code</th><th>Client</th><th>PIC Tax / ACC</th><th>Result / Existing Code</th></tr></thead><tbody>${preview.clients.map((client, index) => { const validation = validationByRow.get(index + 2); const errors = validation?.errors || []; const match = preview.matches?.[index]; return `<tr class="${errors.length ? "import-preview-error-row" : ""}"><td>${index + 2}</td><td>${escapeHtml(client.clientCode || "-")}</td><td>${escapeHtml(displayClientName(client) || client.name || "-")}</td><td>${escapeHtml(client.taxPic || "-")} / ${escapeHtml(client.accountingPic || "-")}</td><td>${errors.length ? `<span class="import-preview-error">! ${escapeHtml(errors.join(" "))}</span>` : `<span class="pill accent">${match?.action === "update" ? `Update ${escapeHtml(match.clientCode)} (by ${escapeHtml(match.matchedBy)})` : "Create new"}</span>`}</td></tr>`; }).join("")}</tbody></table></div>
+            ${preview.error ? `<p role="alert" class="import-preview-warning">${escapeHtml(preview.error)}</p>` : ""}
+            <div class="client-editor-actions"><button class="ghost-btn" data-close-import-preview="yes" ${preview.saving ? "disabled" : ""}>Cancel</button><button class="solid-btn" data-confirm-client-import="yes" ${invalid || preview.saving ? "disabled" : ""}>${preview.saving ? "Importing..." : "Confirm Import"}</button></div>
           </section>
         </div>`);
     }
@@ -11836,6 +11882,8 @@
     function activeEditorSnapshot() {
       const active = document.activeElement;
       if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement)) return null;
+      // A disabled saving form cannot be edited and must not block the confirmed list refresh.
+      if (active.disabled && active.closest("#client-editor-root")) return null;
       const id = active.id;
       if(active.hasAttribute("data-ca-edit")||active.hasAttribute("data-ca-draft-field"))return active.disabled?null:{id:"",inlineId:active.dataset.caCase,field:active.dataset.caEdit||active.dataset.caDraftField,productId:active.dataset.caKey,assessment:true,draftAssessment:active.hasAttribute("data-ca-draft-field"),value:active.value,start:"selectionStart"in active?active.selectionStart:null,end:"selectionEnd"in active?active.selectionEnd:null};
       const sheet = active.hasAttribute("data-case-sheet-id");
@@ -13021,6 +13069,7 @@
       }
 
       if (closeImportPreviewTrigger) {
+        if (state.importPreview?.saving) return;
         state.importPreview = null;
         rerender();
         return;
@@ -13028,18 +13077,21 @@
 
       if (confirmClientImportTrigger) {
         const preview = state.importPreview;
-        if (!preview || Number(preview.summary?.invalid || 0)) return;
+        if (!preview || preview.saving || Number(preview.summary?.invalid || 0)) return;
+        preview.saving = true;
+        preview.error = "";
+        renderClientImportPreview();
         try {
           const response = await appFetch("/api/clients", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ operation: "bulk-import", clients: preview.clients, fileName: preview.fileName })
+            body: JSON.stringify({ operation: "bulk-import", clients: preview.rows, expectedMatches: preview.matches, fileName: preview.fileName })
           }, "");
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || `Import sync failed (${response.status})`);
           state.importPreview = null;
           await loadSharedClients();
-          const selected = clients.find((client) => client.clientCode === preview.clients[0]?.clientCode);
+          const selected = clients.find((client) => client.clientCode === result.data?.[0]?.client_code);
           state.activeClientFormId = selected?.id || state.activeClientFormId;
           state.selectedClientId = selected?.id || state.selectedClientId;
           state.clientManagementTab = "active";
@@ -13047,7 +13099,10 @@
           commitUi("push");
         } catch (error) {
           console.warn("[client import] database sync failed", error);
-          window.alert(error instanceof Error ? error.message : "Client import could not be completed.");
+          preview.error = error instanceof Error ? error.message : "Client import could not be completed.";
+        } finally {
+          preview.saving = false;
+          renderClientImportPreview();
         }
         return;
       }
@@ -13371,8 +13426,18 @@
         client.servicePackage = clientEditorField("client-form-package").value;
         client.partner = clientEditorField("client-form-partner").value;
         client.supervisor = clientEditorField("client-form-supervisor").value;
-        client.engagementStart = clientEditorField("client-form-start-date").value;
-        client.engagementEnd = clientEditorField("client-form-end-date").value;
+        for (const [id, key, label] of [["client-form-start-date", "engagementStart", "Contract Start"], ["client-form-end-date", "engagementEnd", "Engagement End"]]) {
+          const field = clientEditorField(id), iso = parseClientContractDate(field.value);
+          if (iso === null) {
+            field.setCustomValidity("Use a valid dd/mm/yyyy date."); field.setAttribute("aria-invalid", "true");
+            if (editor) { editor.saved = false; editor.saveError = `${label} must be a valid dd/mm/yyyy date.`; }
+            refreshClientEditorSaveStatus(); field.focus({ preventScroll:true });
+            return;
+          }
+          field.setCustomValidity(""); field.removeAttribute("aria-invalid");
+          field.value = formatIsoToDisplayDate(iso);
+          client[key] = iso;
+        }
         client.contractStartedAt = client.engagementStart;
         client.taxOfficeRegion = clientEditorField("client-form-kpp")?.value || client.taxOfficeRegion || "Lainnya";
         client.serviceFee = Number(clientEditorField("client-form-monthly-fee").value || 0);
@@ -14385,22 +14450,21 @@
         const parsed = await appFetch("/api/clients/parse-import", { method: "POST", body: form }, "");
         const parsedResult = await parsed.json().catch(() => ({}));
         if (!parsed.ok) throw new Error(parsedResult.error || "Import file could not be read.");
-        const imported = (parsedResult.rows || [])
-          .filter((row) => (row.name || "").trim())
-          .map((row) => createClientFromRow(row, { useDefaults: false }));
+        const importRows = parsedResult.rows || [];
+        const imported = importRows.map((row) => createClientFromRow(row, { useDefaults: false }));
 
         if (!imported.length) {
-          window.alert("No valid client rows found. Use the file exported from this menu and keep the clientCode column.");
+          window.alert("No client rows found. Use the file exported from this menu. New clients need a clientCode; existing clients can match by name.");
           return;
         }
         const validated = await appFetch("/api/clients", {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ operation: "validate-import", clients: imported })
+          body: JSON.stringify({ operation: "validate-import", clients: importRows })
         }, "");
         const validationResult = await validated.json().catch(() => ({}));
         if (!validated.ok) throw new Error(validationResult.error || "Import preview could not be validated.");
-        state.importPreview = { fileName: file.name, clients: imported, validation: validationResult.validation || [], summary: validationResult.summary || {} };
+        state.importPreview = { fileName: file.name, rows: importRows, clients: imported, matches: validationResult.matches || [], validation: validationResult.validation || [], summary: validationResult.summary || {} };
         rerender();
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Import preview could not be prepared.");

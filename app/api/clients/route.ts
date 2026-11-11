@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
-import { asSafeText, normalizeClientIdentityName, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
+import { asSafeText, clientImportPayload, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { readClients } from "@/lib/workspace-reads";
 
@@ -31,28 +31,6 @@ async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/li
     partner: resolve(row.partner, "Partner", index), supervisor: resolve(row.supervisor, "Supervisor", index)
   }));
   return { ids, issues };
-}
-
-async function addExistingClientDuplicateIssues(admin: NonNullable<ReturnType<typeof import("@/lib/supabase/admin").createAdminClient>>, rows: ClientInput[], validation: ReturnType<typeof validateClientImportRows>) {
-  const { data, error } = await admin.from("client_master").select("client_code, legal_name, npwp");
-  if (error) throw new Error(error.message);
-  const byCode = new Set((data || []).map((client) => asSafeText(client.client_code).toLowerCase()));
-  const byIdentity = new Map<string, string[]>();
-  for (const client of data || []) {
-    const npwp = normalizeNpwp(client.npwp);
-    const name = normalizeClientIdentityName(client.legal_name);
-    const key = npwp.length >= 15 ? `npwp:${npwp}` : name ? `name:${name}` : "";
-    if (key) byIdentity.set(key, [...(byIdentity.get(key) || []), asSafeText(client.client_code)]);
-  }
-  rows.forEach((row, index) => {
-    const code = asSafeText(row.clientCode).toLowerCase();
-    if (byCode.has(code)) return; // Same code is an intentional update.
-    const npwp = normalizeNpwp(row.npwp);
-    const name = normalizeClientIdentityName(row.name);
-    const key = npwp.length >= 15 ? `npwp:${npwp}` : name ? `name:${name}` : "";
-    const matches = key ? byIdentity.get(key) || [] : [];
-    if (matches.length) validation[index].errors.push(`Possible duplicate of existing client code(s): ${matches.join(", ")}. Use the existing code to update it, or resolve the duplicate first.`);
-  });
 }
 
 function buildPayload(client: ClientInput, ids: StaffIds) {
@@ -100,35 +78,43 @@ export async function POST(request: Request) {
   if (["bulk-import", "validate-import"].includes(body.operation) && !canImportClientMaster(actor.profile.role)) {
     return NextResponse.json({ error: "Only a Supervisor or Leader can import the client master." }, { status: 403 });
   }
-  const validation = validateClientImportRows(rows);
+  const importing = ["bulk-import", "validate-import"].includes(body.operation);
+  const validation = validateClientImportRows(rows, { allowMissingCodes: importing });
   let ownership: Awaited<ReturnType<typeof resolveStaffIds>>;
   try { ownership = await resolveStaffIds(actor.admin, rows); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not validate PIC ownership." }, { status: 422 }); }
   ownership.issues.forEach((issues, index) => validation[index].errors.push(...issues));
-  if (["bulk-import", "validate-import"].includes(body.operation)) {
-    try { await addExistingClientDuplicateIssues(actor.admin, rows, validation); }
-    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not check existing client duplicates." }, { status: 500 }); }
+  const payload = rows.map((row, index) => {
+    const full = buildPayload(row, ownership.ids[index]);
+    return importing ? clientImportPayload(row, full) : full;
+  });
+  let matches: Array<{ action: string; errors: string[] }> = [];
+  if (importing) {
+    const { data, error } = await actor.admin.rpc("match_client_master_import", { p_rows: payload });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    matches = data?.matches || [];
+    if (matches.length !== rows.length) return NextResponse.json({ error: "Client matching could not be confirmed." }, { status: 500 });
+    matches.forEach((match, index) => validation[index].errors.push(...match.errors));
   }
   const rejected = validation.filter((entry) => entry.errors.length);
   if (body.operation === "validate-import") {
-    const codes = validation.filter((entry) => entry.clientCode).map((entry) => entry.clientCode);
-    const { data: existing, error } = codes.length ? await actor.admin.from("client_master").select("client_code").in("client_code", codes) : { data: [], error: null };
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    const existingCodes = new Set((existing || []).map((client) => client.client_code));
-    const validRows = validation.filter((entry) => !entry.errors.length);
-    return NextResponse.json({ validation, valid: validRows.length, summary: { total: rows.length, invalid: rejected.length, created: validRows.filter((entry) => !existingCodes.has(entry.clientCode)).length, updated: validRows.filter((entry) => existingCodes.has(entry.clientCode)).length } });
+    const validMatches = matches.filter((_, index) => !validation[index].errors.length);
+    return NextResponse.json({ validation, matches, valid: validMatches.length, summary: { total: rows.length, invalid: rejected.length, created: validMatches.filter((match) => match.action === "create").length, updated: validMatches.filter((match) => match.action === "update").length } });
   }
   if (rejected.length) return NextResponse.json({ error: "Import contains invalid rows.", validation }, { status: 422 });
-  const payload = rows.map((row, index) => buildPayload(row, ownership.ids[index]));
-  const { data: committed, error } = await actor.admin.rpc("commit_client_master_import", {
+  if (importing && !Array.isArray(body.expectedMatches)) return NextResponse.json({ error: "Review the import preview before confirming." }, { status: 422 });
+  const args = {
     p_rows: payload,
     p_actor_user_id: actor.userId,
     p_actor_profile_id: actor.profile.id,
-    p_operation: body.operation === "bulk-import" ? "bulk-import" : "save",
     p_file_name: asSafeText(body.fileName) || null,
     p_file_sha256: asSafeText(body.fileSha256) || null
-  });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  };
+  const result = importing
+    ? await actor.admin.rpc("commit_matched_client_import", { ...args, p_expected_matches: body.expectedMatches })
+    : await actor.admin.rpc("commit_client_master_import", { ...args, p_operation: "save" });
+  const { data: committed, error } = result;
+  if (error) return NextResponse.json({ error: error.message }, { status: error.code === "40001" ? 409 : 500 });
   const data = Array.isArray(committed?.data) ? committed.data : [];
   const createdCount = Number(committed?.created || 0);
   if (createdCount) after(async () => {

@@ -64,7 +64,7 @@ export function normalizeImportedDate(value: unknown) {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export function validateClientImportRows(rows: ClientImportRow[]) {
+export function validateClientImportRows(rows: ClientImportRow[], { allowMissingCodes = false } = {}) {
   const seenCodes = new Set<string>();
   const seenIdentityKeys = new Set<string>();
   const validations: ImportValidation[] = [];
@@ -72,13 +72,18 @@ export function validateClientImportRows(rows: ClientImportRow[]) {
     const clientCode = asSafeText(row.clientCode);
     const name = asSafeText(row.name);
     const errors: string[] = [];
-    if (!clientCode) errors.push("Client code is required.");
+    if (!clientCode && !allowMissingCodes) errors.push("Client code is required.");
     if (!name) errors.push("Client name is required.");
+    if (Object.hasOwn(row, "clientStatus") && !["Active", "Inactive", "Proposal", "Contract"].includes(asSafeText(row.clientStatus))) errors.push("clientStatus must be Active, Inactive, Proposal or Contract.");
+    for (const field of ["monthlyFee", "serviceFee", "annualFee"]) {
+      if (asSafeText(row[field]) && !Number.isFinite(Number(row[field]))) errors.push(`${field} must be a number without currency symbols or separators.`);
+    }
     if (clientCode && seenCodes.has(clientCode.toLowerCase())) errors.push("Duplicate client code in this file.");
     if (clientCode) seenCodes.add(clientCode.toLowerCase());
     const npwp = normalizeNpwp(row.npwp);
     if (asSafeText(row.npwp) && (npwp.length < 15 || npwp.length > 16)) errors.push("NPWP must contain 15 or 16 digits.");
-    const identityKey = npwp.length >= 15 ? `npwp:${npwp}` : `name:${normalizeClientIdentityName(name)}`;
+    const form = asSafeText(row.businessForm || name.match(/^(pt|cv|fa|but|ud|firma|yayasan|koperasi)\.?\s+/i)?.[1]).replace(/[.\s]/g, "").toLowerCase();
+    const identityKey = npwp.length >= 15 ? `npwp:${npwp}` : `name:${normalizeClientIdentityName(name)}:${form}`;
     if (identityKey !== "name:" && seenIdentityKeys.has(identityKey)) errors.push("Possible duplicate client identity in this file.");
     if (identityKey !== "name:") seenIdentityKeys.add(identityKey);
     for (const field of ["contractStartedAt", "inactivatedAt", "engagementStart", "engagementEnd"]) {
@@ -90,4 +95,28 @@ export function validateClientImportRows(rows: ClientImportRow[]) {
     validations.push({ row: index + 2, clientCode, errors });
   });
   return validations;
+}
+
+// Only fields present in the uploaded file may replace existing values.
+export function clientImportPayload(row: ClientImportRow, fullPayload: ClientImportRow) {
+  const fields: Record<string, string[]> = {
+    client_code: ["clientCode"], legal_name: ["name"], npwp: ["npwp"], company_form: ["businessForm"],
+    industry: ["industry"], address: ["address"], status: ["clientStatus"],
+    tax_pic_name: ["taxPic"], tax_pic_profile_id: ["taxPic"], accounting_pic_name: ["accountingPic"], accounting_pic_profile_id: ["accountingPic"],
+    partner_name: ["partner"], partner_profile_id: ["partner"], supervisor_name: ["supervisor"], supervisor_profile_id: ["supervisor"],
+    monthly_fee: ["monthlyFee", "serviceFee"], annual_fee: ["annualFee"], engagement_start: ["engagementStart"], engagement_end: ["engagementEnd"],
+    contract_started_at: ["contractStartedAt"], contract_signed_at: ["contractSignedAt"], inactivated_at: ["inactivatedAt"],
+    tax_office_region: ["taxOfficeRegion"], notes: ["notes"], service_package: ["servicePackage"], proposal_status: ["proposalStatus"],
+    responsible_person_name: ["responsiblePersonName"], responsible_person_birth_place: ["responsiblePersonBirthPlace"],
+    responsible_person_birth_date: ["responsiblePersonBirthDate"], responsible_person_address: ["responsiblePersonAddress"],
+    notary_name: ["notaryName"], notary_address: ["notaryAddress"], deed_number: ["deedNumber"], deed_date: ["deedDate"]
+  };
+  const payload = Object.fromEntries(Object.entries(fields)
+    .filter(([, keys]) => keys.some((key) => Object.hasOwn(row, key)))
+    .map(([field]) => [field, fullPayload[field]]));
+  for (const [input, output] of Object.entries({ pph21: "has_pph21", unifikasi: "has_unifikasi", pph25: "has_pph25_pp55", phrpb1: "has_pb1", ppn: "has_ppn" })) {
+    if (Object.hasOwn(row, input)) payload[output] = /^(true|yes|y|1|x|ya)$/i.test(asSafeText(row[input]));
+    else if (Object.hasOwn(row, "obligations")) payload[output] = fullPayload[output];
+  }
+  return payload;
 }
