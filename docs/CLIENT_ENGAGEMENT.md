@@ -40,6 +40,13 @@ new code; the old app is not FOC-aware, so do not classify FOC clients until the
 new renderer and monthly-generation API are both deployed. Do not roll back the
 constraint after FOC data exists; retain the classification and history instead.
 
+Checkbox selection updates the visible desktop/mobile checkboxes, select-all
+indeterminate state, selection count and Move button in place. It does not rebuild
+the Clients table, reset native vertical/horizontal scroll, discard expanded client
+details, or replace the focused checkbox. Selecting clients remains UI-only; no
+classification is written until the confirmed Move action succeeds. This behavior
+applies to Contract, Free of Charge and On Demand lists without a schema change.
+
 Tests: `client-engagement`, `client-free-of-charge`, `audit-operations-routes` and
 the existing monthly persistence/client sorting tests. Hosted migration status
 and validation results are recorded below after explicit approval and checks.

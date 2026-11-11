@@ -3,6 +3,16 @@
   const selected = new Set(); let context, busy = false, destination='on_demand',previousTab='';
   const labels={contract:'Contract Clients',free_of_charge:'Free of Charge Clients',on_demand:'On Demand Clients'};
   const type = row => ['on_demand','free_of_charge'].includes(row.engagementType) ? row.engagementType : 'contract';
+  function updateSelection() {
+    const root=document.getElementById('client-management-view');if(!root||!context)return;
+    root.querySelectorAll('[data-client-select]').forEach(input=>{input.checked=selected.has(input.dataset.clientSelect);});
+    root.querySelectorAll('[data-client-select-all]').forEach(input=>{
+      input.checked=!!context.rows.length&&context.rows.every(row=>selected.has(row.id));
+      input.indeterminate=selected.size>0&&!input.checked;
+    });
+    const count=root.querySelector('[data-client-selection-count]');if(count)count.textContent=`${selected.size} selected`;
+    const button=root.querySelector('[data-move-client-engagement]');if(button)button.disabled=busy||!selected.size;
+  }
   function enhance(options) {
     context=options;const root=document.getElementById('client-management-view');
     if(!root||!['active','on-demand','free-of-charge'].includes(options.tab)){selected.clear();previousTab='';return;}
@@ -15,7 +25,7 @@
     root.querySelectorAll('.client-mobile-row[data-client-master-toggle]').forEach(row=>row.querySelector('.client-mobile-name')?.prepend(checkbox(row.dataset.clientMasterToggle)));
     const bar=document.createElement('div');bar.className='client-engagement-actions';
     const all=document.createElement('label');all.append(checkbox('',true),document.createTextNode('Select filtered clients'));bar.append(all);
-    const count=document.createElement('span');count.textContent=`${selected.size} selected`;bar.append(count);
+    const count=document.createElement('span');count.setAttribute('data-client-selection-count','');count.textContent=`${selected.size} selected`;bar.append(count);
     const target=document.createElement('select');target.className='filter-select';target.setAttribute('data-client-engagement-target','');target.setAttribute('aria-label','Move selected clients to');target.disabled=busy;
     const currentType=options.tab==='on-demand'?'on_demand':options.tab==='free-of-charge'?'free_of_charge':'contract';
     for(const [value,label]of Object.entries(labels)){if(value===currentType)continue;const option=document.createElement('option');option.value=value;option.textContent=label;option.selected=value===destination;target.append(option);}bar.append(target);
@@ -26,8 +36,9 @@
   document.addEventListener('change',event=>{
     const el=event.target;if(!context?.canManage||busy)return;
     if(el.matches('[data-client-engagement-target]')){destination=el.value;return;}
-    if(el.matches('[data-client-select]')){el.checked?selected.add(el.dataset.clientSelect):selected.delete(el.dataset.clientSelect);context.render();}
-    if(el.matches('[data-client-select-all]')){selected.clear();if(el.checked)context.rows.forEach(row=>selected.add(row.id));context.render();}
+    // Selection is UI-only: rebuilding the table here loses native scroll and keyboard focus.
+    if(el.matches('[data-client-select]')){el.checked?selected.add(el.dataset.clientSelect):selected.delete(el.dataset.clientSelect);updateSelection();}
+    if(el.matches('[data-client-select-all]')){selected.clear();if(el.checked)context.rows.forEach(row=>selected.add(row.id));updateSelection();}
   });
   document.addEventListener('click',async event=>{
     if(!event.target.closest('[data-move-client-engagement]')||!context?.canManage||busy||!selected.size)return;

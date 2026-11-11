@@ -21,14 +21,54 @@ test('bulk engagement route rejects staff and validates before one atomic RPC wi
   const result=await route.POST(req());assert.equal(result.status,200);assert.equal(result.body.updated,1);assert.equal(calls,1);
   conflict=true;assert.equal((await route.POST(req())).status,409);
 });
-function sheet(allowed=true){
+function sheet(allowed=true,initialTab='active'){
   const dom=new JSDOM('<section id="client-management-view"></section>',{runScripts:'outside-only'}),w=dom.window as any;
   w.confirm=()=>true;const alerts:string[]=[];w.alert=(s:string)=>alerts.push(s);w.eval(read('public/client-engagement.js'));
   const rows=[{id:'one',databaseId:id,engagementType:'contract',taxPic:'Tax A',contractStartedAt:'2020-01-01'},{id:'two',databaseId:'22222222-2222-4222-8222-222222222222',engagementType:'contract'}];
-  let visible=rows,tab='active',fail=false,release:any;const writes:any[]=[];
-  const render=()=>{w.document.querySelector('#client-management-view').innerHTML='<div class="table-wrap"><table class="client-table"><thead><tr><th>No.</th></tr></thead><tbody>'+visible.map((r,i)=>`<tr data-client-master-toggle="${r.id}"><td>${i+1}</td></tr>`).join('')+'</tbody></table></div>';w.ClientEngagement.enhance({rows:visible,tab,canManage:allowed,offline:false,render,moved:(type:string)=>{tab=type==='on_demand'?'on-demand':type==='free_of_charge'?'free-of-charge':'active';},fetch:async(_url:string,options:any)=>{writes.push(JSON.parse(options.body));await new Promise(resolve=>release=resolve);return {ok:!fail,json:async()=>fail?{error:'Conflict; refresh'}:{updated:visible.length}};}});};render();
-  return {dom,w,rows,writes,alerts,render,filter:()=>{visible=[rows[0]];render();},fail:()=>{fail=true;},release:()=>release(),tab:()=>tab};
+  rows.forEach(row=>{row.engagementType=initialTab==='on-demand'?'on_demand':initialTab==='free-of-charge'?'free_of_charge':'contract';});
+  let visible=rows,tab=initialTab,fail=false,release:any,renders=0;const writes:any[]=[];
+  const render=()=>{renders++;w.document.querySelector('#client-management-view').innerHTML='<input data-client-search value="Retain search" /><div class="table-wrap"><table class="client-table"><thead><tr><th>No.</th></tr></thead><tbody>'+visible.map((r,i)=>`<tr data-client-master-toggle="${r.id}"><td>${i+1}</td></tr>`).join('')+'</tbody></table><div data-expanded-client>Retain expanded details</div></div>'+visible.map(r=>`<div class="client-mobile-row" data-client-master-toggle="${r.id}"><div class="client-mobile-name"></div></div>`).join('');w.ClientEngagement.enhance({rows:visible,tab,canManage:allowed,offline:false,render,moved:(type:string)=>{tab=type==='on_demand'?'on-demand':type==='free_of_charge'?'free-of-charge':'active';},fetch:async(_url:string,options:any)=>{writes.push(JSON.parse(options.body));await new Promise(resolve=>release=resolve);return {ok:!fail,json:async()=>fail?{error:'Conflict; refresh'}:{updated:visible.length}};}});};render();
+  return {dom,w,rows,writes,alerts,render,renders:()=>renders,filter:()=>{visible=[rows[0]];render();},fail:()=>{fail=true;},release:()=>release(),tab:()=>tab};
 }
+
+test('client selection preserves table identity, scroll, focus and expanded details in every engagement tab',()=>{
+  for(const tab of ['active','free-of-charge','on-demand']){
+    const d=sheet(true,tab);try{
+      const doc=d.w.document,wrap=doc.querySelector('.table-wrap'),table=doc.querySelector('.client-table'),details=doc.querySelector('[data-expanded-client]'),search=doc.querySelector('[data-client-search]');
+      const first=table.querySelector('[data-client-select="one"]'),secondMobile=doc.querySelector('.client-mobile-row [data-client-select="two"]');
+      wrap.scrollTop=640;wrap.scrollLeft=120;search.value='Keep this search';first.focus();first.click();
+      assert.equal(d.renders(),1);assert.equal(doc.activeElement,first);assert.equal(doc.querySelector('.client-table'),table);
+      assert.equal(doc.querySelector('.table-wrap'),wrap);assert.equal(wrap.scrollTop,640);assert.equal(wrap.scrollLeft,120);
+      assert.equal(doc.querySelector('[data-expanded-client]'),details);assert.equal(search.value,'Keep this search');
+      assert.equal(doc.querySelector('.client-mobile-row [data-client-select="one"]').checked,true);
+      assert.equal(doc.querySelector('[data-client-selection-count]').textContent,'1 selected');
+      for(const input of doc.querySelectorAll('[data-client-select-all]')){assert.equal(input.checked,false);assert.equal(input.indeterminate,true);}
+      secondMobile.click();assert.equal(table.querySelector('[data-client-select="two"]').checked,true);
+      for(const input of doc.querySelectorAll('[data-client-select-all]')){assert.equal(input.checked,true);assert.equal(input.indeterminate,false);}
+      const all=table.querySelector('[data-client-select-all]');all.focus();all.click();
+      assert.equal(doc.activeElement,all);assert.equal(doc.querySelector('[data-client-selection-count]').textContent,'0 selected');
+      assert.equal(doc.querySelector('[data-move-client-engagement]').disabled,true);
+      for(const input of doc.querySelectorAll('[data-client-select],[data-client-select-all]'))assert.equal(input.checked,false);
+      doc.querySelector('.client-engagement-actions [data-client-select-all]').click();
+      assert.equal(doc.querySelector('[data-client-selection-count]').textContent,'2 selected');
+      assert.equal(doc.querySelector('[data-move-client-engagement]').disabled,false);
+      assert.equal(d.renders(),1);assert.equal(d.writes.length,0);assert.equal(wrap.scrollTop,640);assert.equal(wrap.scrollLeft,120);
+    }finally{d.dom.window.close();}
+  }
+});
+
+test('selection is pruned to filtered clients after a real render and both select-all controls stay synchronized',()=>{
+  const d=sheet();try{
+    d.w.document.querySelector('[data-client-select-all]').click();d.filter();
+    const doc=d.w.document;
+    assert.equal(doc.querySelector('[data-client-selection-count]').textContent,'1 selected');
+    assert.equal(doc.querySelector('[data-client-select="one"]').checked,true);
+    for(const input of doc.querySelectorAll('[data-client-select-all]')){assert.equal(input.checked,true);assert.equal(input.indeterminate,false);}
+    const renders=d.renders();doc.querySelector('[data-client-select="one"]').click();
+    assert.equal(d.renders(),renders);assert.equal(doc.querySelector('[data-client-selection-count]').textContent,'0 selected');
+    for(const input of doc.querySelectorAll('[data-client-select-all]')){assert.equal(input.checked,false);assert.equal(input.indeterminate,false);}
+  }finally{d.dom.window.close();}
+});
 test('filtered bulk selection waits for confirmation and preserves PIC/contract dates when moved',async()=>{
   const d=sheet();try{
     d.filter();d.w.document.querySelector('[data-client-select-all]').click();d.w.document.querySelector('[data-move-client-engagement]').click();
