@@ -178,8 +178,8 @@ test("client master is not restored from browser storage after a shared-data sav
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /if \(\["clients", "proposals"\]\.includes\(key\)\) return deepClone\(fallback\);/);
   assert.doesNotMatch(demo, /collections: \{\s*clients,\s*proposals,/);
-  assert.match(demo, /const previousClient = structuredClone\(client\);/);
-  assert.match(demo, /Object\.assign\(client, previousClient\);/);
+  assert.match(demo, /const client = structuredClone\(originalClient\);/);
+  assert.match(demo, /const saved = await saveClientToDatabase\(client, \{ showLoading: false \}\);\s*if \(!saved\?\.id\) throw new Error\([^\n]+\);\s*Object\.assign\(originalClient, client\);/);
 });
 
 test("sub-menu navigation uses the complete renderer without triggering an autosave", async () => {

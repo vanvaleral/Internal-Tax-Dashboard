@@ -47,6 +47,26 @@ details, or replace the focused checkbox. Selecting clients remains UI-only; no
 classification is written until the confirmed Move action succeeds. This behavior
 applies to Contract, Free of Charge and On Demand lists without a schema change.
 
+Client Setup saves show local Saving / Saved to database feedback inside the popup.
+Inputs and close/save controls are disabled only during the pending save, preventing
+duplicate requests or accidental dismissal. The editor stays open after confirmation
+with a Done action, and ordinary background list refreshes do not replace its DOM.
+Failures keep the form values for retry and leave confirmed Client Master values
+unchanged. A later form edit clears the old success notice. No schema change is
+needed for this feedback; API authorization and audited writes remain unchanged.
+
+On desktop, Clients uses a viewport-height workspace: the global header, client
+tabs, filters and selection controls retain their natural height; the native table
+scrolls in the remaining space. Active, Free of Charge, On Demand, Inactive,
+Proposal and Contract Monitoring share the same bounded register layout. The New
+Client action has its own footer space instead of covering the last visible rows.
+Contract commercial context stays visible in a compact row. Other menus retain
+their normal layout, and mobile keeps its single natural page scroll. Extremely
+short desktop viewports fall back to one page scrollbar with an uncapped table,
+rather than clipping controls or creating another vertical table scrollbar. No
+wheel listeners, scroll correction timers, virtualized rows or database changes
+are introduced.
+
 Tests: `client-engagement`, `client-free-of-charge`, `audit-operations-routes` and
 the existing monthly persistence/client sorting tests. Hosted migration status
 and validation results are recorded below after explicit approval and checks.

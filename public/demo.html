@@ -646,6 +646,9 @@
 
     .client-editor-head { margin-bottom: 14px; }
     .client-editor-actions { margin-top: 14px; justify-content: flex-end; }
+    .client-editor-save-status { flex:1; min-width:0; margin-right:auto; font-size:12px; line-height:1.5; color:var(--muted); }
+    .client-editor-save-status[data-state="saved"] { color:var(--accent); }
+    .client-editor-save-status[data-state="error"] { color:var(--danger); }
 
     .import-preview-modal { width: min(1120px, 100%); }
     .import-preview-summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -3151,6 +3154,34 @@
 
     @media (prefers-reduced-motion: reduce) {
       .compact-rail-toggle, .compact-rail-toggle svg { transition: none !important; }
+    }
+
+    @media (min-width: 901px) {
+      body.clients-viewport .shell { height:100dvh; min-height:0; align-items:stretch; }
+      body.clients-viewport .main { display:flex; flex-direction:column; align-items:center; height:100%; min-height:0; }
+      body.clients-viewport .global-topbar, body.clients-viewport #feature-notice-root { flex:0 0 auto; width:100%; }
+      body.clients-viewport #feature-notice-root:empty { display:none; }
+      body.clients-viewport #client-management-view { flex:1; min-height:0; }
+      body.clients-viewport .workspace-clients { display:flex; flex-direction:column; height:100%; min-height:0; }
+      body.clients-viewport .workspace-clients > .panel:first-child { flex:0 0 auto; }
+      body.clients-viewport .workspace-clients > [hidden] { display:none !important; }
+      body.clients-viewport .workspace-clients .client-master-layout { display:flex; flex-direction:column; flex:1; min-height:0; }
+      body.clients-viewport .client-register-panel { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; }
+      body.clients-viewport .client-register-panel > .section-title,
+      body.clients-viewport .client-register-panel > .workspace-tabs,
+      body.clients-viewport .client-register-panel > .client-engagement-actions { flex:0 0 auto; }
+      body.clients-viewport .client-register-panel > .table-wrap { flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+      body.clients-viewport .client-commercial-panel { flex:0 0 auto; }
+      body.clients-viewport .client-commercial-panel .detail-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+      body.clients-viewport .workspace-clients > .client-fab { position:static; flex:0 0 auto; align-self:flex-end; min-height:40px; }
+    }
+
+    /* At extreme zoom/short heights, keep every control reachable with one page scroll. */
+    @media (min-width: 901px) and (max-height: 480px) {
+      body.clients-viewport .shell, body.clients-viewport .main, body.clients-viewport .workspace-clients { height:auto; }
+      body.clients-viewport .main, body.clients-viewport .workspace-clients { display:grid; }
+      body.clients-viewport .client-register-panel { display:block; flex:none; overflow:visible; }
+      body.clients-viewport .client-register-panel > .table-wrap { flex:none; max-height:none; }
     }
 
     @media (max-width: 900px) {
@@ -7535,7 +7566,7 @@
 
           ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
-            <div class="panel">
+            <div class="panel client-register-panel">
               <div class="section-title">
                 <div>
                   <h3>${viewingInactiveClients ? "Inactive Clients" : viewingOnDemandClients ? "On Demand Clients" : viewingFreeClients ? "Free of Charge Clients" : "Active Clients"}</h3>
@@ -7543,7 +7574,7 @@
                 </div>
                 <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="client-sort-controls"><select id="client-order" class="filter-select" aria-label="Sort clients" title="Contract order uses Contract Start, or Engagement Start for older records. Unknown dates appear last.">${clientSortOptions.map(([key, label]) => `<option value="${key}" ${clientSortValue === key ? "selected" : ""}>${label}</option>`).join("")}${clientSortOptions.some(([key]) => key === clientSortValue) ? "" : `<option value="column" selected disabled>Column sort</option>`}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
               </div>
-              <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43">
+              <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43" tabindex="0" aria-label="Client list, scroll for more rows and columns">
                 <table class="client-table">
                   <colgroup>
                     <col class="client-number-col">
@@ -7695,7 +7726,7 @@
           ` : ``}
 
           ${state.clientManagementTab === "proposal" ? `
-            <section class="panel">
+            <section class="panel client-register-panel">
               <div class="section-title">
                 <div>
                   <h3>Proposal / Quotation Clients</h3>
@@ -7847,7 +7878,7 @@
 
           ${state.clientManagementTab === "contracts" ? `
             <section class="client-master-layout">
-              <div class="panel">
+              <div class="panel client-register-panel">
                 <div class="section-title">
                   <div>
                     <h3>Contract Monitoring</h3>
@@ -7924,7 +7955,7 @@
                   </div>
                 </div>
               </div>
-              <div class="panel">
+              <div class="panel client-commercial-panel">
                 <div class="section-title">
                   <div>
                     <h3>Commercial Logic</h3>
@@ -9631,6 +9662,7 @@
       const saved = result.data?.[0];
       if (saved?.id) client.databaseId = saved.id;
       clearSyncFailure(`Client ${client.name || client.clientCode}`);
+      return saved;
     }
 
     async function allocateClientCode() {
@@ -11198,6 +11230,11 @@
         root.innerHTML = safeHtml("");
         return;
       }
+      // Background list refreshes must not replace an open form or its save feedback.
+      if (editor.kind === "client" && root.querySelector("[data-client-editor-id]")?.dataset.clientEditorId === editor.id) {
+        refreshClientEditorSaveStatus();
+        return;
+      }
       const isProposal = editor.kind === "proposal";
       const record = isProposal ? proposals.find((item) => item.id === editor.id) : clientMasterClients.find((item) => item.id === editor.id) || clients.find((item) => item.id === editor.id);
       if (!record) {
@@ -11256,7 +11293,7 @@
       const saveAttribute = isProposal ? `data-save-proposal="${record.id}"` : "data-save-client=\"yes\"";
       root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
-          <section class="client-editor-modal" role="dialog" aria-modal="true" aria-label="${title}">
+          <section class="client-editor-modal" role="dialog" aria-modal="true" aria-label="${title}" data-client-editor-id="${escapeAttr(record.id)}" aria-busy="false">
             <div class="client-editor-head"><div><div class="eyebrow">${isProposal ? "Prospective client" : "Client master"}</div><h3>${title}</h3></div><button class="ghost-btn" data-close-client-editor="yes">Close</button></div>
             <div class="detail-list">
               <section class="client-form-section">
@@ -11275,7 +11312,7 @@
               </section>
               <section class="client-form-section"><div class="client-form-section-title"><strong>Fee & Note</strong><span>Optional commercial context</span></div><div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}">Monthly Fee</label><input id="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}" class="field" type="number" value="${isProposal ? record.monthlyFee || 0 : record.serviceFee || 0}" /></div><div class="client-field"><label for="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}">Annual Fee</label><input id="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}" class="field" type="number" value="${record.annualFee || 0}" /></div></div><div class="client-field"><label for="${isProposal ? "proposal-notes" : "client-form-notes"}">Note</label><textarea id="${isProposal ? "proposal-notes" : "client-form-notes"}" class="inline-textarea">${record.notes || ""}</textarea></div></section>
             </div>
-            <div class="client-editor-actions"><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
+            <div class="client-editor-actions"><span class="client-editor-save-status" data-client-editor-save-status role="status" aria-live="polite" aria-atomic="true"></span><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
           </section>
         </div>`);
     }
@@ -11285,6 +11322,32 @@
     function clientEditorField(id) {
       return document.querySelector(`#client-editor-root [id="${id}"]`);
     }
+
+    function refreshClientEditorSaveStatus() {
+      const editor = state.clientEditor;
+      const modal = document.querySelector("#client-editor-root [data-client-editor-id]");
+      if (!modal || editor?.kind !== "client" || modal.dataset.clientEditorId !== editor.id) return;
+      const saving = Boolean(editor.saving);
+      modal.setAttribute("aria-busy", String(saving));
+      modal.querySelectorAll("input, select, textarea, button").forEach(field => { field.disabled = saving; });
+      const button = modal.querySelector("[data-save-client]");
+      if (button) button.textContent = saving ? "Saving..." : "Save Client";
+      const close = modal.querySelector(".client-editor-actions [data-close-client-editor]");
+      if (close) close.textContent = editor.saved ? "Done" : "Cancel";
+      const status = modal.querySelector("[data-client-editor-save-status]");
+      status.dataset.state = saving ? "saving" : editor.saveError ? "error" : editor.saved ? "saved" : "idle";
+      status.textContent = saving ? "Saving to database..." : editor.saveError ? `Save failed: ${editor.saveError} Your changes are still in this form.` : editor.saved ? "Saved to database." : "";
+      status.setAttribute("role", editor.saveError ? "alert" : "status");
+    }
+
+    function clearClientEditorSaveFeedback(event) {
+      if (!event.target.closest?.("#client-editor-root [data-client-editor-id]") || state.clientEditor?.kind !== "client" || state.clientEditor.saving) return;
+      state.clientEditor.saved = false;
+      state.clientEditor.saveError = "";
+      refreshClientEditorSaveStatus();
+    }
+    document.addEventListener("input", clearClientEditorSaveFeedback);
+    document.addEventListener("change", clearClientEditorSaveFeedback);
 
     function renderClientImportPreview() {
       const root = document.getElementById("client-import-preview-root");
@@ -11526,6 +11589,7 @@
     }
 
     function applyViewVisibility(viewId) {
+      document.body.classList.toggle("clients-viewport", viewId === "client-management-view");
       document.querySelectorAll(".nav-btn").forEach((button) => {
         button.classList.toggle("active", button.getAttribute("data-view") === viewId);
       });
@@ -12827,6 +12891,7 @@
       }
 
       if (closeClientEditorTrigger) {
+        if (state.clientEditor?.saving) return;
         state.clientEditor = null;
         renderClientEditor();
         return;
@@ -13283,8 +13348,11 @@
       }
 
       if (target.matches("[data-save-client]")) {
-        const client = clientFormTarget();
-        const previousClient = structuredClone(client);
+        const editor = state.clientEditor;
+        if (editor?.saving) return;
+        const originalClient = editor?.kind === "client" ? clientMasterClients.find(item => item.id === editor.id) || clients.find(item => item.id === editor.id) : clientFormTarget();
+        if (!originalClient) return;
+        const client = structuredClone(originalClient);
         client.clientCode = clientEditorField("client-form-code").value.trim() || client.clientCode;
         const clientName = clientEditorField("client-form-name").value.trim();
         if (!clientName) {
@@ -13318,17 +13386,22 @@
             client.obligations[key].quickNotes = "";
           }
         });
-        client.lastUpdated = "2026-05-20 16:10";
+        client.lastUpdated = currentWorkspaceTimestamp();
         state.selectedClientId = client.id;
+        if (editor) { editor.saving = true; editor.saved = false; editor.saveError = ""; }
+        refreshClientEditorSaveStatus();
         try {
-          await saveClientToDatabase(client);
-          state.clientEditor = null;
-          await loadSharedClients();
+          const saved = await saveClientToDatabase(client, { showLoading: false });
+          if (!saved?.id) throw new Error("The database did not confirm this client save. Please retry.");
+          Object.assign(originalClient, client);
+          if (editor) editor.saved = true;
+          await loadSharedClients(true);
         } catch (error) {
-          Object.assign(client, previousClient);
-          window.alert(error instanceof Error ? error.message : "Client could not be saved.");
+          if (editor) editor.saveError = error instanceof Error ? error.message : "Client could not be saved.";
+        } finally {
+          if (editor) editor.saving = false;
+          refreshClientEditorSaveStatus();
         }
-        commitUi("push");
         return;
       }
 

@@ -98,3 +98,43 @@ test("On Demand clients have a separate tab, can move to contracts, and Allocati
     assert.deepEqual(d.warnings,[]);
   } finally { d.dom.window.close(); }
 });
+
+test("Clients gives every desktop register a viewport-scoped layout without leaking it to other menus", async () => {
+  const d = await clients();
+  try {
+    const doc = d.w.document;
+    assert.equal(doc.body.classList.contains("clients-viewport"), true);
+    for (const tab of ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"]) {
+      doc.querySelector(`[data-client-tab="${tab}"]`).click();
+      const root = doc.getElementById("client-management-view"), register = root.querySelector(".client-register-panel");
+      assert.ok(register, `${tab}: the real register owns the table scroll`);
+      assert.ok(register.querySelector(":scope > .table-wrap"));
+      assert.equal(register.classList.contains("client-setup-panel"), false, "the legacy hidden setup form must stay hidden");
+      if (tab === "contracts") assert.ok(root.querySelector(".client-commercial-panel"), "commercial context is retained, not removed");
+      assert.equal(doc.body.classList.contains("clients-viewport"), true);
+    }
+    doc.querySelector('.nav-btn[data-view="allocation-view"]').click();
+    assert.equal(doc.body.classList.contains("clients-viewport"), false);
+    doc.querySelector('.nav-btn[data-view="client-management-view"]').click();
+    assert.equal(doc.body.classList.contains("clients-viewport"), true);
+    doc.querySelector('[data-client-tab="active"]').click();
+    const scroll = doc.querySelector('[data-virtual-table="active-clients"]');
+    assert.equal(scroll.getAttribute("tabindex"), "0"); assert.match(scroll.getAttribute("aria-label"), /scroll for more rows and columns/);
+    assert.deepEqual(d.writes, []); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("Clients height rules reserve native table space rather than hiding page overflow or intercepting the wheel", () => {
+  const html = read("public/demo.html"), start = html.indexOf('    @media (min-width: 901px) {\n      body.clients-viewport');
+  assert.ok(start > 0);
+  const layout = html.slice(start, html.indexOf("    @media (max-width: 900px)", start));
+  assert.match(layout, /\.shell \{ height:100dvh; min-height:0; align-items:stretch;/);
+  assert.match(layout, /\.main \{ display:flex; flex-direction:column; align-items:center; height:100%; min-height:0;/);
+  assert.match(layout, /#feature-notice-root:empty \{ display:none;/);
+  assert.match(layout, /\.client-register-panel > \.table-wrap \{ flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain;/);
+  assert.match(layout, /\.workspace-clients > \.client-fab \{ position:static; flex:0 0 auto;/);
+  assert.match(layout, /\.workspace-clients > \[hidden\] \{ display:none !important;/);
+  assert.match(layout, /@media \(min-width: 901px\) and \(max-height: 480px\)/);
+  assert.match(layout, /\.client-register-panel \{ display:block; flex:none; overflow:visible;/);
+  assert.doesNotMatch(layout, /scrollTop|scrollTo|wheel|body\.clients-viewport\s*\{[^}]*overflow:\s*hidden/);
+});
