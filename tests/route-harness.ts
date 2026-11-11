@@ -7,7 +7,7 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
   const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const context = { exports: {} as Record<string, any>, require(name: string) {
-    if (name === "next/server") return { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) }, after: () => {} };
+    if (name === "next/server") return bindings[name] || { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) }, after: () => {} };
     if (name in bindings) return bindings[name];
     if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/my-work-steps", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement", "@/lib/case-access", "@/lib/case-progress-page", "@/lib/case-activity"].includes(name)) {
       return loadRoute(`${name.replace("@/", "")}.ts`, {

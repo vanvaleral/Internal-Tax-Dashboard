@@ -59,13 +59,28 @@ On desktop, Clients uses a viewport-height workspace: the global header, client
 tabs, filters and selection controls retain their natural height; the native table
 scrolls in the remaining space. Active, Free of Charge, On Demand, Inactive,
 Proposal and Contract Monitoring share the same bounded register layout. The New
-Client action has its own footer space instead of covering the last visible rows.
+Client action floats as a compact plus button without reserving a footer row;
+hover or keyboard focus reveals its full label.
 Contract commercial context stays visible in a compact row. Other menus retain
 their normal layout, and mobile keeps its single natural page scroll. Extremely
 short desktop viewports fall back to one page scrollbar with an uncapped table,
 rather than clipping controls or creating another vertical table scrollbar. No
 wheel listeners, scroll correction timers, virtualized rows or database changes
 are introduced.
+
+## Export Category Indicator
+
+The Client Master Excel export includes an `engagementType` column immediately
+after `clientStatus`, with readable Contract, Free of Charge and On Demand labels.
+The category column is wide enough for the labels, and the sheet header has Excel
+filters. Active/Inactive status remains independent of engagement category; the
+export still contains the complete authorized master list, including archives.
+
+The exported category is reference-only on reimport: imports cannot reclassify
+clients. Use the confirmed Move selected action to change engagement category.
+Stored fees/dates, PICs, IDs and history are unchanged; FOC fee values in the export
+remain historical/master references, not current monthly charges. No migration
+or client-data update is needed.
 
 Tests: `client-engagement`, `client-free-of-charge`, `audit-operations-routes` and
 the existing monthly persistence/client sorting tests. Hosted migration status
