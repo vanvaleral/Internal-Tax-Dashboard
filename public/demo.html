@@ -681,19 +681,34 @@
       right: 26px;
       bottom: 26px;
       display: inline-flex;
-      gap: 8px;
       align-items: center;
-      min-height: 48px;
-      padding: 0 17px;
+      width: 44px;
+      height: 44px;
+      min-height: 44px;
+      padding: 0 12px;
+      overflow: hidden;
       border: 0;
       border-radius: 999px;
       background: var(--ink);
       color: white;
       box-shadow: 0 12px 28px rgba(19, 34, 44, 0.26);
       font-weight: 800;
+      transition: width 180ms ease, box-shadow 180ms ease;
     }
 
-    .client-fab span { font-size: 22px; line-height: 1; }
+    .client-fab-icon { display:flex; flex:0 0 20px; width:20px; height:20px; }
+    .client-fab-icon svg { display:block; width:20px; height:20px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-width:2.4; }
+    .client-fab-label { position:absolute; left:40px; white-space:nowrap; font-size:13px; opacity:0; transition:opacity 120ms ease; }
+    .workspace-clients .client-fab:focus-visible { width:154px; outline:3px solid var(--accent); outline-offset:3px; }
+    .workspace-clients .client-fab:focus-visible .client-fab-label { opacity:1; }
+    .workspace-clients .client-fab:hover:not(:disabled), .workspace-clients .client-fab:active:not(:disabled) { transform:none; }
+    @media (hover: hover) and (pointer: fine) {
+      .workspace-clients .client-fab:hover { width:154px; }
+      .workspace-clients .client-fab:hover .client-fab-label { opacity:1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .client-fab, .client-fab-label { transition:none; }
+    }
 
     .breadcrumb {
       overflow: hidden;
@@ -3179,7 +3194,6 @@
       body.clients-viewport .client-register-panel > .table-wrap { flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
       body.clients-viewport .client-commercial-panel { flex:0 0 auto; }
       body.clients-viewport .client-commercial-panel .detail-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
-      body.clients-viewport .workspace-clients > .client-fab { position:static; flex:0 0 auto; align-self:flex-end; min-height:40px; }
     }
 
     /* At extreme zoom/short heights, keep every control reachable with one page scroll. */
@@ -3494,21 +3508,16 @@
 
       .workspace-clients .client-fab {
         right: 18px;
-        bottom: 104px;
+        bottom: calc(104px + env(safe-area-inset-bottom));
         z-index: 35;
         width: 48px;
         min-width: 48px;
         height: 48px;
         min-height: 48px;
-        display: grid;
-        place-items: center;
-        padding: 0;
-        border-radius: 50%;
-        font-size: 0;
+        padding: 0 14px;
       }
 
-      .workspace-clients .client-fab span { display: grid; width: 26px; height: 26px; place-items: center; line-height: 1; }
-      .workspace-clients .client-fab svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 2.4; }
+      .workspace-clients .client-fab-label { left:42px; }
 
       .workspace-clients .mobile-card.client-mobile-card {
         display: block;
@@ -3828,6 +3837,31 @@
     html.cases-fullscreen .case-sheet-panel .table-wrap { flex:1; max-height:none; min-height:0; }
     .case-sheet-nav .case-fullscreen-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:7px 10px; font-size:11px; font-weight:600; border:1px solid var(--line); border-radius:8px; color:var(--accent-strong); background:var(--panel-solid); text-decoration:none; }
     @media(max-width:900px) { html.cases-fullscreen .shell { padding:6px; } html.cases-fullscreen .case-sheet-panel { height:calc(100svh - 12px); } .case-sheet-nav .case-fullscreen-link { width:32px; min-width:32px; padding:0; font-size:0; } .case-sheet-nav .case-fullscreen-link .case-tool-icon { display:block; width:16px; height:16px; } }
+    @media (min-width: 901px) {
+      body.cases-viewport .shell, html.cases-fullscreen .shell { height:100dvh; min-height:0; align-items:stretch; }
+      body.cases-viewport .main, html.cases-fullscreen .main { display:flex; flex-direction:column; align-items:center; height:100%; min-height:0; }
+      body.cases-viewport .global-topbar, body.cases-viewport #feature-notice-root { flex:0 0 auto; width:100%; }
+      body.cases-viewport #feature-notice-root:empty { display:none; }
+      body.cases-viewport #cases-view, html.cases-fullscreen #cases-view { flex:1; min-height:0; }
+      body.cases-viewport .workspace-cases, html.cases-fullscreen .workspace-cases { display:flex; flex-direction:column; height:100%; min-height:0; }
+      body.cases-viewport .case-sheet-panel, html.cases-fullscreen .case-sheet-panel { display:flex; flex-direction:column; flex:1; height:auto; min-height:0; }
+      body.cases-viewport .case-sheet-panel > :not(.table-wrap), html.cases-fullscreen .case-sheet-panel > :not(.table-wrap) { flex:0 0 auto; }
+      body.cases-viewport .case-sheet-panel > .table-wrap, html.cases-fullscreen .case-sheet-panel > .table-wrap { flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+      body.cases-viewport .case-archive-panel, html.cases-fullscreen .case-archive-panel { display:flex; flex-direction:column; flex:0 1 auto; min-height:0; max-height:min(32dvh, 240px); overflow:hidden; }
+      body.cases-viewport .case-archive-panel > .section-title, html.cases-fullscreen .case-archive-panel > .section-title { flex:0 0 auto; }
+      body.cases-viewport .case-archive-panel > .detail-list, html.cases-fullscreen .case-archive-panel > .detail-list { min-height:0; overflow:auto; overscroll-behavior:contain; }
+    }
+    /* Keep controls reachable at extreme zoom or very short window heights. */
+    @media (min-width: 901px) and (max-height: 480px) {
+      body.cases-viewport .shell, html.cases-fullscreen .shell,
+      body.cases-viewport .main, html.cases-fullscreen .main,
+      body.cases-viewport .workspace-cases, html.cases-fullscreen .workspace-cases { height:auto; }
+      body.cases-viewport .main, html.cases-fullscreen .main,
+      body.cases-viewport .workspace-cases, html.cases-fullscreen .workspace-cases { display:grid; }
+      body.cases-viewport .case-sheet-panel, html.cases-fullscreen .case-sheet-panel { display:block; flex:none; overflow:visible; }
+      body.cases-viewport .case-sheet-panel > .table-wrap, html.cases-fullscreen .case-sheet-panel > .table-wrap { flex:none; max-height:none; }
+      body.cases-viewport .case-archive-panel, html.cases-fullscreen .case-archive-panel { max-height:none; overflow:visible; }
+    }
   </style>
   <link rel="stylesheet" href="submenu-tabs.css" />
 </head>
@@ -7985,7 +8019,7 @@
               </div>
             </section>
           ` : ``}
-          <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" title="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</button>
+          <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>
         </div>
       `);
       window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : type === "free_of_charge" ? "free-of-charge" : "active"; commitWorkspaceNavigation("replace"); } });
@@ -8992,7 +9026,7 @@
             </tbody></table></div>`}
             <div class="case-sheet-footer"><span>${assessmentTab?'Source documents stay linked to their examination and payment history.':`${caseList.length} / ${categoryCases.length} cases · Yellow: 30+ days · Red: 60+ days without activity · Drag / Shift+click: select · Ctrl+C / V: copy / paste`}</span><span id="case-sheet-status" role="status" aria-live="polite">${escapeHtml(caseSheetStatus)}</span></div>
           </section>
-          ${state.caseTrashOpen ? `<section class="panel"><div class="section-title"><div><h3>Archived Cases</h3><p>Archived cases retain their task links and progress history. They can be restored later.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · archived ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No archived cases.</div>`}</div></section>` : ""}
+          ${state.caseTrashOpen ? `<section class="panel case-archive-panel"><div class="section-title"><div><h3>Archived Cases</h3><p>Archived cases retain their task links and progress history. They can be restored later.</p></div></div><div class="detail-list">${state.deletedCases.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.clientName)}</strong><div class="subline">${escapeHtml(item.caseCategory)} · archived ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-case="${item.id}">Restore</button></div>`).join("") || `<div class="empty-state">No archived cases.</div>`}</div></section>` : ""}
           <datalist id="case-client-options">${clientMasterClients.filter(isActiveClientRecord).map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
@@ -11636,6 +11670,7 @@
 
     function applyViewVisibility(viewId) {
       document.body.classList.toggle("clients-viewport", viewId === "client-management-view");
+      document.body.classList.toggle("cases-viewport", viewId === "cases-view" && !IS_CASES_FULLSCREEN);
       document.querySelectorAll(".nav-btn").forEach((button) => {
         button.classList.toggle("active", button.getAttribute("data-view") === viewId);
       });

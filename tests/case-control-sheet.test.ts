@@ -85,6 +85,58 @@ const gridCell = (d: any, id: string, name: string) => d.w.document.querySelecto
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
 const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
 
+test("Cases scopes remaining-height layout to its dashboard and retains table/footer structure across all categories", async () => {
+  const d = await dashboard();
+  try {
+    const doc = d.w.document;
+    assert.equal(doc.body.classList.contains("cases-viewport"), true);
+    for (const category of ["himbauan", "pemeriksaan", "register", "psa"]) {
+      doc.querySelector(`[data-cases-tab="${category}"]`).click();
+      const panel = doc.querySelector("#cases-view .case-sheet-panel");
+      assert.ok(panel.querySelector(":scope > .table-wrap"));
+      assert.ok(panel.querySelector(":scope > .case-sheet-footer"));
+      assert.ok(panel.querySelector(":scope > .case-sheet-tools"));
+      assert.equal(doc.body.classList.contains("cases-viewport"), true);
+    }
+    d.api.state.caseTrashOpen = true;
+    d.api.state.deletedCases = Array.from({ length:100 }, (_, index) => ({ id:`archived-${index}`, clientName:`Archived ${index}`, caseCategory:"Himbauan" }));
+    d.api.renderCases();
+    const archive = doc.querySelector(".workspace-cases > .case-archive-panel");
+    assert.equal(archive.querySelectorAll(":scope > .detail-list > .list-item").length, 100);
+    assert.ok(doc.querySelector(".workspace-cases > .case-sheet-panel"));
+    doc.querySelector('.nav-btn[data-view="profile-view"]').click();
+    assert.equal(doc.body.classList.contains("cases-viewport"), false);
+    doc.querySelector('.nav-btn[data-view="cases-view"]').click();
+    assert.equal(doc.body.classList.contains("cases-viewport"), true);
+    assert.equal(d.writes.length, 0); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("desktop Cases and full-screen use flex table scrolling rather than a fixed offset or hidden page overflow", () => {
+  const start = html.indexOf("      body.cases-viewport .shell, html.cases-fullscreen .shell");
+  assert.ok(start > 0);
+  const css = html.slice(start, html.indexOf("  </style>", start));
+  assert.match(css, /\.shell \{ height:100dvh; min-height:0; align-items:stretch;/);
+  assert.match(css, /\.workspace-cases \{ display:flex; flex-direction:column; height:100%; min-height:0;/);
+  assert.match(css, /\.case-sheet-panel \{ display:flex; flex-direction:column; flex:1; height:auto; min-height:0;/);
+  assert.match(css, /\.case-sheet-panel > :not\(\.table-wrap\) \{ flex:0 0 auto;/);
+  assert.match(css, /\.case-sheet-panel > \.table-wrap \{ flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain;/);
+  assert.match(css, /\.case-archive-panel \{[^}]*max-height:min\(32dvh, 240px\); overflow:hidden;/);
+  assert.match(css, /\.case-archive-panel > \.detail-list \{ min-height:0; overflow:auto;/);
+  assert.match(css, /@media \(min-width: 901px\) and \(max-height: 480px\)/);
+  assert.doesNotMatch(css, /scrollTop|scrollTo|wheel|body\.cases-viewport\s*\{[^}]*overflow:\s*hidden/);
+});
+
+test("standalone Cases does not enable dashboard-specific top-bar sizing", async () => {
+  const d = await dashboard("supervisor", {}, false, "?casesFullscreen=1&casesTab=himbauan&account=auth-user-1");
+  try {
+    assert.equal(d.w.document.documentElement.classList.contains("cases-fullscreen"), true);
+    assert.equal(d.w.document.body.classList.contains("cases-viewport"), false);
+    assert.ok(caseViewport(d));
+    assert.deepEqual(d.warnings, []); assert.equal(d.writes.length, 0);
+  } finally { d.dom.window.close(); }
+});
+
 test('SPHP integration preserves the original sheet while linking editable assessments into both registers',async()=>{
   const d=await dashboard('supervisor',{casesTab:'pemeriksaan'});try{
     const q=(selector:string)=>d.w.document.querySelector(selector),fill=(name:string,value:string)=>{q(`#case-assessment-dialog [name="${name}"]`).value=value;};

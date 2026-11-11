@@ -17,6 +17,16 @@ account-scoped browser UI settings and do not update business records.
 
 No API change, database migration or data rewrite is needed.
 
+## Floating Create Action
+
+The New Client action is a compact floating plus button, not a footer row in the
+desktop Clients layout. The register can use that reclaimed height without a
+second page scrollbar. A mouse hover or keyboard focus expands the label to
+New Client (or New Proposal on the proposal tab). The button stays anchored;
+reduced-motion preferences disable the expansion animation. On touch devices it
+remains a directly tappable plus above the bottom navigation and safe-area inset.
+The accessible name and existing creation handlers are retained.
+
 ## Day-First Entry And Display
 
 Contract Start and Engagement End use explicit `dd/mm/yyyy` text fields with a

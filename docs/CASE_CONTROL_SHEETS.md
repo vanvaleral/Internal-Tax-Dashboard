@@ -19,6 +19,23 @@ subtle header tones separate reference, tracking and ownership fields. The clien
 and row-number columns stay pinned, and the sheet scrolls natively. Theme colors
 come from the existing appearance settings rather than a separate fixed palette.
 
+## Viewport Layout
+
+Desktop Cases uses the available workspace height instead of subtracting a fixed
+270px estimate from the viewport. The top bar, feature notice, category navigation,
+summary, filters and save footer keep their natural height; the table flexes into
+the remainder and owns native vertical/horizontal scrolling. Expanded timelines
+stay inside that table, rather than extending the main page. All four categories
+and the desktop Full Screen sheet share this behavior.
+
+When Archived Cases is open, its restore list has a bounded native scroll region
+alongside the remaining active-sheet space; it cannot push the whole frame down.
+The layout class is removed when navigating out of Cases, without changing Clients
+or other workspaces. No wheel handlers, scroll corrections, data mutations or
+database migration are involved. Mobile keeps its existing responsive layout;
+very short desktop windows (480px or less, including extreme zoom) use natural
+page scrolling so every control remains reachable.
+
 ## Interaction
 
 - Full Screen opens the active case category in a separate, account-bound tab

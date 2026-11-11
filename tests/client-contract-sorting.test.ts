@@ -31,6 +31,7 @@ async function clients(mobile = false, ui: Record<string, any> = {}) {
   const staff = ["Denny", "Budi"].map(name => ({ id: name, display_name: name, full_name: name, role: "staff", team_division: "Tax Team", directory_active: true }));
   w.fetch = async (url: string, init: any = {}) => {
     if (init.method && init.method !== "GET") writes.push(`${init.method} ${url}`);
+    if (url === "/api/clients/next-code") return { ok: true, status: 200, json: async () => ({ clientCode: "CL-00008" }) };
     if (url === "/api/clients/engagement") return { ok: true, status: 200, json: async () => ({ updated: JSON.parse(init.body).clients.length }) };
     const body = url === "/api/profile" ? { user: { id: "user-1" }, profile: { id: "supervisor", role: "supervisor", display_name: "Supervisor", directory_active: true } }
       : url === "/api/clients" ? { data: rows } : url === "/api/staff" ? { staff } : { data: [], staff: [], tasks: [], announcements: [] };
@@ -132,9 +133,46 @@ test("Clients height rules reserve native table space rather than hiding page ov
   assert.match(layout, /\.main \{ display:flex; flex-direction:column; align-items:center; height:100%; min-height:0;/);
   assert.match(layout, /#feature-notice-root:empty \{ display:none;/);
   assert.match(layout, /\.client-register-panel > \.table-wrap \{ flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain;/);
-  assert.match(layout, /\.workspace-clients > \.client-fab \{ position:static; flex:0 0 auto;/);
+  assert.doesNotMatch(layout, /\.client-fab\s*\{[^}]*position:static/);
   assert.match(layout, /\.workspace-clients > \[hidden\] \{ display:none !important;/);
   assert.match(layout, /@media \(min-width: 901px\) and \(max-height: 480px\)/);
   assert.match(layout, /\.client-register-panel \{ display:block; flex:none; overflow:visible;/);
   assert.doesNotMatch(layout, /scrollTop|scrollTo|wheel|body\.clients-viewport\s*\{[^}]*overflow:\s*hidden/);
+});
+
+test("New Client floats without a reserved footer and expands without moving on hover or keyboard focus", () => {
+  const html = read("public/demo.html");
+  assert.match(html, /\.client-fab \{\s*position: fixed;[\s\S]*?width: 44px;/);
+  assert.match(html, /\.client-fab-label \{ position:absolute;[^}]*opacity:0;/);
+  assert.match(html, /@media \(hover: hover\) and \(pointer: fine\) \{\s*\.workspace-clients \.client-fab:hover \{ width:154px;/);
+  assert.match(html, /\.client-fab:focus-visible \{ width:154px; outline:/);
+  assert.match(html, /\.client-fab:hover:not\(:disabled\),[^}]*\{ transform:none;/);
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\) \{\s*\.client-fab, \.client-fab-label \{ transition:none;/);
+  assert.match(html, /bottom: calc\(104px \+ env\(safe-area-inset-bottom\)\)/);
+});
+
+test("compact action retains client creation on desktop/mobile and the desktop proposal action", async () => {
+  for (const mobile of [false, true]) {
+    const d = await clients(mobile);
+    try {
+      const doc = d.w.document;
+      let button = doc.querySelector(".workspace-clients > .client-fab");
+      assert.equal(button.getAttribute("aria-label"), "New Client");
+      assert.equal(button.querySelector(".client-fab-label").textContent, "New Client");
+      assert.equal(button.querySelector(".client-fab-icon").getAttribute("aria-hidden"), "true");
+      button.click(); await tick();
+      assert.ok(doc.querySelector('#client-editor-root [data-client-editor-id]'), "client editor opens normally");
+      doc.querySelector('#client-editor-root [data-close-client-editor]').click();
+      if (!mobile) {
+        doc.querySelector('[data-client-tab="proposal"]').click();
+        button = doc.querySelector(".workspace-clients > .client-fab");
+        assert.equal(button.getAttribute("aria-label"), "New Proposal");
+        assert.equal(button.querySelector(".client-fab-label").textContent, "New Proposal");
+        assert.ok(button.hasAttribute("data-new-proposal"));
+        button.click();
+        assert.ok(doc.querySelector('#client-editor-root [role="dialog"]'), "proposal editor opens normally");
+      }
+      assert.deepEqual(d.writes, ["POST /api/clients/next-code"]); assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
 });
