@@ -50,6 +50,12 @@ workflow object or bypass closure on a case with a registered BA / SKP.
 - Before recording the BA, add/remove up to 100 draft rows and choose the tax,
   period, whole-rupiah payable amount and whether an SPT revision is required.
   Removing an unsaved row does not delete an existing liability or timeline entry.
+- The editor uses compact spreadsheet cells and read-only row numbers. Header and
+  one calculated Total footer stay frozen within the bounded grid viewport.
+  Adding/removing rows or editing amounts updates the footer without a database
+  call; the footer cannot be edited, removed or submitted as a byproduct. Invalid
+  amounts show Check amounts instead of a misleading total. Narrow screens keep
+  the same grid with local horizontal scrolling rather than expanded row cards.
 - The same tax may appear in different periods. Duplicate tax/period pairs are
   rejected server-side, including case/whitespace variants through Other.
 - `public/case-tax-types.js` is the shared, data-free dropdown/validation catalog.

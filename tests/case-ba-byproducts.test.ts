@@ -125,3 +125,55 @@ test("BA dialog supports no-additional-tax without rows and retains invalid dupl
     e.change("period-1","2024");await e.submit();assert.equal(e.getWorkflow().products.length,2);
   }finally{e.dom.window.close();}
 });
+
+test("compact BA sheet keeps exactly one locked total footer and renumbers only editable rows",async()=>{
+  const d=dialogFixture();try{
+    const total=d.dialog.querySelector("[data-cwf-total]"),footer=d.dialog.querySelector("[data-cwf-total-row]");
+    const input=(name:string,value:string)=>{d.field(name).value=value;d.field(name).dispatchEvent(new d.w.Event("input",{bubbles:true}));};
+    assert.equal(d.dialog.querySelectorAll("tfoot tr").length,1);
+    assert.equal(footer.closest("tbody"),null);
+    assert.equal(footer.querySelectorAll("input,select,textarea,button,[contenteditable=true]").length,0);
+    assert.equal(d.dialog.querySelectorAll("[data-cwf-product-summary]").length,0,"no second total outside the sheet");
+    assert.equal(total.textContent,"Rp0");
+    input("amount-0","1.250");assert.equal(total.textContent,"Rp1.250");
+    for(let i=1;i<=2;i++){
+      d.dialog.querySelector("[data-cwf-add-product]").click();d.change(`tax-${i}`,"PPN");d.change(`period-${i}`,String(2025-i));input(`amount-${i}`,String(i*1000));
+    }
+    assert.equal(total.textContent,"Rp4.250");
+    d.dialog.querySelector('[data-cwf-product="1"] [data-cwf-remove-product]').click();
+    assert.deepEqual(Array.from(d.dialog.querySelectorAll("[data-cwf-row-number]"),(node:any)=>node.textContent),["1","2"]);
+    assert.equal(total.textContent,"Rp3.250");
+    assert.equal(d.dialog.querySelector("[data-cwf-row-count]").textContent,"(2 rows)");
+    assert.equal(d.writes.length,0,"totals and row edits do not trigger database calls");
+    await d.submit();assert.equal(d.getWorkflow().products.length,2);
+    assert.equal(d.getWorkflow().products.reduce((sum:number,row:any)=>sum+row.amount,0),3250);
+    assert.equal(d.writes[0].products.some((row:any)=>row.tax==="Total"),false);
+  }finally{d.dom.window.close();}
+  const e=dialogFixture();try{
+    const footer=e.dialog.querySelector("[data-cwf-total-row]");
+    e.dialog.querySelector("[data-cwf-remove-product]").click();
+    assert.equal(e.dialog.querySelectorAll("[data-cwf-product]").length,0);
+    assert.equal(e.dialog.querySelector("[data-cwf-total-row]"),footer);
+    assert.equal(e.dialog.querySelector("[data-cwf-total]").textContent,"Rp0");
+    assert.equal(e.dialog.querySelector("[data-cwf-row-count]").textContent,"(0 rows)");
+  }finally{e.dom.window.close();}
+});
+
+test("BA locked total flags invalid/unsafe amounts, then recalculates when corrected",()=>{
+  const d=dialogFixture();try{
+    const total=d.dialog.querySelector("[data-cwf-total]");
+    for(const value of ["","-1","1,5","12.34","9007199254740992"]){
+      d.change("amount-0",value);assert.equal(total.textContent,"Check amounts");assert.equal(total.dataset.invalid,"true");
+    }
+    d.change("amount-0","9.007.199.254.740.991");assert.equal(total.dataset.invalid,"false");
+    d.dialog.querySelector("[data-cwf-add-product]").click();d.change("amount-1","1");
+    assert.equal(total.textContent,"Check amounts","safe individual amounts cannot produce an unsafe total");
+    d.change("amount-0","2000");assert.equal(total.textContent,"Rp2.001");assert.equal(total.dataset.invalid,"false");
+    assert.equal(d.writes.length,0);
+    const css=read("public/case-workflow-dashboard.css");
+    assert.match(css,/\.case-workflow-product-scroll\s*\{[^}]*max-height:256px/);
+    assert.match(css,/\.case-workflow-product-table thead th\s*\{[^}]*position:sticky!important;[^}]*top:0/);
+    assert.match(css,/\.case-workflow-product-table tfoot th,\.case-workflow-product-table tfoot td\s*\{[^}]*position:sticky!important;[^}]*bottom:0/);
+    assert.doesNotMatch(css,/\.case-workflow-product-table tr\s*\{[^}]*display:grid/);
+  }finally{d.dom.window.close();}
+});
