@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notificationEventKey, uniqueProfileIds } from "@/lib/operational-rules";
 import webpush from "web-push";
+import { notificationDestination, webPushConfiguration } from "@/lib/web-push";
 
 export { notificationEventKey, uniqueProfileIds } from "@/lib/operational-rules";
 
@@ -75,19 +76,17 @@ export async function createOperationalAnnouncement(input: OperationalAnnounceme
   const pushRecipientIds = uniqueProfileIds((pushSubscriptions || []).map((row) => row.staff_profile_id));
   if (pushRecipientIds.length) {
     await admin.from("notification_delivery_log").upsert(
-      pushRecipientIds.map((staffProfileId) => ({ announcement_id: announcementId, staff_profile_id: staffProfileId, channel: "web_push", status: "queued", attempts: 1, next_attempt_at: new Date().toISOString() })),
+      pushRecipientIds.map((staffProfileId) => ({ announcement_id: announcementId, staff_profile_id: staffProfileId, channel: "web_push", status: "queued", attempts: 1, next_attempt_at: new Date(Date.now() + 120_000).toISOString() })),
       { onConflict: "announcement_id,staff_profile_id,channel", ignoreDuplicates: true }
     );
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    const privateKey = process.env.VAPID_PRIVATE_KEY;
-    if (publicKey && privateKey) {
-      webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:admin@lmatsconsulting.com", publicKey, privateKey);
+    const configuration = webPushConfiguration();
+    if (configuration.configured) {
       await Promise.all(pushRecipientIds.map(async (staffProfileId) => {
         const subscriptions = (pushSubscriptions || []).filter((row) => row.staff_profile_id === staffProfileId);
         const results = await Promise.allSettled(subscriptions.map((subscription) => webpush.sendNotification({
           endpoint: subscription.endpoint,
           keys: { p256dh: subscription.p256dh, auth: subscription.auth }
-        }, JSON.stringify({ title: input.title, body: "Open the dashboard to read this announcement.", tag: `announcement-${announcementId}`, url: "/demo.html?view=announcement-view" }))));
+        }, JSON.stringify({ title: input.title, body: "Open the dashboard to read this notification.", tag: `announcement-${announcementId}`, url: notificationDestination(input.sourceType, input.sourceId) }), { timeout: 10_000 })));
         const expiredIds = results.flatMap((result, index) => result.status === "rejected" && [404, 410].includes(Number((result.reason as any)?.statusCode)) ? [subscriptions[index].id] : []);
         if (expiredIds.length) await admin.from("web_push_subscriptions").delete().in("id", expiredIds);
         const delivered = results.some((result) => result.status === "fulfilled");
@@ -96,6 +95,9 @@ export async function createOperationalAnnouncement(input: OperationalAnnounceme
           : { status: "failed", last_error: "All immediate browser push deliveries failed.", next_attempt_at: new Date(Date.now() + 120_000).toISOString() })
           .eq("announcement_id", announcementId).eq("staff_profile_id", staffProfileId).eq("channel", "web_push");
       }));
+    } else {
+      await admin.from("notification_delivery_log").update({ status: "failed", last_error: configuration.message })
+        .eq("announcement_id", announcementId).in("staff_profile_id", pushRecipientIds).eq("channel", "web_push").is("completed_at", null);
     }
   }
 

@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tax Dashboard</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#087f8d" />
   <style>
     :root {
       --canvas: #f0f2ee;
@@ -4979,16 +4984,19 @@
       }
     };
 
-    if (pageParams.get("view") === "announcement-view") {
-      state.currentView = "announcement-view";
-    }
-
     if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
     window.WorkspaceFeatures.init({ settings: bootstrapProfile.featureAccess, role: state.role, offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), roleChanged: role => { state.role = String(role || "staff").toLowerCase(); }, changed: () => rerender() });
     if (!IS_OFFLINE_DEMO && bootstrapProfile.view) state.currentView = bootstrapProfile.view;
+    if (["announcement-view", "my-work-view"].includes(pageParams.get("view"))) {
+      state.currentView = pageParams.get("view");
+      if (state.currentView === "my-work-view" && pageParams.get("task")) {
+        state.selectedMyWorkId = pageParams.get("task");
+        state.myWorkDetailOpen = true;
+      }
+    }
     state.selectedPic = bootstrapProfile.profile.display_name || bootstrapProfile.profile.full_name || state.selectedPic;
     state.username = bootstrapProfile.profile.username || "";
     state.teamDivision = bootstrapProfile.profile.team_division || state.teamDivision;
@@ -6600,16 +6608,22 @@
       pushNotificationState.loading = true;
       renderAppearanceSettings();
       try {
-        const response = await appFetch("/api/push-subscriptions", { cache: "no-store", headers: { Accept: "application/json" } }, "", { trackUpdate: false });
+        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        const response = await appFetch("/api/push-subscriptions", { cache: "no-store", headers: { Accept: "application/json", ...(subscription ? { "x-push-endpoint": subscription.endpoint } : {}) } }, "", { trackUpdate: false });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Push settings could not be loaded.");
-        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
-        const subscription = await registration.pushManager.getSubscription();
         pushNotificationState.configured = Boolean(result.configured && result.publicKey);
-        pushNotificationState.enabled = Boolean(result.enabled && subscription);
+        pushNotificationState.enabled = Boolean(result.deviceEnabled && subscription && Notification.permission === "granted");
         pushNotificationState.publicKey = result.publicKey || "";
-        pushNotificationState.message = pushNotificationState.configured ? "Receive announcements even when the dashboard is closed." : "VAPID keys must be configured on the server.";
+        pushNotificationState.reminderMessage = result.remindersMessage || "";
+        pushNotificationState.message = !pushNotificationState.configured ? result.message || "Check the server VAPID keys and subject."
+          : Notification.permission === "denied" ? "Notifications are blocked in browser settings. Allow them for this website."
+          : pushNotificationState.enabled ? "Push is linked to this device. Send a test to check delivery."
+          : "Push is off on this device. Enable it to receive notifications and task reminders.";
       } catch (error) {
+        pushNotificationState.enabled = false;
         pushNotificationState.message = error instanceof Error ? error.message : "Push settings could not be loaded.";
       } finally {
         pushNotificationState.loading = false;
@@ -6622,7 +6636,13 @@
       pushNotificationState.loading = true;
       renderAppearanceSettings();
       try {
+        // Request permission directly from the user's click, before other awaits.
+        if (!pushNotificationState.enabled && Notification.permission !== "granted") {
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") throw new Error("Allow notifications in this browser's site settings, then try again.");
+        }
         const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
         const existing = await registration.pushManager.getSubscription();
         if (pushNotificationState.enabled) {
           const endpoint = existing?.endpoint || "";
@@ -6633,8 +6653,6 @@
           pushNotificationState.enabled = false;
           pushNotificationState.message = "Push notifications are off on this device.";
         } else {
-          const permission = await Notification.requestPermission();
-          if (permission !== "granted") throw new Error("Notification permission was not granted in this browser.");
           const subscription = existing || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(pushNotificationState.publicKey) });
           const response = await appFetch("/api/push-subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: subscription.toJSON() }) }, "");
           const result = await response.json().catch(() => ({}));
@@ -6648,6 +6666,32 @@
         pushNotificationState.loading = false;
         renderAppearanceSettings();
       }
+    }
+
+    async function testPushNotification() {
+      if (!pushNotificationState.enabled || pushNotificationState.loading) return;
+      pushNotificationState.loading = true; renderAppearanceSettings();
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (!subscription) throw new Error("Enable push on this device again before testing.");
+        const response = await appFetch("/api/push-subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test", endpoint: subscription.endpoint }) }, "");
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (response.status === 410) { await subscription.unsubscribe(); pushNotificationState.enabled = false; }
+          throw new Error(result.error || "The test could not be sent.");
+        }
+        pushNotificationState.message = "Test accepted by the push service. If it does not appear, check browser/Windows notification settings and Do Not Disturb.";
+      } catch (error) { pushNotificationState.message = error instanceof Error ? error.message : "Push test failed."; }
+      finally { pushNotificationState.loading = false; renderAppearanceSettings(); }
+    }
+
+    function myWorkLocalDateTime(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return "";
+      const pad = number => String(number).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
     }
 
     function renderAppearanceSettings() {
@@ -6669,7 +6713,7 @@
           <label class="appearance-custom"><span>Custom color</span><input id="appearance-custom-color" type="color" value="${escapeAttr(state.appearance.accent)}" /></label>
           <button class="appearance-choice" style="margin-top:12px;width:100%" data-restore-annual-green="yes">Restore Annual Green</button>
           <div class="appearance-background"><div class="eyebrow">My Work background</div><button class="appearance-upload" data-select-my-work-background="yes">Upload image</button><div class="subline">${state.appearance.myWorkBackground ? "Image applied" : "PNG, JPG, or WebP up to 1.5 MB"}</div>${state.appearance.myWorkBackground ? `<button class="ghost-btn" data-clear-my-work-background="yes">Remove background image</button>` : ""}</div>
-          <div class="appearance-background"><div class="eyebrow">Notifications</div><div class="section-title"><div><strong>Browser push</strong><div class="subline">${escapeHtml(pushNotificationState.message || "Checking notification availability...")}</div></div><button class="${pushNotificationState.enabled ? "solid-btn" : "ghost-btn"}" data-toggle-push-notifications="yes" ${!pushNotificationState.supported || !pushNotificationState.configured || pushNotificationState.loading ? "disabled" : ""}>${pushNotificationState.loading ? "Checking..." : pushNotificationState.enabled ? "On" : "Off"}</button></div></div>
+          <div class="appearance-background"><div class="eyebrow">Notifications</div><div class="section-title"><div><strong>Browser push</strong><div class="subline">${escapeHtml(pushNotificationState.message || "Checking notification availability...")}</div></div><button class="${pushNotificationState.enabled ? "solid-btn" : "ghost-btn"}" data-toggle-push-notifications="yes" ${!pushNotificationState.supported || !pushNotificationState.configured || pushNotificationState.loading ? "disabled" : ""}>${pushNotificationState.loading ? "Checking..." : pushNotificationState.enabled ? "On" : "Off"}</button></div><button class="ghost-btn" data-test-push-notification ${!pushNotificationState.enabled || pushNotificationState.loading ? "disabled" : ""}>Send test notification</button>${pushNotificationState.reminderMessage ? `<p class="subline">${escapeHtml(pushNotificationState.reminderMessage)}</p>` : ""}</div>
         </section>`);
     }
 
@@ -9329,10 +9373,12 @@
               <div class="inline-controls" style="margin-top:12px;"><button class="solid-btn" data-save-my-work-case="yes">Save Case link</button><button class="ghost-btn" data-close-my-work-menu="yes">Cancel</button></div>
             ` : `
               <h3>${state.myWorkMenu === "due" ? "Add due date" : "Remind me"}</h3>
-              ${state.myWorkMenu === "reminder" ? `<button data-set-my-work-time="later">Later today <span>20:00</span></button><button data-set-my-work-time="tomorrow">Tomorrow <span>09:00</span></button>` : ``}
+              ${state.myWorkMenu === "reminder" ? `<button data-set-my-work-time="later">${new Date().getHours() >= 20 ? "Tomorrow" : "Later today"} <span>20:00</span></button><button data-set-my-work-time="tomorrow">Tomorrow <span>09:00</span></button>` : ``}
               <label class="eyebrow" style="display:block; margin:16px 0 6px;">Pick a date & time</label>
-              <input id="my-work-picker" class="field" type="datetime-local" />
+              <input id="my-work-picker" class="field" type="datetime-local" value="${escapeAttr(state.myWorkMenu === "reminder" ? myWorkLocalDateTime(selected?.reminder) : selected?.dueDate ? `${selected.dueDate}T09:00` : "")}" />
+              <p class="subline">Local time: ${escapeHtml(Intl.DateTimeFormat().resolvedOptions().timeZone)}. A reminder is not an automatic completion.</p>
               <div class="inline-controls" style="margin-top:12px;"><button class="solid-btn" data-save-my-work-time="yes">Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}</button><button class="ghost-btn" data-close-my-work-menu="yes">Cancel</button></div>
+              ${state.myWorkMenu === "reminder" && selected?.reminder ? `<button class="ghost-btn" data-clear-my-work-reminder>Remove reminder</button>` : ""}
             `}
           </section>
         </div>` : "";
@@ -9360,7 +9406,7 @@
                   ${state.addingMyWorkStepId === selected.id ? `<div class="my-work-step-entry"><span class="circle-check" aria-hidden="true"></span><input id="my-work-step" placeholder="Type a step and press Enter" autocomplete="off" /></div>` : ""}
                   <button class="my-work-add-step" data-start-my-work-step="${selected.id}"><span aria-hidden="true">+</span><span>Add step</span></button>
                 </div>
-                <button class="my-work-action-card" data-open-my-work-menu="reminder">${myWorkActionIcon("reminder")}<span>${selected.reminder ? `Remind: ${escapeHtml(selected.reminder.replace("T", " "))}` : "Remind me"}</span></button>
+                <button class="my-work-action-card" data-open-my-work-menu="reminder">${myWorkActionIcon("reminder")}<span>${selected.reminder ? `Remind: ${escapeHtml(new Date(selected.reminder).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }))}` : "Remind me"}</span></button>
                 <button class="my-work-action-card" data-open-my-work-menu="due">${myWorkActionIcon("due")}<span>${selected.dueDate ? `Due: ${escapeHtml(selected.dueDate)}` : "Add due date"}</span></button>
                 <div class="my-work-action-card">${myWorkActionIcon("case")}<label class="my-work-assignment"><span>Linked to</span><select class="field" data-my-work-case-select="${selected.id}" aria-label="Link task to Case"><option value="">No linked Case</option>${availableCases.map((item) => `<option value="${item.id}" ${item.id === selected.caseId ? "selected" : ""}>${escapeHtml(`${item.caseCategory || item.caseType} - ${item.clientName || "Untitled Case"}${item.letterNumber ? ` (${item.letterNumber})` : ""}`)}</option>`).join("")}</select></label></div>
                 <div class="my-work-action-card">${myWorkActionIcon("assign")}<label class="my-work-assignment"><span>Assign to</span><input id="my-work-assignee" class="field" list="my-work-pic-options" placeholder="Type a PIC" /></label></div>
@@ -12290,6 +12336,7 @@
       if (selectMyWorkBackgroundTrigger) { document.getElementById("appearance-my-work-background")?.click(); return; }
       if (clearMyWorkBackgroundTrigger) { state.appearance.myWorkBackground = ""; applyAppearance(); persistDemoState(); renderAppearanceSettings(); return; }
       if (togglePushNotificationsTrigger) { await togglePushNotifications(); return; }
+      if (target.closest("[data-test-push-notification]")) { await testPushNotification(); return; }
 
       if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitWorkspaceNavigation("replace"); return; }
       if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
@@ -12303,10 +12350,11 @@
       if (openMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = openMyWorkArchivePeriodTrigger.getAttribute("data-open-my-work-archive-period") || ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitUi("replace"); return; }
       if (closeMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitUi("replace"); return; }
       if (exportMyWorkArchiveTrigger) { exportMyWorkArchivePeriod(exportMyWorkArchiveTrigger.getAttribute("data-export-my-work-archive")); return; }
-      if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (state.myWorkMenu === "due") task.dueDate = date.toISOString().slice(0, 10); else task.reminder = date.toISOString().slice(0, 16); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
-      if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else task.reminder = value; } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (date <= new Date()) date.setDate(date.getDate()+1); if (state.myWorkMenu === "due") task.dueDate = myWorkLocalDateTime(date).slice(0, 10); else task.reminder = date.toISOString(); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
+      if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { const date = new Date(value); if (!Number.isFinite(date.getTime()) || state.myWorkMenu === "reminder" && date <= new Date()) { window.alert("Choose a future reminder date and time."); return; } if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else task.reminder = date.toISOString(); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
       if (saveMyWorkCaseTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) task.caseId = document.getElementById("my-work-case-picker")?.value || ""; state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { caseId: task.caseId }); return; }
       if (selectMyWorkTrigger) { state.selectedMyWorkId = selectMyWorkTrigger.getAttribute("data-select-my-work"); state.myWorkDetailOpen = true; state.addingMyWorkStepId = ""; commitUi("replace"); return; }
+      if (target.closest("[data-clear-my-work-reminder]")) { const task = state.myWork.find(item => item.id === state.selectedMyWorkId); if (task) { task.reminder = ""; state.myWorkMenu = ""; commitUi("replace"); saveMyWorkTaskToDatabase(task); } return; }
       if (startMyWorkStepTrigger) { state.addingMyWorkStepId = startMyWorkStepTrigger.getAttribute("data-start-my-work-step"); commitUi("replace"); return; }
       if (completeMyWorkStepTrigger) { const [taskId, stepIndex] = completeMyWorkStepTrigger.getAttribute("data-my-work-step-done").split(":"); const task = state.myWork.find((item) => item.id === taskId); const step = task?.steps?.[Number(stepIndex)]; if (step) step.done = completeMyWorkStepTrigger.checked; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
 

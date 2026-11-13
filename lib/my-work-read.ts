@@ -35,7 +35,7 @@ export function taskResponse(task: TaskRow, preference?: { favorite?: boolean | 
     title: task.title,
     note: task.notes || "",
     steps: taskSteps(task.steps, task.id),
-    reminder: task.reminder_at ? task.reminder_at.slice(0, 16) : "",
+    reminder: task.reminder_at ? new Date(task.reminder_at).toISOString() : "",
     dueDate: task.due_date || "",
     repeatRule: task.repeat_rule || "none",
     repeatCustomDate: task.repeat_custom_date ? task.repeat_custom_date.slice(0, 16) : "",

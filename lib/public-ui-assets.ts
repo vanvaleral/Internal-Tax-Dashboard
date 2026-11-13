@@ -1,6 +1,13 @@
 // Only reviewed, non-data UI files may bypass session/database checks.
 const PUBLIC_UI_ASSETS = new Set([
   "/favicon.svg",
+  "/favicon.ico",
+  "/favicon-32.png",
+  "/manifest.webmanifest",
+  "/icons/app-192.png",
+  "/icons/app-512.png",
+  "/icons/app-maskable-512.png",
+  "/icons/apple-touch-icon.png",
   "/favicon-options/option-a-diamond.svg",
   "/favicon-options/option-b-monogram.svg",
   "/favicon-options/option-c-orbit.svg",

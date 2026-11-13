@@ -14,7 +14,7 @@ test("central menu visibility hides both stable annual sheets before rendering a
     w.eval(read("public/annual-sheet-dashboard.js"));
     const api = w.AnnualDashboardSheets, root = w.document.getElementById("matrix-view");
     const state = { currentView: "matrix-view", operationsMode: "annual", annualTeam: "accounting" };
-    const apply = w.Function("state", "IS_OFFLINE_DEMO", "IS_ANNUAL_SHEET_PREVIEW", `${visibility}; return applyViewVisibility;`)(state, false, false);
+    const apply = w.Function("state", "IS_OFFLINE_DEMO", "IS_ANNUAL_SHEET_PREVIEW", "IS_CASES_FULLSCREEN", `${visibility}; return applyViewVisibility;`)(state, false, false, false);
     api.render(root, state); const acc = w.document.querySelector("iframe");
     state.annualTeam = "tax"; api.render(root, state); const tax = w.document.querySelectorAll("iframe")[1];
     tax.contentDocument.open(); tax.contentDocument.write("<!doctype html><html><body></body></html>"); tax.contentDocument.close();
@@ -59,7 +59,7 @@ test("central visibility also hides the offline annual integration preview witho
     const state = { currentView: "matrix-view", operationsMode: "annual", annualTeam: "tax" }, root = w.document.getElementById("matrix-view");
     w.AnnualDashboardPreview.render(root, state);
     const frame = w.document.querySelector("iframe");
-    const apply = w.Function("state", "IS_OFFLINE_DEMO", "IS_ANNUAL_SHEET_PREVIEW", `${visibility}; return applyViewVisibility;`)(state, true, true);
+    const apply = w.Function("state", "IS_OFFLINE_DEMO", "IS_ANNUAL_SHEET_PREVIEW", "IS_CASES_FULLSCREEN", `${visibility}; return applyViewVisibility;`)(state, true, true, false);
     state.currentView = "cases-view"; apply("cases-view");
     assert.equal(frame.parentElement.hidden, true);
     state.currentView = "matrix-view"; apply("matrix-view");

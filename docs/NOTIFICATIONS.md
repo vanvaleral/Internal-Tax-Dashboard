@@ -22,6 +22,116 @@ Announcements are stored in Supabase with per-recipient read status. Web Push is
 implemented separately for opted-in devices and requires the configured VAPID
 keys, HTTPS and browser permission; it is not the source of truth for the inbox.
 
+## My Work Reminders And Push Checks (13 November 2026)
+
+The previous My Work implementation stored `reminder_at` but never processed due
+reminders. The datetime picker also sent timezone-less text, and task responses
+discarded the saved UTC offset. Quick choices and manually picked times could
+therefore disagree. Production diagnostics found one overdue reminder without
+reminder delivery, one registered push device and six past accepted push deliveries.
+No current failed push jobs were found; this does not establish device/OS display.
+
+New reminder writes use explicit UTC instants; the picker and card display local
+browser time. Old timezone-less writes are rejected with a refresh instruction.
+Existing stored reminder dates are not guessed/reinterpreted or rewritten. Users
+can remove a reminder, or set a new future time. Quick choices always pick the
+next future 20:00 or tomorrow 09:00 in browser-local time. Reminder links open the
+authorized My Work task rather than the remembered last menu.
+
+The additive database functions create one reminder event per task/time, lock due
+tasks, and atomically write the announcement, recipients and push outbox. Only the
+active registered creator/assignees with permitted My Work and Notifications access
+are targeted, not every leader. In-app delivery does not require a push subscription.
+Task completion, Case timelines, points and task versions are not changed.
+Completed/rescheduled reminders have their remaining delivery jobs cancelled.
+
+`20261113024124_my_work_reminders_and_push_delivery.sql` adds the server-only event
+and scheduler-state tables, an unfinished-reminder index, atomic delivery leases,
+and self-test rate limiting. Existing task/subscription fields are preserved.
+`20261113024528_notification_minute_scheduler.sql` enables pg_cron/pg_net, generates
+a random scheduler token in Vault and installs a **paused** minute-level job.
+The token never appears in source code, cron commands or API responses.
+
+### Deployment And Activation
+
+Apply the migrations before deploying the matching API/UI. Keep the minute job
+paused until deployment is verified. Then explicitly activate with:
+
+```sql
+select public.set_notification_scheduler_enabled(true);
+```
+
+This sets the first activation cutoff: old overdue reminders are deliberately not
+backfilled. When recovering from an interruption, at most the last 24 hours of
+otherwise eligible reminders are considered. The job checks once a minute and
+invokes the website worker only while delivery jobs are due, not for idle ticks.
+Each worker claims at most ten jobs with five-minute leases and uses at most three
+concurrent deliveries. Push retries retain the same notification tag. Timing is
+best effort, generally a minute or two, not an exact-second alarm.
+
+To pause without removing history:
+
+```sql
+select public.set_notification_scheduler_enabled(false);
+```
+
+Existing Vercel daily retries remain compatible via CRON_SECRET. The new scheduler
+authenticates through a narrow service-only Vault-token verifier. It does not need
+the VAPID private key or a Supabase service-role key in the cron command. Anonymous
+and ordinary authenticated users cannot run scheduler/queue/test-claim functions.
+
+### Device Checks
+
+Settings checks both VAPID keys, their mathematical pairing and VAPID subject in
+the **website server environment (Vercel)**. Supabase Edge Function secrets do not
+configure these Next.js routes. It shows this device's subscription and actual
+browser permission, not whether a different device is enabled. Permission is
+requested only from the On click, before unrelated asynchronous work; subscribing
+waits for service-worker activation. Off revokes only this device.
+
+Settings > Notifications > Send test notification sends a user-initiated push to
+the current account/device only, limited to once per 30 seconds. Expired 404/410
+subscriptions are removed and can be re-enabled. Other errors show a sanitized
+provider status rather than endpoint keys. Accepted by a provider does not prove
+that Windows/browser displayed it; check site permission, OS notifications and
+Do Not Disturb. Background push also depends on the browser/OS remaining capable
+of receiving it, and cannot wake a powered-off computer.
+
+Push clicks are same-origin and use the protected live renderer, never demo data.
+The service worker uses an existing PNG icon and stable tags without re-alerting
+for the same retry. No unrequested test push or historical notification is sent
+during development/validation. Local tests use synthetic data and mocked providers.
+
+### Hosted Preparation / 13 November 2026
+
+Applied with explicit approval to `kedpcolyklquhfjzimvx`:
+
+- `20261113030524_my_work_reminders_and_push_delivery` corresponds to local
+  `20261113024124_my_work_reminders_and_push_delivery.sql`.
+- `20261113030528_notification_minute_scheduler` corresponds to local
+  `20261113024528_notification_minute_scheduler.sql`.
+
+Do not reapply historical migrations with an unreconciled `supabase db push`.
+The named cron job is inactive, settings are disabled and activation cutoff is
+null. A real tick returned enabled=false without enqueueing work. No reminder
+events, test pushes or historical announcements were created. All six existing
+tasks had identical pre/post hashes; the existing subscription's original fields
+also matched. Announcement/recipient/delivery counts were unchanged.
+
+Anonymous enqueue and authenticated scheduler activation remain denied, server
+claiming is permitted and an invalid scheduler token is rejected. Security
+advisors gained only the expected two INFO entries for server-only RLS tables
+with no browser policies; the pre-existing WARN findings are unchanged.
+The isolated PostgreSQL fixture passed, as did 555 regression tests, the targeted
+device/time tests, typecheck and production build. Test fixture stubs were updated
+for the already-existing Cases viewport constant and compact/safe-area client
+button markup; no unrelated production behavior was changed for those tests.
+
+Application changes are not deployed by a database migration. Deploy the matching
+code, verify the protected worker/new settings response, explicitly activate the
+schedule, and use the device's Send test notification action for an OS/browser
+display check. Old reminders should be reset to a new future time deliberately.
+
 ## Case-Creation Delivery Fix (2026-11-02)
 
 New saved Himbauan/Pemeriksaan cases create an operational announcement for their

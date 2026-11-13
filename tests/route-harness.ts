@@ -9,14 +9,14 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
   const context = { exports: {} as Record<string, any>, require(name: string) {
     if (name === "next/server") return bindings[name] || { NextResponse: { json: (body: any, options: any) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) }, after: () => {} };
     if (name in bindings) return bindings[name];
-    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/my-work-steps", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement", "@/lib/case-access", "@/lib/case-progress-page", "@/lib/case-activity"].includes(name)) {
+    if (["@/lib/workspace-reads", "@/lib/my-work-read", "@/lib/my-work-steps", "@/lib/my-work-reminders", "@/lib/annual-sheet-read", "@/lib/workspace-security", "@/lib/feature-access", "@/lib/client-engagement", "@/lib/case-access", "@/lib/case-progress-page", "@/lib/case-activity"].includes(name)) {
       return loadRoute(`${name.replace("@/", "")}.ts`, {
         "@/lib/access": { isLeadership: (role: string) => ["leader", "supervisor", "partner", "admin"].includes(role) },
         ...bindings
       });
     }
     throw new Error(`Unmocked route dependency ${name}`);
-  }, URL, URLSearchParams, Date, Set, Map, structuredClone, console, crypto: { randomUUID } };
+  }, URL, URLSearchParams, Date, Set, Map, structuredClone, console, process, crypto: { randomUUID } };
   vm.runInNewContext(compiled, context, { filename: file });
   return context.exports;
 }
@@ -36,6 +36,7 @@ export function mockDatabase(tables: Record<string, any[]>) {
       or(expression: string) { const parts = expression.split(",").map(item => item.split(".eq.")); filters.push(row => parts.some(([key, value]) => row[key] === value)); return query; },
       insert(value: any) { action = "insert"; input = value; return query; },
       update(value: any) { action = "update"; input = value; return query; },
+      delete() { action = "delete"; return query; },
       upsert(value: any) { action = "upsert"; input = value; return query; },
       maybeSingle() { single = true; return Promise.resolve(run()); }, single() { single = true; return Promise.resolve(run()); },
       then(resolve: any, reject: any) { return Promise.resolve(run()).then(resolve, reject); }
@@ -50,6 +51,7 @@ export function mockDatabase(tables: Record<string, any[]>) {
         rows.push(...added); result = added;
       }
       if (action === "update") result.forEach(row => Object.assign(row, structuredClone(input), table === "my_work_tasks" ? { updated_at: `${row.updated_at}+1` } : {}));
+      if (action === "delete") for (let index = rows.length - 1; index >= 0; index--) if (result.includes(rows[index])) rows.splice(index, 1);
       if (action === "upsert") { result = Array.isArray(input) ? input : [input]; rows.push(...structuredClone(result)); }
       const count = result.length;
       if (bounds && action === "read") result = result.slice(bounds[0], bounds[1] + 1);

@@ -46,7 +46,7 @@ test("F15 performance writes are ledger-backed and manual adjustments require le
 test("F16 notifications use a transactional outbox and bounded asynchronous retries", () => {
   assert.match(migration, /create or replace function public\.enqueue_operational_announcement/);
   assert.match(notificationHelper, /rpc\("enqueue_operational_announcement"/);
-  assert.match(notificationWorker, /\.limit\(100\)/);
+  assert.match(notificationWorker, /rpc\("claim_notification_deliveries", \{ p_limit: 10 \}\)/);
   assert.match(notificationWorker, /max_attempts/);
   assert.match(notificationWorker, /directory_active/);
 });

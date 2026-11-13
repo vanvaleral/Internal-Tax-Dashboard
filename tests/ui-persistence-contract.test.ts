@@ -243,7 +243,7 @@ test("mobile navigation is limited to operational companion workspaces", async (
 test("mobile workspace keeps the header, cases controls, and client list compact", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /workspace-cases \.case-mobile-tabs/);
-  assert.match(demo, /workspace-clients \.client-fab[\s\S]{0,160}bottom: 104px/);
+  assert.match(demo, /workspace-clients \.client-fab[\s\S]{0,160}bottom: calc\(104px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(demo, /client-mobile-row/);
   assert.doesNotMatch(demo, /client-mobile-card[\s\S]{0,1800}obligationStripMarkup\(client\)/);
   assert.match(demo, /topbar-mobile-icon/);
@@ -342,5 +342,5 @@ test("mobile header keeps attendance and custom icons centered", async () => {
   assert.match(demo, /\.topbar-actions \.mobile-attendance-trigger \{[\s\S]{0,320}place-items: center;/);
   assert.match(demo, /\.topbar-actions \.ghost-btn \{[\s\S]{0,320}display: grid;[\s\S]{0,320}place-items: center;[\s\S]{0,320}line-height: 0;/);
   assert.match(demo, /\.workspace-cases \.case-mobile-actions \.solid-btn \{[\s\S]{0,360}display: grid;[\s\S]{0,360}place-items: center;/);
-  assert.match(demo, /client-fab[\s\S]{0,520}<svg viewBox="0 0 24 24" aria-hidden="true">/);
+  assert.match(demo, /<span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24">/);
 });

@@ -23,7 +23,7 @@ test("announcements enqueue immediate Web Push with durable retry", async () => 
   ]);
   assert.match(notifications, /channel: "web_push", status: "queued"/);
   assert.match(notifications, /webpush\.sendNotification/);
-  assert.match(worker, /\.in\("status", \["queued", "failed"\]\)/);
+  assert.match(worker, /\.rpc\("claim_notification_deliveries"/);
   assert.match(worker, /\[404, 410\]/);
   assert.match(serviceWorker, /self\.addEventListener\("push"/);
   assert.match(serviceWorker, /self\.addEventListener\("notificationclick"/);

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readMyWork, taskResponse, TASK_SELECT, type TaskRow } from "@/lib/my-work-read";
 import { taskSteps, validateTaskSteps } from "@/lib/my-work-steps";
+import { reminderInstant } from "@/lib/my-work-reminders";
 
 
 async function currentProfile() {
@@ -105,7 +106,8 @@ export async function POST(request: Request) {
   if (!/^[a-zA-Z0-9-]{8,100}$/.test(requestId)) return NextResponse.json({ error: "A stable task creation ID is required. Reload your workspace." }, { status: 400 });
   if (!title) return NextResponse.json({ error: "Task title is required." }, { status: 400 });
   let steps;
-  try { steps = validateTaskSteps(body.steps ?? [], [], requestId); }
+  let reminder: string | null;
+  try { steps = validateTaskSteps(body.steps ?? [], [], requestId); reminder = reminderInstant(body.reminder); }
   catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
   const repeatRule = ["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule) ? body.repeatRule : "none";
   let caseId: string | null;
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
     steps,
     step_change_actor_profile_id: current.profile.id,
     step_change_id: crypto.randomUUID(),
-    reminder_at: body.reminder || null,
+    reminder_at: reminder,
     due_date: body.dueDate || null,
     repeat_rule: repeatRule,
     repeat_custom_date: repeatRule === "custom" ? body.repeatCustomDate || null : null,
@@ -192,7 +194,10 @@ export async function PATCH(request: Request) {
       update.step_change_id = crypto.randomUUID();
     }
   }
-  if (typeof body.reminder === "string") update.reminder_at = body.reminder || null;
+  if (body.reminder !== undefined) {
+    try { update.reminder_at = reminderInstant(body.reminder); }
+    catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 400 }); }
+  }
   if (typeof body.dueDate === "string") update.due_date = body.dueDate || null;
   if (["none", "daily", "weekly", "monthly", "annually", "custom"].includes(body.repeatRule)) {
     update.repeat_rule = body.repeatRule;

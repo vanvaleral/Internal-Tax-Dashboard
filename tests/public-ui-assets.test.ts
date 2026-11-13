@@ -7,13 +7,13 @@ import { isPublicUiAsset } from "../lib/public-ui-assets.ts";
 import * as featureAccess from "../lib/feature-access.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
-  for (const path of ["/favicon.svg", "/annual-sheet-live.js", "/annual-accounting-sheet-demo.css", "/submenu-tabs.css", "/vendor/purify.min.js", "/workspace-sync.js", "/images/lmats-logo-official.png"]) {
+  for (const path of ["/favicon.svg", "/favicon.ico", "/favicon-32.png", "/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/annual-sheet-live.js", "/annual-accounting-sheet-demo.css", "/submenu-tabs.css", "/vendor/purify.min.js", "/workspace-sync.js", "/images/lmats-logo-official.png"]) {
     assert.ok(existsSync(new URL(`../public${path}`, import.meta.url)));
     assert.equal(isPublicUiAsset(path, "GET"), true);
     assert.equal(isPublicUiAsset(path, "HEAD"), true);
     assert.equal(isPublicUiAsset(path, "POST"), false);
   }
-  for (const path of ["/", "/dashboard", "/demo.html", "/annual-accounting-sheet-demo.html", "/annual-accounting-sheet-demo.js", "/annual-tax-sheet-config.js", "/annual-accounting-dashboard-preview.js", "/api/annual-sheet", "/api/clients/export", "/api/profile.css", "/api/data.js", "/client-import-template.csv", "/private/data.svg", "/annual-sheet-live.js/extra"]) {
+  for (const path of ["/", "/dashboard", "/demo.html", "/annual-accounting-sheet-demo.html", "/annual-accounting-sheet-demo.js", "/annual-tax-sheet-config.js", "/annual-accounting-dashboard-preview.js", "/api/annual-sheet", "/api/clients/export", "/api/profile.css", "/api/data.js", "/client-import-template.csv", "/private/data.svg", "/annual-sheet-live.js/extra", "/icons/private.json", "/icons/app-512.png/extra", "/manifest.webmanifest/extra"]) {
     assert.equal(isPublicUiAsset(path, "GET"), false, path);
   }
 });
@@ -40,6 +40,7 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   const run = (path: string, workspaceUser = "") => context.exports.middleware({ method: "GET", nextUrl: new URL(`https://test.local${path}`), url: `https://test.local${path}`, headers: { get: () => workspaceUser }, cookies: { getAll: () => [] } });
   assert.equal((await run("/annual-sheet-live.js")).status, 200);
   assert.equal((await run("/favicon.svg")).status, 200);
+  for (const path of ["/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/favicon-32.png"]) assert.equal((await run(path)).status, 200, "installation assets do not need a session");
   assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
   assert.equal((await run("/api/workspace/bootstrap")).status, 200);
   for (const path of ["/api/cases", "/api/cases/workflow", "/api/cases/report"]) assert.equal((await run(path)).status, 200, "exact Cases handlers authenticate themselves");
