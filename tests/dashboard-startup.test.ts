@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { JSDOM, VirtualConsole } from "jsdom";
+import { defaultFeaturePolicy } from "../lib/feature-access.ts";
 
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const html = read("public/demo.html");
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-async function openDashboard(view = "matrix-view", mode = "monthly", savedUi: Record<string, any> = {}, emptyClients = false) {
+async function openDashboard(view = "matrix-view", mode = "monthly", savedUi: Record<string, any> = {}, emptyClients = false, role = "supervisor") {
   const warnings: string[] = [], requests: string[] = [];
   const virtualConsole = new VirtualConsole();
   for (const type of ["warn", "error"] as const) virtualConsole.on(type, (...items: any[]) => warnings.push(items.map(item => item?.stack || String(item)).join(" ")));
@@ -20,18 +21,88 @@ async function openDashboard(view = "matrix-view", mode = "monthly", savedUi: Re
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.history.replaceState = () => {}; w.history.pushState = () => {};
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
+  const policy = defaultFeaturePolicy();
+  policy.associate.management.mode = "enabled"; policy.leader.management.mode = "enabled";
+  let featureAccess = { policy, version: 1, ready: true };
+  const featureWrites: any[] = [];
   w.fetch = async (url: string, init: any = {}) => {
     requests.push(url);
+    if (url === "/api/feature-access" && init.method === "PUT") {
+      const body = JSON.parse(init.body); featureWrites.push(body);
+      featureAccess = { policy: body.policy, version: featureAccess.version + 1, ready: true };
+      return { ok: true, status: 200, json: async () => structuredClone(featureAccess) };
+    }
     assert.equal(init.method || "GET", "GET", "startup must not write business records");
-    const body = url === "/api/profile" ? { user: { id: "auth-user-1" }, profile: { id: "staff-1", display_name: "Supervisor", role: "supervisor", team_division: "Accounting Team", directory_active: true } }
+    const body = url === "/api/profile" ? { user: { id: "auth-user-1" }, featureAccess, profile: { id: "staff-1", display_name: "Supervisor", role, team_division: "Accounting Team", directory_active: true } }
       : url === "/api/clients" ? { data: emptyClients ? [] : [{ id: "client-1", client_code: "CL-00001", legal_name: "Confirmed database client", company_form: "PT", status: "Active" }] }
       : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js"));
   await w.eval(html.match(/<script>([\s\S]*?)<\/script>/)![1]); await tick(); await tick();
-  return { dom, w, requests, warnings, cache };
+  return { dom, w, requests, warnings, cache, featureWrites };
 }
+
+test("PIC Features is a separate saved Management tab and PIC Access remains focused on accounts", async () => {
+  const d = await openDashboard("dashboard-view", "monthly", { managementTab: "workload" });
+  try {
+    const doc = d.w.document;
+    assert.ok(doc.querySelector('[data-management-tab="features"]'));
+    assert.equal(doc.querySelector(".feature-access-editor"), null);
+    assert.ok(doc.querySelector("[data-create-staff]"));
+    doc.querySelector('[data-management-tab="features"]').click();
+    assert.ok(doc.querySelector(".feature-access-editor"));
+    assert.equal(doc.querySelector("[data-create-staff]"), null);
+    assert.equal(doc.getElementById("workspace-breadcrumb").textContent, "Management / PIC Features");
+    assert.equal(JSON.parse(d.cache.get("tax-practice-v2:auth-user-1")!).ui.managementTab, "features");
+    assert.equal(d.featureWrites.length, 0); assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+  const reopened = await openDashboard("dashboard-view", "monthly", { managementTab: "features" });
+  try {
+    assert.ok(reopened.w.document.querySelector(".feature-access-editor"));
+    assert.equal(reopened.w.document.getElementById("workspace-breadcrumb").textContent, "Management / PIC Features");
+    assert.deepEqual(reopened.warnings, []);
+  } finally { reopened.dom.window.close(); }
+});
+
+test("PIC Features retains unsaved rule/message edits across tabs and saves through the existing versioned endpoint", async () => {
+  const d = await openDashboard("dashboard-view", "monthly", { managementTab: "features" });
+  try {
+    const doc = d.w.document;
+    const input = doc.querySelector('[data-feature-mode="cases"][data-feature-tier="associate"]');
+    input.value = "preview"; input.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    const message = doc.querySelector('[data-feature-message="cases"][data-feature-tier="associate"]');
+    message.value = "Please report any problems."; message.dispatchEvent(new d.w.Event("input", { bubbles: true }));
+    doc.querySelector('[data-management-tab="workload"]').click(); await tick();
+    assert.equal(doc.querySelector(".feature-access-editor"), null);
+    doc.querySelector('[data-management-tab="features"]').click();
+    assert.equal(doc.querySelector('[data-feature-mode="cases"][data-feature-tier="associate"]').value, "preview");
+    assert.equal(doc.querySelector('[data-feature-message="cases"][data-feature-tier="associate"]').value, "Please report any problems.");
+    assert.equal(d.featureWrites.length, 0);
+    doc.querySelector("[data-feature-save]").click(); await tick(); await tick();
+    assert.equal(d.featureWrites.length, 1); assert.equal(d.featureWrites[0].version, 1);
+    assert.equal(d.featureWrites[0].policy.associate.cases.message, "Please report any problems.");
+    assert.match(doc.querySelector("[data-feature-save-status]").textContent, /Saved settings \/ version 2/);
+    assert.equal(doc.querySelector("[data-feature-save]").disabled, true);
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("Associates and Leaders with Management access cannot open PIC Features via saved or forged tab navigation", async () => {
+  for (const role of ["staff", "leader"]) {
+    const d = await openDashboard("dashboard-view", "monthly", { managementTab: "features" }, false, role);
+    try {
+      const doc = d.w.document;
+      assert.equal(doc.querySelector('[data-management-tab="features"]'), null);
+      assert.equal(doc.querySelector(".feature-access-editor"), null);
+      assert.equal(doc.getElementById("workspace-breadcrumb").textContent, "Management / KPI Overview");
+      const forged = doc.createElement("button"); forged.dataset.managementTab = "features"; doc.body.append(forged); forged.click();
+      assert.equal(doc.querySelector(".feature-access-editor"), null);
+      assert.equal(doc.getElementById("workspace-breadcrumb").textContent, "Management / KPI Overview");
+      assert.equal(d.featureWrites.length, 0); assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
+});
 
 test("authenticated dashboard startup opens from each primary menu using confirmed API data", async () => {
   for (const [view, mode] of [["matrix-view", "monthly"], ["matrix-view", "annual"], ["cases-view", "annual"], ["my-work-view", "annual"], ["client-management-view", "annual"]]) {

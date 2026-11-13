@@ -1,11 +1,16 @@
 # Feature Access And Development Notices
 
-Management > PIC Access now includes a shared access matrix for Associate and
+Management > PIC Features contains the shared access matrix for Associate and
 Leader. Associate is the display label for the existing `staff` role; no staff
 identity, role value, PIC assignment or operational history is migrated.
 
 Supervisor, Partner and legacy Admin retain every menu. Only these roles can
 manage PIC Access, including account creation, roles, claim codes and archival.
+PIC Features has the same Supervisor/Partner/Admin-only restriction, but is a
+separate sibling tab: PIC Access remains focused on staff/account administration.
+Saved navigation and breadcrumbs recognize PIC Features. Unsaved feature settings
+survive switching Management tabs; saving/reloading uses the existing versioned
+settings API and audit history. Moving this panel requires no database migration.
 Leader no longer inherits staff-directory administration. Partner/Admin identities
 remain manageable only by a Partner/Admin under the existing identity rules.
 

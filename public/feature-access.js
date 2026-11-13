@@ -24,7 +24,7 @@
   function chrome(view){
     document.querySelectorAll(".nav-btn[data-view]").forEach(b=>{const f=views[b.dataset.view];if(f)b.hidden=!visible(f);});
     document.querySelectorAll("[data-open-announcement-inbox]").forEach(b=>b.hidden=!visible("notifications"));
-    document.querySelectorAll('[data-management-tab="workload"]').forEach(b=>b.hidden=!manager());
+    document.querySelectorAll('[data-management-tab="workload"],[data-management-tab="features"]').forEach(b=>b.hidden=!manager());
     const root=document.getElementById("feature-notice-root"),f=views[view];
     if(root)root.innerHTML=f&&rule(f).mode==="preview"?`<div class="feature-notice" role="status"><strong>In progress</strong><span>${esc(rule(f).message)}</span></div>`:"";
   }

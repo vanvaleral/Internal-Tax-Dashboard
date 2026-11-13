@@ -62,7 +62,7 @@ test('database guards are restrictive, audited atomically and unavailable to sel
 });
 
 function ui(role='staff'){
-  const dom=new JSDOM('<button class="nav-btn" data-view="matrix-view"></button><button class="nav-btn" data-view="cases-view"></button><button data-management-tab="workload"></button><div id="feature-notice-root"></div><div id="matrix-view"></div><div id="editor"></div>',{runScripts:'outside-only'}),w=dom.window as any;
+  const dom=new JSDOM('<button class="nav-btn" data-view="matrix-view"></button><button class="nav-btn" data-view="cases-view"></button><button data-management-tab="workload"></button><button data-management-tab="features"></button><div id="feature-notice-root"></div><div id="matrix-view"></div><div id="editor"></div>',{runScripts:'outside-only'}),w=dom.window as any;
   w.structuredClone=structuredClone;w.eval(read('public/feature-access.js'));
   let currentRole=role,policy=access.defaultFeaturePolicy(),version=1;const writes:any[]=[];
   const settings=()=>({policy,version,ready:true});
@@ -73,12 +73,14 @@ function ui(role='staff'){
 test('menu UI hides unavailable menus, shows escaped preview notices and blocks maintenance content',()=>{
   const d=ui();try{
     assert.equal(d.w.document.querySelector('[data-view="matrix-view"]').hidden,true);
+    assert.equal(d.w.document.querySelector('[data-management-tab="features"]').hidden,true);
     assert.equal(d.api.normalize('matrix-view'),'my-work-view');
     d.policy.associate.operations={mode:'preview',message:'<img src=x onerror=alert(1)> In progress'};d.api.accept(d.settings(),'staff');d.api.chrome('matrix-view');
     assert.equal(d.w.document.querySelector('[data-view="matrix-view"]').hidden,false);assert.match(d.w.document.querySelector('#feature-notice-root').textContent,/In progress/);assert.equal(d.w.document.querySelectorAll('img').length,0);
     d.policy.associate.operations.mode='maintenance';d.api.accept(d.settings(),'staff');assert.equal(d.api.normalize('matrix-view'),'matrix-view');assert.equal(d.api.blocked('matrix-view'),true);assert.match(d.w.document.querySelector('#matrix-view').textContent,/temporarily unavailable/);
     d.setRole('leader');assert.equal(d.api.manager(),false);assert.equal(d.api.editor(),'');
     d.setRole('supervisor');assert.equal(d.api.manager(),true);assert.equal(d.api.can('operations'),true);
+    d.api.chrome('matrix-view');assert.equal(d.w.document.querySelector('[data-management-tab="features"]').hidden,false);
   }finally{d.dom.window.close();}
 });
 test('background policy refresh cannot advance the version of an unsaved settings draft',async()=>{

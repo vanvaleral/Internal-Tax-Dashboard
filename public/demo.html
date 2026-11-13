@@ -321,7 +321,12 @@
     .my-work-step-entry .circle-check { display:block; }
     .my-work-step-entry input { width:100%; padding:7px 0; border:0; border-bottom:1px solid #e5e7eb; background:#fff; outline:0; }
     .my-work-step-entry input:focus { border-bottom-color:#3679cf; }
-    .my-work-step-row { display:grid; grid-template-columns:19px 1fr 16px; gap:10px; align-items:center; margin:10px 0; color:#4b5563; }
+    .my-work-step-row { display:grid; grid-template-columns:19px minmax(0,1fr) 16px; gap:10px; align-items:center; margin:10px 0; color:var(--ink); }
+    .my-work-step-title { min-width:0; width:100%; min-height:32px; padding:5px 6px; border:1px solid transparent; border-radius:6px; background:transparent; color:inherit; font:inherit; cursor:text; text-overflow:ellipsis; }
+    .my-work-step-title:hover { background:var(--neutral-soft); }
+    .my-work-step-title:focus { outline:2px solid var(--accent); outline-offset:-1px; background:var(--panel-solid); }
+    .my-work-step-row.is-complete .my-work-step-title { text-decoration:line-through; color:var(--muted); }
+    .my-work-step-row.is-complete .my-work-step-title:focus { text-decoration:none; color:var(--ink); }
     .my-work-action-card { display:flex; align-items:center; gap:12px; width:100%; min-height:68px; margin-bottom:10px; padding:18px; border:1px solid #e5e7eb; border-radius:3px; color:#414b59; background:#fff; text-align:left; transition:background-color 160ms ease; }
     button.my-work-action-card:hover:not(:disabled), button.my-work-action-card:focus-visible:not(:disabled) { background:#f3f6ff; box-shadow:none !important; filter:none; transform:none !important; }
     .my-work-action-icon { width:19px; height:19px; flex:0 0 auto; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round; }
@@ -5168,6 +5173,7 @@
           trends: ["Management / Client Growth", "Management Workspace", "Trend view for fee growth, proposal conversion, and client portfolio movement."],
           portfolio: ["Management / Portfolio Dashboard", "Management Workspace", "Executive portfolio summary for client-master health, fee base, and PIC coverage."],
           workload: ["Management / PIC Access", "Management Workspace", "Leadership-only directory controls for PIC roles, teams, and access status."],
+          features: ["Management / PIC Features", "Management Workspace", "Configure Associate and Leader menu access, maintenance restrictions, and development notices."],
           recognition: ["Management / Recognition", "Management Workspace", "Transparent points, monthly recognition, and supervisor-ready incentive estimates."],
           report: ["Management / Monthly Report", "Management Workspace", "Printable monthly partner briefing and period-end activity review."],
           announcements: ["Management / Notifications", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."],
@@ -7066,7 +7072,7 @@
                 <button class="${state.managementTab === "overview" ? "solid-btn" : "ghost-btn"}" data-management-tab="overview">KPI Overview</button>
                 <button class="${state.managementTab === "trends" ? "solid-btn" : "ghost-btn"}" data-management-tab="trends">Client Growth</button>
                 <button class="${state.managementTab === "portfolio" ? "solid-btn" : "ghost-btn"}" data-management-tab="portfolio">Portfolio Dashboard</button>
-                ${window.WorkspaceFeatures.manager() ? `<button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button>` : ""}
+                ${window.WorkspaceFeatures.manager() ? `<button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button><button class="${state.managementTab === "features" ? "solid-btn" : "ghost-btn"}" data-management-tab="features">PIC Features</button>` : ""}
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
                 <button class="${state.managementTab === "report" ? "solid-btn" : "ghost-btn"}" data-management-tab="report">Monthly Report</button>
                 <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Notifications</button>
@@ -7150,8 +7156,9 @@
             <section class="panel"><div class="section-title"><div><h3>Regional Tax Office (KPP) Client Distribution</h3><p>Active portfolio by registered tax office region.</p></div></div><div class="compact-grid-4">${regionalCounts.map((row) => `<div class="detail-card"><div class="eyebrow">${row.region}</div><strong>${row.count} clients</strong><div class="subline">${clientGrowth.at(-1)?.active ? (row.count / clientGrowth.at(-1).active * 100).toFixed(1) : "0.0"}% share of portfolio</div></div>`).join("")}</div></section>
           ` : ``}
 
+          ${state.managementTab === "features" && window.WorkspaceFeatures.manager() ? window.WorkspaceFeatures.editor() : ""}
+
           ${state.managementTab === "workload" && window.WorkspaceFeatures.manager() ? `
-            ${window.WorkspaceFeatures.editor()}
             <section class="panel">
               <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff roles, teams, and account access. Changes notify Supervisors and Partners.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
               <div class="workspace-tabs submenu-secondary" style="margin-bottom:16px;" role="group" aria-label="PIC access status">
@@ -9248,6 +9255,28 @@
       URL.revokeObjectURL(link.href);
     }
 
+    function saveMyWorkStepTitle(input) {
+      const [taskId, index] = input.getAttribute("data-my-work-step-title").split(":");
+      const task = state.myWork.find(item => item.id === taskId);
+      const step = task?.steps?.[Number(index)];
+      if (!step) return false;
+      const title = input.value.trim();
+      if (!title || title.length > 1000) {
+        input.setCustomValidity("Enter a subtask title between 1 and 1000 characters.");
+        input.reportValidity();
+        return false;
+      }
+      input.setCustomValidity("");
+      input.value = title;
+      if (step.title === title) return true;
+      step.title = title;
+      input.closest(".my-work-step-row")?.querySelector("[data-my-work-step-done]")?.setAttribute("aria-label", `Complete subtask: ${title}`);
+      // Keep this editor mounted while the existing save queue confirms the edit.
+      persistDemoState();
+      saveMyWorkTaskToDatabase(task);
+      return true;
+    }
+
     function renderMyWork() {
       const root = document.getElementById("my-work-view");
       const archiveThreshold = new Date();
@@ -9327,7 +9356,7 @@
                   <button class="${selected.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${selected.id}" aria-label="Favorite task">☆</button>
                   <input class="circle-check" type="checkbox" data-my-work-done="${selected.id}" ${selected.done ? "checked" : ""} />
                   <textarea id="my-work-title-detail" class="my-work-title-input" rows="1" aria-label="Task title">${escapeHtml(selected.title)}</textarea>
-                  ${(selected.steps || []).map((step, index) => `<label class="my-work-step-row"><input class="circle-check" type="checkbox" data-my-work-step-done="${selected.id}:${index}" ${step.done ? "checked" : ""} /><span ${step.done ? 'style="text-decoration:line-through; color:#8a93a3;"' : ""}>${escapeHtml(step.title)}</span><span aria-hidden="true">&#8942;</span></label>`).join("")}
+                  ${(selected.steps || []).map((step, index) => `<div class="my-work-step-row ${step.done ? "is-complete" : ""}"><input class="circle-check" type="checkbox" data-my-work-step-done="${selected.id}:${index}" aria-label="Complete subtask: ${escapeAttr(step.title)}" ${step.done ? "checked" : ""} /><input id="my-work-step-title-${index}" class="my-work-step-title" type="text" data-my-work-step-title="${selected.id}:${index}" value="${escapeAttr(step.title)}" maxlength="1000" aria-label="Edit subtask title" autocomplete="off" /><span aria-hidden="true">&#8942;</span></div>`).join("")}
                   ${state.addingMyWorkStepId === selected.id ? `<div class="my-work-step-entry"><span class="circle-check" aria-hidden="true"></span><input id="my-work-step" placeholder="Type a step and press Enter" autocomplete="off" /></div>` : ""}
                   <button class="my-work-add-step" data-start-my-work-step="${selected.id}"><span aria-hidden="true">+</span><span>Add step</span></button>
                 </div>
@@ -11692,14 +11721,14 @@
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
         clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"],
-        managementTab: ["overview", "trends", "portfolio", "workload", "recognition", "report", "announcements", "access"]
+        managementTab: ["overview", "trends", "portfolio", "workload", "features", "recognition", "report", "announcements", "access"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
       for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
       if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
       window.WorkspaceFeatures.setRole(state.role);
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
-      if (state.managementTab === "workload" && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
+      if (["workload", "features"].includes(state.managementTab) && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
     }
 
     function normalizeMobileWorkspaceView() {
@@ -12818,7 +12847,7 @@
       }
 
       if (managementTabTrigger) {
-        if (managementTabTrigger.getAttribute("data-management-tab") === "workload" && !window.WorkspaceFeatures.manager()) return;
+        if (["workload", "features"].includes(managementTabTrigger.getAttribute("data-management-tab")) && !window.WorkspaceFeatures.manager()) return;
         if (managementTabTrigger.getAttribute("data-management-tab") !== "workload") {
           latestStaffClaimCode = "";
           latestStaffClaimFor = "";
@@ -13877,6 +13906,10 @@
     });
 
     document.addEventListener("input", (event) => {
+      if (event.target instanceof HTMLInputElement && event.target.matches("[data-my-work-step-title]")) {
+        event.target.setCustomValidity("");
+        return;
+      }
       const target = event.target instanceof HTMLTextAreaElement ? event.target : null;
       if (!target || target.id !== "my-work-title-detail") return;
       target.style.height = "auto";
@@ -13885,6 +13918,10 @@
 
     document.addEventListener("focusout", (event) => {
       const target = event.target;
+      if (target instanceof HTMLInputElement && target.matches("[data-my-work-step-title]")) {
+        saveMyWorkStepTitle(target);
+        return;
+      }
       if (!(target instanceof HTMLInputElement) || !target.matches("[data-case-inline]")) return;
       const record = taxCases.find((item) => item.id === target.getAttribute("data-case-inline"));
       const field = target.getAttribute("data-case-field");
@@ -13894,6 +13931,10 @@
 
     document.addEventListener("change", (event) => {
       const target = event.target;
+      if (target instanceof HTMLInputElement && target.matches("[data-my-work-step-title]")) {
+        saveMyWorkStepTitle(target);
+        return;
+      }
       if (target instanceof HTMLSelectElement && target.id === "annual-tax-year") {
         state.annualPlanYear = Number(target.value);
         state.expandedAnnualAccountingId = "";
@@ -14580,6 +14621,23 @@
     });
 
     window.addEventListener("keydown", (event) => {
+      if (event.target instanceof HTMLInputElement && event.target.matches("[data-my-work-step-title]")) {
+        if (event.isComposing) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (saveMyWorkStepTitle(event.target)) event.target.blur();
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          const [taskId, index] = event.target.getAttribute("data-my-work-step-title").split(":");
+          const step = state.myWork.find(task => task.id === taskId)?.steps?.[Number(index)];
+          event.target.value = step?.title || "";
+          event.target.setCustomValidity("");
+          event.target.blur();
+          return;
+        }
+      }
       if (event.key === "Escape" && state.announcementInboxOpen) {
         state.announcementInboxOpen = false;
         renderAnnouncementInbox();
