@@ -1,7 +1,7 @@
 .my-work-sort-group { position:relative; min-height:0; }
 [data-my-work-reorder-row] { position:relative; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 [data-my-work-reorder-row][hidden] { display:none; }
-[data-my-work-reorder-row].is-reorder-holding::after { content:""; position:absolute; bottom:0; left:0; height:2px; width:100%; background:var(--accent); transform-origin:left; animation:my-work-hold 3s linear both; pointer-events:none; }
+[data-my-work-reorder-row].is-reorder-holding::after { content:""; position:absolute; bottom:0; left:0; height:2px; width:100%; background:var(--accent); transform-origin:left; animation:my-work-hold 1s linear both; pointer-events:none; }
 .my-work-task-list.is-reordering .my-work-row,.my-work-task-list.is-reordering .my-work-section-toggle { filter:brightness(.43); transition:filter 150ms ease; }
 .my-work-task-list.is-reordering { overflow-anchor:none; }
 .my-work-drop-gap { margin:3px 0; border:1px dashed rgba(255,255,255,.55); border-radius:4px; background:rgba(255,255,255,.08); }

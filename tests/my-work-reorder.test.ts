@@ -45,9 +45,9 @@ function fixture(reduced=false){
   return {dom,w,root,list,row,pointer,touch,advance,frame,ids,writes,groups,frames,animations:()=>animations,clicks:()=>clicks};
 }
 
-test("a full three-second hold lifts only the selected task, moves a gap, and drops without selecting it",()=>{
+test("a full one-second hold lifts only the selected task, moves a gap, and drops without selecting it",()=>{
   const d=fixture();try{
-    d.pointer("pointerdown",d.row("a").querySelector("strong"));d.advance(2999);
+    d.pointer("pointerdown",d.row("a").querySelector("strong"));d.advance(999);
     assert.equal(d.w.document.querySelector(".my-work-drag-preview"),null);assert.equal(d.row("a").hidden,false);
     d.advance(1);assert.ok(d.w.document.querySelector(".my-work-drag-preview"));assert.equal(d.row("a").hidden,true);
     assert.ok(d.list.classList.contains("is-reordering"));assert.ok(d.w.document.body.classList.contains("my-work-reordering"));
@@ -64,20 +64,20 @@ test("a full three-second hold lifts only the selected task, moves a gap, and dr
 
 test("short clicks and completion/favorite controls never start a drag; moving early preserves native scrolling",()=>{
   const d=fixture();try{
-    d.pointer("pointerdown",d.row("a"));d.advance(1000);d.pointer("pointerup",d.row("a"));d.row("a").click();d.advance(3000);
+    d.pointer("pointerdown",d.row("a"));d.advance(999);d.pointer("pointerup",d.row("a"));d.row("a").click();d.advance(1000);
     assert.equal(d.clicks(),1);assert.equal(d.w.document.querySelector(".my-work-drag-preview"),null);
-    for(const target of [d.row("a").querySelector("input"),d.row("a").querySelector("button")]){d.pointer("pointerdown",target);d.advance(3000);assert.equal(d.w.document.querySelector(".my-work-drag-preview"),null);}
-    d.touch("touchstart",d.row("a"));const move=d.touch("touchmove",d.row("a"),145);assert.equal(move.defaultPrevented,false);d.advance(3000);
+    for(const target of [d.row("a").querySelector("input"),d.row("a").querySelector("button")]){d.pointer("pointerdown",target);d.advance(1000);assert.equal(d.w.document.querySelector(".my-work-drag-preview"),null);}
+    d.touch("touchstart",d.row("a"));const move=d.touch("touchmove",d.row("a"),145);assert.equal(move.defaultPrevented,false);d.advance(1000);
     assert.equal(d.w.document.querySelector(".my-work-drag-preview"),null);assert.equal(d.writes.length,0);assert.deepEqual(d.ids(),["a","b","c"]);
   }finally{d.dom.window.close();}
 });
 
 test("dragging a task upwards shifts the other rows down; cancelled touch drags restore the original position",()=>{
   const d=fixture();try{
-    d.pointer("pointerdown",d.row("c"),237);d.advance(3000);d.pointer("pointermove",d.w.document,110);d.frame();
+    d.pointer("pointerdown",d.row("c"),237);d.advance(1000);d.pointer("pointermove",d.w.document,110);d.frame();
     assert.equal(d.row("a").offsetTop,56,"the first row moves down to make the destination gap");
     d.pointer("pointerup",d.w.document,110);assert.deepEqual(d.ids(),["c","a","b"]);
-    d.advance(601);d.touch("touchstart",d.row("c"));d.advance(3000);d.touch("touchmove",d.row("c"),245);d.frame();
+    d.advance(601);d.touch("touchstart",d.row("c"));d.advance(1000);d.touch("touchmove",d.row("c"),245);d.frame();
     d.w.document.dispatchEvent(new d.w.Event("touchcancel",{bubbles:true}));
     assert.deepEqual(d.ids(),["c","a","b"]);assert.equal(d.writes.length,1);assert.equal(d.w.document.querySelector(".my-work-drag-preview"),null);
   }finally{d.dom.window.close();}
@@ -86,7 +86,7 @@ test("dragging a task upwards shifts the other rows down; cancelled touch drags 
 test("Escape, pointer cancellation, blur, resize, and rerender cancel rather than save a moved task",()=>{
   for(const cancel of ["escape","pointercancel","blur","resize","rerender"]){
     const d=fixture();try{
-      d.pointer("pointerdown",d.row("a"));d.advance(3000);d.pointer("pointermove",d.w.document,245);d.frame();
+      d.pointer("pointerdown",d.row("a"));d.advance(1000);d.pointer("pointermove",d.w.document,245);d.frame();
       if(cancel==="escape")d.w.document.dispatchEvent(new d.w.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
       else if(cancel==="pointercancel")d.pointer("pointercancel",d.w.document);
       else if(cancel==="rerender")d.w.MyWorkReorder.cancel(d.root);
@@ -99,7 +99,7 @@ test("Escape, pointer cancellation, blur, resize, and rerender cancel rather tha
 
 test("touch holds reorder without toggling completion or crossing into the completed section",()=>{
   const d=fixture();try{
-    d.touch("touchstart",d.row("a"));d.advance(3000);
+    d.touch("touchstart",d.row("a"));d.advance(1000);
     assert.equal(d.touch("touchmove",d.row("a"),500).defaultPrevented,true);d.frame();d.touch("touchend",d.row("a"),500);
     assert.deepEqual(d.ids(),["b","c","a"]);assert.deepEqual(d.ids("completed:2026-11"),["d","e"]);
     assert.equal(d.row("a").querySelector("input").checked,false);assert.equal(d.writes.length,1);
@@ -118,10 +118,10 @@ test("keyboard movement preserves filtered-out rows and works with reduced motio
 
 test("no-op holds do not save; frame work pauses away from edges and scrolls when needed",()=>{
   const d=fixture();try{
-    d.pointer("pointerdown",d.row("a"),150);d.advance(3000);d.pointer("pointermove",d.w.document,160);d.frame();
+    d.pointer("pointerdown",d.row("a"),150);d.advance(1000);d.pointer("pointermove",d.w.document,160);d.frame();
     assert.equal(d.frames.size,0,"stationary dragging away from edges does not keep measuring layout");
     d.pointer("pointerup",d.w.document,125);assert.equal(d.writes.length,0);
-    d.advance(601);d.pointer("pointerdown",d.row("a"));d.advance(3000);d.pointer("pointermove",d.w.document,395);d.frame();
+    d.advance(601);d.pointer("pointerdown",d.row("a"));d.advance(1000);d.pointer("pointermove",d.w.document,395);d.frame();
     assert.ok(d.list.scrollTop>0);assert.ok(d.frames.size>0);
     d.w.MyWorkReorder.cancel();assert.equal(d.frames.size,0);
   }finally{d.dom.window.close();}
@@ -136,6 +136,7 @@ test("personal ordering is validated, keeps new tasks first, and retains immutab
     assert.deepEqual(JSON.parse(JSON.stringify(normalized)),{active:["a","b"],"completed:2026-11":["d"]});
     assert.deepEqual(JSON.parse(JSON.stringify(api.normalize(null))),{});
     assert.deepEqual(Array.from(api.merge(["a","b"],["foreign"])),["a","b"]);
-    const css=read("public/my-work-reorder.css");assert.match(css,/brightness\(\.43\)/);assert.match(css,/prefers-reduced-motion/);assert.match(css,/my-work-hold 3s/);
+    const css=read("public/my-work-reorder.css");assert.match(css,/brightness\(\.43\)/);assert.match(css,/prefers-reduced-motion/);assert.match(css,/my-work-hold 1s/);
+    assert.match(read("public/demo.html"),/Hold for 1 second to move/);
   }finally{d.dom.window.close();}
 });

@@ -1,7 +1,7 @@
 /* Personal display order only: dragging never edits a shared task or its completion. */
 (() => {
   "use strict";
-  const contexts=new WeakMap(),animations=new WeakMap(),holdMs=3000,slop=8;
+  const contexts=new WeakMap(),animations=new WeakMap(),holdMs=1000,slop=8;
   let gesture=null,suppressUntil=0;
   const reduced=()=>window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const rows=group=>[...group.children].filter(row=>row.matches("[data-select-my-work]")&&!row.hidden);

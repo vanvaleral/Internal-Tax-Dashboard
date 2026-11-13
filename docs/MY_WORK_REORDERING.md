@@ -1,6 +1,6 @@
 # My Work Personal Task Order
 
-Hold the body/title of a task for three seconds, then drag vertically. A thin
+Hold the body/title of a task for one second, then drag vertically. A thin
 progress line shows the hold; only after the full hold does the task lift.
 Completion bullets, stars, inputs and other interactive controls never start a
 drag. Releasing early behaves as a normal click; moving before the hold finishes
