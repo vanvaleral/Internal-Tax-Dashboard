@@ -1,0 +1,13 @@
+.my-work-sort-group { position:relative; min-height:0; }
+[data-my-work-reorder-row] { position:relative; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+[data-my-work-reorder-row][hidden] { display:none; }
+[data-my-work-reorder-row].is-reorder-holding::after { content:""; position:absolute; bottom:0; left:0; height:2px; width:100%; background:var(--accent); transform-origin:left; animation:my-work-hold 3s linear both; pointer-events:none; }
+.my-work-task-list.is-reordering .my-work-row,.my-work-task-list.is-reordering .my-work-section-toggle { filter:brightness(.43); transition:filter 150ms ease; }
+.my-work-task-list.is-reordering { overflow-anchor:none; }
+.my-work-drop-gap { margin:3px 0; border:1px dashed rgba(255,255,255,.55); border-radius:4px; background:rgba(255,255,255,.08); }
+.my-work-row.my-work-drag-preview { position:fixed; z-index:100; margin:0; pointer-events:none; cursor:grabbing; filter:none; transform:scale(1.018); box-shadow:0 14px 35px rgba(10,27,32,.32),0 0 0 2px var(--accent); animation:none!important; transition:none; }
+.my-work-drag-preview input:disabled,.my-work-drag-preview button:disabled { opacity:1; }
+body.my-work-reordering,body.my-work-reordering * { cursor:grabbing!important; user-select:none!important; }
+.my-work-reorder-status { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+@keyframes my-work-hold { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+@media(prefers-reduced-motion:reduce) { [data-my-work-reorder-row].is-reorder-holding::after { animation:none; transform:scaleX(1); } .my-work-row.my-work-drag-preview { transform:none; } .my-work-task-list.is-reordering .my-work-row,.my-work-task-list.is-reordering .my-work-section-toggle { transition:none; } }

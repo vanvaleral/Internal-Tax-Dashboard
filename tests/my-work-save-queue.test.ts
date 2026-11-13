@@ -38,6 +38,16 @@ function fixture(creating=false){
 }
 const tick=async()=>{await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));};
 
+test('new task identity confirmation preserves personal order without changing the task payload',async()=>{
+  const d=fixture(true);try{
+    d.state.myWorkOrder={active:['another-task','task-local']};
+    await d.save();
+    assert.equal(d.task.id,'saved-task');
+    assert.deepEqual(Array.from(d.state.myWorkOrder.active),['another-task','saved-task']);
+    assert.equal('myWorkOrder' in d.writes[0],false);assert.equal(d.issues.length,0);
+  }finally{d.dom.window.close();}
+});
+
 test('save status keeps the same compact box through saved, saving, retry and conflict without replacing inputs',async()=>{
   const d=fixture();try{
     const status=d.w.document.querySelector('[data-my-work-save-status]'),input=d.w.document.getElementById('editor');

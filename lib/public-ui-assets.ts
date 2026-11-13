@@ -20,6 +20,8 @@ const PUBLIC_UI_ASSETS = new Set([
   "/vendor/purify.min.js",
   "/vendor/xlsx.full.min.js",
   "/workspace-sync.js",
+  "/my-work-reorder.js",
+  "/my-work-reorder.css",
   "/workspace-startup.js",
   "/feature-access.js",
   "/feature-access.css",
