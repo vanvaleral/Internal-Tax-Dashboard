@@ -64,6 +64,10 @@ page scrolling so every control remains reachable.
   once; subsequent explicit sorts remain saved.
 - Row numbers open progress below the row, including completed linked My Work
   tasks. Editing cells does not expand progress.
+- Authorized manual follow-ups have a small red X at the top-right of their
+  timeline card. It retains an accessible label/tooltip and the existing reason
+  dialog, recoverable removal and audit history. Automatic task/workflow events
+  are not removable here, and retained removed entries keep their Restore action.
 - A compact summary counts the current category/filter scope by progress,
   payment/instalments, revision and completion. Print Report opens an A4 report
   of those saved records and the browser print dialog. See `docs/CASE_REPORTS.md`.

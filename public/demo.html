@@ -672,6 +672,10 @@
     .import-preview-error-row { background: #fff5f5; }
     .import-preview-error { display: inline-flex; align-items: center; gap: 5px; color: #a61b1b; font-size: 11px; font-weight: 750; line-height: 1.35; }
     .import-preview-table { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+    .import-name-review { min-width:270px; margin-top:9px; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--accent-soft); }
+    .import-name-review label { display:block; font-size:12px; font-weight:700; margin-bottom:6px; }
+    .import-name-review select { width:100%; max-width:420px; }
+    .import-name-review .subline { margin-top:6px; white-space:normal; }
     .duplicate-review-table { max-height: min(62vh, 620px); }
     .duplicate-review-table table { min-width: 860px; }
     .duplicate-review-table th, .duplicate-review-table td { padding: 7px 9px; font-size: 12px; white-space: nowrap; }
@@ -2990,6 +2994,11 @@
     .case-progress-inline .case-progress-grid { margin-top: 0; }
     .case-progress-inline .case-progress-list { max-height: 150px; }
     .case-progress-inline .list-item { padding: 7px 9px; min-height: 0; }
+    .case-progress-timeline-item { position:relative; }
+    .case-progress-viewport .case-progress-timeline-item.has-remove { padding-right:46px; }
+    .case-progress-viewport .case-progress-timeline-item button.case-progress-remove { position:absolute; top:6px; right:6px; display:grid; place-items:center; width:30px; min-width:30px; height:30px; padding:0; border:1px solid transparent; border-radius:6px; color:#dc2626; background:transparent; box-shadow:none; transform:none; }
+    .case-progress-viewport .case-progress-timeline-item button.case-progress-remove:hover:not(:disabled) { color:#dc2626; background:rgba(220,38,38,.1); box-shadow:none; transform:none; }
+    .case-progress-viewport .case-progress-timeline-item button.case-progress-remove:focus-visible { outline:2px solid #dc2626; outline-offset:1px; }
     .generation-preview-table { max-height: min(52vh, 480px); overflow: auto; margin-top: 14px; }
     .generation-preview-table table { min-width: 620px; }
     .generation-preview-table th, .generation-preview-table td { padding: 7px 9px; font-size: 12px; }
@@ -4009,10 +4018,12 @@
   <link rel="stylesheet" href="feature-access.css" />
   <script src="feature-access.js"></script>
   <link rel="stylesheet" href="client-engagement.css" />
+  <link rel="stylesheet" href="client-bulk-edit.css" />
   <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
   <link rel="stylesheet" href="case-workflow-dashboard.css" />
   <script src="case-assessment-dashboard.js"></script>
+  <script src="client-bulk-edit.js"></script>
   <script src="case-workflow-dashboard.js"></script>
   <script src="case-report.js"></script>
   <script>
@@ -4984,7 +4995,7 @@
       }
     };
 
-    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
+    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts", "bulk-edit"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
@@ -5174,7 +5185,8 @@
           "free-of-charge": ["Clients / Free of Charge", "Clients Workspace", "Recurring monthly work without a fee; separate from the paid client portfolio."],
           inactive: ["Clients / Inactive Clients", "Clients Workspace", "Inactive clients are retained for history but excluded from the active operating list."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
-          contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
+          contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."],
+          "bulk-edit": ["Clients / Bulk Edit", "Clients Workspace", "Stage, review and save client master changes together without exporting a file."]
         },
         management: {
           overview: ["Management / KPI Overview", "Management Workspace", "Decision workspace for exceptions, bottlenecks, and quick access only."],
@@ -7679,6 +7691,7 @@
                 ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
+                ${!isMobileWorkspace && hasLeadershipAccess() ? `<button class="${state.clientManagementTab === "bulk-edit" ? "solid-btn" : "ghost-btn"}" data-client-tab="bulk-edit">Bulk Edit</button>` : ""}
               </div>
               <div class="toolbar-right">
                 ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
@@ -7687,6 +7700,7 @@
             </div>
           </section>
 
+          ${state.clientManagementTab === "bulk-edit" ? `<div class="client-bulk-slot" data-client-bulk-slot></div>` : ""}
           ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
             <div class="panel client-register-panel">
@@ -8094,10 +8108,12 @@
               </div>
             </section>
           ` : ``}
-          <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>
+          ${state.clientManagementTab === "bulk-edit" ? "" : `<button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>`}
         </div>
       `);
       window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : type === "free_of_charge" ? "free-of-charge" : "active"; commitWorkspaceNavigation("replace"); } });
+      const bulkSlot = root.querySelector("[data-client-bulk-slot]");
+      if (bulkSlot) window.ClientBulkEdit?.mount(bulkSlot, { canEdit: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, account: bootstrapProfile.user?.id || "offline", fetch: (...args) => appFetch(...args), onSaved: () => loadSharedClients() });
     }
 
     function renderMatrix() {
@@ -8921,7 +8937,7 @@
       const ready = !draft && !progress?.accessDenied;
       const saving = caseFollowUpPending.has(item.id);
       const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
-      const removal=(entry,restore=false)=>window.CaseAssessmentUI&&entry.id&&(hasLeadershipAccess()||entry.creatorProfileId===bootstrapProfile.profile.id)?window.CaseAssessmentUI.action(item,restore?"restore-progress":"remove-progress",restore?"Restore":"Remove incorrect update",entry.id,IS_OFFLINE_DEMO||!item.workflowAvailable):"";
+      const removal=(entry,restore=false)=>window.CaseAssessmentUI&&entry.id&&(hasLeadershipAccess()||entry.creatorProfileId===bootstrapProfile.profile.id)?window.CaseAssessmentUI.action(item,restore?"restore-progress":"remove-progress",restore?"Restore":"Remove incorrect update",entry.id,IS_OFFLINE_DEMO||!item.workflowAvailable,!restore):"";
       const removed=(item.workflow?.removedProgress||[]).filter(entry=>!entry.restoredAt);
       return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(formatIsoToDisplayDate(item.dueDate))}</strong></span>` : ""}</div>
         ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Changes are not saved.</div>` : draft ? `<div class="case-progress-notice"><span>Select a Client Master client and leave the cell to save automatically.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
@@ -8930,7 +8946,7 @@
           <section class="case-progress-block"><div class="eyebrow">Open work <span>(${nextActions.length + pendingTasks.length})</span></div><div class="case-progress-list">${nextActions.map(step => `<div class="list-item"><strong>${escapeHtml(step.title)}</strong><span class="pill neutral">Next action</span></div>`).join("")}${pendingTasks.map(task => `<div class="list-item"><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${escapeHtml(task.creatorName || "My Work")}${task.dueDate ? ` · Due ${escapeHtml(task.dueDate)}` : ""}</div></div><span class="pill neutral">Open</span></div>`).join("") || (nextActions.length ? "" : `<div class="subline">No open work in your scope.</div>`)}</div></section>
         </div><div>
           ${progress?.error ? `<div class="case-progress-notice" role="alert"><span>${escapeHtml(progress.error)}</span><button class="tiny-btn" data-case-reload-progress="${escapeAttr(item.id)}">Retry</button></div>` : ""}
-          <div class="eyebrow">Case timeline</div><div class="subline">Showing ${visibleTimeline.length} loaded updates · Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${visibleTimeline.map(entry => `<div class="list-item" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong>${entry.taskTitle ? `<div class="subline">Task: ${escapeHtml(entry.taskTitle)}</div>` : ""}<div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${entry.historical ? "Completion date not recorded" : timestamp(entry.createdAt)}${entry.taskId && !entry.taskTitle ? ` · ${escapeHtml(entry.taskId)}` : ""}</div>${entry.source==="Follow-up"?removal(entry):""}</div><span class="pill neutral">${escapeHtml(entry.source)}</span></div>`).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
+          <div class="eyebrow">Case timeline</div><div class="subline">Showing ${visibleTimeline.length} loaded updates · Completed My Work (${completed.length})${progress?.loading ? ` · ${progress.loadedAt ? "Refreshing timeline..." : "Loading case timeline..."}` : ""}</div><div class="case-progress-list" data-case-timeline>${visibleTimeline.map(entry => { const remove=entry.source==="Follow-up"?removal(entry):""; return `<div class="list-item case-progress-timeline-item${remove?" has-remove":""}" data-case-timeline-key="${escapeAttr(entry.key)}"><div><strong>${escapeHtml(entry.entry)}</strong>${entry.taskTitle ? `<div class="subline">Task: ${escapeHtml(entry.taskTitle)}</div>` : ""}<div class="subline">${escapeHtml(entry.creatorName || "PIC")} · ${entry.historical ? "Completion date not recorded" : timestamp(entry.createdAt)}${entry.taskId && !entry.taskTitle ? ` · ${escapeHtml(entry.taskId)}` : ""}</div></div><span class="pill neutral">${escapeHtml(entry.source)}</span>${remove}</div>`; }).join("") || `<div class="subline">${progress?.loadedAt || draft ? "No progress recorded yet." : "Loading case timeline..."}</div>`}</div>
           ${removed.length?`<details class="case-removed-progress"><summary>Removed updates (${removed.length})</summary>${removed.map(entry=>`<div class="list-item"><div><strong>${escapeHtml(entry.entry)}</strong><div class="subline">${escapeHtml(entry.reason)} · Removed ${timestamp(entry.at)}</div></div>${removal({...entry,creatorProfileId:entry.creatorId},true)}</div>`).join("")}</details>`:""}
           ${progress?.pageInfo?.hasMore || timeline.length > visibleTimeline.length ? `<button type="button" class="ghost-btn" data-case-load-older="${escapeAttr(item.id)}" ${progress?.loading ? "disabled" : ""}>${progress?.loading ? "Loading..." : "Load older updates"}</button>` : ""}
           <label class="case-progress-entry-label" for="himbauan-progress-entry">Add a follow-up</label><div class="case-progress-entry"><input id="himbauan-progress-entry" class="field" maxlength="1000" value="${escapeAttr(caseFollowUpDrafts.get(item.id) || "")}" placeholder="Work done, result, and next step..." ${ready ? "" : "disabled"} /><button class="solid-btn" data-add-himbauan-progress="${escapeAttr(item.id)}" ${ready && !saving ? "" : "disabled"}>${saving ? "Saving..." : IS_OFFLINE_DEMO ? "Add to demo" : "Save update"}</button></div><div class="subline" data-case-followup-status role="status">${escapeHtml(saving ? "Saving to database..." : caseFollowUpStatus.get(item.id) || "")}</div>
@@ -11538,23 +11554,44 @@
       const summary = preview.summary || {};
       const validationByRow = new Map((preview.validation || []).map((item) => [item.row, item]));
       const invalid = Number(summary.invalid || 0);
+      const similarByRow = new Map((preview.similarNames || []).map(item => [item.row, item]));
+      const reviewRequired = Number(summary.reviewRequired || 0);
+      const similarReview = row => {
+        const review = similarByRow.get(row);
+        if (!review) return "";
+        const choice = preview.nameChoices?.[row] || "";
+        const selected = review.candidates.find(candidate => candidate.clientId === choice);
+        return `<div class="import-name-review"><label for="import-name-choice-${row}">Similar names found: choose before importing</label><select class="field" id="import-name-choice-${row}" data-import-name-choice="${row}" ${preview.saving ? "disabled" : ""}><option value="" ${!choice ? "selected" : ""}>Review similar names...</option><option value="new" ${choice === "new" ? "selected" : ""}>Create a separate new client</option>${review.candidates.map(candidate => `<option value="${escapeAttr(candidate.clientId)}" ${choice === candidate.clientId ? "selected" : ""} ${candidate.conflicts.length ? "disabled" : ""}>${escapeHtml(candidate.clientCode)} / ${escapeHtml(candidate.businessForm || "No form")} / ${escapeHtml(candidate.name)} / ${candidate.similarity}% similar / ${escapeHtml(candidate.status)}${candidate.conflicts.length ? " / identity conflict" : ""}</option>`).join("")}</select><div class="subline">Similarity is a name-comparison score, not a verified identity. No match is selected automatically.</div>${selected ? `<div class="subline">Selected: ${escapeHtml(selected.clientCode)} / ${escapeHtml(selected.status)} / ${escapeHtml(({contract:"Contract",on_demand:"On Demand",free_of_charge:"Free of Charge"})[selected.engagementType] || selected.engagementType || "Contract")}. The existing client name, ID and history will be kept.</div>` : choice === "new" ? `<div class="subline">Keep this as a separate client. A new client code is required.</div>` : ""}${review.candidates.filter(candidate => candidate.conflicts.length).map(candidate => `<div class="subline">${escapeHtml(candidate.clientCode)}: ${escapeHtml(candidate.conflicts.join(" "))}</div>`).join("")}</div>`;
+      };
       root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal import-preview-modal" role="dialog" aria-modal="true" aria-label="Client import preview">
-            <div class="client-editor-head"><div><div class="eyebrow">Client Master Import</div><h3>Review changes before importing</h3><p class="subline">${escapeHtml(preview.fileName || "Selected file")}. Match by existing code, NPWP, or unique client name and form. Existing IDs and history stay unchanged. Missing columns are preserved; blank cells clear their fields, including PIC assignments.</p></div><button class="ghost-btn" data-close-import-preview="yes" ${preview.saving ? "disabled" : ""}>Close</button></div>
+            <div class="client-editor-head"><div><div class="eyebrow">Client Master Import</div><h3>Review changes before importing</h3><p class="subline">${escapeHtml(preview.fileName || "Selected file")}. Exact code, NPWP and name matches are checked first; close names require your choice. Existing IDs and history stay unchanged. Missing columns are preserved; blank cells clear their fields, including PIC assignments.</p></div><button class="ghost-btn" data-close-import-preview="yes" ${preview.saving ? "disabled" : ""}>Close</button></div>
             <div class="import-preview-summary">
               <div class="detail-card"><div class="eyebrow">Rows</div><strong>${summary.total || 0}</strong></div>
               <div class="detail-card"><div class="eyebrow">New Clients</div><strong>${summary.created || 0}</strong></div>
               <div class="detail-card"><div class="eyebrow">Will Update</div><strong>${summary.updated || 0}</strong></div>
               <div class="detail-card"><div class="eyebrow">Needs Fixing</div><strong class="${invalid ? "import-preview-warning" : ""}">${invalid}</strong></div>
             </div>
-            ${invalid ? `<p class="import-preview-warning">&#9888; ${invalid} row(s) contain errors. Correct the file and upload it again; import is disabled to protect the client master.</p>` : `<p class="subline">All rows passed validation. Confirming will create ${summary.created || 0} and update ${summary.updated || 0} client record(s).</p>`}
-            <div class="import-preview-table"><table><thead><tr><th>Row</th><th>File Code</th><th>Client</th><th>PIC Tax / ACC</th><th>Result / Existing Code</th></tr></thead><tbody>${preview.clients.map((client, index) => { const validation = validationByRow.get(index + 2); const errors = validation?.errors || []; const match = preview.matches?.[index]; return `<tr class="${errors.length ? "import-preview-error-row" : ""}"><td>${index + 2}</td><td>${escapeHtml(client.clientCode || "-")}</td><td>${escapeHtml(displayClientName(client) || client.name || "-")}</td><td>${escapeHtml(client.taxPic || "-")} / ${escapeHtml(client.accountingPic || "-")}</td><td>${errors.length ? `<span class="import-preview-error">! ${escapeHtml(errors.join(" "))}</span>` : `<span class="pill accent">${match?.action === "update" ? `Update ${escapeHtml(match.clientCode)} (by ${escapeHtml(match.matchedBy)})` : "Create new"}</span>`}</td></tr>`; }).join("")}</tbody></table></div>
+            ${preview.reviewDirty ? `<p class="import-preview-warning">Review your selected matches to recheck the entire file before confirming. No clients have been changed.</p>` : reviewRequired ? `<p class="import-preview-warning">${reviewRequired} row(s) have similar existing names. Choose an existing client or explicitly create a separate client.</p>` : ""}
+            ${invalid ? `<p class="import-preview-warning">&#9888; ${invalid} row(s) contain errors. Choose an existing client where appropriate; for other errors, correct the file and upload again.</p>` : `<p class="subline">${reviewRequired ? "Provisional totals" : "Validated totals"}: create ${summary.created || 0} and update ${summary.updated || 0} client record(s).</p>`}
+            <div class="import-preview-table"><table><thead><tr><th>Row</th><th>File Code</th><th>Client</th><th>PIC Tax / ACC</th><th>Result / Existing Code</th></tr></thead><tbody>${preview.clients.map((client, index) => { const validation = validationByRow.get(index + 2); const errors = validation?.errors || []; const match = preview.matches?.[index]; return `<tr class="${errors.length ? "import-preview-error-row" : ""}"><td>${index + 2}</td><td>${escapeHtml(client.clientCode || "-")}</td><td>${escapeHtml(displayClientName(client) || client.name || "-")}</td><td>${escapeHtml(client.taxPic || "-")} / ${escapeHtml(client.accountingPic || "-")}</td><td>${errors.length ? `<span class="import-preview-error">! ${escapeHtml(errors.join(" "))}</span>` : `<span class="pill accent">${match?.action === "update" ? `Update ${escapeHtml(match.clientCode)} (by ${escapeHtml(match.matchedBy)})` : "Create new"}</span>`}${similarReview(index + 2)}</td></tr>`; }).join("")}</tbody></table></div>
             ${preview.error ? `<p role="alert" class="import-preview-warning">${escapeHtml(preview.error)}</p>` : ""}
-            <div class="client-editor-actions"><button class="ghost-btn" data-close-import-preview="yes" ${preview.saving ? "disabled" : ""}>Cancel</button><button class="solid-btn" data-confirm-client-import="yes" ${invalid || preview.saving ? "disabled" : ""}>${preview.saving ? "Importing..." : "Confirm Import"}</button></div>
+            <div class="client-editor-actions"><button class="ghost-btn" data-close-import-preview="yes" ${preview.saving ? "disabled" : ""}>Cancel</button><button class="solid-btn" data-confirm-client-import="yes" ${preview.saving || !preview.reviewDirty && (invalid || reviewRequired) ? "disabled" : ""}>${preview.saving ? preview.reviewDirty ? "Reviewing..." : "Importing..." : preview.reviewDirty ? "Review selected matches" : "Confirm Import"}</button></div>
           </section>
         </div>`);
     }
+
+    document.addEventListener("change", event => {
+      const choice = event.target.closest?.("[data-import-name-choice]");
+      const preview = state.importPreview;
+      if (!choice || !preview || preview.saving) return;
+      preview.nameChoices ||= {};
+      preview.nameChoices[choice.dataset.importNameChoice] = choice.value;
+      preview.reviewDirty = true;
+      preview.error = "";
+      renderClientImportPreview();
+    });
 
     function renderClientDuplicateReview() {
       const root = document.getElementById("client-duplicate-review-root");
@@ -11790,11 +11827,12 @@
         operationsTab: ["active", "history", "claim", "archive"],
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
-        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"],
+        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts", "bulk-edit"],
         managementTab: ["overview", "trends", "portfolio", "workload", "features", "recognition", "report", "announcements", "access"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
       for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
+      if (state.clientManagementTab === "bulk-edit" && (!hasLeadershipAccess() || window.matchMedia("(max-width: 900px)").matches)) state.clientManagementTab = "active";
       if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
       window.WorkspaceFeatures.setRole(state.role);
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
@@ -13213,7 +13251,7 @@
 
       if (confirmClientImportTrigger) {
         const preview = state.importPreview;
-        if (!preview || preview.saving || Number(preview.summary?.invalid || 0)) return;
+        if (!preview || preview.saving || !preview.reviewDirty && (Number(preview.summary?.invalid || 0) || Number(preview.summary?.reviewRequired || 0))) return;
         preview.saving = true;
         preview.error = "";
         renderClientImportPreview();
@@ -13221,10 +13259,18 @@
           const response = await appFetch("/api/clients", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ operation: "bulk-import", clients: preview.rows, expectedMatches: preview.matches, fileName: preview.fileName })
+            body: JSON.stringify({ operation: preview.reviewDirty ? "validate-import" : "bulk-import", clients: preview.rows, expectedMatches: preview.matches, fileName: preview.fileName, ...(preview.nameChoices ? { nameChoices: preview.nameChoices } : {}) })
           }, "");
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || `Import sync failed (${response.status})`);
+          if (preview.reviewDirty) {
+            preview.matches = result.matches || [];
+            preview.similarNames = result.similarNames || [];
+            preview.validation = result.validation || [];
+            preview.summary = result.summary || {};
+            preview.reviewDirty = false;
+            return;
+          }
           state.importPreview = null;
           await loadSharedClients();
           const selected = clients.find((client) => client.clientCode === result.data?.[0]?.client_code);
@@ -14612,7 +14658,7 @@
         }, "");
         const validationResult = await validated.json().catch(() => ({}));
         if (!validated.ok) throw new Error(validationResult.error || "Import preview could not be validated.");
-        state.importPreview = { fileName: file.name, rows: importRows, clients: imported, matches: validationResult.matches || [], validation: validationResult.validation || [], summary: validationResult.summary || {} };
+        state.importPreview = { fileName: file.name, rows: importRows, clients: imported, matches: validationResult.matches || [], similarNames: validationResult.similarNames || [], nameChoices: {}, validation: validationResult.validation || [], summary: validationResult.summary || {} };
         rerender();
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Import preview could not be prepared.");

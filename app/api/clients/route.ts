@@ -1,11 +1,23 @@
 import { after, NextResponse } from "next/server";
 import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
-import { asSafeText, clientImportPayload, normalizeImportedDate, normalizeNpwp, validateClientImportRows } from "@/lib/client-import";
+import { asSafeText, clientImportPayload, findSimilarClientNames, normalizeImportedDate, normalizeNpwp, validateClientImportRows, type ClientNameRecord } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { readClients } from "@/lib/workspace-reads";
 
 type ClientInput = Record<string, unknown>;
 type StaffIds = { tax: string | null; accounting: string | null; partner: string | null; supervisor: string | null };
+
+async function importNameCatalog(admin: Parameters<typeof resolveStaffIds>[0]) {
+  const records: ClientNameRecord[] = [];
+  for (let offset = 0; offset < 20_000; offset += 1000) {
+    const { data, error } = await admin.from("client_master")
+      .select("id, client_code, legal_name, company_form, npwp, status, engagement_type, updated_at").order("id").range(offset, offset + 999);
+    if (error) throw new Error("Similar client names could not be checked. Retry the preview before importing.");
+    records.push(...(data || []));
+    if ((data || []).length < 1000) return records;
+  }
+  throw new Error("The client directory is too large for this name review. Import using exact existing client codes.");
+}
 
 async function resolveStaffIds(admin: NonNullable<ReturnType<typeof import("@/lib/supabase/admin").createAdminClient>>, rows: ClientInput[]) {
   const { data, error } = await admin.from("staff_profiles").select("id, full_name, display_name").eq("directory_active", true);
@@ -88,19 +100,55 @@ export async function POST(request: Request) {
     const full = buildPayload(row, ownership.ids[index]);
     return importing ? clientImportPayload(row, full) : full;
   });
-  let matches: Array<{ action: string; errors: string[] }> = [];
+  let matches: Array<{ action: string; errors: string[]; clientId?: string; updatedAt?: string }> = [];
+  const similarNames: Array<{ row: number; candidates: ReturnType<typeof findSimilarClientNames>; choice: string }> = [];
+  const choiceErrors = rows.map(() => [] as string[]);
   if (importing) {
-    const { data, error } = await actor.admin.rpc("match_client_master_import", { p_rows: payload });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    matches = data?.matches || [];
+    const initial = await actor.admin.rpc("match_client_master_import", { p_rows: payload });
+    if (initial.error) return NextResponse.json({ error: initial.error.message }, { status: 500 });
+    matches = initial.data?.matches || [];
     if (matches.length !== rows.length) return NextResponse.json({ error: "Client matching could not be confirmed." }, { status: 500 });
+    const choices = body.nameChoices && typeof body.nameChoices === "object" && !Array.isArray(body.nameChoices) ? body.nameChoices : {};
+    const chosen = new Map<number, ReturnType<typeof findSimilarClientNames>[number]>();
+    try {
+      const catalog = matches.some(match => match.action === "create") ? await importNameCatalog(actor.admin) : [];
+      matches.forEach((match, index) => {
+        const choice = asSafeText(choices[index + 2]);
+        if (match.action !== "create") {
+          if (choice && choice !== match.clientId) choiceErrors[index].push("This row now has an exact existing match. Upload again to review it.");
+          return;
+        }
+        const candidates = findSimilarClientNames(rows[index], catalog);
+        if (candidates.length) similarNames.push({ row: index + 2, candidates, choice });
+        if (!choice || choice === "new") return;
+        const selected = candidates.find(candidate => candidate.clientId === choice);
+        if (!selected || selected.conflicts.length) { choiceErrors[index].push("The selected similar client is unavailable or has conflicting identity details. Review the preview again."); return; }
+        // Choosing a suggestion must not replace a correct master name with a file typo.
+        payload[index] = { ...payload[index], client_code: selected.clientCode, legal_name: selected.name };
+        chosen.set(index, selected);
+      });
+      if (chosen.size) {
+        const reviewed = await actor.admin.rpc("match_client_master_import", { p_rows: payload });
+        if (reviewed.error) return NextResponse.json({ error: reviewed.error.message }, { status: 500 });
+        matches = reviewed.data?.matches || [];
+        if (matches.length !== rows.length) return NextResponse.json({ error: "Client matching could not be confirmed." }, { status: 500 });
+        for (const [index, selected] of chosen) {
+          if (matches[index].clientId !== selected.clientId || matches[index].updatedAt !== selected.updatedAt) {
+            choiceErrors[index].push("The selected client changed during name review. Upload again before importing.");
+          }
+        }
+      }
+    } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 503 }); }
     matches.forEach((match, index) => validation[index].errors.push(...match.errors));
+    choiceErrors.forEach((errors, index) => validation[index].errors.push(...errors));
   }
+  const reviewRequired = similarNames.filter(review => !review.choice).length;
   const rejected = validation.filter((entry) => entry.errors.length);
   if (body.operation === "validate-import") {
     const validMatches = matches.filter((_, index) => !validation[index].errors.length);
-    return NextResponse.json({ validation, matches, valid: validMatches.length, summary: { total: rows.length, invalid: rejected.length, created: validMatches.filter((match) => match.action === "create").length, updated: validMatches.filter((match) => match.action === "update").length } });
+    return NextResponse.json({ validation, matches, similarNames, valid: validMatches.length, summary: { total: rows.length, invalid: rejected.length, reviewRequired, created: validMatches.filter((match) => match.action === "create").length, updated: validMatches.filter((match) => match.action === "update").length } });
   }
+  if (reviewRequired) return NextResponse.json({ error: "Review similar client names before confirming the import.", similarNames }, { status: 422 });
   if (rejected.length) return NextResponse.json({ error: "Import contains invalid rows.", validation }, { status: 422 });
   if (importing && !Array.isArray(body.expectedMatches)) return NextResponse.json({ error: "Review the import preview before confirming." }, { status: 422 });
   const args = {

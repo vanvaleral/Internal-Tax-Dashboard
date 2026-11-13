@@ -24,6 +24,60 @@ export function normalizeClientIdentityName(value: unknown) {
     .trim();
 }
 
+export type ClientNameRecord = {
+  id: string; client_code: string; legal_name: string; company_form?: string | null;
+  npwp?: string | null; status?: string | null; engagement_type?: string | null; updated_at?: string | null;
+};
+export type SimilarClientName = {
+  clientId: string; clientCode: string; name: string; businessForm: string;
+  status: string; engagementType: string; updatedAt: string | null; similarity: number; conflicts: string[];
+};
+
+const FORM_PREFIX = /^(p\.?t|c\.?v|f\.?a|b\.?u\.?t|u\.?d|firma|yayasan|koperasi)\.?\s+/i;
+function importForm(form: unknown, name: unknown) {
+  return asSafeText(form || asSafeText(name).match(FORM_PREFIX)?.[1]).toLowerCase().replace(/[.\s]/g, "");
+}
+function similarNameKey(name: unknown) {
+  return normalizeClientIdentityName(asSafeText(name).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(FORM_PREFIX, ""));
+}
+function nameCloseness(left: string, right: string) {
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const length = Math.max(left.length, right.length);
+  if (length > 256 || Math.min(left.length, right.length) / length < 0.75) return 0;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index), beforePrevious = previous;
+  for (let i = 1; i <= left.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j++) {
+      current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + Number(left[i - 1] !== right[j - 1]));
+      if (i > 1 && j > 1 && left[i - 1] === right[j - 2] && left[i - 2] === right[j - 1]) current[j] = Math.min(current[j], beforePrevious[j - 2] + 1);
+    }
+    beforePrevious = previous; previous = current;
+  }
+  return 1 - previous[right.length] / length;
+}
+
+/** Suggestions only: identity resolution still belongs to the guarded database matcher. */
+export function findSimilarClientNames(row: ClientImportRow, records: ClientNameRecord[]): SimilarClientName[] {
+  const name = similarNameKey(row.name), form = importForm(row.businessForm, row.name), npwp = normalizeNpwp(row.npwp);
+  if (!name) return [];
+  const variants = (value: string) => [value.replace(/\s/g, ""), value.split(" ").sort().join(" ")];
+  const source = variants(name);
+  return records.flatMap(record => {
+    const target = similarNameKey(record.legal_name), compare = variants(target);
+    let score = Math.max(nameCloseness(source[0], compare[0]), nameCloseness(source[1], compare[1]));
+    // Contact names in parentheses often accompany the same company name.
+    const base = similarNameKey(asSafeText(row.name).replace(/\([^)]*\)/g, " "));
+    const targetBase = similarNameKey(record.legal_name.replace(/\([^)]*\)/g, " "));
+    if (base.length >= 6 && targetBase.length >= 6) score = Math.max(score, nameCloseness(base, targetBase) * 0.98);
+    if (score < (Math.min(name.length, target.length) < 6 ? 0.95 : 0.82)) return [];
+    const businessForm = importForm(record.company_form, record.legal_name), existingNpwp = normalizeNpwp(record.npwp), conflicts: string[] = [];
+    if (form && businessForm && form !== businessForm) conflicts.push("Different company form; correct the file before selecting this client.");
+    if (npwp && existingNpwp && npwp !== existingNpwp) conflicts.push("Different NPWP; correct the file or use an explicit existing code for an intentional correction.");
+    return [{ clientId: record.id, clientCode: record.client_code, name: record.legal_name, businessForm: asSafeText(record.company_form) || businessForm.toUpperCase(), status: asSafeText(record.status), engagementType: asSafeText(record.engagement_type), updatedAt: record.updated_at || null, similarity: Math.round(score * 100), conflicts }];
+  }).sort((a, b) => b.similarity - a.similarity || a.clientCode.localeCompare(b.clientCode) || a.clientId.localeCompare(b.clientId)).slice(0, 5);
+}
+
 export type DuplicateClientCandidate = { id?: string; clientCode: string; name: string; npwp?: string | null; createdAt?: string | null };
 
 export function findDuplicateClientGroups(rows: DuplicateClientCandidate[]) {

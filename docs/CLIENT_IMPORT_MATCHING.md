@@ -4,7 +4,42 @@ Imports update an existing Client Master record instead of creating a duplicate
 when its code, NPWP, or unique normalized name and company form match.
 The preview shows Create / Update, matching method and canonical existing code.
 Names ignore case, punctuation and a leading Indonesian corporate prefix; a known
-PT/CV/etc. form must be compatible. This is exact normalization, not fuzzy matching.
+PT/CV/etc. form must be compatible. These automatic matches remain exact, not fuzzy.
+
+## Similar-Name Review
+
+Unmatched import rows are also compared with existing Client Master names before
+confirmation. The preview offers up to five ranked suggestions, including the
+existing code, company form and Active/Inactive status. Selected records also show
+their Contract/On Demand/Free of Charge category. Inactive clients are included for
+identity review only; this does not add them to operational portfolio totals.
+
+Comparison tolerates minor spelling errors, adjacent letter transpositions,
+spacing, word order, accents and parenthesized contact names. Scores are name
+similarity, not identity confidence. Short names have a stricter threshold. These
+are suggestions only: a similar client is never selected or merged automatically.
+
+Choose an existing client, or explicitly choose Create a separate new client.
+Then click Review selected matches to rerun validation for the whole file before
+Confirm Import becomes available. The uploaded rows remain unchanged in memory.
+Selecting an existing client substitutes its current code and canonical name on
+the server; a file typo cannot rename it. Other supplied columns retain the existing
+import semantics, including explicit blanks. Conflicting company forms or NPWPs
+cannot be selected from suggestions; correct the file or use an explicit existing
+code for an intentional identity correction. A separate new client still needs a
+new code. Multiple rows selecting one existing client block the entire batch.
+
+The API also blocks unresolved/forged choices and compares the selected identity
+and version again after matching. Final writes still use the existing locked,
+transactional commit with exact expected-match/version checks and audit history.
+Reviewing suggestions never writes clients or sends announcements.
+
+Catalog reads request only the needed identity/status fields and paginate in
+stable ID order, rather than silently checking only the first API page. A failed
+or over-limit catalog read blocks import instead of treating unchecked names as
+new. Comparison bounds expensive edit-distance work for long names. This is an
+application-only update: no migration, extension, dependency, historical rewrite,
+automatic merge or hosted data mutation is required.
 
 ## Safety Rules
 

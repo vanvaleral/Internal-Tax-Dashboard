@@ -179,9 +179,24 @@ test('manual removal integrates with retained timeline entries without offering 
   const d=await dashboard();try{
     const row=d.api.getRows()[0],entry={id:'manual-note',entry:'Wrong case note',creatorProfileId:'tax-a',creatorName:'tax-a',createdAt:'2026-11-01T00:00:00Z'};
     d.api.state.expandedHimbauanId=row.id;d.api.state.caseProgressById[row.id]={progressEntries:[entry],completedTasks:[],taskTimeline:[],loadedAt:Date.now()};d.api.renderCases();
-    assert.ok(d.w.document.querySelector('[data-ca-action="remove-progress"]'));
+    const remove=d.w.document.querySelector('[data-ca-action="remove-progress"]');
+    assert.ok(remove);
+    assert.equal(remove.textContent.trim(),'','remove is icon-only');
+    assert.equal(remove.getAttribute('aria-label'),'Remove incorrect update');
+    assert.equal(remove.getAttribute('title'),'Remove incorrect update');
+    assert.ok(remove.querySelector('svg[aria-hidden="true"]'));
+    assert.equal(remove.parentElement.dataset.caseTimelineKey,'progress:manual-note','X belongs to the timeline card, not its text block');
+    assert.ok(remove.parentElement.classList.contains('has-remove'));
+    const style=d.w.getComputedStyle(remove);
+    assert.equal(style.position,'absolute');assert.equal(style.top,'6px');assert.equal(style.right,'6px');
+    assert.equal(style.color,'rgb(220, 38, 38)');
+    assert.equal(d.w.getComputedStyle(remove.parentElement).paddingRight,'46px','reserve room for the corner action');
+    remove.click();
+    assert.ok(d.w.document.querySelector('#case-assessment-dialog [name="reason"]'),'icon retains the reason/confirmation dialog');
+    assert.equal(d.writes.length,0,'opening the dialog does not remove a follow-up');
+    d.w.document.querySelector('#case-assessment-dialog [data-ca-close]').click();
     row.workflow={result:null,products:[],schedule:[],payments:[],events:[],removedProgress:[{id:entry.id,entry:entry.entry,creatorId:'tax-a',reason:'Wrong client',at:'2026-11-05T00:00:00Z',actorId:'tax-a'}]};d.api.renderCases();
-    assert.equal(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'),null);assert.match(d.w.document.querySelector('.case-removed-progress').textContent,/Wrong case note/);assert.ok(d.w.document.querySelector('[data-ca-action="restore-progress"]'));
+    assert.equal(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'),null);assert.match(d.w.document.querySelector('.case-removed-progress').textContent,/Wrong case note/);assert.equal(d.w.document.querySelector('[data-ca-action="restore-progress"]').textContent,'Restore');
     row.workflow.removedProgress[0].restoredAt='2026-11-05T01:00:00Z';d.api.renderCases();assert.ok(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'));assert.equal(d.w.document.querySelector('.case-removed-progress'),null);assert.deepEqual(d.warnings,[]);
   }finally{d.dom.window.close();}
 });
