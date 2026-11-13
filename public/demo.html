@@ -4018,12 +4018,10 @@
   <link rel="stylesheet" href="feature-access.css" />
   <script src="feature-access.js"></script>
   <link rel="stylesheet" href="client-engagement.css" />
-  <link rel="stylesheet" href="client-bulk-edit.css" />
   <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
   <link rel="stylesheet" href="case-workflow-dashboard.css" />
   <script src="case-assessment-dashboard.js"></script>
-  <script src="client-bulk-edit.js"></script>
   <script src="case-workflow-dashboard.js"></script>
   <script src="case-report.js"></script>
   <script>
@@ -4995,7 +4993,7 @@
       }
     };
 
-    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts", "bulk-edit"].includes(state.clientManagementTab)) {
+    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
@@ -5185,8 +5183,7 @@
           "free-of-charge": ["Clients / Free of Charge", "Clients Workspace", "Recurring monthly work without a fee; separate from the paid client portfolio."],
           inactive: ["Clients / Inactive Clients", "Clients Workspace", "Inactive clients are retained for history but excluded from the active operating list."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
-          contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."],
-          "bulk-edit": ["Clients / Bulk Edit", "Clients Workspace", "Stage, review and save client master changes together without exporting a file."]
+          contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
         },
         management: {
           overview: ["Management / KPI Overview", "Management Workspace", "Decision workspace for exceptions, bottlenecks, and quick access only."],
@@ -7691,7 +7688,6 @@
                 ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
-                ${!isMobileWorkspace && hasLeadershipAccess() ? `<button class="${state.clientManagementTab === "bulk-edit" ? "solid-btn" : "ghost-btn"}" data-client-tab="bulk-edit">Bulk Edit</button>` : ""}
               </div>
               <div class="toolbar-right">
                 ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
@@ -7700,7 +7696,6 @@
             </div>
           </section>
 
-          ${state.clientManagementTab === "bulk-edit" ? `<div class="client-bulk-slot" data-client-bulk-slot></div>` : ""}
           ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
             <div class="panel client-register-panel">
@@ -8108,12 +8103,10 @@
               </div>
             </section>
           ` : ``}
-          ${state.clientManagementTab === "bulk-edit" ? "" : `<button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>`}
+          <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>
         </div>
       `);
       window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : type === "free_of_charge" ? "free-of-charge" : "active"; commitWorkspaceNavigation("replace"); } });
-      const bulkSlot = root.querySelector("[data-client-bulk-slot]");
-      if (bulkSlot) window.ClientBulkEdit?.mount(bulkSlot, { canEdit: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, account: bootstrapProfile.user?.id || "offline", fetch: (...args) => appFetch(...args), onSaved: () => loadSharedClients() });
     }
 
     function renderMatrix() {
@@ -11827,12 +11820,11 @@
         operationsTab: ["active", "history", "claim", "archive"],
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
-        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts", "bulk-edit"],
+        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"],
         managementTab: ["overview", "trends", "portfolio", "workload", "features", "recognition", "report", "announcements", "access"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
       for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
-      if (state.clientManagementTab === "bulk-edit" && (!hasLeadershipAccess() || window.matchMedia("(max-width: 900px)").matches)) state.clientManagementTab = "active";
       if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
       window.WorkspaceFeatures.setRole(state.role);
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
