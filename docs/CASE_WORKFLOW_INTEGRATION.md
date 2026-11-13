@@ -23,7 +23,8 @@ workflow object or bypass closure on a case with a registered BA / SKP.
   linked tasks, next actions, notes and PIC/due-date context remain available.
 - BA / SKP popup records reference, actual date, outcome, result, selected tax
   byproducts, periods, whole-rupiah payable values, explicit revision requirements
-  and internal targets. The supported taxes follow the approved mockup. BA closes
+  and internal targets. BA supports editable draft rows with Add/Remove controls
+  and a grouped Indonesian tax dropdown (see BA Byproducts below). BA closes
   discussion only. Results cannot be overwritten through this initial version;
   corrections require a separately reviewed amendment workflow.
 - Positive byproducts create payment targets automatically. Instalments preserve
@@ -43,6 +44,36 @@ workflow object or bypass closure on a case with a registered BA / SKP.
   Existing case due-date behavior is unchanged. The overdue-payment filter is
   dashboard attention only: no new cron, push delivery or automated escalation
   messages are added by this phase.
+
+## BA Byproducts
+
+- Before recording the BA, add/remove up to 100 draft rows and choose the tax,
+  period, whole-rupiah payable amount and whether an SPT revision is required.
+  Removing an unsaved row does not delete an existing liability or timeline entry.
+- The same tax may appear in different periods. Duplicate tax/period pairs are
+  rejected server-side, including case/whitespace variants through Other.
+- `public/case-tax-types.js` is the shared, data-free dropdown/validation catalog.
+  It groups central PPh/PPN/PPnBM/PBB/Bea Meterai/Pajak Karbon, provincial and regency/city taxes,
+  plus historical regional labels for older periods. Existing saved labels remain
+  valid. Other / Lainnya requires an explicit tax name (maximum 80 characters).
+  The catalog identifies categories, not every KAP/KJS or taxable object. It does
+  not determine jurisdiction, applicability, rates, statutory deadlines or the
+  need to revise a return. These remain explicit PIC decisions from the BA.
+- Tax references: [DJP central taxes](https://www.pajak.go.id/index.php/id/jenis-pajak-pusat),
+  [DJP payment account/setoran categories](https://www.pajak.go.id/id/kode-akun-pajak-dan-kode-jenis-setoran-pajak),
+  [UU 1/2022, Article 4 and PBJT categories](https://djpk.kemenkeu.go.id/wp-content/uploads/2022/01/Salinan-UU-Nomor-1-Tahun-2022.pdf),
+  and [UU HPP, Article 13](https://www.pajak.go.id/index.php/id/peraturan/harmonisasi-peraturan-perpajakan).
+  This is a maintainable selection catalog, not a guarantee that future tax
+  legislation will need no catalog update; Other covers specialized labels.
+- Only remaining draft rows are submitted. Positive rows each receive their own
+  linked payment schedule, while zero-value revision-only rows remain possible.
+  Instalment selection includes the period so repeated tax types are distinguishable.
+- Failed validation/network saves retain the dialog and values. Pending saves lock
+  that dialog's controls, not the whole sheet. Existing authorization, request-ID
+  replay protection, optimistic concurrency and atomic audit writes are unchanged.
+- No database migration or existing-data rewrite is needed: products continue to
+  use the existing `case_workflow` JSON. Recorded BA results remain immutable;
+  editing an already saved result requires a separate audited amendment workflow.
 
 ## Saving And Concurrency
 

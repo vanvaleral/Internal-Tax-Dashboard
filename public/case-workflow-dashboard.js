@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const hosts=new Map(),tabs=new Map();
-  const taxes=["PPh Pasal 29","PPh Pasal 21","PPh Pasal 23","PPh Pasal 4 ayat (2)","PPN"];
+  const taxCatalog=window.CaseTaxTypes;
   const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
   const money=value=>"Rp"+Number(value||0).toLocaleString("id-ID");
   const date=value=>value?value.slice(0,10).split("-").reverse().join("/"):"-";
@@ -55,12 +55,18 @@
     document.getElementById("case-workflow-dialog")?.remove();
     const {item}=host,w=item.workflow||initial(),s=status(w),kind=item.caseCategory==="Pemeriksaan"?"SKP":"BA";
     let fields="",title="",submit="Save";
+    let productIndex=0;
+    const productRow=(tax="")=>{
+      const i=productIndex++;
+      const options=taxCatalog.groups.map(group=>`<optgroup label="${esc(group.label)}">${group.taxes.map(value=>`<option ${tax===value?"selected":""}>${esc(value)}</option>`).join("")}</optgroup>`).join("");
+      return `<tr data-cwf-product="${i}"><td data-label="Tax byproduct"><select class="field" name="tax-${i}" aria-label="Tax type" required><option value="" disabled ${tax?"":"selected"}>Choose tax</option>${options}<option value="${taxCatalog.otherValue}">Other / Lainnya...</option></select><label class="case-workflow-custom" hidden>Other tax name<input class="field" name="customTax-${i}" maxlength="80" disabled></label></td><td data-label="Period / year"><input class="field" name="period-${i}" aria-label="Tax period" value="${esc(item.taxYear||"")}" maxlength="40" required></td><td data-label="Payable (Rp)"><input class="field" name="amount-${i}" aria-label="Payable in rupiah" inputmode="numeric" value="0" required></td><td data-label="Revise SPT"><input type="checkbox" name="revise-${i}" aria-label="Requires revised SPT" ${kind==="BA"?"checked":""}></td><td class="case-workflow-remove-cell"><button type="button" class="ghost-btn case-workflow-remove" data-cwf-remove-product aria-label="Remove byproduct row" title="Remove byproduct row"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></td></tr>`;
+    };
     if(action==="record-result"){
       title=`Record ${kind} result`;
-      fields=field("number",`${kind} reference`,"","required maxlength=200")+dateField("date",`${kind} date`)+`<label>Outcome<select class="field" name="outcome"><option>Additional tax / revision</option><option>No additional tax</option></select></label><label>Result<textarea class="field" name="text" required maxlength="2000"></textarea></label><div class="case-workflow-scroll"><table><thead><tr><th>Byproduct</th><th>Period / year</th><th>Payable (Rp)</th><th>Revise SPT</th></tr></thead><tbody>${taxes.map((tax,index)=>`<tr><td><label class="case-workflow-choice"><input type="checkbox" data-cwf-product="${index}">${tax}</label></td><td><input class="field" name="period-${index}" value="${esc(item.taxYear||"")}" maxlength="40" disabled></td><td><input class="field" name="amount-${index}" inputmode="numeric" value="0" disabled></td><td><input type="checkbox" name="revise-${index}" ${kind==="BA"?"checked":""} disabled></td></tr>`).join("")}</tbody></table></div>`+dateField("paymentTarget","First internal payment target")+dateField("revisionTarget","Internal revision target");
+      fields=field("number",`${kind} reference`,"","required maxlength=200")+dateField("date",`${kind} date`)+`<label>Outcome<select class="field" name="outcome"><option>Additional tax / revision</option><option>No additional tax</option></select></label><label>Result<textarea class="field" name="text" required maxlength="2000"></textarea></label><fieldset class="case-workflow-products"><legend>Tax byproducts</legend><div class="case-workflow-product-tools"><p class="subline">One row per tax and period. Edit or remove rows before saving the BA.</p><button type="button" class="tiny-btn" data-cwf-add-product>+ Add row</button></div><div class="case-workflow-scroll"><table class="case-workflow-product-table"><thead><tr><th>Tax byproduct</th><th>Period / year</th><th>Payable (Rp)</th><th>Revise SPT</th><th><span class="case-workflow-sr-only">Remove</span></th></tr></thead><tbody data-cwf-products>${productRow("PPh Pasal 29")}</tbody></table></div><p class="subline" data-cwf-product-summary aria-live="polite"></p></fieldset>`+dateField("paymentTarget","First internal payment target")+dateField("revisionTarget","Internal revision target");
     }else if(action==="set-plan"){
       title="Set monthly instalments";
-      fields=`<label>Tax byproduct<select class="field" name="productId">${w.products.filter(p=>p.amount>0).map(p=>`<option value="${esc(p.id)}">${esc(p.tax)} / ${money(p.amount)}</option>`).join("")}</select></label>`+field("count","Number of instalments",3,'type="number" min="1" max="12" required')+dateField("date","First internal target")+'<p class="subline">Schedules with receipts cannot be replaced.</p>';
+      fields=`<label>Tax byproduct<select class="field" name="productId">${w.products.filter(p=>p.amount>0).map(p=>`<option value="${esc(p.id)}">${esc(p.tax)} / ${esc(p.period)} / ${money(p.amount)}</option>`).join("")}</select></label>`+field("count","Number of instalments",3,'type="number" min="1" max="12" required')+dateField("date","First internal target")+'<p class="subline">Schedules with receipts cannot be replaced.</p>';
     }else if(action==="record-payment"||action==="verify-payment"){
       title=action==="verify-payment"?"Verify tax receipt":"Record payment";
       const receipt=w.payments.find(p=>p.id===key),row=w.schedule.find(s=>s.id===(receipt?.scheduleId||key));
@@ -79,29 +85,63 @@
     document.body.append(dialog);
     let saving=false;
     const requestId=crypto.randomUUID();
+    const syncProducts=()=>{
+      if(action!=="record-result")return;
+      const rows=[...dialog.querySelectorAll("[data-cwf-product]")];
+      const total=rows.reduce((sum,row)=>sum+(Number(row.querySelector('[name^="amount-"]').value.replaceAll(".",""))||0),0);
+      dialog.querySelector("[data-cwf-product-summary]").textContent=rows.length?`${rows.length} byproduct${rows.length===1?"":"s"} / Total ${money(total)}`:"No byproducts. Add a row if tax or revision is required.";
+      dialog.querySelector("[data-cwf-add-product]").disabled=rows.length>=taxCatalog.maxProducts;
+      dialog.querySelector('[name="paymentTarget"]').required=rows.some(row=>Number(row.querySelector('[name^="amount-"]').value.replaceAll(".",""))>0);
+      dialog.querySelector('[name="revisionTarget"]').required=rows.some(row=>row.querySelector('[name^="revise-"]').checked);
+    };
+    let lockedControls=[];
+    const setSaving=value=>{
+      saving=value;
+      if(value){lockedControls=[...dialog.querySelectorAll("button,input,select,textarea")].map(control=>[control,control.disabled]);lockedControls.forEach(([control])=>control.disabled=true);}
+      else{lockedControls.forEach(([control,disabled])=>control.disabled=disabled);lockedControls=[];syncProducts();}
+    };
     const close=()=>{if(!saving){dialog.close();dialog.remove();}};
     dialog.querySelectorAll("[data-cwf-close]").forEach(b=>b.addEventListener("click",close));
     dialog.addEventListener("cancel",event=>{event.preventDefault();close();});
     dialog.addEventListener("click",event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)close();}});
-    dialog.addEventListener("change",event=>{const choice=event.target.closest("[data-cwf-product]");if(choice)choice.closest("tr").querySelectorAll("input[name]").forEach(input=>input.disabled=!choice.checked);});
+    dialog.addEventListener("click",event=>{
+      if(saving)return;
+      if(event.target.closest("[data-cwf-add-product]")){
+        const body=dialog.querySelector("[data-cwf-products]");if(body.children.length>=taxCatalog.maxProducts)return;
+        body.insertAdjacentHTML("beforeend",productRow());syncProducts();body.lastElementChild.querySelector("select").focus();
+      }
+      const remove=event.target.closest("[data-cwf-remove-product]");
+      if(remove){const row=remove.closest("[data-cwf-product]"),next=row.nextElementSibling||row.previousElementSibling;row.remove();syncProducts();(next?.querySelector("select")||dialog.querySelector("[data-cwf-add-product]")).focus();}
+    });
+    dialog.addEventListener("change",event=>{
+      if(saving)return;
+      if(event.target.matches('[name^="tax-"]')){
+        const custom=event.target.closest("tr").querySelector(".case-workflow-custom"),other=event.target.value===taxCatalog.otherValue;
+        custom.hidden=!other;custom.querySelector("input").disabled=!other;custom.querySelector("input").required=other;
+        if(other)custom.querySelector("input").focus();
+      }
+      syncProducts();
+    });
+    dialog.addEventListener("input",()=>{if(!saving)syncProducts();});
     dialog.querySelector("form").addEventListener("submit",async event=>{
       event.preventDefault();if(saving)return;
       const error=dialog.querySelector("[data-cwf-error]");error.textContent="";
       try{
         const form=new FormData(event.target),command={type:action,requestId};
-        for(const [name,value] of form)if(!/^(?:amount|period|revise)-/.test(name))command[name]=String(value).trim();
+        for(const [name,value] of form)if(!/^(?:amount|period|revise|tax|customTax)-/.test(name))command[name]=String(value).trim();
         const iso=value=>{const m=String(value||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:String(value||"");};
         for(const name of ["date","paymentTarget","revisionTarget"])if(command[name])command[name]=iso(command[name]);
         const amount=value=>{if(!/^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(String(value)))throw Error("Use a whole rupiah amount, optionally with dot thousand separators.");return Number(String(value).replaceAll(".",""));};
-        if(action==="record-result")command.products=[...dialog.querySelectorAll("[data-cwf-product]:checked")].map(input=>{const i=Number(input.dataset.cwfProduct);return {tax:taxes[i],period:form.get(`period-${i}`),amount:amount(form.get(`amount-${i}`)),revise:form.has(`revise-${i}`)};});
+        if(action==="record-result")command.products=[...dialog.querySelectorAll("[data-cwf-product]")].map(row=>{const i=row.dataset.cwfProduct,tax=form.get(`tax-${i}`);return {tax,...(tax===taxCatalog.otherValue?{customTax:form.get(`customTax-${i}`)}:{}),period:form.get(`period-${i}`),amount:amount(form.get(`amount-${i}`)),revise:form.has(`revise-${i}`)};});
         if(action==="record-payment"){command.amount=amount(form.get("amount"));command.verified=form.has("verified");command.scheduleId=key;}
         if(action==="verify-payment")command.paymentId=key;
         if(action==="record-filing")command.productId=key;
-        saving=true;dialog.querySelectorAll("button").forEach(b=>b.disabled=true);
+        setSaving(true);
         await host.onSave(command);
         saving=false;close();
-      }catch(e){error.textContent=e.message||"Not saved. Your database values are unchanged.";saving=false;dialog.querySelectorAll("button").forEach(b=>b.disabled=false);}
+      }catch(e){error.textContent=e.message||"Not saved. Your database values are unchanged.";setSaving(false);}
     });
+    syncProducts();
     dialog.showModal();
   }
   document.addEventListener("click",event=>{

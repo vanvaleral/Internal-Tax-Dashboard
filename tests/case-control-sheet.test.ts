@@ -70,7 +70,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-assessment-dashboard.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
+  w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-assessment-dashboard.js")); w.eval(read("public/case-tax-types.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
   // Expose closure references in the test source only, never in the served dashboard.
   const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, addHimbauanProgress, loadPerformanceLedger, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script.replace('window.__casesTest = { state,','window.__casesTest = { resetAssignedPreload:()=>{assignedCasePreloadTimer=null;assignedCasePreloadAttempts.clear();}, scheduleAssignedCasePreload, assignedCasePreloadIds, caseInactivity, refreshCaseActivityAppearance, state,')); await tick();
@@ -603,12 +603,12 @@ test("workflow dialog preserves invalid entries on failure and closes only after
     d.w.document.querySelector('[data-cwf-action="record-result"]').click();
     const dialog=d.w.document.querySelector('#case-workflow-dialog');assert.ok(dialog.hasAttribute('open'));
     dialog.querySelector('[name="number"]').value="BA-DIALOG";dialog.querySelector('[name="date"]').value="01/11/2026";dialog.querySelector('[name="text"]').value="Agreed";
-    const choice=dialog.querySelector('[data-cwf-product="0"]');choice.checked=true;choice.dispatchEvent(new d.w.Event('change',{bubbles:true}));
+    assert.equal(dialog.querySelector('[name="tax-0"]').value,"PPh Pasal 29");
     dialog.querySelector('[name="period-0"]').value="2025";dialog.querySelector('[name="amount-0"]').value="-1000";
     const submit=()=>dialog.querySelector('form').dispatchEvent(new d.w.Event('submit',{bubbles:true,cancelable:true}));
     submit();await tick();assert.match(dialog.querySelector('[data-cwf-error]').textContent,/whole rupiah/);assert.equal(d.writes.length,0);assert.equal(dialog.querySelector('[name="number"]').value,"BA-DIALOG");
     dialog.querySelector('[name="amount-0"]').value="1.000";dialog.querySelector('[name="paymentTarget"]').value="05/11/2026";dialog.querySelector('[name="revisionTarget"]').value="06/11/2026";
-    d.delay();submit();await tick();assert.equal(dialog.querySelector('button[type="submit"]').disabled,true);assert.ok(dialog.isConnected);
+    d.delay();submit();await tick();assert.equal(dialog.querySelector('button[type="submit"]').disabled,true);assert.equal(dialog.querySelector('[name="tax-0"]').disabled,true);assert.ok(dialog.isConnected);
     d.release();await tick();await tick();assert.equal(dialog.isConnected,false);assert.equal(d.api.getRows()[0].workflow.products[0].amount,1000);
     assert.deepEqual(d.warnings,[]);
   }finally{d.dom.window.close();}

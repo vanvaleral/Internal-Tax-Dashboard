@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-export const CASE_TAX_TYPES = ["PPh Pasal 29", "PPh Pasal 21", "PPh Pasal 23", "PPh Pasal 4 ayat (2)", "PPN"];
+import taxCatalog from "../public/case-tax-types.js";
+export const CASE_TAX_TYPES = taxCatalog.taxes;
 type Document = { number: string; date: string };
 export type CasePsa = { id:string; requested:number; application:string; date:string; status:"Draft"|"Diajukan"|"Dalam proses"|"Disetujui"|"Disetujui sebagian"|"Ditolak"; note:string; decision?:Document & {amount:number} };
 export type CaseAssessment = Document & { type:"SKP"|"STP"; principal:number; penalty:number; psa:CasePsa|null };
@@ -139,12 +140,16 @@ export function applyCaseWorkflowAction(previous: CaseWorkflow | null, input: an
     const doc = document(options.category === "Himbauan" ? "BA reference" : "SKP reference");
     const outcome = input.outcome;
     if (!["Additional tax / revision","No additional tax"].includes(outcome)) return fail("Choose the result outcome.");
-    if (!Array.isArray(input.products) || input.products.length > CASE_TAX_TYPES.length) return fail("Choose up to five tax byproducts.");
+    if (!Array.isArray(input.products) || input.products.length > taxCatalog.maxProducts) return fail(`Add up to ${taxCatalog.maxProducts} tax byproducts.`);
     const seen = new Set();
     const products: Product[] = input.products.map((p: any,index: number)=>{
-      if (!CASE_TAX_TYPES.includes(p.tax) || seen.has(p.tax)) return fail("Choose each supported tax type at most once.");
-      seen.add(p.tax);
-      return { id:`${requestId}-p${index}`, tax:p.tax, period:text(p.period,"Tax period",40), amount:amount(p.amount), revise:p.revise===true, filing:null };
+      if (!p || typeof p!=="object" || !CASE_TAX_TYPES.includes(p.tax) && p.tax!==taxCatalog.otherValue) return fail("Choose a supported tax type or Other and enter its name.");
+      const entered=p.tax===taxCatalog.otherValue?text(p.customTax,"Other tax name",80).replace(/\s+/g," "):p.tax;
+      const tax=CASE_TAX_TYPES.find(tax=>tax.toLowerCase()===entered.toLowerCase())||entered;
+      const period=text(p.period,"Tax period",40),identity=JSON.stringify([tax.toLowerCase(),period.replace(/\s+/g," ").toLowerCase()]);
+      if (seen.has(identity)) return fail("The same tax and period appear more than once. Combine them or choose a different period.");
+      seen.add(identity);
+      return { id:`${requestId}-p${index}`, tax, period, amount:amount(p.amount), revise:p.revise===true, filing:null };
     });
     const total = products.reduce((sum,p)=>sum+p.amount,0);
     if (!Number.isSafeInteger(total)) return fail("The total amount is too large.");
