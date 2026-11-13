@@ -31,16 +31,18 @@ function ico(frames) {
 
 async function main() {
   const source = await fs.readFile(path.join(publicDir, "favicon.svg"));
+  const desktop = await sharp(source, { density: 1152 }).trim().png().toBuffer();
   await fs.mkdir(path.join(publicDir, "icons"), { recursive: true });
   for (const size of [192, 512]) {
     await fs.writeFile(path.join(publicDir, "icons", `app-${size}.png`), await png(source, size, 0.88));
+    await fs.writeFile(path.join(publicDir, "icons", `app-desktop-v2-${size}.png`), await png(desktop, size, 0.96));
   }
   // Keep all meaningful artwork inside the maskable icon's central safe circle.
   await fs.writeFile(path.join(publicDir, "icons", "app-maskable-512.png"), await png(source, 512, 0.68, true));
   await fs.writeFile(path.join(publicDir, "icons", "apple-touch-icon.png"), await png(source, 180, 0.74, true));
   await fs.writeFile(path.join(publicDir, "favicon-32.png"), await png(source, 32));
   const frames = [];
-  for (const size of [16, 32, 48]) frames.push({ size, bytes: await png(source, size) });
+  for (const size of [16, 32, 48]) frames.push({ size, bytes: await png(desktop, size, 0.96) });
   await fs.writeFile(path.join(publicDir, "favicon.ico"), ico(frames));
   console.log("Generated app icons and favicon fallbacks from public/favicon.svg.");
 }

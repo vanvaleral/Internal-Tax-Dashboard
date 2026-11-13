@@ -5,25 +5,25 @@ import { JSDOM, VirtualConsole } from "jsdom";
 
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve)); };
-async function fixture(permission = "default", registered = false) {
+async function fixture(permission = "default", registered = false, received = true) {
   const warnings: string[] = [], events: string[] = [], requests: any[] = [];
   const vc = new VirtualConsole(); vc.on("jsdomError", e => warnings.push(e.message));
   const dom = new JSDOM(read("public/demo.html"), { runScripts: "outside-only", url: "http://localhost/demo.html", virtualConsole: vc }), w = dom.window as any;
   let allowed = permission, linked = registered;
   const subscription = { endpoint: "https://push.invalid/current", unsubscribe: async () => { linked = false; return true; }, toJSON: () => ({ endpoint: "https://push.invalid/current", keys: { p256dh: "key", auth: "auth" } }) };
-  const registration = { pushManager: { getSubscription: async () => subscription, subscribe: async () => { events.push("subscribe"); return subscription; } } };
+  const registration = { getNotifications: async ({ tag }: any) => { events.push(`check:${tag}`); return received ? [{ tag }] : [{ tag: "unrelated-event" }]; }, pushManager: { getSubscription: async () => subscription, subscribe: async () => { events.push("subscribe"); return subscription; } } };
   Object.defineProperty(w.navigator, "serviceWorker", { value: { register: async () => { events.push("register"); return registration; }, ready: Promise.resolve(registration) } });
   w.PushManager = function() {};
   w.Notification = { get permission() { return allowed; }, requestPermission: () => { events.push("permission"); allowed = "granted"; return Promise.resolve(allowed); } };
   w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
-  w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
+  w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = (fn: any, delay: number) => { if (delay === 500) queueMicrotask(fn); return 0; };
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
   w.fetch = async (url: string, init: any = {}) => {
     let body: any;
     if (url === "/api/push-subscriptions") {
       requests.push({ url, ...init });
-      if (init.method === "POST") { const input = JSON.parse(init.body); if (input.action !== "test") linked = true; body = input.action === "test" ? { accepted: true } : { enabled: true }; }
+      if (init.method === "POST") { const input = JSON.parse(init.body); if (input.action !== "test") linked = true; body = input.action === "test" ? { accepted: true, tag: "lmats-push-test-current" } : { enabled: true }; }
       else body = { configured: true, enabled: true, deviceEnabled: linked, publicKey: "BAAA" };
     } else body = url === "/api/profile" ? { user: { id: "push-user" }, profile: { id: "supervisor", role: "supervisor", display_name: "Supervisor", directory_active: true } } : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
@@ -50,7 +50,21 @@ test("push settings use this browser's subscription, request permission only fro
     assert.equal(doc.querySelector("[data-test-push-notification]").disabled, false);
     doc.querySelector("[data-test-push-notification]").click(); await tick();
     assert.equal(JSON.parse(d.requests.at(-1).body).action, "test");
-    assert.match(doc.querySelector('[role="dialog"][aria-label="Appearance settings"]').textContent, /Test accepted by the push service/);
+    assert.match(doc.querySelector('[role="dialog"][aria-label="Appearance settings"]').textContent, /This browser received the test notification/);
+    assert.ok(d.events.includes("check:lmats-push-test-current"));
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
+
+test("an accepted push without browser receipt is not reported as delivered", async () => {
+  const d = await fixture("granted", true, false);
+  try {
+    d.w.document.querySelector("[data-test-push-notification]").click(); await tick();
+    const text = d.w.document.querySelector('[role="dialog"][aria-label="Appearance settings"]').textContent;
+    assert.match(text, /browser receipt was not confirmed/);
+    assert.doesNotMatch(text, /This browser received/);
+    assert.equal(d.events.filter(item => item.startsWith("check:")).length, 20, "receipt check is bounded and ignores other notifications");
+    assert.equal(d.w.document.querySelector("[data-test-push-notification]").disabled, false);
     assert.deepEqual(d.warnings, []);
   } finally { d.dom.window.close(); }
 });

@@ -48,6 +48,22 @@ test("the maskable icon is opaque and all artwork stays inside its central safe 
   assert.ok(artwork > 10000);
 });
 
+test("desktop artwork fills the icon canvas without clipping or inheriting mobile padding", async () => {
+  for (const icon of manifest.icons.filter((item: any) => item.purpose === "any")) {
+    const { data, info } = await sharp(bytes(icon.src)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let left = info.width, right = -1, top = info.height, bottom = -1;
+    for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+      if (data[(y * info.width + x) * 4 + 3] > 16) {
+        left = Math.min(left, x); right = Math.max(right, x);
+        top = Math.min(top, y); bottom = Math.max(bottom, y);
+      }
+    }
+    assert.ok((right - left + 1) / info.width >= 0.94);
+    assert.ok((bottom - top + 1) / info.height >= 0.94);
+    assert.ok(left > 0 && top > 0 && right < info.width - 1 && bottom < info.height - 1, "retain a small unclipped edge");
+  }
+});
+
 test("Windows ICO contains complete 16/32/48 PNG frames and the PNG favicon is 32px", async () => {
   const icon = bytes("/favicon.ico");
   assert.equal(icon.readUInt16LE(0), 0); assert.equal(icon.readUInt16LE(2), 1); assert.equal(icon.readUInt16LE(4), 3);

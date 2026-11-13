@@ -43,9 +43,10 @@ export async function POST(request: Request) {
     if (claim.error) return NextResponse.json({ error: "Push testing is not ready. Apply the notification migration." }, { status: 503 });
     if (claim.data !== true) return NextResponse.json({ error: "Wait 30 seconds before sending another test." }, { status: 429 });
     try {
+      const tag = `lmats-push-test-${crypto.randomUUID()}`;
       await webpush.sendNotification({ endpoint: device.endpoint, keys: { p256dh: device.p256dh, auth: device.auth } },
-        JSON.stringify({ title: "Tax Dashboard test", body: "Browser push is connected on this device.", tag: "lmats-push-test", url: "/demo.html?view=my-work-view" }), { timeout: 10_000 });
-      return NextResponse.json({ accepted: true });
+        JSON.stringify({ title: "Tax Dashboard test", body: "Browser push is connected on this device.", tag, renotify: true, url: "/demo.html?view=my-work-view" }), { timeout: 10_000, TTL: 60, urgency: "high" });
+      return NextResponse.json({ accepted: true, tag });
     } catch (error) {
       const status = Number((error as { statusCode?: number }).statusCode);
       if ([404, 410].includes(status)) {

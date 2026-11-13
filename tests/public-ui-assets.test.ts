@@ -40,7 +40,7 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   const run = (path: string, workspaceUser = "") => context.exports.middleware({ method: "GET", nextUrl: new URL(`https://test.local${path}`), url: `https://test.local${path}`, headers: { get: () => workspaceUser }, cookies: { getAll: () => [] } });
   assert.equal((await run("/annual-sheet-live.js")).status, 200);
   assert.equal((await run("/favicon.svg")).status, 200);
-  for (const path of ["/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/favicon-32.png"]) assert.equal((await run(path)).status, 200, "installation assets do not need a session");
+  for (const path of ["/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-desktop-v2-192.png", "/icons/app-desktop-v2-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/favicon-32.png"]) assert.equal((await run(path)).status, 200, "installation assets do not need a session");
   assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
   assert.equal((await run("/api/workspace/bootstrap")).status, 200);
   for (const path of ["/api/cases", "/api/cases/workflow", "/api/cases/report"]) assert.equal((await run(path)).status, 200, "exact Cases handlers authenticate themselves");

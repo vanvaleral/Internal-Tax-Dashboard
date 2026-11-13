@@ -25,3 +25,11 @@ If it does not update, remove/reinstall the app shortcut without choosing to cle
 site data. Do not erase browser storage as an icon repair step: it can contain
 unsaved task edits and account-specific UI preferences. Installing from the main
 dashboard is recommended; all supported linked pages share the same app identity.
+
+Desktop installation icons now use trimmed artwork with a 96% canvas footprint,
+instead of shrinking an already padded SVG to 88%. Versioned desktop PNG paths
+encourage Chrome to refresh the icon; the stable app ID is unchanged. Legacy icon
+paths remain available to older installs. Mobile maskable and Apple touch artwork
+retain their original safe padding. The Windows ICO fallback uses the enlarged
+artwork too. Chrome/Windows may still need a shortcut reinstall to replace their
+cached taskbar icon; do not clear site data.

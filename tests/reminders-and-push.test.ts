@@ -40,7 +40,7 @@ function subscriptions() {
   const route = loadRoute("app/api/push-subscriptions/route.ts", {
     "@/lib/access": { currentActor: async () => ({ admin: db, profile: { id: "own" } }) },
     "@/lib/web-push": { webPushConfiguration: () => ({ configured, message: "Configuration needs attention" }) },
-    "web-push": { default: { sendNotification: async (subscription: any, payload: string) => { sends.push({ subscription, payload }); if (status) throw { statusCode: status }; } } }
+    "web-push": { default: { sendNotification: async (subscription: any, payload: string, options: any) => { sends.push({ subscription, payload, options }); if (status) throw { statusCode: status }; } } }
   });
   const req = (body: any) => new Request("https://test.invalid/api/push-subscriptions", { method: "POST", body: JSON.stringify(body) });
   return { db, route, req, sends, configure: (value: boolean) => { configured = value; }, allow: (value: boolean) => { allowed = value; }, status: (value: number) => { status = value; } };
@@ -65,8 +65,14 @@ test("test pushes are self-only, rate limited, distinguish provider acceptance a
   d.allow(false);
   assert.equal((await d.route.POST(d.req({ action: "test", endpoint: "https://push.invalid/own" }))).status, 429);
   d.allow(true);
-  assert.equal((await d.route.POST(d.req({ action: "test", endpoint: "https://push.invalid/own" }))).body.accepted, true);
+  const first = await d.route.POST(d.req({ action: "test", endpoint: "https://push.invalid/own" }));
+  assert.equal(first.body.accepted, true);
   assert.equal(d.sends.length, 1);
+  assert.equal(JSON.parse(d.sends[0].payload).tag, first.body.tag);
+  assert.equal(JSON.parse(d.sends[0].payload).renotify, true);
+  assert.equal(d.sends[0].options.urgency, "high"); assert.equal(d.sends[0].options.TTL, 60);
+  const second = await d.route.POST(d.req({ action: "test", endpoint: "https://push.invalid/own" }));
+  assert.notEqual(second.body.tag, first.body.tag, "explicit tests must not silently replace each other");
   d.status(410);
   assert.equal((await d.route.POST(d.req({ action: "test", endpoint: "https://push.invalid/own" }))).status, 410);
   assert.deepEqual(d.db.tables.web_push_subscriptions.map(row => row.id), ["other-device"]);
@@ -106,7 +112,24 @@ test("service-worker clicks are same-origin only and notification payloads use a
   new Function("self", "clients", readFileSync(new URL("../public/push-sw.js", import.meta.url), "utf8"))(self, clients);
   let pending: Promise<any>;
   handlers.push({ data: { json: () => ({ title: "Reminder" }) }, waitUntil: (value: Promise<any>) => { pending = value; } }); await pending!;
-  assert.equal(shown[0].options.icon, "/images/lmats-logo-official.png");
+  assert.equal(shown[0].options.icon, "/icons/app-desktop-v2-192.png");
+  assert.equal(shown[0].options.renotify, false, "ordinary retries remain quiet");
+  handlers.push({ data: { json: () => ({ tag: "lmats-push-test-example", renotify: true }) }, waitUntil: (value: Promise<any>) => { pending = value; } }); await pending!;
+  assert.equal(shown[1].options.renotify, true);
+  handlers.push({ data: { json: () => ({ tag: "ordinary-event", renotify: true }) }, waitUntil: (value: Promise<any>) => { pending = value; } }); await pending!;
+  assert.equal(shown[2].options.renotify, false);
   handlers.notificationclick({ notification: { close() {}, data: { url: "https://evil.invalid" } }, waitUntil: (value: Promise<any>) => { pending = value; } }); await pending!;
   assert.deepEqual(opened, ["https://test.invalid/dashboard"]);
+});
+
+test("push-only service worker updates activate without closing all dashboard windows", async () => {
+  const handlers: Record<string, any> = {}, calls: string[] = [];
+  const self = { addEventListener: (name: string, handler: any) => { handlers[name] = handler; }, skipWaiting: async () => { calls.push("skipWaiting"); } };
+  const clients = { claim: async () => { calls.push("claim"); } };
+  new Function("self", "clients", readFileSync(new URL("../public/push-sw.js", import.meta.url), "utf8"))(self, clients);
+  for (const event of ["install", "activate"]) {
+    let pending: Promise<any>;
+    handlers[event]({ waitUntil: (value: Promise<any>) => { pending = value; } }); await pending!;
+  }
+  assert.deepEqual(calls, ["skipWaiting", "claim"]);
 });

@@ -6608,7 +6608,7 @@
       pushNotificationState.loading = true;
       renderAppearanceSettings();
       try {
-        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/", updateViaCache: "none" });
         await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
         const response = await appFetch("/api/push-subscriptions", { cache: "no-store", headers: { Accept: "application/json", ...(subscription ? { "x-push-endpoint": subscription.endpoint } : {}) } }, "", { trackUpdate: false });
@@ -6641,7 +6641,7 @@
           const permission = await Notification.requestPermission();
           if (permission !== "granted") throw new Error("Allow notifications in this browser's site settings, then try again.");
         }
-        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+        const registration = await navigator.serviceWorker.register("/push-sw.js", { scope: "/", updateViaCache: "none" });
         await navigator.serviceWorker.ready;
         const existing = await registration.pushManager.getSubscription();
         if (pushNotificationState.enabled) {
@@ -6673,17 +6673,41 @@
       pushNotificationState.loading = true; renderAppearanceSettings();
       try {
         const registration = await navigator.serviceWorker.ready;
+        if (Notification.permission !== "granted") {
+          pushNotificationState.enabled = false;
+          throw new Error("Notifications are blocked. Allow this website in browser settings before testing.");
+        }
         const subscription = await registration.pushManager.getSubscription();
-        if (!subscription) throw new Error("Enable push on this device again before testing.");
+        if (!subscription) {
+          pushNotificationState.enabled = false;
+          throw new Error("Enable push on this device again before testing.");
+        }
         const response = await appFetch("/api/push-subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test", endpoint: subscription.endpoint }) }, "");
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
           if (response.status === 410) { await subscription.unsubscribe(); pushNotificationState.enabled = false; }
           throw new Error(result.error || "The test could not be sent.");
         }
-        pushNotificationState.message = "Test accepted by the push service. If it does not appear, check browser/Windows notification settings and Do Not Disturb.";
+        pushNotificationState.message = "Test accepted by the push service. Checking whether this browser received it...";
+        renderAppearanceSettings();
+        const received = await confirmTestPushReceived(registration, result.tag);
+        pushNotificationState.message = received
+          ? "This browser received the test notification. If no banner appeared, check Windows Settings > System > Notifications for Tax Dashboard / Google Chrome, banner permissions and Do Not Disturb."
+          : "The push service accepted the test, but browser receipt was not confirmed. Keep Chrome running and check your connection, browser/site notification permissions and Windows notification settings. A late or already dismissed notification may not be detected. Retry in 30 seconds.";
       } catch (error) { pushNotificationState.message = error instanceof Error ? error.message : "Push test failed."; }
       finally { pushNotificationState.loading = false; renderAppearanceSettings(); }
+    }
+
+    async function confirmTestPushReceived(registration, tag) {
+      if (!tag || typeof registration.getNotifications !== "function") return false;
+      // Inspect only this test; do not read or dismiss the user's other notifications.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        try {
+          if ((await registration.getNotifications({ tag })).some(notification => notification.tag === tag)) return true;
+        } catch { return false; }
+        if (attempt < 19) await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      return false;
     }
 
     function myWorkLocalDateTime(value) {

@@ -6,6 +6,8 @@ const PUBLIC_UI_ASSETS = new Set([
   "/manifest.webmanifest",
   "/icons/app-192.png",
   "/icons/app-512.png",
+  "/icons/app-desktop-v2-192.png",
+  "/icons/app-desktop-v2-512.png",
   "/icons/app-maskable-512.png",
   "/icons/apple-touch-icon.png",
   "/favicon-options/option-a-diamond.svg",

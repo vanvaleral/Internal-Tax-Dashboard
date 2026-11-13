@@ -1,12 +1,20 @@
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
   event.waitUntil(self.registration.showNotification(payload.title || "LMATS Consulting", {
     body: payload.body || "You have a new announcement.",
-    icon: "/images/lmats-logo-official.png",
-    badge: "/images/lmats-logo-official.png",
+    icon: "/icons/app-desktop-v2-192.png",
+    badge: "/icons/app-desktop-v2-192.png",
     tag: payload.tag || "lmats-announcement",
-    renotify: false,
+    renotify: payload.renotify === true && String(payload.tag || "").startsWith("lmats-push-test-"),
     data: { url: payload.url || "/demo.html?view=announcement-view" }
   }));
 });

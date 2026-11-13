@@ -132,6 +132,27 @@ code, verify the protected worker/new settings response, explicitly activate the
 schedule, and use the device's Send test notification action for an OS/browser
 display check. Old reminders should be reset to a new future time deliberately.
 
+### Explicit Test Display Diagnostics
+
+A live device test on 13 November returned provider acceptance, but a visible OS
+banner was not confirmed. The original test reused a fixed tag with renotify=false,
+which could silently replace a previous test rather than alert again. Each explicit
+test now has a unique server-generated tag, high delivery urgency and a short TTL.
+Only explicit test payloads may re-alert; ordinary outbox retries stay quiet.
+
+After acceptance, Settings checks only that test's tag in this registration's
+getNotifications for up to roughly ten seconds. It distinguishes browser receipt
+from unconfirmed receipt and from a server/provider error. Browser receipt still
+does not prove a Windows banner appeared: OS notification permissions, banner
+settings and Do Not Disturb remain user-controlled. A quickly dismissed or late
+notification may not be detected. No fake local notification is substituted for a
+real push and no other notifications are inspected or dismissed.
+
+The push-only worker activates updates without waiting for every open workspace
+window to close. It still has no fetch handler/offline cache. Branding uses the
+desktop app icon. No database changes, reminder scheduler activation, permission
+changes or historical notification broadcasts are part of this display fix.
+
 ## Case-Creation Delivery Fix (2026-11-02)
 
 New saved Himbauan/Pemeriksaan cases create an operational announcement for their
