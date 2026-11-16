@@ -48,6 +48,17 @@ test('new task identity confirmation preserves personal order without changing t
   }finally{d.dom.window.close();}
 });
 
+test('new task confirmation moves the unsent step draft to its UUID without including it in the save',async()=>{
+  const d=fixture(true);try{
+    d.state.myWorkStepDrafts={'task-local':'Earlier draft'};d.state.addingMyWorkStepId='task-local';
+    const input=d.w.document.createElement('input');input.id='my-work-step';input.dataset.myWorkStepTask='task-local';input.value='Newest unsubmitted draft';d.w.document.getElementById('my-work-view').append(input);
+    await d.save();
+    assert.equal(d.task.id,'saved-task');assert.equal(d.state.myWorkStepDrafts['saved-task'],'Newest unsubmitted draft');
+    assert.equal('task-local' in d.state.myWorkStepDrafts,false);assert.equal(input.dataset.myWorkStepTask,'saved-task');assert.equal(d.state.addingMyWorkStepId,'saved-task');
+    assert.equal(JSON.stringify(d.writes).includes('unsubmitted'),false);assert.equal(d.issues.length,0);
+  }finally{d.dom.window.close();}
+});
+
 test('save status keeps the same compact box through saved, saving, retry and conflict without replacing inputs',async()=>{
   const d=fixture();try{
     const status=d.w.document.querySelector('[data-my-work-save-status]'),input=d.w.document.getElementById('editor');
