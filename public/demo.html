@@ -9361,6 +9361,11 @@
     function renderMyWork() {
       const root = document.getElementById("my-work-view");
       window.MyWorkReorder?.cancel(root);
+      const scrollContext = state.myWorkTab === "archived"
+        ? JSON.stringify(["archived", state.myWorkArchivePeriod, state.myWorkArchiveYear, state.myWorkArchiveQuery])
+        : "current";
+      const previousTaskList = root.querySelector(".my-work-task-list");
+      const previousScrollTop = previousTaskList?.dataset.myWorkScrollContext === scrollContext ? previousTaskList.scrollTop : 0;
       const myWorkOrderGroups = {};
       const ordered = (key, tasks) => {
         const result = window.MyWorkReorder?.sort(tasks, state.myWorkOrder[key]) || tasks;
@@ -9436,7 +9441,7 @@
               <div class="eyebrow" style="color:#dce5ff">MY WORK</div><h2>Progress ${escapeHtml(state.selectedPic)}</h2>
               ${myWorkDemoMode ? `<div class="pill accent" style="align-self:flex-start; margin-top:8px;">Preview data · not saved</div>` : ""}
               <div class="my-work-tabs"><button class="my-work-tab ${state.myWorkTab === "current" ? "active" : ""}" data-my-work-tab="current">Current</button><button class="my-work-tab ${state.myWorkTab === "archived" ? "active" : ""}" data-my-work-tab="archived">Archived <span class="my-work-section-count">${archivedTasks.length}</span></button></div>
-              <div class="my-work-task-list">
+              <div class="my-work-task-list" data-my-work-scroll-context="${escapeAttr(scrollContext)}">
                 ${state.myWorkTab === "archived" ? archivedTaskMarkup : currentTaskMarkup}
               </div>
               ${state.myWorkTab === "current" ? `<div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>` : ""}
@@ -9473,6 +9478,8 @@
       if (state.addingMyWorkStepId === selected?.id) requestAnimationFrame(() => document.getElementById("my-work-step")?.focus());
       const titleInput = document.getElementById("my-work-title-detail");
       if (titleInput) { titleInput.style.height = "auto"; titleInput.style.height = `${titleInput.scrollHeight}px`; }
+      // The drawer rebuilds this scroll container; preserve its viewport before paint.
+      root.querySelector(".my-work-task-list").scrollTop = previousScrollTop;
       if (state.newMyWorkTaskId) window.setTimeout(() => { state.newMyWorkTaskId = ""; }, 260);
       if (state.movingMyWorkTaskId) window.setTimeout(() => { state.movingMyWorkTaskId = ""; }, 380);
       if (state.restoringMyWorkTaskId) window.setTimeout(() => { state.restoringMyWorkTaskId = ""; }, 380);
@@ -12417,7 +12424,22 @@
       if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitWorkspaceNavigation("replace"); return; }
       if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
       if (completeMyWorkTrigger) { const task = state.myWork.find((item) => item.id === completeMyWorkTrigger.getAttribute("data-my-work-done")); if (task) { task.done = completeMyWorkTrigger.checked; task.completedAt = task.done ? Date.now() : 0; state.movingMyWorkTaskId = task.done ? task.id : ""; state.restoringMyWorkTaskId = task.done ? "" : task.id; } commitUi("push"); if (task) saveMyWorkTaskToDatabase(task, { done: task.done }); return; }
-      if (starMyWorkTrigger) { const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star")); if (task) { task.favorite = !task.favorite; task.favoritedAt = task.favorite ? Date.now() : 0; } commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite }); return; }
+      if (starMyWorkTrigger) {
+        const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star"));
+        if (task) {
+          task.favorite = !task.favorite;
+          task.favoritedAt = task.favorite ? Date.now() : 0;
+          if (task.favorite && !task.done && state.myWorkOrder.active?.length) {
+            const activeIds = new Set(state.myWork.filter(item => !item.done).map(item => item.id));
+            const visibleOrder = [...document.querySelectorAll('#my-work-view [data-my-work-sort-group="active"] [data-select-my-work]')].map(row => row.dataset.selectMyWork);
+            const remaining = [...new Set([...visibleOrder, ...state.myWorkOrder.active, ...activeIds])].filter(id => id !== task.id && activeIds.has(id));
+            state.myWorkOrder.active = [task.id, ...remaining];
+          }
+        }
+        commitUi("replace");
+        if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite });
+        return;
+      }
       if (openMyWorkMenuTrigger) { state.myWorkMenu = openMyWorkMenuTrigger.getAttribute("data-open-my-work-menu"); commitUi("replace"); return; }
       if (closeMyWorkMenuTrigger && (target === closeMyWorkMenuTrigger || closeMyWorkMenuTrigger.tagName === "BUTTON")) { state.myWorkMenu = ""; commitUi("replace"); return; }
       if (closeMyWorkDetailTrigger) { state.myWorkDetailOpen = false; state.myWorkMenu = ""; state.addingMyWorkStepId = ""; commitUi("replace"); return; }

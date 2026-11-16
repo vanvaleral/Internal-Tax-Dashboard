@@ -5,16 +5,22 @@ import { JSDOM, VirtualConsole } from "jsdom";
 const read=(file:string)=>readFileSync(new URL(`../${file}`,import.meta.url),"utf8");
 const tick=async()=>{await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));};
 
-async function dashboard(saved:any={},account="sort-user"){
+async function dashboard(saved:any={},account="sort-user",mobile=false){
   const warnings:string[]=[],writes:any[]=[],vc=new VirtualConsole();vc.on("jsdomError",error=>warnings.push(error.message));
   const dom=new JSDOM(read("public/demo.html"),{url:"http://localhost/demo.html",runScripts:"outside-only",virtualConsole:vc}),w=dom.window as any;
   const key=`tax-practice-v2:${account}`;
   w.localStorage.setItem(key,JSON.stringify({ui:{currentView:"my-work-view",...saved}}));
-  w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
+  w.matchMedia=(query:string)=>({matches:mobile&&/max-width:\s*(760|900)px/.test(query),addEventListener(){},removeEventListener(){}});w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.requestIdleCallback=()=>0;w.setTimeout=()=>0;w.setInterval=()=>0;w.Headers=Headers;w.Response=Response;w.structuredClone=structuredClone;
-  const tasks=["a","b","c"].map(id=>({id,title:`Task ${id}`,creatorName:"Ivan",createdAt:1,done:false,version:"v1",favorite:id==="b",favoritedAt:id==="b"?100:0,steps:[]}));
+  const tasks:any[]=["a","b","c"].map(id=>({id,title:`Task ${id}`,creatorName:"Ivan",createdAt:1,done:false,version:"v1",favorite:id==="b",favoritedAt:id==="b"?100:0,steps:[]}));
   w.fetch=async(url:string,init:any={})=>{
     if(init.method&&init.method!=="GET")writes.push({url,body:init.body});
+    if(url==="/api/my-work"&&init.method==="PATCH"){
+      const body=JSON.parse(init.body),task=tasks.find(task=>task.id===body.id);
+      assert.ok(task,"the favorite save must address a real task");
+      Object.assign(task,body,{version:`v${writes.length+1}`,...(typeof body.favorite==="boolean"?{favoritedAt:body.favorite?Date.now():0}:{})});
+      return {ok:true,status:200,json:async()=>({task:structuredClone(task)})};
+    }
     const body=url==="/api/profile"?{user:{id:account},profile:{id:"ivan",role:"supervisor",display_name:"Ivan",directory_active:true}}
       :url==="/api/my-work"?{tasks}: {data:[],tasks:[],staff:[],announcements:[]};
     return {ok:true,status:200,json:async()=>structuredClone(body)};
@@ -27,8 +33,45 @@ async function dashboard(saved:any={},account="sort-user"){
   const ids=()=>[...w.document.querySelectorAll('#my-work-view [data-my-work-sort-group="active"] [data-select-my-work]')].map((node:any)=>node.dataset.selectMyWork);
   const move=(id:string,key:string)=>row(id).dispatchEvent(new w.KeyboardEvent("keydown",{key,altKey:true,bubbles:true,cancelable:true}));
   const savedUi=()=>JSON.parse(w.localStorage.getItem(key)).ui;
-  return {dom,w,writes,warnings,ids,row,move,savedUi,api:w.__workOrderTest};
+  return {dom,w,writes,warnings,tasks,ids,row,move,savedUi,api:w.__workOrderTest};
 }
+
+test("My Work keeps the list scroll when opening, changing and closing task details on desktop and mobile",async()=>{
+  for(const mobile of [false,true]){
+    const d=await dashboard({},`scroll-user-${mobile}`,mobile);try{
+      d.tasks.push(...Array.from({length:60},(_,index)=>({id:`long-${index}`,title:`Long list task ${index}`,creatorName:"Ivan",createdAt:1,done:false,version:"v1",favorite:false,favoritedAt:0,steps:[]})));
+      await d.api.loadSharedMyWork(true);
+      const viewport=()=>d.w.document.querySelector("#my-work-view .my-work-task-list");
+      let previous=viewport();previous.scrollTop=1260;
+      d.row("long-59").click();
+      assert.equal(d.api.state.selectedMyWorkId,"long-59");assert.equal(d.api.state.myWorkDetailOpen,true);
+      assert.notEqual(viewport(),previous,"exercise real replacement of the scroll container");
+      assert.equal(viewport().scrollTop,1260,"opening details must not jump to the first task");
+      previous=viewport();previous.scrollTop=1380;d.row("long-58").click();
+      assert.equal(viewport().scrollTop,1380,"selecting a different task keeps the latest scroll offset");
+      await d.api.loadSharedMyWork(true);assert.equal(viewport().scrollTop,1380,"confirmed background reloads retain the position too");
+      d.w.document.querySelector("[data-close-my-work-detail]").click();
+      assert.equal(d.api.state.myWorkDetailOpen,false);assert.equal(viewport().scrollTop,1380,"maximizing the left panel keeps its position");
+      assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+    }finally{d.dom.window.close();}
+  }
+});
+
+test("My Work resets list scroll for archive navigation but preserves it when selecting an archived task",async()=>{
+  const d=await dashboard();try{
+    const date=new Date();date.setDate(1);date.setMonth(date.getMonth()-1);
+    d.api.state.myWork.push(...["archived-a","archived-b"].map(id=>({id,title:id,done:true,completedAt:date.getTime(),steps:[]})));
+    d.api.renderMyWork();
+    const viewport=()=>d.w.document.querySelector("#my-work-view .my-work-task-list");
+    viewport().scrollTop=500;d.w.document.querySelector('[data-my-work-tab="archived"]').click();
+    assert.equal(viewport().scrollTop,0,"the month picker does not inherit the Current task offset");
+    viewport().scrollTop=200;d.w.document.querySelector("[data-open-my-work-archive-period]").click();
+    assert.equal(viewport().scrollTop,0,"opening a month starts at that month's first task");
+    viewport().scrollTop=300;d.row("archived-b").click();assert.equal(viewport().scrollTop,300);
+    d.w.document.querySelector("[data-close-my-work-archive-period]").click();assert.equal(viewport().scrollTop,0);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 test("the real dashboard retains a personal task order through rerenders, data refreshes and reloads without task writes",async()=>{
   const d=await dashboard();let prefs:any;
@@ -46,6 +89,39 @@ test("the real dashboard retains a personal task order through rerenders, data r
   }finally{d.dom.window.close();}
   const reload=await dashboard(prefs);try{assert.deepEqual(reload.ids(),["b","c","a"]);assert.deepEqual(reload.warnings,[]);}finally{reload.dom.window.close();}
   const other=await dashboard({},"different-account");try{assert.deepEqual(other.ids(),["b","a","c"],"another account starts with its own layout");}finally{other.dom.window.close();}
+});
+
+test("starring a task moves it to the top even after manual ordering, including from its detail panel",async()=>{
+  const d=await dashboard({myWorkOrder:{active:["a","b","c"]}});try{
+    assert.deepEqual(d.ids(),["a","b","c"]);
+    d.row("c").querySelector('[data-toggle-my-work-star="c"]').click();
+    assert.deepEqual(d.ids(),["c","a","b"],"a newly starred task overrides its previous manual position");
+    await tick();
+    assert.equal(d.tasks.find(task=>task.id==="c").favorite,true);
+    assert.deepEqual(d.savedUi().myWorkOrder.active,["c","a","b"]);
+    assert.equal(d.api.state.myWorkDetailOpen,false,"clicking a star does not open the drawer");
+    assert.equal(d.writes.length,1);assert.equal(JSON.parse(d.writes[0].body).favorite,true);
+    assert.equal("myWorkOrder" in JSON.parse(d.writes[0].body),false,"the task API receives no display-order payload");
+    await d.api.loadSharedMyWork(true);assert.deepEqual(d.ids(),["c","a","b"]);
+    d.row("a").click();
+    const list=d.w.document.querySelector("#my-work-view .my-work-task-list");list.scrollTop=420;
+    d.w.document.querySelector('.my-work-detail [data-toggle-my-work-star="a"]').click();
+    assert.deepEqual(d.ids(),["a","c","b"]);assert.equal(d.w.document.querySelector("#my-work-view .my-work-task-list").scrollTop,420);
+    await tick();assert.equal(d.tasks.find(task=>task.id==="a").favorite,true);assert.equal(d.api.state.selectedMyWorkId,"a");
+    assert.equal(d.writes.length,2);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("starring without manual ordering keeps favorites-first defaults and completed tasks stay completed",async()=>{
+  const d=await dashboard();try{
+    d.row("c").querySelector('[data-toggle-my-work-star="c"]').click();assert.equal(d.ids()[0],"c");await tick();
+    assert.equal(d.savedUi().myWorkOrder.active,undefined,"starring does not freeze the default sort unless a manual order already exists");
+    d.tasks.push({id:"completed-favorite",title:"Completed task",creatorName:"Ivan",createdAt:1,done:true,completedAt:Date.now(),version:"v1",favorite:false,steps:[]});
+    await d.api.loadSharedMyWork(true);const before=d.ids();
+    d.row("completed-favorite").querySelector('[data-toggle-my-work-star="completed-favorite"]').click();await tick();
+    assert.deepEqual(d.ids(),before);assert.equal(d.tasks.find(task=>task.id==="completed-favorite").done,true);
+    assert.match(d.row("completed-favorite").parentElement.dataset.myWorkSortGroup,/^completed:/);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
 });
 
 test("completed and archived monthly task groups remain separate from active tasks",async()=>{

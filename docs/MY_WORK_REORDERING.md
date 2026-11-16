@@ -16,6 +16,13 @@ position and clear the dimming. Reduced-motion users get the same interaction
 without animated displacement/lift. Focused rows also support Alt+Up/Down with
 screen-reader announcements, without requiring a timed pointer gesture.
 
+Opening, switching or closing task details retains the task list's native scroll
+offset, including on mobile and confirmed background redraws. Restoration happens
+synchronously when replacing the list, without scroll listeners or delayed scroll
+corrections. Changing Current/Archived, archive month, search or year starts the
+new view at the top rather than inheriting an unrelated scroll offset. Native
+browser clamping handles a shorter list; no task order or data is changed.
+
 ## Scope And Persistence
 
 - Ordering is a personal display preference, saved in the existing authenticated
@@ -29,6 +36,12 @@ screen-reader announcements, without requiring a timed pointer gesture.
   completed ordering are unchanged. A manual order takes precedence within its
   section; favorite flags remain available and unchanged. Tasks without an
   existing manual position appear before the manually ordered entries.
+- Starring an active task explicitly moves it first, even after manual ordering,
+  while preserving the relative order of every other active task (including new
+  tasks without a saved position). Promotion works from the list or detail panel
+  and is retained across redraws. Subsequent dragging remains available;
+  unstarring does not discard the manual order. Starring completed/archived work
+  never moves it into Active or changes its completion/archive history.
 - Only task IDs are added to UI preferences. Task writes continue through the
   existing version-checked API/save queue. Reordering makes no task/database call
   and therefore cannot generate a completion or Case timeline event.
