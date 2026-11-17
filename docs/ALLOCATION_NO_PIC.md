@@ -159,3 +159,39 @@ Closing/reloading during an Apply request triggers the unsaved-work warning.
 Success clears drafts and selection; failure unlocks editing and retains drafts
 for retry or explicit reset. No schema migration or authorization change is
 required.
+
+## Legal PDF Preview
+
+Preview PDF opens a real PDF in a separate browser tab. It uses US Legal portrait
+(215.9 x 355.6 mm), with 10 mm top/left/right margins and 40 mm bottom margin on
+every page. The PDF viewer provides Print and Download; opening the preview never
+automatically opens the print dialog. Keep Legal paper and Actual size / 100% in
+the printer dialog to retain the intended dimensions; printer hardware/settings
+can override scaling or paper choice.
+
+The report captures the currently visible, permission-scoped, filtered and sorted
+Allocation rows at click time, with the allocation year, preparer, WITA timestamp,
+filter/order labels, and Accounting/Tax Saved / Proposed counts. It is independent
+of row-checkbox selection and the historical Print Latest Report action. Inactive
+clients and clients outside the current scope are not included. Current and Next
+PIC columns are printed together; changed Next cells are highlighted and pending
+edits are labelled DRAFT / not applied. Empty assignments appear as No PIC.
+Preview does not apply, reset, persist or write allocation/client/history data.
+The snapshot does not change if editing continues while its PDF is prepared.
+
+Column headers repeat, text wraps without truncation, oversized rows continue on
+the next page, and page numbering remains above the reserved bottom margin.
+Empty views cannot preview; preview is disabled during Apply and while another
+preview is preparing. Blocked popups or resource failures show a retryable error
+without affecting drafts. PDF blob URLs stay local to the browser and are released
+when their tab closes or the originating page unloads; no public PDF or extra API
+endpoint is created. Downloaded/printed copies contain client information and
+should be handled accordingly.
+
+PDF generation uses pinned jsPDF 4.2.1, vendored during postinstall, and the
+SIL Open Font License Noto Sans Regular font from the official noto-fonts
+repository. Their licenses ship alongside the assets. Only the small data-free
+report renderer loads with the app; the engine and font load on first Preview
+and are reused for subsequent previews. No CDN requests or database migration are
+required. The exact public-asset allowlist includes only the renderer, PDF engine
+and font, never client data or generated PDFs.

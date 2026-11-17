@@ -47,7 +47,7 @@ async function allocation(mobile = false, role = "supervisor") {
       : { data:[], staff:[], tasks:[], announcements:[] };
     return { ok:true, json:async () => structuredClone(body) };
   };
-  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
+  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js", "public/allocation-report.js"]) w.eval(read(file));
   const script = read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__allocationTest = { state, renderAllocation, allocationRows, loadSharedClients, loadStaffDirectory, getClients:() => clientMasterClients };\n    })().catch(error =>");
   await w.eval(script); await tick();
   const api = w.__allocationTest; assert.ok(api, warnings.join("\n")); api.state.currentView = "allocation-view"; api.renderAllocation();
@@ -75,6 +75,42 @@ const projection=(d:any,team:string,pic:string)=>{
 };
 
 const sheetCell = (d:any,id:string,field="acc") => d.w.document.querySelector(`[data-allocation-row="${id}"] [data-allocation-cell="${field}"]`);
+
+test("Allocation PDF preview captures the filtered/sorted draft simulation without applying or mutating clients",async()=>{
+  const d=await allocation();try{
+    const previews:any[]=[];let release:()=>void=()=>{};
+    d.w.AllocationReports.preview=async(snapshot:any)=>{previews.push(snapshot);await new Promise<void>(resolve=>{release=resolve;});};
+    d.choose("acc","Dina");d.choose("tax","");
+    const before=JSON.stringify(d.api.getClients());
+    d.api.state.allocationAccFilter="Ivan";d.api.renderAllocation();
+    const button=d.w.document.querySelector("[data-preview-allocation]");button.click();
+    assert.equal(previews.length,1);assert.equal(button.disabled,true);button.click();assert.equal(previews.length,1);
+    const snapshot=previews[0];assert.equal(snapshot.rows.length,1);assert.equal(snapshot.rows[0].code,"CL-00001");
+    assert.equal(snapshot.rows[0].currentAcc,"Ivan");assert.equal(snapshot.rows[0].nextAcc,"Dina");
+    assert.equal(snapshot.rows[0].currentTax,"Bagus");assert.equal(snapshot.rows[0].nextTax,"No PIC");assert.equal(snapshot.pending,1);
+    assert.equal(snapshot.year,d.api.state.allocationYear);assert.ok(snapshot.filters.includes("ACC: Ivan"));
+    assert.equal(snapshot.summary[0].items.find((item:any)=>item.pic==="Dina").proposed,1);
+    d.api.state.allocationDrafts["client-00001"].nextAccPic="Ivan";assert.equal(snapshot.rows[0].nextAcc,"Dina","preview is a fixed snapshot, not a live draft reference");
+    release();await tick();assert.equal(button.disabled,false);assert.equal(button.textContent,"Preview PDF");
+    assert.equal(JSON.stringify(d.api.getClients()),before);assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation preview handles failures and empty filters, and cannot start during Apply",async()=>{
+  const d=await allocation();try{
+    let calls=0;d.w.AllocationReports.preview=async()=>{calls++;throw new Error("Allow pop-ups to preview.");};
+    d.w.document.querySelector("[data-preview-allocation]").click();await tick();
+    assert.equal(calls,1);assert.match(d.alerts[0],/pop-ups/);assert.equal(d.w.document.querySelector("[data-preview-allocation]").disabled,false);
+    d.api.state.allocationQuery="no matching client";d.api.renderAllocation();
+    assert.equal(d.w.document.querySelector("[data-preview-allocation]").disabled,true);
+    d.api.state.allocationQuery="";d.api.renderAllocation();d.choose("acc","Dina");
+    d.delay();d.w.document.querySelector("[data-apply-allocation]").click();await tick();
+    assert.equal(d.w.document.querySelector("[data-preview-allocation]").disabled,true);
+    d.w.document.querySelector("[data-preview-allocation]").click();assert.equal(calls,1);
+    d.release();await tick();assert.equal(d.w.document.querySelector("[data-preview-allocation]").disabled,false);
+  }finally{d.dom.window.close();}
+});
+
 function sheetPointer(d:any,cell:any,type="pointerdown",shiftKey=false) {
   cell.dispatchEvent(new d.w.MouseEvent(type,{bubbles:true,cancelable:true,button:0,shiftKey}));
 }

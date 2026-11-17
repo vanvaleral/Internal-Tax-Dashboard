@@ -7,6 +7,11 @@ import { isPublicUiAsset } from "../lib/public-ui-assets.ts";
 import * as featureAccess from "../lib/feature-access.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
+  for (const path of ["/allocation-report.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf"]) {
+    assert.ok(existsSync(new URL(`../public${path}`,import.meta.url)));
+    assert.equal(isPublicUiAsset(path,"GET"),true);assert.equal(isPublicUiAsset(path,"HEAD"),true);assert.equal(isPublicUiAsset(path,"POST"),false);
+  }
+  for (const path of ["/allocation-report.js/private","/fonts/private.json","/api/allocation-report.js"]) assert.equal(isPublicUiAsset(path,"GET"),false);
   for (const path of ["/favicon.svg", "/favicon.ico", "/favicon-32.png", "/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/annual-sheet-live.js", "/annual-accounting-sheet-demo.css", "/submenu-tabs.css", "/vendor/purify.min.js", "/workspace-sync.js", "/my-work-reorder.js", "/my-work-reorder.css", "/case-tax-types.js", "/images/lmats-logo-official.png"]) {
     assert.ok(existsSync(new URL(`../public${path}`, import.meta.url)));
     assert.equal(isPublicUiAsset(path, "GET"), true);

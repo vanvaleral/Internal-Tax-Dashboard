@@ -4078,6 +4078,7 @@
   <script src="case-tax-types.js"></script>
   <script src="case-workflow-dashboard.js"></script>
   <script src="case-report.js"></script>
+  <script src="allocation-report.js"></script>
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
@@ -6390,6 +6391,51 @@
       popup.print();
     }
 
+    function allocationPreviewSnapshot() {
+      const rows = allocationRows();
+      const order = {code:"Code",form:"Company form / name",name:"Client name",createdAt:"Date added",accPic:"Current ACC PIC",taxPic:"Current Tax PIC",nextAccPic:"Next ACC PIC",nextTaxPic:"Next Tax PIC",status:"Status"}[state.sorts.allocation.key] || state.sorts.allocation.key;
+      const filters = [
+        `ACC: ${state.allocationAccFilter === "all" ? "All PICs" : state.allocationAccFilter === "__no_pic__" ? "No PIC" : state.allocationAccFilter}`,
+        `Tax: ${state.allocationTaxFilter === "all" ? "All PICs" : state.allocationTaxFilter === "__no_pic__" ? "No PIC" : state.allocationTaxFilter}`,
+        `Engagement: ${{all:"All",contract:"Contract",free_of_charge:"Free of Charge",on_demand:"On Demand"}[state.allocationEngagementFilter] || "All"}`,
+        `Order: ${order} (${state.sorts.allocation.dir === "asc" ? "ascending" : "descending"})`
+      ];
+      if (state.allocationQuery.trim()) filters.push(`Search: ${state.allocationQuery.trim()}`);
+      if (state.allocationShowChangedOnly) filters.push("Changed only");
+      return {
+        year:state.allocationYear, generatedAt:new Date().toISOString(), preparedBy:state.selectedPic,
+        pending:rows.filter(allocationChanged).length, filters,
+        summary:[
+          {title:"Accounting PIC",items:allocationPicCounts(rows,ACC_PICS,"accountingPic")},
+          {title:"Tax PIC",items:allocationPicCounts(rows,TAX_PICS,"taxPic")}
+        ],
+        rows:rows.map((client,index) => {
+          const identity = splitBusinessName(client), draft = state.allocationDrafts[client.id] || {};
+          return {number:index+1,code:client.clientCode,form:identity.form || "Individual",name:identity.name,
+            currentAcc:client.accountingPic || "No PIC",currentTax:client.taxPic || "No PIC",
+            nextAcc:(draft.nextAccPic ?? client.accountingPic) || "No PIC",nextTax:(draft.nextTaxPic ?? client.taxPic) || "No PIC"};
+        })
+      };
+    }
+
+    async function previewAllocation() {
+      if (allocationPreviewPreparing || state.allocationApplying) return;
+      const snapshot = allocationPreviewSnapshot();
+      if (!snapshot.rows.length) { alert("No clients match the current Allocation filters."); return; }
+      allocationPreviewPreparing = true;
+      const button = document.querySelector("[data-preview-allocation]");
+      if (button) { button.disabled = true; button.textContent = "Preparing PDF..."; }
+      try {
+        if (!window.AllocationReports) throw new Error("The Allocation preview could not be loaded. Please reload.");
+        await window.AllocationReports.preview(snapshot);
+      } catch (error) { alert(error.message || "The PDF preview could not be created."); }
+      finally {
+        allocationPreviewPreparing = false;
+        const current = document.querySelector("[data-preview-allocation]");
+        if (current) { current.disabled = state.allocationApplying || !allocationRows().length; current.textContent = "Preview PDF"; }
+      }
+    }
+
     function createAnnualAccountingRow(nameOverride = "") {
       const nextNumber = annualAccountingRows.length + 1;
       const name = nameOverride || `Klien Lepas Baru ${nextNumber}`;
@@ -7534,6 +7580,7 @@
               <div class="toolbar-right">
                 <label class="pill neutral">Allocation year <input id="allocation-year" type="number" min="2000" max="2200" value="${state.allocationYear}" style="width:72px" ${state.allocationApplying ? "disabled" : ""} /></label>
                 <label class="pill neutral"><input id="allocation-changed-only" type="checkbox" ${state.allocationShowChangedOnly ? "checked" : ""} /> Changed only</label>
+                <button class="ghost-btn" data-preview-allocation title="Preview the filtered allocation on Legal paper, then print or download PDF" ${state.allocationApplying || allocationPreviewPreparing || !rows.length ? "disabled" : ""}>${allocationPreviewPreparing ? "Preparing PDF..." : "Preview PDF"}</button>
                 <button class="ghost-btn" data-print-allocation-report="yes">Print Latest Report</button>
                 <button class="ghost-btn" data-reset-allocation-drafts title="Discard all unsaved PIC drafts, including clients hidden by filters" ${!canEdit || !hasDrafts ? "disabled" : ""}>Reset unsaved</button>
                 <span class="pill warning allocation-pending-status" title="Pending changes in the current filtered view" ${pendingChanges ? "" : "hidden"}><strong data-allocation-pending-count>${pendingChanges}</strong> pending</span>
@@ -7663,7 +7710,7 @@
       root.querySelectorAll("[data-allocation-select-all]").forEach(input => { input.indeterminate = selectedIds.size > 0 && selectedIds.size < rows.length; });
     }
 
-    let allocationSheetRange = null, allocationSheetDrag = null;
+    let allocationSheetRange = null, allocationSheetDrag = null, allocationPreviewPreparing = false;
 
     function allocationSheetMessage(message, error = false) {
       const node = document.querySelector("[data-allocation-sheet-message]");
@@ -14075,6 +14122,11 @@
 
       if (printAllocationTrigger) {
         printAllocationReport();
+        return;
+      }
+
+      if (target.closest("[data-preview-allocation]")) {
+        void previewAllocation();
         return;
       }
 
