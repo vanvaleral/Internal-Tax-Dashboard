@@ -1,4 +1,5 @@
 export type ClientImportRow = Record<string, unknown>;
+export const CLIENT_IMPORT_DATE_FIELDS = ["contractStartedAt", "inactivatedAt", "engagementStart", "engagementEnd"] as const;
 
 export type ImportValidation = {
   row: number;
@@ -140,7 +141,7 @@ export function validateClientImportRows(rows: ClientImportRow[], { allowMissing
     const identityKey = npwp.length >= 15 ? `npwp:${npwp}` : `name:${normalizeClientIdentityName(name)}:${form}`;
     if (identityKey !== "name:" && seenIdentityKeys.has(identityKey)) errors.push("Possible duplicate client identity in this file.");
     if (identityKey !== "name:") seenIdentityKeys.add(identityKey);
-    for (const field of ["contractStartedAt", "inactivatedAt", "engagementStart", "engagementEnd"]) {
+    for (const field of CLIENT_IMPORT_DATE_FIELDS) {
       if (asSafeText(row[field]) && !normalizeImportedDate(row[field])) errors.push(`${field} must be a year or a valid date.`);
     }
     for (const [field, value] of Object.entries(row)) {

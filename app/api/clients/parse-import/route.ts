@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { canImportClientMaster, currentActor } from "@/lib/access";
 import { validateClientImportRows } from "@/lib/client-import";
+import { clientImportWorkbookRows } from "@/lib/client-import-workbook";
 
 export async function POST(request: Request) {
   const actor = await currentActor();
@@ -11,14 +12,10 @@ export async function POST(request: Request) {
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) return NextResponse.json({ error: "Choose an Excel or CSV file." }, { status: 400 });
   if (file.size > 8 * 1024 * 1024) return NextResponse.json({ error: "Import files must be 8 MB or smaller." }, { status: 413 });
-  let rows: Record<string, unknown>[];
-  if (/\.csv$/i.test(file.name)) {
-    const workbook = XLSX.read(await file.text(), { type: "string", raw: false });
-    rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false }) as Record<string, unknown>[];
-  } else {
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", raw: false });
-    rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false }) as Record<string, unknown>[];
-  }
+  const workbook = /\.csv$/i.test(file.name)
+    ? XLSX.read(await file.text(), { type: "string", raw: true, cellNF: true })
+    : XLSX.read(await file.arrayBuffer(), { type: "array", raw: true, cellNF: true, cellDates: false });
+  const rows = clientImportWorkbookRows(workbook);
   if (!rows.length) return NextResponse.json({ error: "The selected file has no data rows." }, { status: 422 });
   const validation = validateClientImportRows(rows, { allowMissingCodes: true });
   return NextResponse.json({ rows, validation, valid: validation.filter((entry) => !entry.errors.length).length });

@@ -16,7 +16,7 @@ export function loadRoute(file: string, bindings: Record<string, any>) {
       });
     }
     throw new Error(`Unmocked route dependency ${name}`);
-  }, URL, URLSearchParams, Date, Set, Map, structuredClone, console, process, crypto: { randomUUID } };
+  }, URL, URLSearchParams, Date, Set, Map, File, structuredClone, console, process, crypto: { randomUUID } };
   vm.runInNewContext(compiled, context, { filename: file });
   return context.exports;
 }

@@ -60,6 +60,31 @@ automatic merge or hosted data mutation is required.
 - Supervisor/Leader import permissions remain enforced by the API. New functions
   are SECURITY INVOKER, empty search_path and executable only by service_role.
 
+## Exported And Excel Date Values
+
+The parser preserves ISO date text (`YYYY-MM-DD`) from Client Master exports.
+Day-first text (`DD/MM/YYYY`) and year-only entries retain their existing meaning;
+ambiguous two-digit years and impossible dates are not guessed or auto-corrected.
+
+If Excel has converted a date to a numeric date cell, its displayed format can
+be `m/d/yy`, localized text, or another calendar presentation. The parser now
+decodes the underlying date serial for engagementStart, engagementEnd,
+contractStartedAt and inactivatedAt and sends canonical ISO dates to validation.
+It respects the workbook's 1900/1904 date system and rejects Excel's nonexistent
+1900 leap day. Only date-formatted numeric cells in these date columns are
+decoded; unformatted numbers, unrelated fields and explicit blank values retain
+their existing validation/update semantics. Date formulas remain invalid rather
+than being accepted via their cached result.
+
+CSV is read as text to avoid locale-dependent date coercion and loss of leading
+zeros in codes/NPWPs. No client is changed by parsing or validation; identity
+matching, version checks, transactional confirmation and authorization are
+unchanged. This fix needs no database migration or new dependency.
+
+Implementation follows the installed SheetJS date model and parsing options:
+[Dates and Times](https://docs.sheetjs.com/docs/csf/features/dates/),
+[Reading Files](https://docs.sheetjs.com/docs/api/parse-options/).
+
 ## Migration And Rollout
 
 Apply `20261111030428_client_import_identity_matching.sql` before deploying the
