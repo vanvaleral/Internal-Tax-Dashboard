@@ -61,11 +61,88 @@ async function allocation(mobile = false, role = "supervisor") {
   };
   const selectAll = (checked = true) => { const input = w.document.querySelector("[data-allocation-select-all]"); input.checked = checked; input.dispatchEvent(new w.Event("change", { bubbles:true })); };
   const bulk = (type: string, value: string) => { const input = w.document.querySelector(`[data-allocation-bulk="${type}"]`); assert.ok(input); input.value = value; input.dispatchEvent(new w.Event("change", { bubbles:true })); };
-  return { dom, w, api, rows, writes, warnings, alerts, confirmations, choose, select, selectAll, bulk,
+  return { dom, w, api, rows, staff, writes, warnings, alerts, confirmations, choose, select, selectAll, bulk,
     fail:() => { fail = true; }, cancelReset:() => { allowReset = false; }, allowReset:() => { allowReset = true; },
     delay:() => { delay = true; }, release:() => { delay = false; releaseSave?.(); }
   };
 }
+
+const picCount=(d:any,team:string,pic:string)=>Number(d.w.document.querySelector(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic="${pic}"] strong`)?.textContent);
+
+test("compact Allocation summary separates ACC/Tax counts and retains zero-client staff and No PIC on desktop/mobile",async()=>{
+  for(const mobile of [false,true]){
+    const d=await allocation(mobile);try{
+      const summary=d.w.document.querySelector(".allocation-overview");assert.ok(summary);
+      assert.equal(summary.querySelectorAll(".metric").length,1,"only Visible Clients remains a large metric");
+      assert.doesNotMatch(summary.textContent,/Pending Changes|Last Batch|Leader Scope|Limited Scope/);
+      assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"acc","Dina"),0);assert.equal(picCount(d,"acc",""),1);
+      assert.equal(picCount(d,"tax","Bagus"),2);assert.equal(picCount(d,"tax","Denny"),0);assert.equal(picCount(d,"tax",""),0);
+      assert.match(summary.textContent,/Current assignments.*filters/i);assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+    }finally{d.dom.window.close();}
+  }
+});
+
+test("Allocation PIC totals exclude inactive clients and follow engagement, combined PIC and search filters",async()=>{
+  const d=await allocation();try{
+    const extra=(id:string,status:string,category:string,acc:string,tax:string)=>({id,client_code:id,legal_name:id,status,engagement_type:category,accounting_pic_name:acc,tax_pic_name:tax,created_at:"2026-10-10T00:00:00Z"});
+    (d.rows as any[]).push(extra("free-client","Active","free_of_charge","Dina","Denny"),extra("demand-client","Active","on_demand","Ivan",""),extra("inactive-client","Inactive","contract","Ivan","Bagus"));
+    await d.api.loadSharedClients(true);d.api.renderAllocation();
+    assert.equal(picCount(d,"acc","Ivan"),2);assert.equal(picCount(d,"acc","Dina"),1);assert.equal(picCount(d,"acc",""),1);
+    assert.equal(picCount(d,"tax","Bagus"),2);assert.equal(picCount(d,"tax","Denny"),1);assert.equal(picCount(d,"tax",""),1);
+    for(const team of ["acc","tax"]){
+      const counts=[...d.w.document.querySelectorAll(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic] strong`)];
+      assert.equal(counts.reduce((sum:number,node:any)=>sum+Number(node.textContent),0),4);
+    }
+    d.api.state.allocationEngagementFilter="contract";d.api.renderAllocation();
+    assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"acc","Dina"),0);assert.equal(picCount(d,"tax","Bagus"),2);
+    d.api.state.allocationEngagementFilter="free_of_charge";d.api.renderAllocation();assert.equal(picCount(d,"acc","Dina"),1);assert.equal(picCount(d,"tax","Denny"),1);assert.equal(picCount(d,"tax","Bagus"),0);
+    d.api.state.allocationEngagementFilter="on_demand";d.api.renderAllocation();assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"tax",""),1);
+    d.api.state.allocationEngagementFilter="all";d.api.state.allocationAccFilter="Ivan";d.api.state.allocationTaxFilter="Bagus";d.api.renderAllocation();assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"tax","Bagus"),1);
+    d.api.state.allocationAccFilter="all";d.api.state.allocationTaxFilter="all";d.api.state.allocationQuery="Beta";d.api.renderAllocation();assert.equal(picCount(d,"acc",""),1);assert.equal(picCount(d,"tax","Bagus"),1);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation counts use saved PICs until Apply succeeds, not draft replacements",async()=>{
+  const d=await allocation();try{
+    d.choose("acc","Dina");d.choose("tax","Denny");
+    assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"acc","Dina"),0);assert.equal(picCount(d,"tax","Bagus"),2);assert.equal(picCount(d,"tax","Denny"),0);
+    assert.equal(d.w.document.querySelector("[data-allocation-pending-count]").textContent,"1");
+    d.w.document.querySelector("[data-apply-allocation]").click();await tick();
+    assert.equal(picCount(d,"acc","Ivan"),0);assert.equal(picCount(d,"acc","Dina"),1);assert.equal(picCount(d,"tax","Bagus"),1);assert.equal(picCount(d,"tax","Denny"),1);
+    assert.equal(d.writes.length,1);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation summary merges case/whitespace variants without hiding legacy PIC allocations",async()=>{
+  const d=await allocation();try{
+    const clients=d.api.getClients();clients[0].accountingPic="  IVAN  ";clients[0].taxPic=" BAGUS ";clients[1].taxPic="bagus";
+    clients[1].accountingPic="Former PIC";d.api.renderAllocation();
+    assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"acc","Former PIC"),1);assert.equal(picCount(d,"tax","Bagus"),2);
+    assert.equal(d.w.document.querySelectorAll('[data-allocation-pic-team="tax"] [data-allocation-summary-pic="Bagus"]').length,1);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation summary includes the full directory and counts the full filtered list, not just rendered rows",async()=>{
+  const d=await allocation();try{
+    d.staff.push(...Array.from({length:12},(_,i)=>({id:`extra-tax-${i}`,display_name:`Extra Tax ${i}`,full_name:`Extra Tax ${i}`,team_division:"Tax Team",directory_active:true})));
+    d.staff.push({id:"inactive-zero",display_name:"Inactive zero",full_name:"Inactive zero",team_division:"Tax Team",directory_active:false});
+    (d.rows as any[]).push(...Array.from({length:60},(_,i)=>({id:`extra-client-${i}`,client_code:`CL-EXTRA-${i}`,legal_name:`Client ${i}`,status:"Active",accounting_pic_name:"Ivan",tax_pic_name:"Bagus"})));
+    await d.api.loadStaffDirectory(true);await d.api.loadSharedClients(true);d.api.renderAllocation();
+    assert.equal(d.w.document.querySelectorAll('[data-allocation-pic-team="tax"] [data-allocation-summary-pic]').length,15,"all 14 Tax PICs plus No PIC, without a top-ten cap");
+    assert.equal(picCount(d,"tax","Extra Tax 11"),0);assert.equal(picCount(d,"tax","Bagus"),62);assert.equal(picCount(d,"acc","Ivan"),61);
+    assert.equal(d.w.document.querySelector('[data-allocation-summary-pic="Inactive zero"]'),null);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation distribution retains the same client-visibility scope for a non-leadership user",async()=>{
+  const d=await allocation(false,"associate");try{
+    assert.equal(d.api.allocationRows().length,1);assert.equal(picCount(d,"acc","Ivan"),1);assert.equal(picCount(d,"tax","Bagus"),1);assert.equal(picCount(d,"acc",""),0);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 test("desktop and mobile Allocation retain No PIC as an explicit pending choice when the other PIC changes", async () => {
   for (const mobile of [false, true]) {
@@ -73,7 +150,7 @@ test("desktop and mobile Allocation retain No PIC as an explicit pending choice 
     try {
       assert.ok([...d.w.document.querySelector('[data-allocation-acc="client-00001"]').options].some((option: any) => option.value === "" && option.textContent === "No PIC"));
       d.choose("acc", ""); d.choose("tax", "");
-      assert.equal(d.w.document.querySelector("#allocation-view .metric:nth-child(2) strong").textContent, "1");
+      assert.equal(d.w.document.querySelector("#allocation-view [data-allocation-pending-count]").textContent, "1");
       assert.deepEqual(JSON.parse(JSON.stringify(d.api.state.allocationDrafts["client-00001"])), { nextAccPic:"", nextTaxPic:"" });
       await d.api.loadStaffDirectory(true);
       assert.equal(d.api.state.allocationDrafts["client-00001"].nextAccPic, "");

@@ -24,6 +24,28 @@ one transaction. Existing monthly snapshots, cases and annual work ownership are
 not reassigned by this change. No PIC is a display label, not a fictitious staff
 profile and is never stored as the PIC name.
 
+## Compact PIC Distribution
+
+Allocation keeps Visible Clients and replaces the Pending Changes, Last Batch
+and Rule metric cards with compact Accounting PIC and Tax PIC count groups.
+Each group includes every PIC from its active directory roster (including zero
+counts), any legacy PIC still assigned to a visible client, and a separate No PIC
+count. Names are grouped case-insensitively with trimmed/collapsed whitespace, so
+case variants are not counted as different people. No PIC is not a staff record.
+
+Counts use the same active, permission-scoped, fully filtered records as the
+Allocation list, not only its rendered/windowed rows. Contract/Free of Charge/
+On Demand follow the engagement filter; inactive clients never count. Search,
+both PIC filters and Changed only also apply. Each client contributes exactly
+once per division, including unassigned clients, so either division totals the
+Visible Clients count. These are confirmed current assignments: choosing a Next
+PIC does not move its count until Apply succeeds and Client Master reloads.
+
+Pending edits remain visible as row statuses and a small count beside Apply for
+the current filtered view. Apply/reset/report/selection/history/authorization
+behavior is unchanged. The summary adds no API requests, database writes,
+migration or dependency, and uses wrapping grids instead of another scroller.
+
 ## Entry Order
 
 The Allocation order dropdown offers Company form / name (the existing default),

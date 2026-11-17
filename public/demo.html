@@ -2576,6 +2576,30 @@
       gap: 10px;
     }
     .allocation-bulk-toolbar { padding:10px; margin:0 0 10px; border:1px solid var(--line); border-radius:10px; background:var(--accent-soft); }
+    .allocation-overview { display:grid; grid-template-columns:130px minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:stretch; }
+    .allocation-overview>.metric { padding:12px; border-radius:14px; }
+    .allocation-overview>.metric .eyebrow { font-size:9px; letter-spacing:.12em; }
+    .allocation-overview>.metric strong { font-size:28px; margin-top:6px; }
+    .allocation-overview>.metric .sub { margin-top:5px; font-size:10px; line-height:1.4; }
+    .allocation-pic-summary { min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:14px; background:var(--panel-solid); }
+    .allocation-pic-summary h3 { display:flex; align-items:center; gap:7px; margin:0 0 8px; font-size:13px; }
+    .allocation-pic-team { padding:3px 5px; border-radius:4px; background:var(--accent-soft); color:var(--accent-strong); font-size:10px; letter-spacing:.04em; }
+    [data-allocation-pic-team="tax"] .allocation-pic-team { background:color-mix(in srgb,var(--panel-solid) 88%,#4e78af); color:color-mix(in srgb,var(--ink) 50%,#4e78af); }
+    .allocation-pic-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(88px,1fr)); gap:5px; }
+    .allocation-pic-count { display:flex; align-items:center; justify-content:space-between; gap:7px; min-width:0; padding:5px 7px; border-radius:5px; background:var(--neutral-soft); font-size:12px; }
+    .allocation-pic-count>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .allocation-pic-count strong { font-size:16px; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--accent-strong); }
+    [data-allocation-pic-team="tax"] .allocation-pic-count strong { color:color-mix(in srgb,var(--ink) 50%,#4e78af); }
+    .allocation-pic-count.is-unassigned { border:1px dashed var(--line); background:transparent; color:var(--muted); }
+    .allocation-pic-count.is-unassigned.has-clients { background:var(--warning-soft); border-color:var(--warning); }
+    .allocation-pending-status { white-space:nowrap; }
+    @media(max-width:760px) {
+      .allocation-overview { grid-template-columns:minmax(0,1fr); }
+      .allocation-overview>.metric { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:9px 12px; }
+      .allocation-overview>.metric strong { margin:0; }
+      .allocation-overview>.metric .sub { margin:0; }
+      .allocation-pic-summary { padding:9px 10px; }
+    }
     .allocation-check-cell { width:36px; min-width:36px; text-align:center; }
     [data-allocation-row][data-selected="true"] > td { background:var(--accent-soft); }
     .mobile-card[data-allocation-row][data-selected="true"] { border-color:var(--accent); background:var(--accent-soft); }
@@ -7410,6 +7434,21 @@
       return `<option value="" ${!selected ? "selected" : ""}>No PIC</option>${optionsMarkup(choices, selected)}`;
     }
 
+    function allocationPicCounts(rows, people, field) {
+      const counts = new Map();
+      const label = value => String(value || "").trim().replace(/\s+/g, " ");
+      const key = value => label(value).toLocaleLowerCase("id-ID");
+      for (const person of people) if (label(person) && !counts.has(key(person))) counts.set(key(person), { pic: label(person), clients: 0 });
+      let unassigned = 0;
+      for (const client of rows) {
+        const name = label(client[field]);
+        if (!name) { unassigned++; continue; }
+        if (!counts.has(key(name))) counts.set(key(name), { pic: name, clients: 0 });
+        counts.get(key(name)).clients++;
+      }
+      return [...counts.values()].sort((left, right) => right.clients - left.clients || compareText(left.pic, right.pic)).concat({ pic: "", clients: unassigned });
+    }
+
     function renderAllocation(rootOverride = null) {
       const root = rootOverride || document.getElementById("allocation-view");
       const rows = allocationRows();
@@ -7422,6 +7461,7 @@
       const activeAllocationClients = clientMasterClients.filter(isActiveClientRecord);
       const allocationAccOptions = [...new Set([...ACC_PICS, ...activeAllocationClients.map((client) => client.accountingPic).filter(Boolean)])].sort(compareText);
       const allocationTaxOptions = [...new Set([...TAX_PICS, ...activeAllocationClients.map((client) => client.taxPic).filter(Boolean)])].sort(compareText);
+      const picSummary = (team, title, people, field) => `<section class="allocation-pic-summary" data-allocation-pic-team="${team}" aria-label="${title} client counts"><h3><span class="allocation-pic-team">${team === "acc" ? "ACC" : "TAX"}</span>${title}</h3><div class="allocation-pic-list" role="list">${allocationPicCounts(rows, people, field).map(item => `<div class="allocation-pic-count ${item.pic ? "" : `is-unassigned ${item.clients ? "has-clients" : ""}`}" role="listitem" data-allocation-summary-pic="${escapeAttr(item.pic)}" title="${escapeAttr(item.pic || "No PIC")}: ${item.clients} client${item.clients === 1 ? "" : "s"}"><span>${escapeHtml(item.pic || "No PIC")}</span><strong>${item.clients}</strong></div>`).join("")}</div></section>`;
       const allocationWindow = windowedRows(rows, "allocation-clients", 48);
       const isMobileLayout = window.matchMedia("(max-width: 760px)").matches;
       const allocationOrder = state.sorts.allocation.key === "createdAt" ? (state.sorts.allocation.dir === "asc" ? "oldest" : "newest") : state.sorts.allocation.key === "form" && state.sorts.allocation.dir === "asc" ? "form" : "column";
@@ -7432,11 +7472,10 @@
 
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-management">
-          <section class="compact-grid-4">
-            <div class="metric"><div class="eyebrow">Visible Clients</div><strong>${rows.length}</strong><div class="sub">Rows in current allocation scope.</div></div>
-            <div class="metric"><div class="eyebrow">Pending Changes</div><strong>${pendingChanges}</strong><div class="sub">Clients with draft PIC reassignment.</div></div>
-            <div class="metric"><div class="eyebrow">Last Batch</div><strong>${state.allocationLastReport.length}</strong><div class="sub">Clients changed in the latest applied update.</div></div>
-            <div class="metric"><div class="eyebrow">Rule</div><strong>${hasLeadershipAccess() ? "Leader Scope" : "Limited Scope"}</strong><div class="sub">Mass update is intended for leader/supervisor use.</div></div>
+          <section class="allocation-overview" aria-label="Allocation client distribution">
+            <div class="metric"><div class="eyebrow">Visible Clients</div><strong>${rows.length}</strong><div class="sub">Current assignments. Filters applied.</div></div>
+            ${picSummary("acc", "Accounting PIC", ACC_PICS, "accountingPic")}
+            ${picSummary("tax", "Tax PIC", TAX_PICS, "taxPic")}
           </section>
 
           <section class="panel">
@@ -7453,6 +7492,7 @@
                 <label class="pill neutral"><input id="allocation-changed-only" type="checkbox" ${state.allocationShowChangedOnly ? "checked" : ""} /> Changed only</label>
                 <button class="ghost-btn" data-print-allocation-report="yes">Print Latest Report</button>
                 <button class="ghost-btn" data-reset-allocation-drafts title="Discard all unsaved PIC drafts, including clients hidden by filters" ${!canEdit || !hasDrafts ? "disabled" : ""}>Reset unsaved</button>
+                ${pendingChanges ? `<span class="pill warning allocation-pending-status" title="Pending changes in the current filtered view"><strong data-allocation-pending-count>${pendingChanges}</strong> pending</span>` : ""}
                 <button class="solid-btn" data-apply-allocation="yes" title="Save all pending PIC changes, including clients hidden by filters" ${!canEdit ? "disabled" : ""}>${state.allocationApplying ? "Saving..." : "Apply PIC Update"}</button>
               </div>
             </div>
