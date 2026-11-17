@@ -68,6 +68,228 @@ async function allocation(mobile = false, role = "supervisor") {
 }
 
 const picCount=(d:any,team:string,pic:string)=>Number(d.w.document.querySelector(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic="${pic}"] strong`)?.textContent);
+const projection=(d:any,team:string,pic:string)=>{
+  const node=d.w.document.querySelector(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic="${pic}"]`);
+  assert.ok(node,`${team} summary contains ${pic || "No PIC"}`);
+  return {current:Number(node.dataset.allocationCurrent),proposed:Number(node.dataset.allocationProposed),delta:Number(node.dataset.allocationDelta)};
+};
+
+const sheetCell = (d:any,id:string,field="acc") => d.w.document.querySelector(`[data-allocation-row="${id}"] [data-allocation-cell="${field}"]`);
+function sheetPointer(d:any,cell:any,type="pointerdown",shiftKey=false) {
+  cell.dispatchEvent(new d.w.MouseEvent(type,{bubbles:true,cancelable:true,button:0,shiftKey}));
+}
+function sheetClipboard(d:any,cell:any,type:string,source="") {
+  const event=new d.w.Event(type,{bubbles:true,cancelable:true});let copied="";
+  Object.defineProperty(event,"clipboardData",{value:{getData:()=>source,setData:(_type:string,value:string)=>{copied=value;}}});
+  cell.dispatchEvent(event);return {copied,prevented:event.defaultPrevented};
+}
+
+test("Allocation sheet pastes two PIC columns over multiple visible rows as drafts, including blanks",async()=>{
+  const d=await allocation();try{
+    const ids=[...d.w.document.querySelectorAll(".allocation-sheet [data-allocation-row]")].map((row:any)=>row.dataset.allocationRow);
+    const table=d.w.document.querySelector(".allocation-sheet"),wrap=table.parentElement;wrap.scrollLeft=164;wrap.scrollTop=80;
+    const input=d.w.document.querySelector(`[data-allocation-acc="${ids[0]}"]`);
+    sheetPointer(d,sheetCell(d,ids[0]));
+    const before=JSON.stringify(d.api.getClients());
+    assert.equal(sheetClipboard(d,sheetCell(d,ids[0]),"paste","  dina  \tdenny\r\nIVAN\t\r\n").prevented,true);
+    assert.equal(d.api.state.allocationDrafts[ids[0]].nextAccPic,"Dina");assert.equal(d.api.state.allocationDrafts[ids[0]].nextTaxPic,"Denny");
+    assert.equal(d.api.state.allocationDrafts[ids[1]].nextAccPic,"Ivan");assert.equal(d.api.state.allocationDrafts[ids[1]].nextTaxPic,"");
+    assert.equal(JSON.stringify(d.api.getClients()),before);assert.equal(d.writes.length,0);
+    const stored=JSON.parse(d.w.localStorage.getItem("tax-practice-v2:user-1"));
+    assert.deepEqual(stored.ui.allocationDrafts[ids[0]],{nextAccPic:"Dina",nextTaxPic:"Denny"});
+    assert.equal(d.w.document.querySelector(".allocation-sheet"),table);assert.equal(table.parentElement,wrap);
+    assert.equal(d.w.document.querySelector(`[data-allocation-acc="${ids[0]}"]`),input,"normal edits keep native editors mounted");
+    assert.equal(wrap.scrollLeft,164);assert.equal(wrap.scrollTop,80);
+    assert.equal(d.w.document.querySelectorAll("[data-allocation-cell].is-pending").length,3);
+    assert.deepEqual(projection(d,"tax",""),{current:0,proposed:1,delta:1});
+    assert.match(d.w.document.querySelector("[data-allocation-sheet-message]").textContent,/4 cell\(s\) staged/);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation range selection copies TSV, fills one PIC down a range, and retains focus through edits",async()=>{
+  const d=await allocation();try{
+    const cells=[...d.w.document.querySelectorAll('[data-allocation-cell="acc"]')];
+    sheetPointer(d,cells[0]);sheetPointer(d,cells[1],"pointerdown",true);sheetPointer(d,cells[1],"pointerup");
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,2);
+    const focused=d.w.document.activeElement;
+    sheetClipboard(d,cells[0],"paste","Dina");
+    assert.ok(Object.values(d.api.state.allocationDrafts).every((draft:any)=>draft.nextAccPic==="Dina"));
+    assert.equal(sheetClipboard(d,cells[0],"copy").copied,"Dina\r\nDina");
+    assert.equal(d.w.document.activeElement,focused);
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,2);
+    const table=d.w.document.querySelector(".allocation-sheet");d.choose("tax","Denny");
+    assert.equal(d.w.document.querySelector(".allocation-sheet"),table);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation drag and keyboard selection cover both next PIC columns; blank fills clear only that range",async()=>{
+  const d=await allocation();try{
+    const acc=[...d.w.document.querySelectorAll('[data-allocation-cell="acc"]')],tax=[...d.w.document.querySelectorAll('[data-allocation-cell="tax"]')];
+    sheetPointer(d,acc[0]);sheetPointer(d,tax[1],"pointermove");sheetPointer(d,tax[1],"pointerup");
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,4);
+    const copied=sheetClipboard(d,acc[0],"copy").copied;assert.equal(copied.split("\r\n").length,2);assert.ok(copied.includes("\t"));
+    sheetClipboard(d,acc[0],"paste","No PIC");
+    assert.ok(Object.values(d.api.state.allocationDrafts).every((draft:any)=>draft.nextAccPic===""&&draft.nextTaxPic===""));
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,4);
+    acc[0].dispatchEvent(new d.w.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,0);
+    acc[0].dispatchEvent(new d.w.KeyboardEvent("keydown",{key:"ArrowDown",shiftKey:true,bubbles:true,cancelable:true}));
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,2);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation rejects invalid PICs, wrong divisions, malformed/overflow ranges atomically",async()=>{
+  const d=await allocation();try{
+    const cell=d.w.document.querySelector("[data-allocation-cell]");
+    for(const source of ["Dina\tBagus\nUnknown PIC\tDenny","Bagus","Dina\tDenny\textra","Ivan\nDina\nIvan","Ivan\tBagus\nDina",'"Ivan']){
+      sheetPointer(d,cell);sheetClipboard(d,cell,"paste",source);
+      assert.equal(Object.keys(d.api.state.allocationDrafts).length,0,source);
+      assert.equal(d.w.document.querySelector("[data-allocation-sheet-message]").dataset.error,"true",source);
+    }
+    sheetPointer(d,cell);sheetClipboard(d,cell,"paste","Dina");const before=JSON.stringify(d.api.state.allocationDrafts);
+    sheetClipboard(d,cell,"paste","Ivan\tBagus\nNot a person\tDenny");assert.equal(JSON.stringify(d.api.state.allocationDrafts),before);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation rejects ambiguous active staff names and more than 250 clipboard rows",async()=>{
+  const d=await allocation();try{
+    d.staff.push({id:"acc-duplicate",display_name:"Dina",full_name:"Other Dina",team_division:"Accounting Team",directory_active:true});
+    await d.api.loadStaffDirectory(true);d.api.renderAllocation();
+    const cell=d.w.document.querySelector("[data-allocation-cell]");sheetClipboard(d,cell,"paste","Dina");
+    assert.match(d.w.document.querySelector("[data-allocation-sheet-message]").textContent,/ambiguous/);
+    assert.equal(Object.keys(d.api.state.allocationDrafts).length,0);
+    sheetClipboard(d,cell,"paste",Array(251).fill("Ivan").join("\n"));
+    assert.match(d.w.document.querySelector("[data-allocation-sheet-message]").textContent,/250/);
+    assert.equal(Object.keys(d.api.state.allocationDrafts).length,0);assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation paste follows filtered/sorted client IDs and never edits hidden clients or current fields",async()=>{
+  const d=await allocation();try{
+    const order=d.w.document.getElementById("allocation-order");order.value="oldest";order.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    sheetClipboard(d,d.w.document.querySelector('[data-allocation-cell="acc"]'),"paste","Dina\nIvan");
+    assert.equal(d.api.state.allocationDrafts["client-00002"].nextAccPic,"Dina");assert.equal(d.api.state.allocationDrafts["client-00001"].nextAccPic,"Ivan");
+    const filter=d.w.document.getElementById("allocation-tax-filter");filter.value="__no_pic__";filter.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    assert.equal(d.w.document.querySelectorAll("[data-allocation-cell]").length,0);
+    const resetFilter=d.w.document.getElementById("allocation-tax-filter");resetFilter.value="all";resetFilter.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    const accFilter=d.w.document.getElementById("allocation-acc-filter");accFilter.value="__no_pic__";accFilter.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    sheetClipboard(d,sheetCell(d,"client-00002","tax"),"paste","Denny");
+    assert.equal(d.api.state.allocationDrafts["client-00002"].nextTaxPic,"Denny");assert.equal(d.api.state.allocationDrafts["client-00001"].nextTaxPic,"Bagus");
+    assert.equal(d.api.getClients().find((client:any)=>client.id==="client-00002").taxPic,"Bagus");
+    assert.equal(d.w.document.querySelectorAll(".allocation-sheet td[tabindex]").length,2,"only Next PIC columns are sheet editors");
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation clipboard respects leadership/save locks and Apply submits one audited batch",async()=>{
+  const denied=await allocation(false,"associate");try{
+    const cell=denied.w.document.querySelector("[data-allocation-cell]");sheetClipboard(denied,cell,"paste","Dina");
+    assert.equal(Object.keys(denied.api.state.allocationDrafts).length,0);assert.equal(denied.writes.length,0);
+  }finally{denied.dom.window.close();}
+  const d=await allocation();try{
+    const cell=d.w.document.querySelector("[data-allocation-cell]");sheetClipboard(d,cell,"paste","Dina\tDenny\nIvan\tNo PIC");
+    d.delay();d.w.document.querySelector("[data-apply-allocation]").click();await tick();
+    const before=JSON.stringify(d.api.state.allocationDrafts);sheetClipboard(d,d.w.document.querySelector("[data-allocation-cell]"),"paste","No PIC");
+    assert.equal(JSON.stringify(d.api.state.allocationDrafts),before);assert.equal(d.writes.length,1);
+    d.release();await tick();assert.equal(d.writes[0].changes.length,2);assert.equal(Object.keys(d.api.state.allocationDrafts).length,0);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation rebuilds only its sheet when draft-sensitive sort/filter membership changes",async()=>{
+  const d=await allocation();try{
+    d.api.state.sorts.allocation={key:"nextAccPic",dir:"asc"};d.api.renderAllocation();
+    const before=d.w.document.querySelector(".allocation-sheet"),shell=d.w.document.querySelector(".global-topbar");assert.ok(shell);
+    before.parentElement.scrollLeft=190;
+    const anchor=sheetCell(d,"client-00002");sheetPointer(d,anchor);sheetClipboard(d,anchor,"paste","Dina");
+    // Blank sorts before Ivan; Dina still sorts before Ivan, so no replacement is needed.
+    assert.equal(d.w.document.querySelector(".allocation-sheet"),before);
+    d.choose("acc","Ivan","client-00002");d.choose("acc","Dina","client-00001");
+    const ids=[...d.w.document.querySelectorAll(".allocation-sheet [data-allocation-row]")].map((row:any)=>row.dataset.allocationRow);
+    assert.deepEqual(ids,["client-00001","client-00002"]);assert.notEqual(d.w.document.querySelector(".allocation-sheet"),before);
+    assert.equal(d.w.document.querySelector(".allocation-sheet").parentElement.scrollLeft,190);
+    assert.equal(d.w.document.querySelector(".global-topbar"),shell);
+    d.api.state.allocationShowChangedOnly=true;d.api.renderAllocation();
+    assert.equal(d.w.document.querySelectorAll(".allocation-sheet [data-allocation-row]").length,2);
+    sheetClipboard(d,sheetCell(d,"client-00001"),"paste","Ivan");
+    assert.equal(d.w.document.querySelectorAll(".allocation-sheet [data-allocation-row]").length,1);
+    assert.equal(d.w.document.querySelector(".allocation-sheet [data-allocation-row]").dataset.allocationRow,"client-00002");
+    assert.equal(d.w.document.querySelectorAll(".allocation-range-selected").length,0);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation simulates outgoing/incoming ACC and Tax counts immediately without changing saved clients",async()=>{
+  for(const mobile of [false,true]){
+    const d=await allocation(mobile);try{
+      const before=JSON.stringify(d.api.getClients());
+      d.choose("acc","Dina");d.choose("tax","Denny");
+      assert.deepEqual(projection(d,"acc","Ivan"),{current:1,proposed:0,delta:-1});assert.deepEqual(projection(d,"acc","Dina"),{current:0,proposed:1,delta:1});
+      assert.deepEqual(projection(d,"tax","Bagus"),{current:2,proposed:1,delta:-1});assert.deepEqual(projection(d,"tax","Denny"),{current:0,proposed:1,delta:1});
+      assert.match(d.w.document.querySelector(".allocation-overview").textContent,/Draft simulation/);
+      assert.match(d.w.document.querySelector('[data-allocation-pic-team="acc"]').textContent,/Saved.*Proposed/);
+      assert.ok(d.w.document.querySelector('[data-allocation-summary-pic="Dina"] [data-allocation-simulated-count]'));
+      assert.equal(JSON.stringify(d.api.getClients()),before);assert.equal(d.writes.length,0);
+      for(const team of ["acc","tax"]){
+        const chips=[...d.w.document.querySelectorAll(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic]`)];
+        assert.equal(chips.reduce((sum:number,node:any)=>sum+Number(node.dataset.allocationCurrent),0),2);
+        assert.equal(chips.reduce((sum:number,node:any)=>sum+Number(node.dataset.allocationProposed),0),2);
+      }
+      d.choose("acc","Ivan");d.choose("tax","Bagus");
+      assert.equal(d.w.document.querySelector("[data-allocation-simulated-count]"),null);
+      assert.deepEqual(projection(d,"acc","Ivan"),{current:1,proposed:1,delta:0});assert.equal(d.writes.length,0);
+      assert.deepEqual(d.warnings,[]);
+    }finally{d.dom.window.close();}
+  }
+});
+
+test("Allocation simulation handles No PIC and partial drafts, and resetting removes the preview",async()=>{
+  const d=await allocation();try{
+    d.choose("acc","");
+    assert.deepEqual(projection(d,"acc",""),{current:1,proposed:2,delta:1});assert.deepEqual(projection(d,"acc","Ivan"),{current:1,proposed:0,delta:-1});
+    assert.deepEqual(projection(d,"tax","Bagus"),{current:2,proposed:2,delta:0});
+    d.choose("tax","");assert.deepEqual(projection(d,"tax",""),{current:0,proposed:1,delta:1});
+    d.w.document.querySelector("[data-reset-allocation-drafts]").click();
+    assert.deepEqual(projection(d,"acc","Ivan"),{current:1,proposed:1,delta:0});assert.deepEqual(projection(d,"acc",""),{current:1,proposed:1,delta:0});
+    assert.equal(d.w.document.querySelector("[data-allocation-simulated-count]"),null);assert.doesNotMatch(d.w.document.querySelector(".allocation-overview").textContent,/Draft simulation/);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("bulk simulation follows the current filter cohort and Apply confirms all pending assignments",async()=>{
+  const d=await allocation();try{
+    d.selectAll();d.bulk("acc","Dina");assert.deepEqual(projection(d,"acc","Dina"),{current:0,proposed:2,delta:2});assert.deepEqual(projection(d,"acc",""),{current:1,proposed:0,delta:-1});
+    d.api.state.allocationAccFilter="__no_pic__";d.api.renderAllocation();
+    assert.deepEqual(projection(d,"acc","Dina"),{current:0,proposed:1,delta:1});assert.deepEqual(projection(d,"acc",""),{current:1,proposed:0,delta:-1});
+    assert.equal(d.writes.length,0);
+    d.w.document.querySelector("[data-apply-allocation]").click();await tick();assert.equal(d.writes.length,1);assert.equal(d.writes[0].changes.length,2);
+    d.api.state.allocationAccFilter="all";d.api.renderAllocation();
+    assert.deepEqual(projection(d,"acc","Dina"),{current:2,proposed:2,delta:0});assert.equal(d.w.document.querySelector("[data-allocation-simulated-count]"),null);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("a failed Apply retains the simulation and saved counts, while case variants do not create duplicate PICs",async()=>{
+  const d=await allocation();try{
+    d.choose("acc","Dina");d.fail();d.w.document.querySelector("[data-apply-allocation]").click();await tick();
+    assert.deepEqual(projection(d,"acc","Ivan"),{current:1,proposed:0,delta:-1});assert.deepEqual(projection(d,"acc","Dina"),{current:0,proposed:1,delta:1});
+    d.api.state.allocationDrafts["client-00001"].nextAccPic=" DINA ";d.api.renderAllocation();assert.deepEqual(projection(d,"acc","Dina"),{current:0,proposed:1,delta:1});
+    assert.equal(d.w.document.querySelectorAll('[data-allocation-summary-pic="Dina"]').length,1);assert.equal(d.writes.length,1);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("swapping equal client loads is labelled no net change without hiding pending assignments",async()=>{
+  const d=await allocation();try{
+    d.rows[1].accounting_pic_name="Dina";d.rows[1].accounting_pic_profile_id="acc-2";
+    await d.api.loadSharedClients(true);d.choose("acc","Dina");d.choose("acc","Ivan","client-00002");
+    assert.deepEqual(projection(d,"acc","Ivan"),{current:1,proposed:1,delta:0});assert.deepEqual(projection(d,"acc","Dina"),{current:1,proposed:1,delta:0});
+    assert.match(d.w.document.querySelector('[data-allocation-pic-team="acc"] .allocation-pic-legend').textContent,/No net change/);
+    assert.equal(d.w.document.querySelector("[data-allocation-pending-count]").textContent,"2");assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 test("compact Allocation summary separates ACC/Tax counts and retains zero-client staff and No PIC on desktop/mobile",async()=>{
   for(const mobile of [false,true]){

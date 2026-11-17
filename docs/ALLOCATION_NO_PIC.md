@@ -38,8 +38,33 @@ Allocation list, not only its rendered/windowed rows. Contract/Free of Charge/
 On Demand follow the engagement filter; inactive clients never count. Search,
 both PIC filters and Changed only also apply. Each client contributes exactly
 once per division, including unassigned clients, so either division totals the
-Visible Clients count. These are confirmed current assignments: choosing a Next
-PIC does not move its count until Apply succeeds and Client Master reloads.
+Visible Clients count. The saved count remains authoritative until Apply succeeds
+and Client Master reloads.
+
+### Draft Simulation
+
+Choosing Next ACC/Tax PIC or bulk assignment calculates proposed counts for the
+same currently visible client cohort. Changed PICs show Saved -> Proposed and a
+signed delta; unchanged counts remain compact. A division with pending changes but
+unchanged counts is labelled No net change (for example, an equal-size swap).
+No PIC participates on both sides,
+and an omitted draft field retains the current PIC while an explicit empty string
+removes it. Case/whitespace variants still share one PIC entry. Both saved and
+proposed division totals always equal Visible Clients, including unassigned rows.
+
+The view is explicitly labelled Draft simulation while its visible clients have
+pending changes. It respects existing current-PIC, engagement, search and Changed
+only filters; it does not refilter rows by their proposed PIC. Hidden clients and
+hidden pending drafts are not part of this filtered preview. Clear the filters to
+review overall impact before applying the batch. Chip order follows saved counts
+so simulation alone does not reshuffle the people being compared.
+
+Simulation never changes Client Master, history or API payloads and adds no write
+requests. Reset or returning Next PIC to its current value removes the impact;
+failed Apply retains both drafts and projections with saved values unchanged.
+After a successful Apply/reload, saved counts reflect the confirmed assignments
+and the preview disappears. The existing Apply still submits all eligible pending
+drafts, including hidden ones; this preview does not narrow the save scope.
 
 Pending edits remain visible as row statuses and a small count beside Apply for
 the current filtered view. Apply/reset/report/selection/history/authorization
@@ -75,7 +100,46 @@ Selecting rows reveals Assign ACC PIC and Assign Tax PIC dropdowns. Choosing a
 PIC (or No PIC) stages that field for the selected visible clients only; the
 other field, including an existing unsaved choice, remains untouched. These
 actions make no database requests. Clear selection leaves drafts intact.
-There is intentionally no PIC clipboard-paste feature.
+Desktop also supports the Allocation sheet clipboard interactions below.
+
+## Allocation Sheet
+
+The desktop register uses a compact spreadsheet presentation. Client identity and
+current PIC columns remain read-only; Next ACC PIC and Next Tax PIC sit together
+as the only editable sheet columns. Mobile retains its compact cards and dropdowns.
+Existing sorting, combined filters, row selection, bulk assignment, reset, year,
+reports and audited Apply remain available.
+
+- Click a Next PIC dropdown for an individual change. Shift+click another cell,
+  or drag across cell edges, to select a rectangular range. Native dropdowns keep
+  their normal one-click interaction; start a drag on the cell padding, not the
+  dropdown arrow. Selection is temporary, not a database record or row-checkbox
+  selection, and clears when the sheet is rebuilt for sorting/filtering/navigation.
+- Ctrl+C (Cmd+C) copies selected Next PIC cells as Excel-compatible tab-separated
+  values. Ctrl+V (Cmd+V) pastes one or two columns starting at the top-left selected
+  cell, down the visible sorted rows. Two columns mean ACC followed by Tax.
+  A single pasted name fills the entire selected range. Up to 250 rows per paste;
+  pastes cannot extend beyond the visible rows or the two Next PIC columns.
+- Blank cells and the explicit No PIC label remove that assignment. Missing
+  columns leave the other PIC unchanged. Names match the appropriate active team
+  roster case-insensitively with collapsed whitespace, using its canonical label.
+  An existing legacy current name can be retained, not newly assigned elsewhere.
+  Unknown/wrong-team/ambiguous names or malformed/overflow ranges reject the whole
+  paste without partial draft changes. Server-side identity validation still runs
+  on Apply and remains authoritative.
+- Arrow keys navigate focused cells; Shift+arrows extend selection; Tab/Shift+Tab
+  move between cells. Enter/F2 focuses the native dropdown. Escape clears the
+  range. Native dropdown arrow-key behavior is retained while it has focus.
+  This is not a full Excel shortcut/formula engine.
+
+Paste and dropdown changes stage local drafts and immediately update the live
+Saved -> Proposed distribution. They make no database requests. Normal edits and
+bulk assignments patch affected editors/statuses and summary without replacing
+the table, shell or popups, preserving focus and native scroll. When an explicit
+sort/filter changes row order/membership, only Allocation is rebuilt, preserving
+the table's scroll position. Preferences/history are saved once per action, not
+once per pasted cell. Apply remains one leadership-only audited batch, with all
+editing blocked while it is in flight. No schema migration or dependency is added.
 
 Reset unsaved confirms before discarding every allocation draft, including
 filtered-out clients, and clears selection. It also removes the discarded
