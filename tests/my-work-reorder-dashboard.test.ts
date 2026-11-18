@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import test from "node:test";
 import { JSDOM, VirtualConsole } from "jsdom";
 const read=(file:string)=>readFileSync(new URL(`../${file}`,import.meta.url),"utf8");
+const require=createRequire(import.meta.url);
 const tick=async()=>{await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));};
 
-async function dashboard(saved:any={},account="sort-user",mobile=false){
-  const warnings:string[]=[],writes:any[]=[],vc=new VirtualConsole();vc.on("jsdomError",error=>warnings.push(error.message));
+async function dashboard(saved:any={},account="sort-user",mobile=false,reducedMotion=false,configure?:(w:any)=>void,production=false){
+  const warnings:string[]=[],writes:any[]=[],vc=new VirtualConsole();vc.on("jsdomError",error=>warnings.push(error.message));vc.on("error",(...values:any[])=>warnings.push(values.map(String).join(" ")));
   const dom=new JSDOM(read("public/demo.html"),{url:"http://localhost/demo.html",runScripts:"outside-only",virtualConsole:vc}),w=dom.window as any;
   const key=`tax-practice-v2:${account}`;
   w.localStorage.setItem(key,JSON.stringify({ui:{currentView:"my-work-view",...saved}}));
-  w.matchMedia=(query:string)=>({matches:mobile&&/max-width:\s*(760|900)px/.test(query),addEventListener(){},removeEventListener(){}});w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
+  w.matchMedia=(query:string)=>({matches:query==="(prefers-reduced-motion: reduce)"?reducedMotion:mobile&&/max-width:\s*(760|900)px/.test(query),addEventListener(){},removeEventListener(){}});w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.requestIdleCallback=()=>0;w.setTimeout=()=>0;w.setInterval=()=>0;w.Headers=Headers;w.Response=Response;w.structuredClone=structuredClone;
   const tasks:any[]=["a","b","c"].map(id=>({id,title:`Task ${id}`,creatorName:"Ivan",createdAt:1,done:false,version:"v1",favorite:id==="b",favoritedAt:id==="b"?100:0,steps:[]}));
   w.fetch=async(url:string,init:any={})=>{
@@ -26,7 +28,9 @@ async function dashboard(saved:any={},account="sort-user",mobile=false){
     return {ok:true,status:200,json:async()=>structuredClone(body)};
   };
   for(const file of ["public/vendor/purify.min.js","public/workspace-sync.js","public/feature-access.js","public/my-work-reorder.js","public/annual-sheet-dashboard.js"])w.eval(read(file));
-  const script=read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>","    window.__workOrderTest={state,renderMyWork,loadSharedMyWork};\n    })().catch(error =>");
+  configure?.(w);
+  const html=production?require("../scripts/build-workspace-shell.cjs").buildWorkspace({write:false}).html:read("public/demo.html");
+  const script=html.match(/<script>([\s\S]*?)<\/script>/)![1].replace(/}\)\(\)\.catch\(/,";window.__workOrderTest={state,renderMyWork,loadSharedMyWork,persistDemoState,flushBrowserPreferences,historySnapshot,applyHistorySnapshot};})().catch(");
   await w.eval(script);await tick();
   assert.ok(w.__workOrderTest,warnings.join("\n"));
   const row=(id:string)=>w.document.querySelector(`#my-work-view [data-select-my-work="${id}"]`);
@@ -35,6 +39,69 @@ async function dashboard(saved:any={},account="sort-user",mobile=false){
   const savedUi=()=>JSON.parse(w.localStorage.getItem(key)).ui;
   return {dom,w,writes,warnings,tasks,ids,row,move,savedUi,api:w.__workOrderTest};
 }
+
+test("task titles are native controls, keyboard opening focuses details, and navigation avoids unrelated renders",async()=>{
+  const d=await dashboard();try{
+    const button=d.row("a").querySelector(".my-work-open-task");assert.equal(button.tagName,"BUTTON");assert.equal(button.textContent,"Task a");
+    assert.equal(d.row("a").getAttribute("role"),"group");assert.equal(d.row("a").getAttribute("tabindex"),"-1");
+    assert.equal(d.row("a").querySelector('input[type="checkbox"]').getAttribute("aria-label"),"Complete task: Task a");
+    const settings=d.w.document.getElementById("appearance-settings-root"),marker=d.w.document.createElement("span");settings.append(marker);
+    let historyWrites=0;d.w.history.replaceState=()=>historyWrites++;button.click();
+    assert.equal(d.api.state.selectedMyWorkId,"a");assert.equal(d.w.document.activeElement.id,"my-work-title-detail");assert.ok(marker.isConnected);assert.equal(historyWrites,0);
+    d.w.document.querySelector("[data-close-my-work-detail]").click();assert.equal(d.w.document.activeElement,d.row("a").querySelector(".my-work-open-task"));
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("task-local menus, edits and save acknowledgements retain unrelated DOM and avoid history serialization",async()=>{
+  for(const production of [false,true]){
+    const d=await dashboard({},`scoped-edit-${production}`,false,false,undefined,production);try{
+      const roots=["appearance-settings-root","announcement-inbox-root","client-editor-root"];
+      const markers=roots.map(id=>{const node=d.w.document.createElement("span");d.w.document.getElementById(id).append(node);return node;});
+      let histories=0;d.w.history.replaceState=()=>histories++;d.w.history.pushState=()=>histories++;
+      d.row("a").querySelector(".my-work-open-task").click();
+      d.w.document.querySelector('[data-open-my-work-menu="due"]').click();assert.equal(d.api.state.myWorkMenu,"due");
+      d.w.document.querySelector('button[data-close-my-work-menu]').click();assert.equal(d.api.state.myWorkMenu,"");
+      d.row("c").querySelector('[data-toggle-my-work-star="c"]').click();await tick();
+      assert.equal(d.tasks.find(task=>task.id==="c").favorite,true);assert.equal(d.ids()[0],"c");
+      d.row("a").querySelector('[data-my-work-done="a"]').click();await tick();
+      assert.equal(d.tasks.find(task=>task.id==="a").done,true);
+      assert.equal(d.writes.length,2,"each business change still reaches the existing save queue");
+      assert.ok(markers.every(node=>node.isConnected),"edits and acknowledgements must not rebuild unrelated roots");
+      assert.equal(histories,0,"task changes are not browser-history navigation");
+      assert.deepEqual(d.warnings,[]);
+    }finally{d.dom.window.close();}
+  }
+});
+
+test("online browser history neither serializes notifications nor restores an old shared inbox",async()=>{
+  const d=await dashboard();try{
+    d.api.state.announcements=[{id:"current",message:"Current private notice"}];
+    const before=structuredClone(d.api.state.announcements),snapshot=d.api.historySnapshot();
+    assert.equal(snapshot.announcements,undefined);assert.doesNotMatch(JSON.stringify(snapshot),/Current private notice/);
+    d.api.applyHistorySnapshot({...snapshot,announcements:[{id:"stale",message:"Stale notice"}]});
+    assert.deepEqual(d.api.state.announcements,before);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("navigation preference writes coalesce, flush the latest selection on page exit and reveal storage failures",async()=>{
+  const idle=new Map<number,()=>void>();let sequence=0,storageWrites=0,fail=false;
+  const d=await dashboard({},"preference-test",false,false,w=>{
+    w.requestIdleCallback=(fn:()=>void)=>{const id=++sequence;idle.set(id,fn);return id;};w.cancelIdleCallback=(id:number)=>idle.delete(id);
+    const original=w.Storage.prototype.setItem;w.Storage.prototype.setItem=function(key:string,value:string){if(key==="tax-practice-v2:preference-test"){storageWrites++;if(fail)throw new Error("Quota exceeded");}return original.call(this,key,value);};
+  });try{
+    d.api.flushBrowserPreferences();storageWrites=0;idle.clear();
+    for(const id of ["a","b","c"])d.row(id).querySelector(".my-work-open-task").click();
+    assert.equal(storageWrites,0);assert.equal(idle.size,1);assert.equal(d.api.state.selectedMyWorkId,"c");
+    d.w.dispatchEvent(new d.w.Event("pagehide"));assert.equal(storageWrites,1);assert.equal(idle.size,0);assert.equal(d.savedUi().selectedMyWorkId,"c");
+    d.api.persistDemoState();assert.equal(storageWrites,2,"business edits retain immediate persistence");
+    fail=true;d.api.persistDemoState();assert.match(d.w.document.getElementById("browser-storage-notice").textContent,/Database save status is shown separately/);
+    d.api.state.allocationDrafts={client:{nextAccPic:"Ivan"}};const warning=new d.w.Event("beforeunload",{cancelable:true});d.w.dispatchEvent(warning);assert.equal(warning.defaultPrevented,true);
+    fail=false;d.w.document.querySelector("#browser-storage-notice button").click();assert.equal(d.w.document.getElementById("browser-storage-notice"),null);
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 test("My Work keeps the list scroll when opening, changing and closing task details on desktop and mobile",async()=>{
   for(const mobile of [false,true]){
@@ -55,6 +122,52 @@ test("My Work keeps the list scroll when opening, changing and closing task deta
       assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
     }finally{d.dom.window.close();}
   }
+});
+
+test("online preferences omit task/notification records while retaining personal ordering and Allocation drafts",async()=>{
+  const d=await dashboard({announcements:[{id:"stale",message:"Old private notification"}]},"minimal-storage");try{
+    assert.equal(d.api.state.announcements.length,0,"online startup does not resurrect stale notification content");
+    d.api.state.myWork[0].note="Private confirmed task note";d.api.state.announcements=[{id:"confirmed",message:"Private confirmed notification"}];
+    d.api.state.allocationDrafts={client:{nextAccPic:"Ivan"}};d.api.state.myWorkOrder.active=["c","b","a"];
+    d.api.persistDemoState();const saved=d.savedUi();assert.deepEqual(saved.myWork,[]);assert.deepEqual(saved.announcements,[]);
+    assert.deepEqual(saved.allocationDrafts,{client:{nextAccPic:"Ivan"}});assert.deepEqual(saved.myWorkOrder.active,["c","b","a"]);
+    assert.equal(d.api.state.myWork[0].note,"Private confirmed task note");assert.equal(d.api.state.announcements.length,1);assert.equal(d.writes.length,0);
+    const json=d.w.localStorage.getItem("tax-practice-v2:minimal-storage");assert.doesNotMatch(json,/Private confirmed task note|Private confirmed notification/);
+  }finally{d.dom.window.close();}
+});
+
+test("My Work drawer remains opaque while opening/switching tasks, and clears only its own completed or cancelled animation",async()=>{
+  for(const mobile of [false,true]){
+    const d=await dashboard({},`opaque-drawer-${mobile}`,mobile);try{
+      const before=JSON.stringify(d.api.state.myWork);
+      const finish=(node:any,type:string,name="myWorkDrawerEnter")=>{const event=new d.w.Event(type,{bubbles:true});Object.defineProperty(event,"animationName",{value:name});node.dispatchEvent(event);};
+      d.row("a").click();let drawer=d.w.document.querySelector(".my-work-detail");
+      assert.equal(drawer.classList.contains("is-opening"),true);assert.equal(d.w.getComputedStyle(drawer).opacity,"1");
+      assert.equal(d.w.document.querySelectorAll(".my-work-detail input:disabled, .my-work-detail textarea:disabled, .my-work-detail select:disabled").length,0);
+      finish(drawer.querySelector(".my-work-card"),"animationend");assert.equal(drawer.classList.contains("is-opening"),true,"child animations must not finish the drawer animation");
+      finish(drawer,"animationend","unrelated");assert.equal(drawer.classList.contains("is-opening"),true);
+      finish(drawer,"animationend");assert.equal(drawer.classList.contains("is-opening"),false);
+      d.row("b").click();drawer=d.w.document.querySelector(".my-work-detail");assert.equal(drawer.classList.contains("is-opening"),true);assert.equal(d.w.getComputedStyle(drawer).opacity,"1");
+      finish(drawer,"animationcancel");assert.equal(drawer.classList.contains("is-opening"),false);
+      d.api.renderMyWork();assert.equal(d.w.document.querySelector(".my-work-detail").classList.contains("is-opening"),false,"same-task redraws do not restart the entrance");
+      d.w.document.querySelector("[data-close-my-work-detail]").click();d.row("b").click();
+      assert.equal(d.w.getComputedStyle(d.w.document.querySelector(".my-work-detail")).opacity,"1");
+      assert.equal(JSON.stringify(d.api.state.myWork),before);assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+    }finally{d.dom.window.close();}
+  }
+});
+
+test("My Work drawer has transform-only, non-retained keyframes and honors reduced motion",async()=>{
+  const d=await dashboard({},"reduced-drawer",false,true);try{
+    const rules=[...d.w.document.styleSheets].flatMap((sheet:any)=>[...sheet.cssRules]);
+    const frames=rules.find((rule:any)=>rule.type===7&&rule.name==="myWorkDrawerEnter");assert.ok(frames);
+    assert.equal(frames.cssRules.length,2);for(const frame of frames.cssRules){assert.equal(frame.style.getPropertyValue("opacity"),"");assert.ok(frame.style.getPropertyValue("transform"));}
+    const entrance=rules.find((rule:any)=>rule.selectorText===".my-work-detail.is-opening");assert.ok(entrance);
+    assert.doesNotMatch(entrance.style.getPropertyValue("animation"),/both|forwards/);
+    const reduced=rules.find((rule:any)=>rule.conditionText==="(prefers-reduced-motion: reduce)"&&[...rule.cssRules].some((child:any)=>child.selectorText===".my-work-detail.is-opening"&&child.style.getPropertyValue("animation")==="none"));assert.ok(reduced);
+    d.row("a").click();const drawer=d.w.document.querySelector(".my-work-detail");assert.equal(drawer.classList.contains("is-opening"),false);assert.equal(d.w.getComputedStyle(drawer).opacity,"1");
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
 });
 
 test("My Work resets list scroll for archive navigation but preserves it when selecting an archived task",async()=>{

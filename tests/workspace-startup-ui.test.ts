@@ -42,6 +42,7 @@ function open(options: { view?: string; annual?: string; mobile?: boolean; statu
   };
   w.eval(read("public/workspace-startup.js"));
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js"));
+  for (const file of ["case-tax-types.js","case-workflow-dashboard.js","case-assessment-dashboard.js","case-report.js"]) w.eval(read(`public/${file}`));
   const opening = w.eval(html.match(/<script>([\s\S]*?)<\/script>/)![1]);
   return { dom, w, opening, release, requests, idle, cache, warnings };
 }

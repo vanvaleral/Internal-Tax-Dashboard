@@ -26,7 +26,7 @@ function atWidth(width: number) {
     return { get matches() { return item.matches; }, addEventListener(_event: string, listener: () => void) { item.listeners.push(listener); } };
   }) as any;
   (w as any).fetch = () => { throw new Error("Sidebar sizing must not fetch workspace data"); };
-  w.eval(w.document.querySelector("script[data-compact-navigation]")!.textContent!);
+  w.eval(readFileSync(new URL("../public/workspace-navigation.js",import.meta.url),"utf8"));
   return {
     dom, w, css, toggle: w.document.getElementById("compact-rail-toggle")!, sidebar: w.document.getElementById("workspace-sidebar")!,
     resize(width: number) {
@@ -179,7 +179,7 @@ test("desktop handle stays centered on hover/press and has reduced-motion suppor
     assert.equal(hover.style.transform, "translateY(-50%)");
     assert.ok(hover.selectorText.includes(".compact-rail-toggle:active:not(:disabled)"));
     assert.match(html, /\.compact-rail-toggle, \.compact-rail-toggle svg \{ transition: none !important; \}/);
-    const script = d.w.document.querySelector("script[data-compact-navigation]")!.textContent!;
+    const script = readFileSync(new URL("../public/workspace-navigation.js",import.meta.url),"utf8");
     assert.doesNotMatch(script, /setTimeout|pointerenter|pointerleave|pointermove|localStorage|fetch\(/);
   } finally { d.dom.window.close(); }
 });

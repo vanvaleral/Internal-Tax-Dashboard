@@ -17,6 +17,7 @@ async function allocation(mobile = false, role = "supervisor") {
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone; w.alert = (value: string) => alerts.push(value);
+  w.open = () => ({closed:false,opener:{},document:{title:"",body:{textContent:""}}});
   let fail = false, allowReset = true, delay = false, releaseSave: (() => void) | undefined;
   w.confirm = (message: string) => { confirmations.push(message); return allowReset; };
   const staff = [

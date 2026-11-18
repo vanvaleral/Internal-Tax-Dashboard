@@ -124,9 +124,11 @@
     return pdf;
   }
 
-  async function preview(snapshot) {
-    const popup = window.open("","_blank","width=1100,height=850");
+  async function preview(snapshot,reservedPopup) {
+    const popup = reservedPopup || window.open("","_blank","width=1100,height=850");
     if (!popup) throw new Error("Allow pop-ups to open the Allocation PDF preview.");
+    if (popup.closed) return;
+    if (reservedPopup) popup.document.body.textContent = "";
     popup.opener = null;
     popup.document.title = "Preparing Allocation PDF";
     const status = popup.document.createElement("p");

@@ -1,8 +1,23 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss" source(none);
+@config "../tailwind.config.ts";
+@source "./";
+@source "../components";
+@source "../lib";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/PlusJakartaSans.ttf") format("truetype");
+}
+
+/* Preserve the existing v3 reset while upgrading the build pipeline. */
+@layer base {
+  *, ::before, ::after, ::backdrop, ::file-selector-button { border-color: #e5e7eb; }
+  input::placeholder, textarea::placeholder { color: #9ca3af; }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
 
 :root {
   color-scheme: light;

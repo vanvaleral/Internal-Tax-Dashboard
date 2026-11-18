@@ -50,7 +50,9 @@ test("dashboard and annual first-paint loaders need no image, font, external sty
     } finally { dom.window.close(); }
   }
   const annual = read("public/annual-accounting-sheet-demo.html");
-  assert.match(annual, /id="sheet-styles"[^>]*media="print"[^>]*onload=/);
+  assert.match(annual, /id="sheet-styles"[^>]*media="print"/);
+  assert.doesNotMatch(annual, /\son(?:load|error)=/);
+  assert.match(annual, /link\.addEventListener\("load",ready/);
   assert.match(annual, /sheet-booting \.workbook\{visibility:hidden\}/);
   assert.doesNotMatch(read("public/demo.html"), /setTimeout\(finishStartup|classList\.add\("is-entering"\)/);
 });

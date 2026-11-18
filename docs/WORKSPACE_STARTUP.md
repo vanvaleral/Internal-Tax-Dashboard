@@ -1,5 +1,9 @@
 # Workspace Startup
 
+Production also extracts reusable head CSS with minimal first-paint loader CSS.
+The canonical HTML and verified bootstrap flow are retained. See
+`MODERN_WEB_HARDENING.md` for style readiness, generated assets and security policy.
+
 ## Request Path
 
 The root page is a data-free, static loader/iframe shell. It no longer performs

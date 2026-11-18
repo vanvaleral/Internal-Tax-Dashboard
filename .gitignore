@@ -9,3 +9,9 @@ supabase/.temp/
 
 # Sensitive local snapshots are never source-controlled.
 /tmp/private-case-workflow-pre-migration-*.json
+/tmp/
+/output/
+
+# Generated from the canonical protected demo at install/build time.
+/public/workspace-built.html
+/public/workspace-shell.css

@@ -22,6 +22,7 @@ async function openDashboard(preview: boolean) {
   w.structuredClone = structuredClone;
   w.eval(readFileSync(new URL("../public/vendor/purify.min.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/workspace-sync.js", import.meta.url), "utf8"));
+  w.eval(readFileSync(new URL("../public/workspace-demo-fixtures.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/feature-access.js", import.meta.url), "utf8"));
   const append = w.document.head.append.bind(w.document.head);
   w.document.head.append = (...nodes: any[]) => {
@@ -30,6 +31,7 @@ async function openDashboard(preview: boolean) {
       if (node.tagName === "SCRIPT" && node.src.endsWith("annual-accounting-dashboard-preview.js")) { w.eval(previewScript); queueMicrotask(() => node.onload()); }
     }
   };
+  for (const file of ["case-tax-types.js","case-workflow-dashboard.js","case-assessment-dashboard.js","case-report.js"]) w.eval(readFileSync(new URL(`../public/${file}`,import.meta.url),"utf8"));
   const inline = dashboard.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(inline);
   await w.eval(inline);

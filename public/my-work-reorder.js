@@ -80,7 +80,7 @@
   function begin(event,point,kind,id){
     if(gesture)return;
     const row=event.target.closest?.("[data-my-work-reorder-row]");
-    if(!row||event.target.closest("input,button,select,textarea,a,[contenteditable=true]"))return;
+    if(!row||event.target.closest("input,button:not(.my-work-open-task),select,textarea,a,[contenteditable=true]"))return;
     const root=row.closest("[data-my-work-sort-root]"),context=contexts.get(root),group=row.parentElement,list=row.closest(".my-work-task-list");
     if(!context||!group.matches("[data-my-work-sort-group]")||rows(group).length<2)return;
     gesture={root,context,group,list,row,id,kind,x:point.clientX,y:point.clientY,startX:point.clientX,startY:point.clientY,title:row.querySelector("strong")?.textContent||"Task",lifted:false,animations:new Map()};
@@ -121,8 +121,9 @@
   document.addEventListener("contextmenu",event=>{if(gesture?.row.contains(event.target))event.preventDefault();});
   document.addEventListener("keydown",event=>{
     if(event.key==="Escape"&&gesture){event.preventDefault();event.stopImmediatePropagation();finish(false);return;}
-    if(gesture||!event.altKey||!["ArrowUp","ArrowDown"].includes(event.key)||!event.target.matches?.("[data-my-work-reorder-row]"))return;
-    const row=event.target,root=row.closest("[data-my-work-sort-root]"),context=contexts.get(root),group=row.parentElement;
+    const row=event.target.closest?.("[data-my-work-reorder-row]");
+    if(gesture||!event.altKey||!["ArrowUp","ArrowDown"].includes(event.key)||!row||event.target.closest("input,button:not(.my-work-open-task),select,textarea,a,[contenteditable=true]"))return;
+    const root=row.closest("[data-my-work-sort-root]"),context=contexts.get(root),group=row.parentElement;
     if(!context)return;
     event.preventDefault();event.stopPropagation();
     const items=rows(group),index=items.indexOf(row),next=index+(event.key==="ArrowUp"?-1:1);
@@ -130,7 +131,7 @@
     animateShift(group,()=>group.insertBefore(row,event.key==="ArrowUp"?items[next]:items[next].nextSibling));
     const ids=rows(group).map(item=>item.dataset.selectMyWork);
     context.onReorder(group.dataset.myWorkSortGroup,merge(context.groups[group.dataset.myWorkSortGroup]||ids,ids));
-    announce(root,`Moved ${row.querySelector("strong")?.textContent||"task"} to position ${next+1} of ${items.length}.`);row.focus({preventScroll:true});
+    announce(root,`Moved ${row.querySelector("strong")?.textContent||"task"} to position ${next+1} of ${items.length}.`);(row.querySelector(".my-work-open-task")||row).focus({preventScroll:true});
   },true);
   window.addEventListener("blur",()=>finish(false));window.addEventListener("resize",()=>finish(false));
   document.addEventListener("visibilitychange",()=>{if(document.hidden)finish(false);});

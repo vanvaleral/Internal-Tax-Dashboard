@@ -29,7 +29,7 @@ function fixture(creating=false){
   w.eval(`const state=harness.state,myWorkDemoMode=false,caseProgressReadRevision=new Map();
     const appFetch=harness.appFetch,persistDemoState=()=>{},safeHtml=value=>value,escapeAttr=value=>String(value);
     const clearSyncFailure=()=>{},markSyncFailure=(scope,error)=>harness.issues.push(error.message);
-    const activeEditorSnapshot=()=>harness.editing?{}:null,rerender=()=>{};
+    const activeEditorSnapshot=()=>harness.editing?{}:null,renderMyWorkUpdate=()=>{};
     const loadCaseProgress=id=>harness.history.push(id);
     ${source}
     window.queueTest={save:saveMyWorkTaskToDatabase,values:myWorkValues,refreshStatus:refreshMyWorkSaveStatus};`);

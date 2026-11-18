@@ -269,7 +269,7 @@
       max-width: 100%;
     }
 
-    .my-work-shell { max-width: none; padding: 0; }
+    .my-work-shell { max-width: none; padding: 0; container-type:inline-size; container-name:my-work; }
     .my-work-panel { height: calc(100dvh - 132px); min-height:0; display:grid; grid-template-columns:minmax(0, 1fr); overflow:hidden; border-radius:20px; }
     .my-work-panel.has-detail { grid-template-columns:minmax(430px, 1.25fr) minmax(360px, .75fr); }
     .my-work-list { display:flex; flex-direction:column; min-height:0; padding:30px; color:#fff; background-color:var(--my-work-start); background-image:linear-gradient(145deg, var(--my-work-overlay-start), var(--my-work-overlay-end)), var(--my-work-image); background-position:center; background-size:cover; }
@@ -281,6 +281,9 @@
     .my-work-row.is-complete { background:rgba(44,58,91,.78); color:#d7deef; }
     .my-work-row.is-complete strong { color:#c7d0e5; text-decoration:line-through; }
     .my-work-row.is-complete .subline { color:#aeb9d2; }
+    .my-work-open-task { display:block; width:100%; min-height:24px; padding:0; border:0; color:inherit; background:transparent; text-align:left; font:inherit; }
+    .my-work-open-task:hover:not(:disabled), .my-work-open-task:active:not(:disabled) { transform:none; filter:none; box-shadow:none; }
+    .my-work-open-task:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
     .circle-check { appearance:none; width:19px; height:19px; margin:2px 0 0; border:2px solid #6b7280; border-radius:50%; background:#fff; }
     .circle-check:checked { border-color:var(--accent); background:radial-gradient(circle,var(--accent) 45%,#fff 48%); }
     .my-work-task-list { flex:1; min-height:0; margin-top:24px; overflow:auto; }
@@ -306,9 +309,10 @@
     .my-work-empty { padding:22px 12px; color:rgba(255,255,255,.82); text-align:center; }
     .my-work-composer { display:flex; flex:0 0 auto; gap:10px; margin-top:12px; padding:12px; background:rgba(232,237,255,.65); border-radius:5px; backdrop-filter:blur(8px); }
     .my-work-composer input { flex:1; border:0; background:transparent; outline:0; }
-    .my-work-detail { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; overflow-y:auto; scrollbar-gutter:stable; padding:52px 22px 28px; background:#fff; }
+    .my-work-detail { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; overflow-y:auto; scrollbar-gutter:stable; padding:52px 22px 28px; background:#fff; opacity:1; }
     .my-work-detail > * { flex-shrink:0; }
-    .my-work-detail.is-opening { animation:drawerIn 260ms ease both; }
+    .my-work-detail.is-opening { animation:myWorkDrawerEnter 180ms cubic-bezier(.2,.8,.2,1); }
+    @media (prefers-reduced-motion: reduce) { .my-work-detail.is-opening { animation:none; } }
     .my-work-detail-back { display:none; }
     .my-work-detail-close { position:absolute; top:12px; right:14px; display:grid; width:32px; height:32px; place-items:center; padding:0; border-radius:9px; color:var(--muted); background:transparent; }
     .my-work-detail-close svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
@@ -346,15 +350,28 @@
     .my-work-save-status { display:flex; align-items:center; gap:8px; min-height:32px; margin:0; padding:0; border:0; color:var(--muted); font-size:12px; line-height:20px; }
     .my-work-save-status .ghost-btn { flex:0 0 auto; min-height:28px; padding:4px 8px; font-size:12px; line-height:20px; }
     .my-work-save-status .ghost-btn:hover { transform:none; }
+    .browser-storage-notice { position:fixed; z-index:100; bottom:16px; right:16px; max-width:min(380px,calc(100vw - 32px)); padding:12px; border:1px solid var(--warning); border-radius:10px; color:var(--ink); background:var(--panel-solid); box-shadow:var(--shadow); font-size:12px; }
+    .browser-storage-notice button { margin-top:8px; }
     .my-work-time-dialog-backdrop { position:fixed; z-index:70; inset:0; display:grid; place-items:center; padding:20px; background:rgba(28,36,54,.32); }
     .my-work-time-dialog { width:min(360px, 100%); padding:18px; border:1px solid #d9dfeb; border-radius:12px; background:#fff; box-shadow:0 20px 50px rgba(25,34,54,.25); }
     .my-work-time-dialog h3 { margin:0 0 12px; font-size:18px; }
     .my-work-time-dialog button { display:flex; justify-content:space-between; width:100%; padding:12px; border-bottom:1px solid #e5e7eb; background:#fff; text-align:left; }
     .my-work-time-dialog button:hover { background:#f3f6ff; box-shadow:none; transform:none; }
+    dialog.workspace-modal-host { position:fixed; inset:0; width:100%; height:100%; max-width:none; max-height:none; margin:0; padding:0; border:0; background:transparent; color:var(--ink); overflow:auto; }
+    dialog.workspace-modal-host[open] { display:block; }
+    dialog.workspace-modal-host:not([open]) { display:none; }
+    dialog.workspace-modal-host:modal { overscroll-behavior:contain; }
+    dialog.workspace-modal-host::backdrop { background:transparent; overflow:hidden; overscroll-behavior:contain; }
     @keyframes taskEnter { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
     @keyframes taskCompleteMove { from { opacity:.3; transform:translateY(-22px); } to { opacity:1; transform:translateY(0); } }
     @keyframes taskRestoreMove { from { opacity:.3; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
-    @keyframes drawerIn { from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes myWorkDrawerEnter { from { transform:translateX(18px); } to { transform:translateX(0); } }
+    @container my-work (max-width:789px) {
+      .my-work-panel { position:relative; display:block; }
+      .my-work-list { height:100%; }
+      .my-work-detail { position:absolute; z-index:25; inset:0; }
+      .my-work-detail-back { display:inline-flex; align-self:flex-start; margin-bottom:12px; padding:8px 10px; background:var(--neutral-soft); color:var(--ink); }
+    }
 
     .role-bar {
       display: none;
@@ -4019,38 +4036,7 @@
     </main>
   </div>
 
-  <script data-compact-navigation>
-    (() => {
-      const desktop = window.matchMedia("(min-width: 901px)");
-      const narrow = window.matchMedia("(min-width: 901px) and (max-width: 1100px)");
-      const root = document.documentElement, sidebar = document.getElementById("workspace-sidebar"), toggle = document.getElementById("compact-rail-toggle");
-      let requestedMini = null;
-      const sync = () => {
-        const available = desktop.matches && !root.classList.contains("cases-fullscreen");
-        const mini = available && (requestedMini ?? narrow.matches);
-        root.classList.toggle("desktop-nav-mini", mini);
-        sidebar.removeAttribute("inert"); sidebar.removeAttribute("aria-hidden");
-        toggle.disabled = !available;
-        toggle.setAttribute("aria-expanded", String(!mini));
-        toggle.setAttribute("aria-label", mini ? "Show full sidebar" : "Use mini sidebar");
-        toggle.title = mini ? "Show full sidebar" : "Use mini sidebar";
-        sidebar.querySelector("h1").title = available ? "Double-click to switch sidebar size" : "";
-        if (!available && document.activeElement === toggle) sidebar.querySelector(".nav-btn.active:not([hidden])")?.focus({ preventScroll: true });
-      };
-      const switchSize = () => {
-        if (!desktop.matches || root.classList.contains("cases-fullscreen")) return;
-        requestedMini = !root.classList.contains("desktop-nav-mini"); sync();
-      };
-      toggle.addEventListener("click", switchSize);
-      sidebar.addEventListener("dblclick", event => {
-        if (!(event.target instanceof Element) || event.target.closest("button,a,input,select,textarea,[contenteditable]")) return;
-        event.preventDefault(); switchSize();
-      });
-      desktop.addEventListener("change", sync);
-      narrow.addEventListener("change", sync);
-      sync();
-    })();
-  </script>
+  <script src="workspace-navigation.js" data-compact-navigation></script>
 
   <input id="client-csv-input" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="hidden" />
   <input id="appearance-my-work-background" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
@@ -4063,7 +4049,10 @@
   <div id="fame-announcement-root"></div>
   <div id="announcement-inbox-root"></div>
   <div id="appearance-settings-root"></div>
-  <link rel="stylesheet" href="client-overview.css" media="print" onload="this.media='all'" />
+  <link id="client-overview-styles" rel="stylesheet" href="client-overview.css" media="print" />
+  <script data-client-overview-styles>
+    (() => { const link = document.getElementById("client-overview-styles"); const ready = () => { link.media = "all"; }; if (link.sheet) ready(); else link.addEventListener("load", ready, { once:true }); })();
+  </script>
   <script src="vendor/purify.min.js"></script>
   <script src="workspace-sync.js"></script>
   <link rel="stylesheet" href="my-work-reorder.css" />
@@ -4073,12 +4062,10 @@
   <link rel="stylesheet" href="client-engagement.css" />
   <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
-  <link rel="stylesheet" href="case-workflow-dashboard.css" />
-  <script src="case-assessment-dashboard.js"></script>
+  <script src="workspace-assets.js"></script>
   <script src="case-tax-types.js"></script>
   <script src="case-workflow-dashboard.js"></script>
-  <script src="case-report.js"></script>
-  <script src="allocation-report.js"></script>
+  <script src="workspace-modals.js"></script>
   <script>
     (async () => {
     const IS_OFFLINE_DEMO = window.location.protocol === "file:";
@@ -4106,6 +4093,21 @@
       }
     }
     if (IS_OFFLINE_DEMO) startupOverlay?.classList.remove("visible", "initial-load");
+    if (window.WorkspaceStyleReady) {
+      try { await window.WorkspaceStyleReady; }
+      catch (error) { failStartup(error); return; }
+    }
+    if (IS_OFFLINE_DEMO && !window.WorkspaceDemoFixtures) {
+      try {
+        await new Promise((resolve,reject) => {
+          const script = document.createElement("script"); script.src = "workspace-demo-fixtures.js";
+          script.onload = resolve; script.onerror = () => reject(new Error("Local preview sample data could not be loaded. Reload to retry."));
+          document.head.append(script);
+        });
+      } catch (error) {
+        startupOverlay?.classList.add("visible","initial-load"); failStartup(error); return;
+      }
+    }
     function safeHtml(markup) {
       return DOMPurify.sanitize(markup, { USE_PROFILES: { html: true, svg: true }, FORBID_TAGS: ["style", "iframe", "object", "embed"], ALLOW_DATA_ATTR: true });
     }
@@ -4293,526 +4295,7 @@
       return Array.isArray(restored) ? restored : deepClone(fallback);
     }
 
-    const DEFAULT_CLIENTS = [
-      {
-        id: "client-001",
-        name: "PT Qalm Retreat",
-        pic: "Bagus",
-        followUpCount: 4,
-        notes: "Reference client using the real billing and claim document format.",
-        lastUpdated: "2026-05-20 10:25",
-        year: 2026,
-        month: "January",
-        npwp: "0614597029902000",
-        address: "Dusun Kundalini, Umeanyar, Seririt, Buleleng, Bali",
-        serviceFee: 2500000,
-        claimStatus: "Billing Ready",
-        paymentStatus: "Waiting Client Payment",
-        billingUploaded: true,
-        drivePath: "Clients/PT Qalm Retreat/2026/January/",
-        obligations: {
-          pph21: {
-            status: "done",
-            receiptNumber: "040504419477933",
-            revisionRequired: false,
-            quickNotes: "Reference amount from billing and claim PDF.",
-            payableAmount: 20513,
-            taxBreakdown: "PPH Pasal 21 Bukan Pegawai",
-            billingCode: "040504419477933",
-            kapkjs: "411618 / 100",
-            expirationDate: "2025-02-24 14:20:41"
-          },
-          unifikasi: {
-            status: "temporary",
-            receiptNumber: "",
-            revisionRequired: false,
-            quickNotes: "Mapped as PPh 23 for grouped withholding bucket in this demo.",
-            payableAmount: 56697,
-            taxBreakdown: "PPH Pasal 23",
-            billingCode: "040504419477933",
-            kapkjs: "411618 / 100",
-            expirationDate: "2025-02-24 14:20:41"
-          },
-          pph25: {
-            status: "na",
-            receiptNumber: "",
-            revisionRequired: false,
-            quickNotes: "",
-            payableAmount: 0,
-            taxBreakdown: "",
-            billingCode: "",
-            kapkjs: "",
-            expirationDate: ""
-          },
-          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          ppn: {
-            status: "na",
-            receiptNumber: "",
-            revisionRequired: false,
-            quickNotes: "",
-            payableAmount: 0,
-            taxBreakdown: "",
-            billingCode: "",
-            kapkjs: "",
-            expirationDate: ""
-          }
-        }
-      },
-      {
-        id: "client-002",
-        name: "CV Bumi Niaga",
-        pic: "Denny",
-        followUpCount: 6,
-        notes: "High rework. Sales recap often incomplete.",
-        lastUpdated: "2026-05-20 11:18",
-        year: 2026,
-        month: "May",
-        npwp: "019283746500000",
-        address: "Denpasar, Bali",
-        serviceFee: 1800000,
-        claimStatus: "Claim Generated",
-        paymentStatus: "Client Reviewing Claim",
-        billingUploaded: true,
-        drivePath: "Clients/CV Bumi Niaga/2026/May/",
-        obligations: {
-          pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          unifikasi: {
-            status: "revision",
-            receiptNumber: "REV-77821",
-            revisionRequired: true,
-            quickNotes: "Need corrected client withholding detail.",
-            payableAmount: 3100000,
-            taxBreakdown: "Vendor withholding adjustment",
-            billingCode: "11281918281",
-            kapkjs: "411128 / 402",
-            expirationDate: "2026-05-26"
-          },
-          pph25: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          phrpb1: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "Still waiting local tax base data.", payableAmount: 1500000, taxBreakdown: "PB1 estimate", billingCode: "", kapkjs: "", expirationDate: "" },
-          ppn: {
-            status: "temporary",
-            receiptNumber: "TMP-88214",
-            revisionRequired: true,
-            quickNotes: "Temporary filed pending final sales invoice list.",
-            payableAmount: 14500000,
-            taxBreakdown: "VAT output pending adjustment",
-            billingCode: "67381928122",
-            kapkjs: "411211 / 100",
-            expirationDate: "2026-05-22"
-          }
-        }
-      },
-      {
-        id: "client-003",
-        name: "PT Nusa Prima Karya",
-        pic: "Bagus",
-        followUpCount: 2,
-        notes: "Generally manageable. One open VAT concern.",
-        lastUpdated: "2026-05-20 09:42",
-        year: 2026,
-        month: "May",
-        npwp: "012345678900000",
-        address: "Badung, Bali",
-        serviceFee: 2100000,
-        claimStatus: "Sent to Client",
-        paymentStatus: "Awaiting Payment",
-        billingUploaded: false,
-        drivePath: "Clients/PT Nusa Prima Karya/2026/May/",
-        obligations: {
-          pph21: {
-            status: "done",
-            receiptNumber: "PPH21-22318",
-            revisionRequired: false,
-            quickNotes: "Finalized.",
-            payableAmount: 9800000,
-            taxBreakdown: "Payroll monthly",
-            billingCode: "98001238121",
-            kapkjs: "411121 / 100",
-            expirationDate: "2026-05-25"
-          },
-          unifikasi: { status: "done", receiptNumber: "UNI-89213", revisionRequired: false, quickNotes: "Done.", payableAmount: 1800000, taxBreakdown: "Unifikasi routine", billingCode: "12712781231", kapkjs: "411128 / 420", expirationDate: "2026-05-27" },
-          pph25: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Need installment confirmation.", payableAmount: 4900000, taxBreakdown: "Installment basis", billingCode: "", kapkjs: "", expirationDate: "" },
-          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          ppn: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "Input VAT support not sent.", payableAmount: 5400000, taxBreakdown: "Expected VAT payable", billingCode: "", kapkjs: "", expirationDate: "" }
-        }
-      },
-      {
-        id: "client-004",
-        name: "PT Samudra Retail",
-        pic: "Okta",
-        followUpCount: 3,
-        notes: "Temporary filings common on VAT cycle.",
-        lastUpdated: "2026-05-20 11:03",
-        year: 2026,
-        month: "May",
-        npwp: "098765432100000",
-        address: "Gianyar, Bali",
-        serviceFee: 2300000,
-        claimStatus: "Payment Received",
-        paymentStatus: "Ready to Pay Tax",
-        billingUploaded: true,
-        drivePath: "Clients/PT Samudra Retail/2026/May/",
-        obligations: {
-          pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          unifikasi: { status: "done", receiptNumber: "UNI-10092", revisionRequired: false, quickNotes: "No issue.", payableAmount: 900000, taxBreakdown: "Routine", billingCode: "18181928191", kapkjs: "411128 / 420", expirationDate: "2026-05-22" },
-          pph25: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          ppn: {
-            status: "temporary",
-            receiptNumber: "",
-            revisionRequired: true,
-            quickNotes: "Temporary reporting first, waiting purchase correction.",
-            payableAmount: 8800000,
-            taxBreakdown: "VAT needs final source doc",
-            billingCode: "55189129122",
-            kapkjs: "411211 / 100",
-            expirationDate: "2026-05-22"
-          }
-        }
-      },
-      {
-        id: "client-005",
-        name: "PT Delta Boga",
-        pic: "Harry",
-        followUpCount: 1,
-        notes: "Payment usually smooth once claim is sent.",
-        lastUpdated: "2026-05-20 08:55",
-        year: 2026,
-        month: "May",
-        npwp: "087654321000000",
-        address: "Denpasar, Bali",
-        serviceFee: 1950000,
-        claimStatus: "Tax Paid",
-        paymentStatus: "Waiting Reporting Finalization",
-        billingUploaded: true,
-        drivePath: "Clients/PT Delta Boga/2026/May/",
-        obligations: {
-          pph21: { status: "done", receiptNumber: "P21-99121", revisionRequired: false, quickNotes: "Paid.", payableAmount: 7100000, taxBreakdown: "Payroll", billingCode: "11127819219", kapkjs: "411121 / 100", expirationDate: "2026-05-24" },
-          unifikasi: { status: "done", receiptNumber: "UNI-22019", revisionRequired: false, quickNotes: "Done.", payableAmount: 1400000, taxBreakdown: "Standard", billingCode: "99271828122", kapkjs: "411128 / 420", expirationDate: "2026-05-24" },
-          pph25: { status: "done", receiptNumber: "P25-77100", revisionRequired: false, quickNotes: "Paid and logged.", payableAmount: 5200000, taxBreakdown: "Monthly installment", billingCode: "92128192817", kapkjs: "411125 / 100", expirationDate: "2026-05-24" },
-          phrpb1: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          ppn: { status: "done", receiptNumber: "PPN-87122", revisionRequired: false, quickNotes: "Waiting report close only.", payableAmount: 11300000, taxBreakdown: "VAT monthly", billingCode: "77281912819", kapkjs: "411211 / 100", expirationDate: "2026-05-24" }
-        }
-      },
-      {
-        id: "client-006",
-        name: "CV Merah Putih Logistik",
-        pic: "Dinar",
-        followUpCount: 5,
-        notes: "Supervisor should watch. Claim often delayed by billing upload.",
-        lastUpdated: "2026-05-19 17:40",
-        year: 2026,
-        month: "May",
-        npwp: "076543210900000",
-        address: "Tabanan, Bali",
-        serviceFee: 1750000,
-        claimStatus: "Draft",
-        paymentStatus: "No Billing Yet",
-        billingUploaded: false,
-        drivePath: "Clients/CV Merah Putih Logistik/2026/May/",
-        obligations: {
-          pph21: { status: "na", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 0, taxBreakdown: "", billingCode: "", kapkjs: "", expirationDate: "" },
-          unifikasi: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Awaiting payment base support.", payableAmount: 2250000, taxBreakdown: "Routine withholding", billingCode: "", kapkjs: "", expirationDate: "" },
-          pph25: { status: "missing", receiptNumber: "", revisionRequired: false, quickNotes: "", payableAmount: 4100000, taxBreakdown: "Installment estimate", billingCode: "", kapkjs: "", expirationDate: "" },
-          phrpb1: {
-            status: "revision",
-            receiptNumber: "",
-            revisionRequired: true,
-            quickNotes: "Need revised hotel tax support.",
-            payableAmount: 2700000,
-            taxBreakdown: "PHR monthly",
-            billingCode: "",
-            kapkjs: "",
-            expirationDate: ""
-          },
-          ppn: { status: "awaiting", receiptNumber: "", revisionRequired: false, quickNotes: "Input VAT recap not submitted.", payableAmount: 9600000, taxBreakdown: "VAT expected", billingCode: "", kapkjs: "", expirationDate: "" }
-        }
-      }
-    ];
-
-    const DEFAULT_PROPOSALS = [
-      {
-        id: "proposal-001",
-        name: "PT Langit Wellness",
-        npwp: "031234567890000",
-        address: "Badung, Bali",
-        proposedPic: "Bagus",
-        team: "Tax Team",
-        obligations: ["pph21", "ppn"],
-        monthlyFee: 3500000,
-        annualFee: 12000000,
-        includeVat: true,
-        includePph23: true,
-        notes: "Hospitality group, wants bundled monthly compliance plus annual filing.",
-        status: "Proposal Sent"
-      },
-      {
-        id: "proposal-002",
-        name: "CV Taman Pesisir",
-        npwp: "041234567890000",
-        address: "Singaraja, Bali",
-        proposedPic: "Okta",
-        team: "Tax Team",
-        obligations: ["unifikasi", "phrpb1"],
-        monthlyFee: 2400000,
-        annualFee: 8000000,
-        includeVat: false,
-        includePph23: true,
-        notes: "Local tax-heavy client, still discussing fee scope.",
-        status: "Negotiation"
-      }
-    ];
-
-    const DEFAULT_TAX_CASES = [
-      {
-        id: "case-001",
-        clientId: "client-001",
-        clientName: "PT Qalm Retreat",
-        caseType: "SP2DK",
-        taxPic: "Bagus",
-        accountingPic: "Ivan",
-        stage: "Document Review",
-        priority: "High",
-        dueDate: "2026-05-27",
-        notes: "Need supporting ledger and clarification memo."
-      },
-      {
-        id: "case-002",
-        clientId: "client-003",
-        clientName: "PT Nusa Prima Karya",
-        caseType: "Restitusi",
-        taxPic: "Harry",
-        accountingPic: "Cemari",
-        stage: "Submission Prep",
-        priority: "Medium",
-        dueDate: "2026-06-05",
-        notes: "Compile VAT support before filing."
-      },
-      {
-        id: "case-003",
-        clientId: "client-004",
-        clientName: "PT Samudra Retail",
-        caseType: "PKP Registration",
-        taxPic: "Okta",
-        accountingPic: "Dewayu",
-        stage: "Waiting Client Docs",
-        priority: "Medium",
-        dueDate: "2026-05-30",
-        notes: "Client still missing deed update."
-      },
-      {
-        id: "case-004",
-        clientId: "client-006",
-        clientName: "CV Merah Putih Logistik",
-        caseType: "Pemeriksaan",
-        taxPic: "Dinar",
-        accountingPic: "Tantri",
-        stage: "Ongoing Review",
-        priority: "High",
-        dueDate: "2026-05-25",
-        notes: "Supervisor attention required this week."
-      }
-    ];
-
-    const DEFAULT_ANNUAL_ACCOUNTING_ROWS = [
-      {
-        id: "annual-acc-001",
-        clientName: "CV Belajar Terus Menerus",
-        contractType: "Kontrak",
-        priority: 1,
-        accountingStatus: "NIHIL",
-        progress: "Reported",
-        result: "NIHIL",
-        risk: "Clear",
-        businessType: "Badan",
-        assist: "-",
-        accountingPic: "Tantri",
-        taxPic: "Okta",
-        notes: "Draft SPT still waiting final supporting schedule.",
-        deadline: "21/04/2026",
-        lapor: "21/04/2026",
-        ntpe: "BPE-43488/CT/KPP.1703/2026",
-        changeLog: []
-      },
-      {
-        id: "annual-acc-002",
-        clientName: "PT Bali Premium Mountain Coffee",
-        contractType: "Kontrak",
-        priority: 1,
-        accountingStatus: "PPH 25",
-        progress: "Payment",
-        result: "Bayar",
-        risk: "Clear",
-        businessType: "Badan",
-        assist: "-",
-        accountingPic: "Cemari",
-        taxPic: "Harry",
-        notes: "Waiting account confirmation from client director.",
-        deadline: "08/04/2026",
-        lapor: "08/04/2026",
-        ntpe: "BPE-159478/CT/KPP.0809/2026",
-        changeLog: []
-      },
-      {
-        id: "annual-acc-003",
-        clientName: "PT VICTORY Inspirasi Persada",
-        contractType: "Kontrak",
-        priority: 2,
-        accountingStatus: "NIHIL",
-        progress: "Review",
-        result: "NIHIL",
-        risk: "Watch",
-        businessType: "Badan",
-        assist: "Dina",
-        accountingPic: "Cemari",
-        taxPic: "Denny",
-        notes: "Meeting required before buku besar finalization.",
-        deadline: "10/04/2026",
-        lapor: "10/04/2026",
-        ntpe: "BPE-86879/CT/KPP.1701/2026",
-        changeLog: []
-      },
-      {
-        id: "annual-acc-004",
-        clientName: "PT Tri Rumah Cantik",
-        contractType: "Kontrak",
-        priority: 2,
-        accountingStatus: "PPH FINAL",
-        progress: "Data Request",
-        result: "Pending",
-        risk: "Cutoff",
-        businessType: "Badan",
-        assist: "-",
-        accountingPic: "Ivan",
-        taxPic: "Bagus",
-        notes: "CUT OFF because client still missing reconciliation support.",
-        deadline: "CUT OFF",
-        lapor: "-",
-        ntpe: "-",
-        changeLog: []
-      },
-      {
-        id: "annual-acc-005",
-        clientName: "PT Qalm Retreat",
-        contractType: "Kontrak",
-        priority: 1,
-        accountingStatus: "NIHIL",
-        progress: "In Process",
-        result: "NIHIL",
-        risk: "Watch",
-        businessType: "Badan",
-        assist: "Dina",
-        accountingPic: "Dina",
-        taxPic: "Bagus",
-        notes: "Annual statement pack already requested, waiting equalization support.",
-        deadline: "25/03/2026",
-        lapor: "-",
-        ntpe: "-",
-        changeLog: []
-      },
-      {
-        id: "annual-acc-006",
-        clientName: "PT Nusa Prima Karya",
-        contractType: "Kontrak",
-        priority: 2,
-        accountingStatus: "PPH 25",
-        progress: "Financials Done",
-        result: "Bayar",
-        risk: "Clear",
-        businessType: "Badan",
-        assist: "-",
-        accountingPic: "Dimas",
-        taxPic: "Harry",
-        notes: "Financial statement draft finished, moving into equalization stage.",
-        deadline: "30/03/2026",
-        lapor: "-",
-        ntpe: "-",
-        changeLog: []
-      }
-    ];
-
-    const DEFAULT_ANNUAL_TAX_ROWS = [
-      {
-        id: "annual-tax-001",
-        clientName: "Rin Sagisaka",
-        groupName: "Rin Beauty Studio",
-        reportPic: "Ivan",
-        taxPic: "Bagus",
-        status: "Pencatatan",
-        previousSpt: true,
-        lifestyleAnalysis: true,
-        assetReview: true,
-        clientMeeting: true,
-        finish: true,
-        meeting: true,
-        spt: true,
-        bayar: true,
-        laporCount: "1",
-        kurangBayar: "Nihil",
-        ntpe: "BPE-50665/CT/KPP.1705/2026",
-        notes: "Done"
-      },
-      {
-        id: "annual-tax-002",
-        clientName: "Taiyo Shoji",
-        groupName: "Nishiki Estate",
-        reportPic: "Ivan",
-        taxPic: "Bagus",
-        status: "Pencatatan",
-        previousSpt: true,
-        lifestyleAnalysis: true,
-        assetReview: true,
-        clientMeeting: true,
-        finish: true,
-        meeting: true,
-        spt: true,
-        bayar: true,
-        laporCount: "1",
-        kurangBayar: "1.906.990",
-        ntpe: "BPE-61664/CT/KPP.1706/2026",
-        notes: "Done"
-      },
-      {
-        id: "annual-tax-003",
-        clientName: "Andrew White",
-        groupName: "Sajanna Property",
-        reportPic: "-",
-        taxPic: "Bagus",
-        status: "Pencatatan",
-        previousSpt: true,
-        lifestyleAnalysis: true,
-        assetReview: true,
-        clientMeeting: false,
-        finish: true,
-        meeting: false,
-        spt: true,
-        bayar: false,
-        laporCount: "0",
-        kurangBayar: "99.900",
-        ntpe: "BPE-114226/CT/KPP.0810/2026",
-        notes: "Waiting client confirmation"
-      },
-      {
-        id: "annual-tax-004",
-        clientName: "Kadek Wisu Wardana",
-        groupName: "Prabha Rupa Ishana",
-        reportPic: "Dewayu",
-        taxPic: "Bagus",
-        status: "Pembukuan",
-        previousSpt: true,
-        lifestyleAnalysis: false,
-        assetReview: false,
-        clientMeeting: false,
-        finish: false,
-        meeting: false,
-        spt: false,
-        bayar: false,
-        laporCount: "0",
-        kurangBayar: "99.036",
-        ntpe: "-",
-        notes: "Analysis pending"
-      }
-    ];
+    const { DEFAULT_CLIENTS = [], DEFAULT_PROPOSALS = [], DEFAULT_TAX_CASES = [], DEFAULT_ANNUAL_ACCOUNTING_ROWS = [], DEFAULT_ANNUAL_TAX_ROWS = [] } = window.WorkspaceDemoFixtures || {};
 
     let clients = IS_OFFLINE_DEMO ? restoreCollection("clients", DEFAULT_CLIENTS) : [];
     let clientsLoadedFromDatabase = false;
@@ -4954,7 +4437,7 @@
         ledger: [],
         ledgerLoaded: false
       },
-      announcements: Array.isArray(persistedDemoState?.ui?.announcements) ? persistedDemoState.ui.announcements : [
+      announcements: IS_OFFLINE_DEMO ? (Array.isArray(persistedDemoState?.ui?.announcements) ? persistedDemoState.ui.announcements : [
         {
           id: "announcement-welcome",
           title: "Welcome to Tax Dashboard",
@@ -4964,7 +4447,7 @@
           createdAt: "2026-05-20T08:00:00.000Z",
           readBy: []
         }
-      ],
+      ]) : [],
       announcementInboxOpen: false,
       fameAnnouncement: null,
       annualActionPopup: null,
@@ -6360,7 +5843,7 @@
           </head>
           <body>
             <h1>Allocation PIC Update Report</h1>
-            <p>Tahun alokasi ${state.allocationLastReport[0]?.allocationYear || state.allocationYear} · Dibuat oleh ${state.selectedPic} pada ${generatedAt}</p>
+            <p>Tahun alokasi ${escapeHtml(state.allocationLastReport[0]?.allocationYear || state.allocationYear)} · Dibuat oleh ${escapeHtml(state.selectedPic)} pada ${escapeHtml(generatedAt)}</p>
             <table>
               <thead>
                 <tr>
@@ -6374,7 +5857,7 @@
               <tbody>
                 ${state.allocationLastReport.map((row) => `
                   <tr>
-                    <td>${row.clientName}</td>
+                    <td>${escapeHtml(row.clientName)}</td>
                     <td>${escapeHtml(row.previousAccPic || "No PIC")}</td>
                     <td>${escapeHtml(row.nextAccPic || "No PIC")}</td>
                     <td>${escapeHtml(row.previousTaxPic || "No PIC")}</td>
@@ -6425,10 +5908,22 @@
       allocationPreviewPreparing = true;
       const button = document.querySelector("[data-preview-allocation]");
       if (button) { button.disabled = true; button.textContent = "Preparing PDF..."; }
+      let popup;
       try {
-        if (!window.AllocationReports) throw new Error("The Allocation preview could not be loaded. Please reload.");
-        await window.AllocationReports.preview(snapshot);
-      } catch (error) { alert(error.message || "The PDF preview could not be created."); }
+        // Reserve synchronously so a cold module download cannot lose popup activation.
+        popup = window.open("","_blank","width=1100,height=850");
+        if (!popup) throw new Error("Allow pop-ups to open the Allocation PDF preview.");
+        popup.opener = null; popup.document.title = "Preparing Allocation PDF";
+        popup.document.body.textContent = "Preparing Legal PDF preview...";
+        if (!window.AllocationReports) {
+          if (!window.WorkspaceAssets) throw new Error("Workspace tools are unavailable. Reload and retry.");
+          await window.WorkspaceAssets.load("allocation-pdf");
+        }
+        if (!popup.closed) await window.AllocationReports.preview(snapshot,popup);
+      } catch (error) {
+        if (popup && !popup.closed) { popup.document.title="Allocation PDF unavailable"; popup.document.body.textContent=error.message || "The PDF preview could not be created. Close this window and retry."; }
+        alert(error.message || "The PDF preview could not be created.");
+      }
       finally {
         allocationPreviewPreparing = false;
         const current = document.querySelector("[data-preview-allocation]");
@@ -7694,7 +7189,7 @@
                 <tbody>
                   ${state.allocationLastReport.map((row) => `
                     <tr>
-                      <td>${row.clientName}</td>
+                      <td>${escapeHtml(row.clientName)}</td>
                       <td>${escapeHtml(row.previousAccPic || "No PIC")}</td>
                       <td>${escapeHtml(row.nextAccPic || "No PIC")}</td>
                       <td>${escapeHtml(row.previousTaxPic || "No PIC")}</td>
@@ -9293,7 +8788,29 @@
       if (event.target.closest?.("[data-case-print-report]")) void printCaseReport();
     });
 
+    let caseFeaturesFlight = null, caseFeaturesError = "";
+    function caseFeaturesReady() {
+      return Boolean(window.CaseAssessmentUI && window.CaseReports) && (!window.WorkspaceAssets || window.WorkspaceAssets.ready("cases"));
+    }
+    function ensureCaseFeatures() {
+      if (caseFeaturesReady()) return Promise.resolve();
+      if (caseFeaturesFlight) return caseFeaturesFlight;
+      caseFeaturesFlight = Promise.resolve().then(()=>{
+        if (!window.WorkspaceAssets) throw new Error("Workspace tools are unavailable. Reload and retry.");
+        return window.WorkspaceAssets.load("cases");
+      }).then(()=>{caseFeaturesError="";},error=>{caseFeaturesError=error.message;throw error;}).finally(()=>{
+        caseFeaturesFlight=null;
+        if (!startupPending && state.currentView === "cases-view") renderCases();
+      });
+      return caseFeaturesFlight;
+    }
     function renderCases(rootOverride = null) {
+      if (!caseFeaturesReady()) {
+        const root = rootOverride || document.getElementById("cases-view");
+        root.innerHTML = safeHtml(`<div class="workspace-frame"><section class="panel"><p role="status">${escapeHtml(caseFeaturesError || "Loading Cases tools...")}</p>${caseFeaturesError ? '<button class="ghost-btn" data-retry-case-assets>Retry Cases tools</button>' : ""}</section></div>`);
+        if (!caseFeaturesError) ensureCaseFeatures().catch(()=>{});
+        return;
+      }
       scheduleAssignedCasePreload();
       rememberCaseFollowUpDraft();
       const assessmentEditor=activeEditorSnapshot();
@@ -9698,13 +9215,13 @@
       const selected = state.myWork.find((task) => task.id === state.selectedMyWorkId);
       const showStepDraft = Boolean(selected && (state.addingMyWorkStepId === selected.id || Object.prototype.hasOwnProperty.call(state.myWorkStepDrafts, selected.id)));
       const showMyWorkDetail = Boolean(selected && state.myWorkDetailOpen);
-      const shouldAnimateDrawer = Boolean(showMyWorkDetail && state.myWorkDrawerTaskId !== selected.id);
+      const shouldAnimateDrawer = Boolean(showMyWorkDetail && state.myWorkDrawerTaskId !== selected.id && !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
       state.myWorkDrawerTaskId = showMyWorkDetail ? selected.id : "";
       const linkedCase = taxCases.find((item) => item.id === selected?.caseId);
       const availableCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
-      const taskRow = (task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" data-my-work-reorder-row role="button" tabindex="0" aria-roledescription="sortable task" title="Hold for 1 second to move. Alt + Up or Down also moves this task."><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" ${task.done ? "checked" : ""} /><div><strong>${escapeHtml(task.title)}</strong><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps${task.done && task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}</div></div><button class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`;
+      const taskRow = (task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" data-my-work-reorder-row role="group" tabindex="-1" aria-label="${escapeAttr(task.title)}" aria-roledescription="sortable task" title="Hold for 1 second to move. Alt + Up or Down also moves this task."><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" aria-label="Complete task: ${escapeAttr(task.title)}" ${task.done ? "checked" : ""} /><div><button type="button" class="my-work-open-task"><strong>${escapeHtml(task.title)}</strong></button><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps${task.done && task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}</div></div><button class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`;
       const taskGroup = (key, tasks, empty) => `<div class="my-work-sort-group" data-my-work-sort-group="${escapeAttr(key)}">${tasks.map(taskRow).join("") || `<div class="my-work-empty">${empty}</div>`}</div>`;
       const currentTaskMarkup = `${taskGroup("active", activeTasks, "No active tasks.")}<button class="my-work-section-toggle" data-toggle-my-work-completed="yes"><span>${state.myWorkCompletedOpen ? "⌄" : "›"} Completed</span><span class="my-work-section-count">${completedTasks.length}</span></button>${state.myWorkCompletedOpen ? taskGroup(completedGroup, completedTasks, "No tasks completed this month.") : ""}`;
       const archiveYears = [...new Set(archiveGroups.map((group) => group.key.slice(0, 4)))];
@@ -9794,6 +9311,25 @@
       if (state.newMyWorkTaskId) window.setTimeout(() => { state.newMyWorkTaskId = ""; }, 260);
       if (state.movingMyWorkTaskId) window.setTimeout(() => { state.movingMyWorkTaskId = ""; }, 380);
       if (state.restoringMyWorkTaskId) window.setTimeout(() => { state.restoringMyWorkTaskId = ""; }, 380);
+    }
+
+    function finishMyWorkDrawerAnimation(event) {
+      if (event.animationName === "myWorkDrawerEnter" && event.target instanceof HTMLElement && event.target.matches(".my-work-detail.is-opening")) event.target.classList.remove("is-opening");
+    }
+    document.addEventListener("animationend",finishMyWorkDrawerAnimation);
+    document.addEventListener("animationcancel",finishMyWorkDrawerAnimation);
+
+    function renderMyWorkUpdate() {
+      const editor = activeEditorSnapshot(), scrollY = window.scrollY;
+      renderMyWork();
+      restoreActiveEditor(editor);
+      if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+    }
+
+    function commitMyWorkNavigation() {
+      // Task-local controls are not part of browser history and change no shared data.
+      renderMyWorkUpdate();
+      persistDemoState({defer:true});
     }
 
     function renderShellChrome() {
@@ -10863,7 +10399,7 @@
     }
     window.addEventListener("beforeunload", event => {
       const hasStepDraft = Object.values(state.myWorkStepDrafts || {}).some(value => typeof value === "string" && value.trim());
-      if (caseSheetBulkSaving || caseFollowUpPending.size || state.allocationApplying || hasStepDraft) { event.preventDefault(); event.returnValue = ""; }
+      if (caseSheetBulkSaving || caseFollowUpPending.size || state.allocationApplying || hasStepDraft || browserStorageFailure && Object.keys(state.allocationDrafts).length) { event.preventDefault(); event.returnValue = ""; }
     });
 
     function clearCaseSheetRange() {
@@ -11403,7 +10939,7 @@
           task.pendingSync = revision !== task.syncRevision || task.pendingAssignees.length > 0 || typeof task.pendingFavorite === "boolean";
           clearSyncFailure(`Task ${task.title || "untitled"}`);
           persistDemoState();
-          if (state.currentView === "my-work-view" && !activeEditorSnapshot()) rerender();
+          if (state.currentView === "my-work-view" && !activeEditorSnapshot()) renderMyWorkUpdate();
           // Every edit already enqueues a save. Never recursively enqueue here:
           // doing so makes older revisions perpetually schedule newer revisions.
         } catch (error) {
@@ -11996,17 +11532,38 @@
       }
     }
 
-    function persistDemoState() {
+    let deferredPersistence = null, browserStorageFailure = false;
+    function flushBrowserPreferences() {
+      if (!deferredPersistence) return;
+      const pending = deferredPersistence; deferredPersistence = null;
+      if (pending.idle) window.cancelIdleCallback?.(pending.id); else window.clearTimeout(pending.id);
+      persistDemoState();
+    }
+    window.addEventListener("pagehide",flushBrowserPreferences);
+    document.addEventListener("visibilitychange",()=>{ if (document.visibilityState === "hidden") flushBrowserPreferences(); });
+
+    function persistDemoState(options = {}) {
       if (IS_ANNUAL_SHEET_PREVIEW) return;
       window.WorkspaceStartup?.remember(state);
+      if (options.defer) {
+        if (!deferredPersistence) {
+          const idle = Boolean(window.requestIdleCallback), run = () => { deferredPersistence = null; persistDemoState(); };
+          deferredPersistence = {idle,id:idle ? window.requestIdleCallback(run,{timeout:1000}) : window.setTimeout(run,120)};
+        }
+        return;
+      }
+      if (deferredPersistence) {
+        const pending = deferredPersistence; deferredPersistence = null;
+        if (pending.idle) window.cancelIdleCallback?.(pending.id); else window.clearTimeout(pending.id);
+      }
       try {
         window.localStorage.setItem(
           DEMO_STORAGE_KEY,
           JSON.stringify({
             collections: {
               taxCases: IS_OFFLINE_DEMO ? taxCases : [],
-              annualAccountingRows,
-              annualTaxRows
+              annualAccountingRows: IS_OFFLINE_DEMO ? annualAccountingRows : [],
+              annualTaxRows: IS_OFFLINE_DEMO ? annualTaxRows : []
             },
             ui: {
               currentView: IS_CASES_FULLSCREEN ? (loadPersistedDemoState()?.ui?.currentView || persistedDemoState?.ui?.currentView || "cases-view") : state.currentView,
@@ -12028,7 +11585,7 @@
               contractFilter: state.contractFilter,
               managementTab: state.managementTab,
               performance: state.performance,
-              announcements: state.announcements,
+              announcements: IS_OFFLINE_DEMO ? state.announcements : [],
               allocationQuery: state.allocationQuery,
               allocationAccFilter: state.allocationAccFilter,
               allocationTaxFilter: state.allocationTaxFilter,
@@ -12053,7 +11610,7 @@
               caseSheetSortVersion: 2,
               caseColumnWidths: state.caseColumnWidths,
               profileTab: state.profileTab,
-              myWork: myWorkDemoMode ? [] : state.myWork,
+              myWork: IS_OFFLINE_DEMO && !myWorkDemoMode ? state.myWork : [],
               myWorkOrder: state.myWorkOrder,
               selectedMyWorkId: state.selectedMyWorkId,
               myWorkTab: state.myWorkTab,
@@ -12068,8 +11625,17 @@
             }
           })
         );
+        browserStorageFailure = false;
+        document.getElementById("browser-storage-notice")?.remove();
       } catch {
-        // local persistence is best-effort only for the demo
+        browserStorageFailure = true;
+        if (!document.getElementById("browser-storage-notice")) {
+          const notice = document.createElement("div"), message = document.createElement("div"), retry = document.createElement("button");
+          notice.id = "browser-storage-notice"; notice.className = "browser-storage-notice"; notice.setAttribute("role","status");
+          message.textContent = "Browser preferences could not be saved. Unsaved browser drafts may be lost if you close this page. Database save status is shown separately.";
+          retry.className = "ghost-btn"; retry.textContent = "Retry browser storage"; retry.addEventListener("click",()=>persistDemoState());
+          notice.append(message,retry); document.body.append(notice);
+        }
       }
     }
 
@@ -12309,7 +11875,7 @@
         contractFilter: state.contractFilter,
         managementTab: state.managementTab,
         performance: JSON.parse(JSON.stringify(state.performance)),
-        announcements: JSON.parse(JSON.stringify(state.announcements)),
+        announcements: IS_OFFLINE_DEMO ? JSON.parse(JSON.stringify(state.announcements)) : undefined,
         allocationQuery: state.allocationQuery,
         allocationAccFilter: state.allocationAccFilter,
         allocationTaxFilter: state.allocationTaxFilter,
@@ -12353,7 +11919,7 @@
       state.contractFilter = snapshot.contractFilter || state.contractFilter;
       state.managementTab = snapshot.managementTab || state.managementTab;
       state.performance = { ...state.performance, ...(snapshot.performance || {}) };
-      state.announcements = Array.isArray(snapshot.announcements) ? snapshot.announcements : state.announcements;
+      if (IS_OFFLINE_DEMO && Array.isArray(snapshot.announcements)) state.announcements = snapshot.announcements;
       state.allocationQuery = snapshot.allocationQuery || "";
       state.allocationEngagementFilter = ["all", "contract", "free_of_charge", "on_demand"].includes(snapshot.allocationEngagementFilter) ? snapshot.allocationEngagementFilter : "all";
       state.allocationShowChangedOnly = typeof snapshot.allocationShowChangedOnly === "boolean" ? snapshot.allocationShowChangedOnly : state.allocationShowChangedOnly;
@@ -12380,6 +11946,11 @@
     }
 
     function commitUi(mode = "push") {
+      if (state.currentView === "my-work-view") {
+        renderMyWorkUpdate();
+        persistDemoState();
+        return;
+      }
       if (state.currentView === "matrix-view" && state.operationsMode === "annual" && (IS_OFFLINE_DEMO || !window.AnnualDashboardSheets)) queueWorkspaceSave(state.annualTeam === "accounting" ? "annual_accounting" : "annual_tax");
       rerender();
       persistDemoState();
@@ -12390,7 +11961,7 @@
     // pass so nested controls are rebound before the next interaction.
     function commitWorkspaceNavigation(mode = "push") {
       rerender();
-      persistDemoState();
+      persistDemoState({defer:true});
       syncBrowserHistory(mode);
     }
 
@@ -12548,6 +12119,7 @@
     document.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      if (target.closest("[data-retry-case-assets]")) { caseFeaturesError=""; renderCases(); return; }
       const annualCell = target.closest("[data-annual-accounting-cell]");
       if (annualCell) {
         if (event.detail === 0) {
@@ -12764,23 +12336,33 @@
         if (task) saveMyWorkTaskToDatabase(task, { favorite: task.favorite });
         return;
       }
-      if (openMyWorkMenuTrigger) { state.myWorkMenu = openMyWorkMenuTrigger.getAttribute("data-open-my-work-menu"); commitUi("replace"); return; }
-      if (closeMyWorkMenuTrigger && (target === closeMyWorkMenuTrigger || closeMyWorkMenuTrigger.tagName === "BUTTON")) { state.myWorkMenu = ""; commitUi("replace"); return; }
-      if (closeMyWorkDetailTrigger) { state.myWorkDetailOpen = false; state.myWorkMenu = ""; state.addingMyWorkStepId = ""; commitUi("replace"); return; }
-      if (myWorkTabTrigger) { state.myWorkTab = myWorkTabTrigger.getAttribute("data-my-work-tab") === "archived" ? "archived" : "current"; state.myWorkDetailOpen = false; state.myWorkMenu = ""; commitUi("replace"); return; }
-      if (toggleMyWorkCompletedTrigger) { state.myWorkCompletedOpen = !state.myWorkCompletedOpen; commitUi("replace"); return; }
-      if (openMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = openMyWorkArchivePeriodTrigger.getAttribute("data-open-my-work-archive-period") || ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitUi("replace"); return; }
-      if (closeMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitUi("replace"); return; }
+      if (openMyWorkMenuTrigger) { state.myWorkMenu = openMyWorkMenuTrigger.getAttribute("data-open-my-work-menu"); commitMyWorkNavigation(); return; }
+      if (closeMyWorkMenuTrigger && (target === closeMyWorkMenuTrigger || closeMyWorkMenuTrigger.tagName === "BUTTON")) { state.myWorkMenu = ""; commitMyWorkNavigation(); return; }
+      if (closeMyWorkDetailTrigger) {
+        state.myWorkDetailOpen = false; state.myWorkMenu = ""; state.addingMyWorkStepId = ""; commitMyWorkNavigation();
+        if (event.detail === 0) document.querySelector(`[data-select-my-work="${escapeAttr(state.selectedMyWorkId)}"] .my-work-open-task`)?.focus({preventScroll:true});
+        return;
+      }
+      if (myWorkTabTrigger) { state.myWorkTab = myWorkTabTrigger.getAttribute("data-my-work-tab") === "archived" ? "archived" : "current"; state.myWorkDetailOpen = false; state.myWorkMenu = ""; commitMyWorkNavigation(); return; }
+      if (toggleMyWorkCompletedTrigger) { state.myWorkCompletedOpen = !state.myWorkCompletedOpen; commitMyWorkNavigation(); return; }
+      if (openMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = openMyWorkArchivePeriodTrigger.getAttribute("data-open-my-work-archive-period") || ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitMyWorkNavigation(); return; }
+      if (closeMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitMyWorkNavigation(); return; }
       if (exportMyWorkArchiveTrigger) { exportMyWorkArchivePeriod(exportMyWorkArchiveTrigger.getAttribute("data-export-my-work-archive")); return; }
       if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (date <= new Date()) date.setDate(date.getDate()+1); if (state.myWorkMenu === "due") task.dueDate = myWorkLocalDateTime(date).slice(0, 10); else task.reminder = date.toISOString(); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
       if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { const date = new Date(value); if (!Number.isFinite(date.getTime()) || state.myWorkMenu === "reminder" && date <= new Date()) { window.alert("Choose a future reminder date and time."); return; } if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else task.reminder = date.toISOString(); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
       if (saveMyWorkCaseTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) task.caseId = document.getElementById("my-work-case-picker")?.value || ""; state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task, { caseId: task.caseId }); return; }
-      if (selectMyWorkTrigger) { state.selectedMyWorkId = selectMyWorkTrigger.getAttribute("data-select-my-work"); state.myWorkDetailOpen = true; state.addingMyWorkStepId = ""; commitUi("replace"); return; }
+      if (selectMyWorkTrigger) {
+        state.selectedMyWorkId = selectMyWorkTrigger.getAttribute("data-select-my-work"); state.myWorkDetailOpen = true; state.addingMyWorkStepId = "";
+        const keyboard = event.detail === 0 && Boolean(target.closest(".my-work-open-task"));
+        commitMyWorkNavigation();
+        if (keyboard) document.getElementById("my-work-title-detail")?.focus({preventScroll:true});
+        return;
+      }
       if (target.closest("[data-clear-my-work-reminder]")) { const task = state.myWork.find(item => item.id === state.selectedMyWorkId); if (task) { task.reminder = ""; state.myWorkMenu = ""; commitUi("replace"); saveMyWorkTaskToDatabase(task); } return; }
       if (startMyWorkStepTrigger) {
         state.addingMyWorkStepId = startMyWorkStepTrigger.getAttribute("data-start-my-work-step");
         state.myWorkStepDrafts[state.addingMyWorkStepId] ??= "";
-        commitUi("replace");
+        commitMyWorkNavigation();
         document.getElementById("my-work-step")?.focus({ preventScroll: true });
         return;
       }
@@ -15221,6 +14803,8 @@
       normalizeMobileWorkspaceView();
       const initialView = state.currentView;
       const initialLoads = [loadSharedClients(true)];
+      let initialFeatureError = null;
+      if (initialView === "cases-view") initialLoads.push(ensureCaseFeatures().catch(error=>{initialFeatureError=error;return false;}));
       if (window.WorkspaceStartup) initialLoads.push(loadStaffDirectory(true));
       const initialAnnualTeam = window.WorkspaceFeatures.can("operations") && initialView === "matrix-view" && state.operationsMode === "annual" ? (state.annualTeam === "tax" ? "tax" : "accounting") : "";
       const initialOperationScope = initialView === "matrix-view" && !initialAnnualTeam ? "monthly_compliance"
@@ -15236,7 +14820,7 @@
       }
       const initialResults = await Promise.all(initialLoads);
       if (!clientsLoadedFromDatabase || initialResults.some((result) => result === false)) {
-        failStartup(new Error("Workspace data could not be loaded. Please retry."));
+        failStartup(initialFeatureError || new Error("Workspace data could not be loaded. Please retry."));
         return;
       }
       databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Client Master loaded from the database." };

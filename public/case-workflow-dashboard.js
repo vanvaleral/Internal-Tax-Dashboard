@@ -13,6 +13,8 @@
   const date=value=>value?value.slice(0,10).split("-").reverse().join("/"):"-";
   const today=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Makassar",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
   const initial=()=>({result:null,products:[],schedule:[],payments:[],events:[],final:null});
+  const psaSuccess=psa=>['Disetujui','Disetujui sebagian'].includes(psa?.status);
+  const psaOngoing=psa=>Boolean(psa)&&!['Disetujui','Disetujui sebagian','Ditolak'].includes(psa.status);
   const status=w=>{
     const total=w.products.reduce((s,p)=>s+p.amount,0),paid=w.payments.filter(p=>p.verified).reduce((s,p)=>s+p.amount,0);
     const settled=Boolean(w.result)&&total===paid,executed=settled&&w.products.every(p=>!p.revise||p.filing);
@@ -22,7 +24,7 @@
   const block=(title,html)=>`<section class="case-workflow-block"><h4>${esc(title)}</h4>${html}</section>`;
   function summary(item){
     const w=item.workflow;
-    if(w?.examinationClosure){const s=status(w),psa=w.products.some(p=>window.CaseAssessmentUI?.ongoing(p.assessment?.psa));return !s.settled?'SPHP closed / payment pending':psa?'SPHP closed / PSA ongoing':'Examination closed at SPHP';}
+    if(w?.examinationClosure){const s=status(w),psa=w.products.some(p=>psaOngoing(p.assessment?.psa));return !s.settled?'SPHP closed / payment pending':psa?'SPHP closed / PSA ongoing':'Examination closed at SPHP';}
     if(w?.final||item.stage==="Closed")return "Closed";
     if(!w?.result)return !item.stage||item.stage==="Waiting Client Docs"?"In Progress":item.stage;
     const s=status(w);
@@ -186,7 +188,7 @@
   });
   function matches(item,filter){
     if(!filter||filter==="all")return true;
-    if(filter.startsWith('psa-'))return item.workflow?.products.some(p=>filter==='psa-ongoing'?window.CaseAssessmentUI?.ongoing(p.assessment?.psa):filter==='psa-successful'?window.CaseAssessmentUI?.success(p.assessment?.psa):p.assessment?.psa?.status==='Ditolak')||false;
+    if(filter.startsWith('psa-'))return item.workflow?.products.some(p=>filter==='psa-ongoing'?psaOngoing(p.assessment?.psa):filter==='psa-successful'?psaSuccess(p.assessment?.psa):p.assessment?.psa?.status==='Ditolak')||false;
     const w=item.workflow;if(!w?.result||w.final)return false;
     const s=status(w);
     if(filter==="supervisor")return s.attention;
@@ -195,7 +197,7 @@
   }
   function bucket(item){
     const w=item.workflow;
-    if(w?.examinationClosure){const s=status(w);return !s.settled?'payment':w.products.some(p=>window.CaseAssessmentUI?.ongoing(p.assessment?.psa))?'progress':'done';}
+    if(w?.examinationClosure){const s=status(w);return !s.settled?'payment':w.products.some(p=>psaOngoing(p.assessment?.psa))?'progress':'done';}
     if(w?.final||item.stage==="Closed"||item.closedAt||(!w?.result&&item.completionDate))return "done";
     if(!w?.result)return "progress";
     const s=status(w);

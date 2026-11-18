@@ -23,6 +23,14 @@ corrections. Changing Current/Archived, archive month, search or year starts the
 new view at the top rather than inheriting an unrelated scroll offset. Native
 browser clamping handles a shorter list; no task order or data is changed.
 
+The detail drawer stays fully opaque from its first rendered frame. Opening or
+switching a task uses only a short horizontal slide, never an opacity fade on
+the drawer or its contents. The animation has no retained fill state; its opening
+class is cleared on completion/cancellation. Confirmed background redraws do not
+replay the entrance for the same task. Reduced-motion users open details without
+the slide. These presentation changes do not block editors, save a task, change
+completion or produce a Case timeline event.
+
 ## Scope And Persistence
 
 - Ordering is a personal display preference, saved in the existing authenticated

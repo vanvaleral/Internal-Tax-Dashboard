@@ -71,6 +71,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js")); w.eval(read("public/case-assessment-dashboard.js")); w.eval(read("public/case-tax-types.js")); w.eval(read("public/case-workflow-dashboard.js")); w.eval(read("public/case-report.js"));
+  w.eval(read("public/workspace-demo-fixtures.js"));
   // Expose closure references in the test source only, never in the served dashboard.
   const script = html.match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__casesTest = { state, renderCases, getRows: () => taxCases, saveCaseSheetCell, saveCaseWorkflow, saveMyWorkTaskToDatabase, myWorkValues, caseTimeline, loadSharedCases, loadCaseProgress, addHimbauanProgress, loadPerformanceLedger, loadStaffDirectory, loadSharedAnnouncements, pasteCaseSheetRange, selectCaseSheetRange, clearCaseSheetRange };\n    })().catch(error =>");
   await w.eval(script.replace('window.__casesTest = { state,','window.__casesTest = { resetAssignedPreload:()=>{assignedCasePreloadTimer=null;assignedCasePreloadAttempts.clear();}, scheduleAssignedCasePreload, assignedCasePreloadIds, caseInactivity, refreshCaseActivityAppearance, state,')); await tick();

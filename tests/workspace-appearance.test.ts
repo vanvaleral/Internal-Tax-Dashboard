@@ -22,7 +22,9 @@ async function openDashboard(saved?: any) {
   w.AnnualDashboardSheets = { setAppearance(value: any) { messages.push(value); } };
   w.eval(readFileSync(new URL("../public/vendor/purify.min.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/workspace-sync.js", import.meta.url), "utf8"));
+  w.eval(readFileSync(new URL("../public/workspace-demo-fixtures.js", import.meta.url), "utf8"));
   w.eval(readFileSync(new URL("../public/feature-access.js", import.meta.url), "utf8"));
+  for (const file of ["case-tax-types.js","case-workflow-dashboard.js","case-assessment-dashboard.js","case-report.js"]) w.eval(readFileSync(new URL(`../public/${file}`,import.meta.url),"utf8"));
   await w.eval(dashboard.match(/<script>([\s\S]*?)<\/script>/)![1]);
   assert.deepEqual(errors, []);
   return { dom, w, cache, messages, settings() { w.document.querySelector("[data-open-appearance-settings]").click(); } };

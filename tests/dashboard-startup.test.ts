@@ -39,6 +39,7 @@ async function openDashboard(view = "matrix-view", mode = "monthly", savedUi: Re
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js"));
+  for (const file of ["case-tax-types.js","case-workflow-dashboard.js","case-assessment-dashboard.js","case-report.js"]) w.eval(read(`public/${file}`));
   await w.eval(html.match(/<script>([\s\S]*?)<\/script>/)![1]); await tick(); await tick();
   return { dom, w, requests, warnings, cache, featureWrites };
 }
@@ -54,6 +55,7 @@ test("PIC Features is a separate saved Management tab and PIC Access remains foc
     assert.ok(doc.querySelector(".feature-access-editor"));
     assert.equal(doc.querySelector("[data-create-staff]"), null);
     assert.equal(doc.getElementById("workspace-breadcrumb").textContent, "Management / PIC Features");
+    d.w.dispatchEvent(new d.w.Event("pagehide")); // Navigation preferences flush before leaving, rather than blocking the click.
     assert.equal(JSON.parse(d.cache.get("tax-practice-v2:auth-user-1")!).ui.managementTab, "features");
     assert.equal(d.featureWrites.length, 0); assert.deepEqual(d.warnings, []);
   } finally { d.dom.window.close(); }

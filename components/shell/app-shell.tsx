@@ -19,7 +19,7 @@ export function AppShell({
   return (
     <div className="min-h-screen">
       <div className="mx-auto flex min-h-screen max-w-[1600px] gap-6 px-4 py-4 md:px-6 lg:px-8">
-        <aside className="hidden w-64 shrink-0 flex-col rounded-[28px] border border-line/70 bg-white/80 p-5 shadow-panel backdrop-blur md:flex">
+        <aside className="hidden w-64 shrink-0 flex-col rounded-[28px] border border-line/70 bg-white/80 p-5 shadow-panel backdrop-blur-sm md:flex">
           <div className="mb-8">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">LMATS Consulting</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink">Tax Dashboard</h1>
@@ -38,7 +38,7 @@ export function AppShell({
                   className={cn(
                     "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
                     currentPath === link.href
-                      ? "bg-ink text-white shadow-sm"
+                      ? "bg-ink text-white shadow-xs"
                       : "text-slate-600 hover:bg-slate-100 hover:text-ink"
                   )}
                 >

@@ -509,7 +509,8 @@ test("annual startup waits for confirmed data and stylesheet readiness without a
     assert.equal(overlay.hidden, false);
     assert.equal(d.w.getComputedStyle(root).overflow, "hidden", "initial loading must not create a page scrollbar");
     const styles = d.w.document.getElementById("sheet-styles");
-    d.w.Function(styles.getAttribute("onload")).call(styles);
+    d.w.eval(d.w.document.querySelector("script[data-sheet-styles]").textContent);
+    styles.dispatchEvent(new d.w.Event("load"));
     assert.equal(styles.media, "all");
     assert.equal(root.classList.contains("sheet-booting"), false);
     assert.equal(overlay.hidden, true, "no timer or animation is required to unlock");
@@ -766,7 +767,8 @@ test("stylesheet failures remain visible instead of exposing an unstyled annual 
   const d = await openRefreshFixture();
   try {
     const styles = d.w.document.getElementById("sheet-styles");
-    d.w.Function(styles.getAttribute("onerror")).call(styles);
+    d.w.eval(d.w.document.querySelector("script[data-sheet-styles]").textContent);
+    styles.dispatchEvent(new d.w.Event("error"));
     assert.equal(d.w.document.getElementById("sheet-loading").hidden, false);
     assert.match(d.w.document.getElementById("sheet-loading").textContent, /styles could not be loaded/);
     assert.equal(d.w.document.documentElement.classList.contains("sheet-booting"), true);

@@ -39,7 +39,7 @@ export function StatusColumn({
   tasks: BoardTask[];
 }) {
   return (
-    <section className="flex min-w-[320px] max-w-[360px] flex-1 flex-col rounded-[28px] border border-line/70 bg-white/75 p-4 shadow-panel backdrop-blur">
+    <section className="flex min-w-[320px] max-w-[360px] flex-1 flex-col rounded-[28px] border border-line/70 bg-white/75 p-4 shadow-panel backdrop-blur-sm">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-600">{status}</h3>
@@ -50,7 +50,7 @@ export function StatusColumn({
 
       <div className="space-y-4">
         {tasks.map((task) => (
-          <article key={task.id} className="rounded-[24px] border border-line/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5">
+          <article key={task.id} className="rounded-[24px] border border-line/80 bg-white p-4 shadow-xs transition hover:-translate-y-0.5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-base font-semibold text-ink">{task.clientName}</p>
@@ -120,7 +120,7 @@ export function StatusColumn({
                 name="receiptNumber"
                 defaultValue={task.receiptNumber ?? ""}
                 placeholder="Receipt number"
-                className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-sm outline-none ring-0 placeholder:text-slate-400"
+                className="w-full rounded-xl border border-line bg-canvas px-3 py-2 text-sm outline-hidden ring-0 placeholder:text-slate-400"
               />
               <button className="rounded-xl bg-ink px-3 py-2 text-sm font-semibold text-white">Save</button>
             </form>

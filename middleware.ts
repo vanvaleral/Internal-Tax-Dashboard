@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isPublicUiAsset } from "./lib/public-ui-assets";
 import { canManageAccess, readFeatureSettings, requestAccessError, requiredRequestFeature } from "./lib/feature-access";
+import { authDocumentSecurity } from "./lib/auth-document-security";
 
 type CookieMutation = {
   name: string;
@@ -10,7 +11,13 @@ type CookieMutation = {
 };
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next();
+  const security = authDocumentSecurity(request.nextUrl.pathname, request.headers, process.env.NODE_ENV === "development");
+  const response = security ? NextResponse.next({ request: { headers: security.requestHeaders } }) : NextResponse.next();
+  if (security) {
+    response.headers.set("Content-Security-Policy", security.policy);
+    response.headers.set("Content-Security-Policy-Report-Only", `${security.policy}; default-src 'self'`);
+    response.headers.set("Cache-Control", "private, no-store");
+  }
   if (isPublicUiAsset(request.nextUrl.pathname, request.method)) return response;
   // The root contains only a loader/iframe. Private HTML remains protected below.
   if (request.nextUrl.pathname === "/" && ["GET", "HEAD"].includes(request.method)) return response;

@@ -9,7 +9,7 @@ export function Topbar({
   subtitle: string;
 }) {
   return (
-    <header className="rounded-[28px] border border-line/70 bg-white/85 p-5 shadow-panel backdrop-blur">
+    <header className="rounded-[28px] border border-line/70 bg-white/85 p-5 shadow-panel backdrop-blur-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Internal Workflow</p>

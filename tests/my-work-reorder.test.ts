@@ -116,6 +116,15 @@ test("keyboard movement preserves filtered-out rows and works with reduced motio
   }finally{d.dom.window.close();}
 });
 
+test("native title buttons retain hold dragging and keyboard reorder without intercepting other controls",()=>{
+  const d=fixture();try{
+    for(const id of ["a","b","c"]){const row=d.row(id);row.setAttribute("role","group");row.tabIndex=-1;row.querySelector("strong").outerHTML=`<button class="my-work-open-task"><strong>Task ${id}</strong></button>`;}
+    const title=d.row("a").querySelector(".my-work-open-task");d.pointer("pointerdown",title);d.advance(1000);assert.ok(d.w.document.querySelector(".my-work-drag-preview"));d.pointer("pointerup",d.w.document,245);assert.deepEqual(d.ids(),["b","c","a"]);
+    d.advance(601);title.dispatchEvent(new d.w.KeyboardEvent("keydown",{key:"ArrowUp",altKey:true,bubbles:true,cancelable:true}));assert.deepEqual(d.ids(),["b","a","c"]);assert.equal(d.w.document.activeElement,title);
+    const writes=d.writes.length;d.row("a").querySelector("input").dispatchEvent(new d.w.KeyboardEvent("keydown",{key:"ArrowUp",altKey:true,bubbles:true,cancelable:true}));assert.equal(d.writes.length,writes);
+  }finally{d.dom.window.close();}
+});
+
 test("no-op holds do not save; frame work pauses away from edges and scrolls when needed",()=>{
   const d=fixture();try{
     d.pointer("pointerdown",d.row("a"),150);d.advance(1000);d.pointer("pointermove",d.w.document,160);d.frame();

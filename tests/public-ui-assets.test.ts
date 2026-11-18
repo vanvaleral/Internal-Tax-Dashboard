@@ -5,9 +5,10 @@ import test from "node:test";
 import ts from "typescript";
 import { isPublicUiAsset } from "../lib/public-ui-assets.ts";
 import * as featureAccess from "../lib/feature-access.ts";
+import * as authSecurity from "../lib/auth-document-security.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
-  for (const path of ["/allocation-report.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf"]) {
+  for (const path of ["/allocation-report.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf","/workspace-navigation.js"]) {
     assert.ok(existsSync(new URL(`../public${path}`,import.meta.url)));
     assert.equal(isPublicUiAsset(path,"GET"),true);assert.equal(isPublicUiAsset(path,"HEAD"),true);assert.equal(isPublicUiAsset(path,"POST"),false);
   }
@@ -30,6 +31,7 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   const context = { exports: {} as Record<string, any>, URL, console, process: { env: { NEXT_PUBLIC_SUPABASE_URL: "https://test.invalid", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test" } }, require(name: string) {
     if (name === "./lib/public-ui-assets") return { isPublicUiAsset };
     if (name === "./lib/feature-access") return featureAccess;
+    if (name === "./lib/auth-document-security") return authSecurity;
     if (name === "next/server") return { NextResponse: {
       next: () => ({ status: 200, cookies: { set() {} } }),
       redirect: (url: URL) => ({ status: 307, location: url.pathname }),
@@ -45,6 +47,7 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   const run = (path: string, workspaceUser = "") => context.exports.middleware({ method: "GET", nextUrl: new URL(`https://test.local${path}`), url: `https://test.local${path}`, headers: { get: () => workspaceUser }, cookies: { getAll: () => [] } });
   assert.equal((await run("/annual-sheet-live.js")).status, 200);
   assert.equal((await run("/favicon.svg")).status, 200);
+  for (const path of ["/workspace-assets.js","/case-report.js","/case-workflow-dashboard.js","/case-workflow-dashboard.css"]) assert.equal((await run(path)).status,200,"reviewed code/style assets do not need Supabase identity or profile reads");
   for (const path of ["/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-desktop-v2-192.png", "/icons/app-desktop-v2-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/favicon-32.png"]) assert.equal((await run(path)).status, 200, "installation assets do not need a session");
   assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
   assert.equal((await run("/api/workspace/bootstrap")).status, 200);
@@ -52,6 +55,8 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   assert.equal((await run("/")).status, 200, "root is only a loader and iframe, never private data");
   assert.equal(clients, 0); assert.equal(authReads, 0); assert.equal(profileReads, 0);
   assert.equal((await run("/demo.html")).status, 307);
+  assert.equal((await run("/workspace-built.html")).status, 307, "generated production HTML retains verified staff authentication");
+  assert.equal((await run("/workspace-demo-fixtures.js")).status, 307, "offline sample data is not a public UI authentication bypass");
   assert.equal((await run("/api/clients")).status, 401);
   assert.equal((await run("/api/annual-sheet/extra")).status, 401);
   assert.equal((await run("/api/workspace/bootstrap/extra")).status, 401);

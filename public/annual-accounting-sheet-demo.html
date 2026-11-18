@@ -21,7 +21,15 @@
     @keyframes workspace-pulse{0%,100%{transform:scaleY(.6);opacity:.45}50%{transform:scaleY(1);opacity:1}}
     @media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}
   </style>
-  <link id="sheet-styles" rel="stylesheet" href="./annual-accounting-sheet-demo.css" media="print" onload="this.media='all';this.dataset.ready='true';window.dispatchEvent(new Event('sheet-styles-ready'))" onerror="this.dataset.failed='true';window.dispatchEvent(new Event('sheet-styles-error'))" />
+  <link id="sheet-styles" rel="stylesheet" href="./annual-accounting-sheet-demo.css" media="print" />
+  <script data-sheet-styles>
+    (() => {
+      const link = document.getElementById("sheet-styles");
+      const ready = () => { link.media = "all"; link.dataset.ready = "true"; window.dispatchEvent(new Event("sheet-styles-ready")); };
+      const failed = () => { link.dataset.failed = "true"; window.dispatchEvent(new Event("sheet-styles-error")); };
+      if (link.sheet) ready(); else { link.addEventListener("load",ready,{once:true}); link.addEventListener("error",failed,{once:true}); }
+    })();
+  </script>
   <link rel="stylesheet" href="./submenu-tabs.css" />
   <noscript><style>.sheet-booting .workbook{display:none}</style></noscript>
   <script src="./annual-tax-sheet-config.js" defer></script>
