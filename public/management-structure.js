@@ -5,7 +5,6 @@
   const roleLabels = { partner:"Partner", supervisor:"Supervisor", leader:"Leader", staff:"Associate", admin:"Admin" };
   const cardWidth = 176, cardHeight = 84, columnGap = 28, rowGap = 50, padding = 24;
   const zoomLevels = [.25,.5,.75,1,1.25,1.5,2];
-  const printWidth = 950, printHeight = 585;
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const nextId = rows => String(1 + Math.max(0, ...rows.map(row => Number(row.id) || 0)));
   const option = (value, label, active) => `<option value="${esc(value)}" ${value === active ? "selected" : ""}>${esc(label)}</option>`;
@@ -90,22 +89,26 @@
     const personName = node => people.get(node.pic)?.name || node.picName || "";
     const nodeName = node => personName(node) || node.label;
     const usedByAnother = (pic, id) => active().nodes.some(node => node.pic === pic && node.id !== id);
-    function flow(nodes, printable = false, {points,width,height} = layout(nodes)) {
-      const wires = nodes.filter(node => node.parent).map(node => {
+    function connections(nodes, points) {
+      return nodes.filter(node => node.parent).map(node => {
         const child = points.get(node.id), parent = points.get(node.parent);
         const mid = parent.y + cardHeight + rowGap/2;
         return `<path d="M ${parent.x+cardWidth/2} ${parent.y+cardHeight} V ${mid} H ${child.x+cardWidth/2} V ${child.y}"></path>`;
       }).join("");
+    }
+
+    function flow(nodes) {
+      const {points,width,height} = layout(nodes);
+      const wires = connections(nodes,points);
       const cards = nodes.map(node => {
         const {x,y} = points.get(node.id), name = nodeName(node);
         const parent = nodes.find(item => item.id === node.parent);
         const detail = personName(node) ? node.label : "Unassigned / planned";
         const label = `${name}, ${detail}, ${parent ? "reports to " + nodeName(parent) : "top level"}`;
         const content = `<small>${esc(node.kind)}</small><strong title="${esc(name)}">${esc(name)}</strong><span title="${esc(detail)}">${esc(detail)}</span>`;
-        return `<article class="structure-card${node.id === editing && !printable ? " is-selected" : ""}" data-structure-node="${esc(node.id)}" data-kind="${esc(node.kind)}" style="left:${x}px;top:${y}px">${printable
-          ? `<div class="structure-card-main">${content}</div>`
-          : `<button type="button" class="structure-card-main" data-structure-edit="${esc(node.id)}" aria-label="${esc(label)}">${content}</button>
-             <button type="button" class="structure-grip" data-structure-move="${esc(node.id)}" ${storageError ? "disabled" : ""} title="Drag or click to connect" aria-label="Move or connect ${esc(name)}"><span aria-hidden="true"></span></button>`}</article>`;
+        return `<article class="structure-card${node.id === editing ? " is-selected" : ""}" data-structure-node="${esc(node.id)}" data-kind="${esc(node.kind)}" style="left:${x}px;top:${y}px">
+          <button type="button" class="structure-card-main" data-structure-edit="${esc(node.id)}" aria-label="${esc(label)}">${content}</button>
+          <button type="button" class="structure-grip" data-structure-move="${esc(node.id)}" ${storageError ? "disabled" : ""} title="Drag or click to connect" aria-label="Move or connect ${esc(name)}"><span aria-hidden="true"></span></button></article>`;
       }).join("");
       return `<div class="structure-flow" data-width="${width}" data-height="${height}" style="width:${width}px;height:${height}px"><svg class="structure-wires" width="${width}" height="${height}" aria-hidden="true">${wires}</svg>${cards}</div>`;
     }
@@ -207,31 +210,27 @@
       }
     }
 
-    function printSheets(plan) {
-      const geometry = layout(plan.nodes);
-      const fit = Math.min(1,printWidth/geometry.width,printHeight/geometry.height);
-      const singlePage = fit >= .56;
-      const scale = singlePage ? fit : .75;
-      const width = Math.ceil(singlePage ? Math.min(printWidth,geometry.width*scale) : geometry.width*scale);
-      const height = Math.ceil(singlePage ? Math.min(printHeight,geometry.height*scale) : geometry.height*scale);
-      // Overlap adjacent sheets by more than one card so a boundary never hides the only full copy of a card.
-      function offsets(size, limit, overlap) {
-        const steps = [];
-        for (let offset=0; ; offset+=limit-overlap) {
-          steps.push(Math.min(offset,Math.max(0,size-limit)));
-          if (offset+limit >= size) return steps;
-        }
-      }
-      const columns = offsets(width,printWidth,Math.ceil(cardWidth*scale)+16);
-      const rows = offsets(height,printHeight,Math.ceil(cardHeight*scale)+16);
-      const total = rows.length*columns.length;
-      const diagram = flow(plan.nodes,true,geometry);
-      return rows.flatMap((y,row) => columns.map((x,column) => `<section class="structure-print-page">
+    function printSheet(plan) {
+      const {points,width,height} = layout(plan.nodes);
+      const cards = plan.nodes.map(node => {
+        const {x,y} = points.get(node.id);
+        const name = nodeName(node), detail = personName(node) ? node.label : "Unassigned / planned";
+        return `<g class="structure-print-card" data-kind="${esc(node.kind)}" transform="translate(${x},${y})">
+          <title>${esc(name)}: ${esc(detail)}</title>
+          <rect class="structure-print-box" x=".5" y=".5" width="${cardWidth-1}" height="${cardHeight-1}" rx="9"></rect>
+          <path class="structure-print-stripe" d="M 8 2 H ${cardWidth-8}"></path>
+          <svg x="10" y="10" width="${cardWidth-20}" height="${cardHeight-20}">
+            <text class="structure-print-kind" y="11">${esc(node.kind.toUpperCase())}</text>
+            <text class="structure-print-name" y="33">${esc(name)}</text>
+            <text class="structure-print-detail" y="51">${esc(detail)}</text>
+          </svg></g>`;
+      }).join("");
+      return `<main class="structure-print-page">
         <header><small>LMATS CONSULTING / ORGANIZATION PLANNING</small><h1>${esc(plan.name)}</h1>
-          <p>Planning only. Does not change system access.${total > 1 ? ` Sheet ${row*columns.length+column+1} of ${total} (row ${row+1}, column ${column+1}). Adjacent sheets overlap.` : ""}</p></header>
-        <div class="structure-print-tile" style="width:${Math.min(width,printWidth)}px;height:${Math.min(height,printHeight)}px">
-          <div class="structure-print-slice" style="left:${-x}px;top:${-y}px;--structure-print-scale:${scale}">${diagram}</div>
-        </div></section>`)).join("");
+          <p>Planning only. Does not change system access.</p></header>
+        <div class="structure-print-frame"><svg class="structure-print-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Organization flowchart">
+          <g class="structure-wires">${connections(plan.nodes,points)}</g>${cards}
+        </svg></div></main>`;
     }
 
     function print() {
@@ -244,25 +243,25 @@
       doc.documentElement.lang = "en";
       doc.title = `Tax Dashboard | ${plan.name}`;
       const style = doc.createElement("style");
-      style.textContent = `@page{size:A4 landscape;margin:12mm}
-        body{font:12px 'Segoe UI',sans-serif;color:#162b31;margin:7mm}
-        .structure-print-page{break-inside:avoid;break-after:page;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-        .structure-print-page:last-child{break-after:auto}
-        header{border-bottom:2px solid #137d80;padding-bottom:8px;max-width:${printWidth}px}h1{font-size:20px;margin:4px 0;overflow-wrap:anywhere}p{margin:4px 0 0}
-        .structure-print-tile{position:relative;overflow:hidden}
-        .structure-print-slice{position:absolute}
-        .structure-flow{position:relative;transform-origin:0 0;transform:scale(var(--structure-print-scale))}
-        .structure-wires{position:absolute;inset:0;fill:none;stroke:#137d80;stroke-width:1.6}
-        .structure-card{box-sizing:border-box;position:absolute;width:${cardWidth}px;height:${cardHeight}px;border:1px solid #c5d6ce;border-top:3px solid #137d80;border-radius:9px;background:#fff}
-        .structure-card[data-kind="Partner"]{border-top-color:#066b77;background:#e7f4f3}.structure-card[data-kind="Team"]{border-top-color:#b76a0a}
-        .structure-card-main{box-sizing:border-box;width:100%;padding:12px 10px}
-        .structure-card-main>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .structure-card-main small{text-transform:uppercase;letter-spacing:.12em;color:#166b69;font-size:9px}
-        .structure-card-main strong{margin:2px 0;font-size:14px}.structure-card-main span{color:#506268;font-size:11px}
-        @media print{body{margin:0}}`;
+      style.textContent = `@page{size:landscape;margin:12mm}
+        body{font:12px 'Segoe UI',sans-serif;color:#162b31;margin:0}
+        .structure-print-page{position:fixed;inset:12mm;display:grid;grid-template-rows:auto minmax(0,1fr);print-color-adjust:exact;-webkit-print-color-adjust:exact}
+        header{border-bottom:2px solid #137d80;padding-bottom:8px}h1{font-size:20px;margin:4px 0;overflow-wrap:anywhere}p{margin:4px 0 0}
+        .structure-print-frame{min-width:0;min-height:0}
+        .structure-print-diagram{display:block;width:100%;height:100%}
+        .structure-wires{fill:none;stroke:#137d80;stroke-width:1.6}
+        .structure-print-box{fill:#fff;stroke:#c5d6ce}
+        .structure-print-stripe{fill:none;stroke:#137d80;stroke-width:3}
+        .structure-print-card[data-kind="Partner"] .structure-print-box{fill:#e7f4f3}
+        .structure-print-card[data-kind="Team"] .structure-print-stripe{stroke:#b76a0a}
+        .structure-print-card svg{overflow:hidden}
+        .structure-print-kind{fill:#166b69;font-size:9px;letter-spacing:1px}
+        .structure-print-name{fill:#162b31;font-weight:700;font-size:14px}
+        .structure-print-detail{fill:#506268;font-size:11px}
+        @media print{.structure-print-page{inset:0}}`;
       doc.head.append(style);
       const printable = document.createElement("template");
-      printable.innerHTML = safeHtml(printSheets(plan));
+      printable.innerHTML = safeHtml(printSheet(plan));
       doc.body.append(doc.importNode(printable.content, true));
       page.focus();
       page.print();

@@ -10,10 +10,10 @@
 .structure-toolbar .field, .structure-editor .field { width:100%; }
 .structure-layout {
   display:grid; grid-template-columns:minmax(0, 1fr) minmax(220px, 255px);
-  gap:14px; align-items:start; margin-top:12px;
+  gap:14px; align-items:stretch; margin-top:12px;
 }
 .structure-chart, .structure-editor, .structure-roster { min-width:0; border:1px solid var(--structure-line); border-radius:12px; }
-.structure-chart { overflow:hidden; background:var(--panel-solid); }
+.structure-chart { display:grid; grid-template-rows:auto minmax(0,1fr); overflow:hidden; background:var(--panel-solid); }
 .structure-chart-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 14px; }
 .structure-chart-tools, .structure-zoom-tools { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
 .structure-chart-tools { gap:8px; }
@@ -23,7 +23,8 @@
 .structure-chart p, .structure-roster p { margin:0; color:var(--muted); font-size:12px; }
 .structure-viewport {
   position:relative;
-  min-height:375px; max-height:62vh; overflow:auto; border-top:1px solid var(--structure-line);
+  /* Let the side rail set the shared height, not the height of a zoomed chart. */
+  contain:size; min-height:375px; overflow:auto; border-top:1px solid var(--structure-line);
   background:radial-gradient(var(--structure-line) 1px, transparent 1px) 0 0 / 18px 18px var(--structure-soft);
 }
 .structure-top {
@@ -62,7 +63,7 @@
   position:fixed; top:0; left:0; z-index:1500; pointer-events:none;
   padding:8px 12px; border-radius:7px; background:var(--accent-strong); color:var(--accent-contrast); font-size:13px;
 }
-.structure-rail { display:grid; gap:10px; min-width:0; }
+.structure-rail { display:grid; grid-template-rows:auto 1fr; gap:10px; min-width:0; }
 .structure-roster { padding:12px; background:var(--panel-solid); }
 .structure-roster ul { list-style:none; margin:9px 0 0; padding:2px; display:grid; gap:5px; max-height:205px; overflow:auto; }
 .structure-roster button {
@@ -74,12 +75,12 @@
 .structure-grip-dots::before { content:""; display:block; }
 .structure-roster button strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .structure-roster button small { flex:none; font-size:10px; color:var(--accent-strong); }
-.structure-editor { padding:12px; display:grid; gap:10px; background:var(--structure-soft); }
+.structure-editor { padding:12px; display:grid; align-content:start; gap:10px; background:var(--structure-soft); }
 .structure-editor h4 { margin:0 0 2px; }
 @media (max-width:1080px) {
   .structure-layout { grid-template-columns:minmax(0, 1fr); gap:10px; }
-  .structure-viewport { min-height:290px; max-height:54vh; }
-  .structure-rail { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+  .structure-viewport { contain:none; min-height:290px; max-height:54vh; }
+  .structure-rail { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; align-items:start; }
 }
 @media (max-width:620px) {
   .structure-rail { grid-template-columns:minmax(0,1fr); }

@@ -15,11 +15,14 @@ moves its direct reports to the removed position's parent.
 
 Use the canvas zoom controls to zoom in or out, reset to 100%, or fit the
 entire chart. Zooming does not change the saved scenario.
+On desktop, the canvas and the PIC/editor sidebar share the same bottom edge.
+The chart scrolls inside the canvas; narrower windows stack the panels.
 
-Print keeps the cards, positions, and connectors in A4 landscape, independent
-of the canvas zoom or scroll. Large charts use numbered, overlapping pages to
-keep cards readable instead of switching to a list. The browser print dialog
-can also save a PDF. Editing controls and the PIC roster aren't printed.
+Print scales the complete flowchart to the width and height available on one
+landscape sheet, using the paper size selected in the browser print dialog.
+Canvas zoom and scroll do not affect the result. With a large chart, choose a
+larger paper size if the labels are too small. You can also save it as a PDF.
+Editing controls and the PIC roster aren't printed.
 
 Scenarios are saved only in the current browser, under the signed-in account's
 storage key. They are not shared, backed up or stored in Supabase. Browser

@@ -108,7 +108,7 @@ test("zoom controls resize the canvas without rebuilding cards or changing the s
   } finally { x.dom.window.close(); }
 });
 
-test("a large off-screen chart prints as overlapping pages, with every full card covered", () => {
+test("a wide and deep off-screen chart prints once, sized to the paper, with every card and connector", () => {
   const x = setup(), print = new JSDOM("<html></html>");
   try {
     const nodes = Array.from({length:18},(_,index) => ({ id:String(index+1), label:`Position ${index+1}`,
@@ -117,23 +117,28 @@ test("a large off-screen chart prints as overlapping pages, with every full card
     x.mount();
     x.host.querySelector('[data-structure-zoom="out"]').click();
     x.host.querySelector(".structure-viewport").scrollLeft = 2000;
+    const graph = x.host.querySelector(".structure-flow");
     x.w.open = () => ({document:print.window.document,focus(){},print(){}});
     x.click("print");
-    const doc = print.window.document, tiles = [...doc.querySelectorAll<HTMLElement>(".structure-print-tile")];
-    assert.ok(tiles.length > 1);
-    assert.match(doc.body.textContent!,/row 2, column 1/);
+    const doc = print.window.document, svg = doc.querySelector(".structure-print-diagram")!;
+    assert.equal(doc.querySelectorAll(".structure-print-page").length,1);
+    assert.equal(svg.getAttribute("viewBox"),`0 0 ${graph.dataset.width} ${graph.dataset.height}`);
+    assert.equal(svg.getAttribute("preserveAspectRatio"),"xMidYMid meet");
+    assert.ok(Number(graph.dataset.width) > 2000);
+    assert.ok(Number(graph.dataset.height) > 700);
+    assert.match(doc.querySelector("style")!.textContent!,/@page\{size:landscape;/);
+    assert.match(doc.querySelector("style")!.textContent!,/@media print\{\.structure-print-page\{inset:0\}\}/);
+    assert.match(doc.querySelector("style")!.textContent!,/\.structure-print-diagram\{display:block;width:100%;height:100%\}/);
     assert.equal(doc.querySelector(".structure-tree, button, form"),null);
-    const first = tiles[0].querySelectorAll<HTMLElement>(".structure-card");
-    assert.equal(first.length,nodes.length);
-    assert.equal(tiles[0].querySelectorAll(".structure-wires path").length,nodes.length-1);
-    for (const card of first) {
-      assert.ok(tiles.some(tile => {
-        const slice = tile.firstElementChild as HTMLElement;
-        const scale = Number(slice.style.getPropertyValue("--structure-print-scale"));
-        const x = parseFloat(slice.style.left) + parseFloat(card.style.left)*scale;
-        const y = parseFloat(slice.style.top) + parseFloat(card.style.top)*scale;
-        return x >= 0 && y >= 0 && x+176*scale <= parseFloat(tile.style.width) && y+84*scale <= parseFloat(tile.style.height);
-      }),`all of ${card.textContent} should appear on at least one sheet`);
+    const cards = [...svg.querySelectorAll(".structure-print-card")];
+    assert.equal(cards.length,nodes.length);
+    assert.deepEqual([...svg.querySelectorAll(".structure-wires path")].map(path => path.getAttribute("d")),
+      [...graph.querySelectorAll(".structure-wires path")].map(path => path.getAttribute("d")));
+    for (const [i,card] of cards.entries()) {
+      const screen = graph.querySelector(`[data-structure-node="${nodes[i].id}"]`);
+      const x = parseFloat(screen.style.left), y = parseFloat(screen.style.top);
+      assert.equal(card.getAttribute("transform"),`translate(${x},${y})`);
+      assert.ok(x >= 0 && y >= 0 && x+176 <= Number(graph.dataset.width) && y+84 <= Number(graph.dataset.height));
     }
   } finally { x.dom.window.close(); print.window.close(); }
 });
