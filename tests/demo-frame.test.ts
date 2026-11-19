@@ -8,6 +8,6 @@ test("dashboard iframe uses the mobile dynamic viewport", async () => {
   const frame = await readFile(framePath, "utf8");
 
   assert.match(frame, /class="demo-frame"/);
-  assert.match(frame, /src="\/demo\.html\?v=client-sorting-v4"/);
+  assert.match(frame, /src="\/demo\.html\?v=workspace-boot-v2"/);
   assert.match(frame, /\.demo-frame\{[^}]*height:100vh;height:100dvh;/);
 });

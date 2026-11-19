@@ -47,7 +47,8 @@
     metrics.readyMs = Math.round(performance.now());
     window.__workspaceStartupTiming = structuredClone(metrics);
     performance.mark?.("workspace:ready");
-    if (parent !== window) parent.postMessage({ type: "dashboard:ready", timing: metrics }, location.origin);
+    if (window.WorkspaceBoot) window.WorkspaceBoot.report("dashboard:ready", metrics);
+    else if (parent !== window) parent.postMessage({ type: "dashboard:ready", timing: metrics }, location.origin);
   }
   function remember(value) {
     if (location.protocol === "file:" || new URLSearchParams(location.search).get("casesFullscreen") === "1") return;

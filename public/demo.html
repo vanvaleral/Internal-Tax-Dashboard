@@ -3907,7 +3907,7 @@
     @media(max-width:700px) { .annual-compact-table summary { grid-template-columns:16px minmax(0,1fr) 72px; } .annual-compact-table summary .annual-compact-extra { display:none; } .annual-months { grid-template-columns:repeat(6,minmax(0,1fr)); } }
   </style>
   <style>
-    .app-loading-overlay.initial-load{z-index:1100;background:rgba(240,242,238,.78);backdrop-filter:blur(10px)}
+    .app-loading-overlay.initial-load{z-index:1100;background:#f0f2ee;backdrop-filter:none}
     .app-loading-overlay:not(.visible){display:none}
     .app-loading-card{display:grid;justify-items:center;gap:14px;background:transparent;box-shadow:none;color:#35575d;font-size:13px;font-weight:400}
     .app-loading-card strong{font-weight:400}
@@ -3962,12 +3962,16 @@
   <script data-workspace-boot>
     (() => {
       if (new URLSearchParams(location.search).get("casesFullscreen") === "1") document.documentElement.classList.add("cases-fullscreen");
-      const notify = () => { if (parent !== window) parent.postMessage({ type: "dashboard:mounted" }, location.protocol === "file:" ? "*" : location.origin); };
+      let status = { type: "dashboard:mounted" };
+      const notify = () => { if (parent !== window && location.protocol !== "file:") parent.postMessage(status, location.origin); };
+      window.WorkspaceBoot = {
+        report(type, timing) { status = { type, timing }; notify(); }
+      };
       window.addEventListener("message", event => { if (event.origin === location.origin && event.source === parent && event.data?.type === "workspace:status") notify(); });
       notify();
     })();
   </script>
-  <script src="workspace-startup.js"></script>
+  <script src="workspace-startup.js?v=boot-v2"></script>
   <div class="shell">
     <button id="compact-rail-toggle" class="compact-rail-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Use mini sidebar" title="Use mini sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"></path></svg></button>
     <aside class="sidebar" id="workspace-sidebar">
@@ -4093,11 +4097,16 @@
       const message = document.getElementById("app-loading-message");
       if (!message) return;
       message.textContent = error.message || "Unable to load your workspace.";
+      startupOverlay?.classList.add("visible", "initial-load");
+      startupOverlay?.setAttribute("aria-busy", "false");
+      startupOverlay?.querySelector(".workspace-bars")?.remove();
+      document.querySelector(".shell")?.setAttribute("inert", "");
       const retry = document.createElement("button"); retry.textContent = "Retry"; retry.className = "ghost-btn";
       retry.addEventListener("click", () => location.reload()); message.after(retry);
       if ([401, 403].includes(error.status)) {
         const signIn = document.createElement("a"); signIn.href = "/login"; signIn.target = "_top"; signIn.textContent = "Sign in again"; retry.after(signIn);
       }
+      window.WorkspaceBoot?.report("dashboard:startup-error");
     }
     if (IS_OFFLINE_DEMO) startupOverlay?.classList.remove("visible", "initial-load");
     if (window.WorkspaceStyleReady) {
@@ -4139,7 +4148,7 @@
       }
     }
     if (IS_CASES_FULLSCREEN && !IS_OFFLINE_DEMO && casePageParams.get("account") && casePageParams.get("account") !== bootstrapProfile.user.id) {
-      document.body.textContent = "The signed-in account changed. Open Cases Full Screen again from your current dashboard.";
+      failStartup(new Error("The signed-in account changed. Open Cases Full Screen again from your current dashboard."));
       return;
     }
     const scopedWorkspaceReads = bootstrapProfile.readPlan?.version === 1;
@@ -14672,7 +14681,8 @@
       };
       finishStartup();
       startupOverlay?.setAttribute("aria-busy", "false");
-      window.WorkspaceStartup?.ready();
+      if (window.WorkspaceStartup) window.WorkspaceStartup.ready();
+      else window.WorkspaceBoot?.report("dashboard:ready");
       if (scopedWorkspaceReads && state.currentView === "my-work-view" && state.myWorkTab === "archived") loadMyWorkArchive();
       const remainingLoads = [];
       if (!clientsLoadedFromDatabase) remainingLoads.push(() => loadSharedClients(true));
@@ -14726,7 +14736,11 @@
       if (!IS_CASES_FULLSCREEN) queueLatestFameAnnouncement();
     }, 280);
     syncBrowserHistory("replace");
-    })().catch(error => { console.error("Workspace initialization failed", error); document.body.textContent = "Workspace could not be initialized. Please reload."; });
+    })().catch(error => {
+      console.error("Workspace initialization failed", error);
+      document.body.textContent = "Workspace could not be initialized. Please reload.";
+      window.WorkspaceBoot?.report("dashboard:startup-error");
+    });
   </script>
 </body>
 </html>

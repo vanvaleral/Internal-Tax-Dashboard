@@ -13,6 +13,16 @@ function open(options: { view?: string; annual?: string; mobile?: boolean; statu
   for (const kind of ["warn", "error"] as const) vc.on(kind, (...items: any[]) => warnings.push(items.join(" ")));
   const dom = new JSDOM(html, { runScripts: "outside-only", url: "https://test.local/demo.html", virtualConsole: vc });
   const w = dom.window as any;
+  const statuses: string[] = [];
+  const parent = { postMessage: (data: { type: string }, origin: string) => {
+    assert.equal(origin, w.location.origin);
+    statuses.push(data.type);
+  } };
+  Object.defineProperty(w, "parent", { value: parent });
+  w.eval(w.document.querySelector("script[data-workspace-boot]").textContent);
+  function requestStatus(source = parent, origin = w.location.origin) {
+    w.dispatchEvent(new w.MessageEvent("message", { source, origin, data: { type: "workspace:status" } }));
+  }
   const ui = { currentView: options.view || "cases-view", operationsMode: options.annual ? "annual" : "monthly", annualTeam: options.annual || "accounting", casesTab: "himbauan" };
   const cache = new Map<string, string>([["tax-practice-v2:user-a", JSON.stringify({ ui })], ["tax-dashboard-startup-view-v1", JSON.stringify(ui)]]);
   Object.defineProperty(w, "localStorage", { value: { getItem: (key: string) => cache.get(key) ?? null, setItem: (key: string, value: string) => cache.set(key, value), removeItem: (key: string) => cache.delete(key) } });
@@ -49,7 +59,7 @@ function open(options: { view?: string; annual?: string; mobile?: boolean; statu
   if (options.coldAllocation) w.eval(read("public/workspace-assets.js"));
   else if (options.view === "allocation-view") w.eval(read("public/allocation-sheet.js"));
   const opening = w.eval(html.match(/<script>([\s\S]*?)<\/script>/)![1]);
-  return { dom, w, opening, release, requests, idle, cache, warnings };
+  return { dom, w, opening, release, requests, idle, cache, warnings, statuses, parent, requestStatus };
 }
 
 test("confirmed bootstrap supplies the first screen with one request and never exposes sample rows while waiting", async () => {
@@ -59,16 +69,30 @@ test("confirmed bootstrap supplies the first screen with one request and never e
       assert.equal(d.requests.length, 1); assert.match(d.requests[0], /workspace\/bootstrap/);
       assert.equal(d.w.document.getElementById("app-loading-overlay").classList.contains("visible"), true);
       assert.equal(d.w.document.querySelectorAll("[data-case-sheet-row]").length, 0);
+      assert.deepEqual(d.statuses, ["dashboard:mounted"]);
       d.release(); await d.opening; await tick();
       assert.deepEqual(d.warnings, [], view);
       assert.equal(d.requests.length, 1, `${view}: first screen should consume bootstrap, not refetch the same records`);
       assert.equal(d.w.document.getElementById("app-loading-overlay").classList.contains("visible"), false);
+      assert.deepEqual(d.statuses, ["dashboard:mounted", "dashboard:ready"]);
       assert.ok(d.w.__workspaceStartupTiming.readyMs >= 0);
       assert.equal(d.w.__workspaceStartupTiming.server.auth, 50);
       const hint = JSON.parse(d.cache.get("tax-dashboard-startup-view-v1")!);
       assert.deepEqual(Object.keys(hint).sort(), ["annualTeam", "currentView", "operationsMode"]);
     } finally { d.dom.window.close(); }
   }
+});
+
+test("the iframe replays the final status only to its same-origin parent", async () => {
+  const d = open();
+  try {
+    d.requestStatus();
+    d.release(); await d.opening;
+    d.requestStatus(d.parent, "https://unrelated.invalid");
+    d.requestStatus({ postMessage() {} });
+    d.requestStatus();
+    assert.deepEqual(d.statuses, ["dashboard:mounted", "dashboard:mounted", "dashboard:ready", "dashboard:ready"]);
+  } finally { d.dom.window.close(); }
 });
 
 test("saved Allocation starts the sheet request during bootstrap but cannot render until data is verified",async()=>{
@@ -150,7 +174,10 @@ test("failed startup keeps the loader and offers retry without demo data or foll
       d.release(); await d.opening;
       assert.equal(d.requests.length, 1);
       assert.equal(d.w.document.getElementById("app-loading-overlay").classList.contains("visible"), true);
+      assert.equal(d.w.document.getElementById("app-loading-overlay").getAttribute("aria-busy"), "false");
       assert.equal(d.w.document.querySelector("#app-loading-overlay button").textContent, "Retry");
+      d.requestStatus();
+      assert.deepEqual(d.statuses, ["dashboard:mounted", "dashboard:startup-error", "dashboard:startup-error"]);
       assert.equal(!!d.w.document.querySelector('#app-loading-overlay a[href="/login"]'), status !== 503);
       assert.equal(d.w.document.querySelectorAll("[data-case-sheet-row]").length, 0);
     } finally { d.dom.window.close(); }
@@ -165,6 +192,7 @@ test("annual startup hands its account-bound snapshot to the registered frame an
       const frame = d.w.document.querySelector("iframe.annual-sheet-frame");
       assert.ok(frame);
       assert.equal(d.w.document.getElementById("app-loading-overlay").classList.contains("visible"), true);
+      assert.deepEqual(d.statuses, ["dashboard:mounted"]);
       const data = await d.w.AnnualDashboardSheets.takePreload(team, "user-a", frame.contentWindow);
       assert.equal(data.userId, "user-a");
       assert.equal(await d.w.AnnualDashboardSheets.takePreload(team, "user-a", frame.contentWindow), null);
@@ -172,6 +200,7 @@ test("annual startup hands its account-bound snapshot to the registered frame an
       await d.opening;
       assert.equal(d.requests.length, 1);
       assert.equal(d.w.document.getElementById("app-loading-overlay").classList.contains("visible"), false);
+      assert.deepEqual(d.statuses, ["dashboard:mounted", "dashboard:ready"]);
       assert.deepEqual(d.warnings, []);
     } finally { d.dom.window.close(); }
   }

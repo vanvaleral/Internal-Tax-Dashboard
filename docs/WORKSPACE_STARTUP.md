@@ -62,8 +62,11 @@ visible with Retry; authentication failures also offer Sign in again. It never
 reveals sample rows or uses an old editable data snapshot as a successful load.
 Initial reads do not repeatedly rebuild the selected view. Annual startup hands
 its confirmed snapshot to the registered same-origin sheet using the existing
-account-bound preload mechanism; the dashboard cover stays until sheet readiness.
-There is no minimum animation duration, second global loader or exit animation.
+account-bound preload mechanism and waits for that sheet to report readiness.
+The entry page keeps one opaque loader visible through iframe mounting, stylesheet
+loading and required reads. It releases the cover only when that iframe reports
+readiness or has an error to show. Direct workspace pages show their own loader.
+There is no minimum animation duration or exit animation.
 
 ## Background Work
 
@@ -89,7 +92,7 @@ dashboard frame records `readyMs` from its own navigation time origin, including
 the iframe navigation gap. The child reports its own navigation-relative timing.
 `workspace:ready` is also a browser Performance mark. Annual readiness includes
 its sheet initialization, not just its data response. The fallback script path
-does not emit the new metrics.
+reports readiness without separate bootstrap metrics.
 
 For deployed comparison, record at least five cold/browser-cache-disabled visits
 and five ordinary refreshes for desktop and a real mobile device, using the same

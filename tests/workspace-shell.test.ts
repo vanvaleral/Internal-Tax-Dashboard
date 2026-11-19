@@ -34,31 +34,57 @@ test("both shell routes use data-free static HTML with an enforced, matching scr
   }
 });
 
-test("shell readiness messages require the original same-origin iframe and login redirects stay same-origin", () => {
+function openShell() {
   const listeners = new Map<string, (event: any) => void>();
   const redirects: string[] = [], marks: string[] = [], messages: any[] = [];
   const location={origin:"https://test.local",replace:(url:string)=>redirects.push(url)};
   const frameWindow={location:new URL("https://test.local/demo.html"),postMessage:(message:any,origin:string)=>messages.push([message.type,origin])};
-  const frame={contentWindow:frameWindow,addEventListener:(name:string,callback:any)=>listeners.set(name,callback)};
-  const loader={hidden:false,setAttribute(){}};
+  const frame={contentWindow:frameWindow,inert:true,addEventListener:(name:string,callback:any)=>listeners.set(name,callback)};
+  const loader={hidden:false,busy:"true",setAttribute(name:string,value:string){if(name==="aria-busy")this.busy=value;}};
   const window:any={addEventListener:(name:string,callback:any)=>listeners.set(name,callback)};
   vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
     window, location, document:{getElementById:(id:string)=>id==="workspace-frame"?frame:loader},
     performance:{now:()=>1200,mark:(name:string)=>marks.push(name)}
   });
-  const receive=listeners.get("message")!;
+  return { listeners, redirects, marks, messages, location, frameWindow, frame, loader, window, receive:listeners.get("message")! };
+}
+
+test("the entry cover stays in place on iframe mount and opens only for verified readiness", () => {
+  const { receive, messages, location, frameWindow, frame, loader, marks, window } = openShell();
+  assert.match(html, /<iframe[^>]*\binert>/);
+  assert.match(html, /\.workspace-boot\{[^}]*background:#f0f2ee/);
   assert.deepEqual(messages,[["workspace:status",location.origin]]);
-  receive({origin:"https://unrelated.invalid",source:frameWindow,data:{type:"dashboard:mounted"}});
-  receive({origin:location.origin,source:{},data:{type:"dashboard:mounted"}});
-  assert.equal(loader.hidden,false);
   receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:mounted"}});
-  assert.equal(loader.hidden,true);
+  receive({origin:"https://unrelated.invalid",source:frameWindow,data:{type:"dashboard:ready"}});
+  receive({origin:location.origin,source:{},data:{type:"dashboard:startup-error"}});
+  assert.equal(loader.hidden,false);
+  assert.equal(loader.busy,"true");
+  assert.equal(frame.inert,true);
+  assert.deepEqual(marks,[]);
   receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:ready",timing:{requestMs:850,server:{auth:100,nonTiming:"ignored"}}}});
+  receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:ready"}});
+  assert.equal(loader.hidden,true);
+  assert.equal(loader.busy,"false");
+  assert.equal(frame.inert,false);
   assert.equal(window.__workspaceStartupTiming.readyMs,1200);
   assert.equal(window.__workspaceStartupTiming.requestMs,850);
   assert.equal(window.__workspaceStartupTiming.server.auth,100);
   assert.equal(window.__workspaceStartupTiming.server.nonTiming,undefined);
   assert.deepEqual(marks,["workspace:ready"]);
+});
+
+test("a verified startup error reveals the iframe without reporting readiness", () => {
+  const { receive, location, frameWindow, frame, loader, marks, window } = openShell();
+  receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:startup-error"}});
+  assert.equal(loader.hidden,true);
+  assert.equal(loader.busy,"false");
+  assert.equal(frame.inert,false);
+  assert.deepEqual(marks,[]);
+  assert.equal(window.__workspaceStartupTiming,undefined);
+});
+
+test("iframe login redirects stay same-origin", () => {
+  const { listeners, frameWindow, redirects } = openShell();
   frameWindow.location=new URL("https://unrelated.invalid/login");
   listeners.get("load")!({});
   assert.deepEqual(redirects,[]);

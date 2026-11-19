@@ -62,7 +62,8 @@ test("shell loader is server-renderable and iframe handover checks origin and so
   assert.match(frame, /id="workspace-boot"[^>]+aria-busy="true"/);
   assert.match(frame, /event\.origin !== location\.origin/);
   assert.match(frame, /event\.source !== frame\.contentWindow/);
-  assert.match(frame, /dashboard:mounted/);
+  assert.match(frame, /dashboard:ready/);
+  assert.match(frame, /dashboard:startup-error/);
   assert.match(frame, /frame\.addEventListener\("load", requestLoadingStatus\)/);
   assert.match(frame, /workspace:status/);
   assert.match(read("app/loading.tsx"), /<WorkspaceLoader/);
