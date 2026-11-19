@@ -4,6 +4,8 @@
   const maxPlans = 20, maxNodes = 100, maxDepth = 6;
   const roleLabels = { partner:"Partner", supervisor:"Supervisor", leader:"Leader", staff:"Associate", admin:"Admin" };
   const cardWidth = 176, cardHeight = 84, columnGap = 28, rowGap = 50, padding = 24;
+  const zoomLevels = [.25,.5,.75,1,1.25,1.5,2];
+  const printWidth = 950, printHeight = 585;
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const nextId = rows => String(1 + Math.max(0, ...rows.map(row => Number(row.id) || 0)));
   const option = (value, label, active) => `<option value="${esc(value)}" ${value === active ? "selected" : ""}>${esc(label)}</option>`;
@@ -49,6 +51,7 @@
     let model = { active: "1", plans: [{ id: "1", name: "Company structure", nodes: [] }] };
     let baseline = null, storageError = "", host, editing = "", rosterKey, people = new Map();
     let pending = null, drag = null;
+    let zoom = 1;
     try {
       baseline = localStorage.getItem(key);
       if (baseline) {
@@ -87,10 +90,7 @@
     const personName = node => people.get(node.pic)?.name || node.picName || "";
     const nodeName = node => personName(node) || node.label;
     const usedByAnother = (pic, id) => active().nodes.some(node => node.pic === pic && node.id !== id);
-    function flow(nodes, printable = false) {
-      const {points,width,height} = layout(nodes);
-      const scale = Math.min(1, 950 / width, 590 / height);
-      if (printable && scale < .56) return chart(nodes);
+    function flow(nodes, printable = false, {points,width,height} = layout(nodes)) {
       const wires = nodes.filter(node => node.parent).map(node => {
         const child = points.get(node.id), parent = points.get(node.parent);
         const mid = parent.y + cardHeight + rowGap/2;
@@ -107,17 +107,45 @@
           : `<button type="button" class="structure-card-main" data-structure-edit="${esc(node.id)}" aria-label="${esc(label)}">${content}</button>
              <button type="button" class="structure-grip" data-structure-move="${esc(node.id)}" ${storageError ? "disabled" : ""} title="Drag or click to connect" aria-label="Move or connect ${esc(name)}"><span aria-hidden="true"></span></button>`}</article>`;
       }).join("");
-      return `<div class="structure-flow" style="width:${width}px;height:${height}px;--structure-print-scale:${scale}"><svg class="structure-wires" width="${width}" height="${height}" aria-hidden="true">${wires}</svg>${cards}</div>`;
+      return `<div class="structure-flow" data-width="${width}" data-height="${height}" style="width:${width}px;height:${height}px"><svg class="structure-wires" width="${width}" height="${height}" aria-hidden="true">${wires}</svg>${cards}</div>`;
     }
 
-    // Large charts print as a hierarchy rather than shrinking the labels past readability.
-    function chart(nodes, parent = "") {
-      const children = nodes.filter(node => node.parent === parent);
-      if (!children.length) return "";
-      return `<ul class="structure-tree">${children.map(node => `<li><div class="structure-node">
-        <div><small>${esc(node.kind)}</small><strong>${esc(node.label)}</strong>
-        <span>${esc(personName(node) || "Unassigned")}</span></div>
-        </div>${chart(nodes, node.id)}</li>`).join("")}</ul>`;
+    function updateZoom() {
+      const stage = host.querySelector(".structure-stage");
+      if (stage) {
+        const graph = stage.firstElementChild;
+        stage.style.width = `${Math.ceil(Number(graph.dataset.width)*zoom)}px`;
+        stage.style.height = `${Math.ceil(Number(graph.dataset.height)*zoom)}px`;
+        graph.style.transform = `scale(${zoom})`;
+      }
+      host.querySelector('[data-structure-zoom="reset"]').textContent = `${Math.round(zoom*100)}%`;
+      host.querySelector('[data-structure-zoom="out"]').disabled = !stage || zoom <= zoomLevels[0];
+      host.querySelector('[data-structure-zoom="in"]').disabled = !stage || zoom >= zoomLevels.at(-1);
+    }
+
+    function changeZoom(action) {
+      const viewport = host.querySelector(".structure-viewport");
+      const stage = viewport.querySelector(".structure-stage");
+      if (!stage || drag) return;
+      const graph = stage.firstElementChild;
+      const width = Number(graph.dataset.width), height = Number(graph.dataset.height);
+      const centerX = (viewport.scrollLeft + viewport.clientWidth/2 - stage.offsetLeft) / zoom;
+      const centerY = (viewport.scrollTop + viewport.clientHeight/2 - stage.offsetTop) / zoom;
+      if (action === "in") zoom = zoomLevels.find(step => step > zoom) ?? zoom;
+      if (action === "out") zoom = zoomLevels.findLast(step => step < zoom) ?? zoom;
+      if (action === "reset") zoom = 1;
+      if (action === "fit") {
+        const availableHeight = viewport.clientHeight - stage.offsetTop - 4;
+        zoom = Math.max(.01, Math.floor(100 * Math.min(1,(viewport.clientWidth-4)/width,availableHeight/height))/100);
+      }
+      updateZoom();
+      if (action === "fit") {
+        viewport.scrollLeft = 0;
+        viewport.scrollTop = 0;
+      } else {
+        viewport.scrollLeft = Math.max(0, stage.offsetLeft + centerX*zoom - viewport.clientWidth/2);
+        viewport.scrollTop = Math.max(0, stage.offsetTop + centerY*zoom - viewport.clientHeight/2);
+      }
     }
 
     function render(message = storageError) {
@@ -142,10 +170,16 @@
         <p class="subline" role="status" data-structure-status>${esc(message)}</p>
         <div class="structure-layout">
           <section class="structure-chart" aria-label="Reporting structure">
-            <header class="structure-chart-head"><div><h4>${esc(plan.name)}</h4><p>Drop a PIC or drag a card by its grip onto a manager.</p></div><span class="pill neutral">${plan.nodes.length} position${plan.nodes.length === 1 ? "" : "s"}</span></header>
+            <header class="structure-chart-head"><div><h4>${esc(plan.name)}</h4><p>Drop a PIC or drag a card by its grip onto a manager.</p></div><div class="structure-chart-tools"><span class="pill neutral">${plan.nodes.length} position${plan.nodes.length === 1 ? "" : "s"}</span>
+              <div class="structure-zoom-tools" role="group" aria-label="Chart zoom">
+                <button type="button" class="ghost-btn" data-structure-zoom="out" aria-label="Zoom out">&minus;</button>
+                <button type="button" class="ghost-btn structure-zoom-value" data-structure-zoom="reset" aria-label="Reset chart zoom to 100%" title="Reset zoom" ${plan.nodes.length ? "" : "disabled"}></button>
+                <button type="button" class="ghost-btn" data-structure-zoom="in" aria-label="Zoom in">+</button>
+                <button type="button" class="ghost-btn" data-structure-zoom="fit" ${plan.nodes.length ? "" : "disabled"}>Fit</button>
+              </div></div></header>
             <div class="structure-viewport" tabindex="0" aria-label="Organization chart, scroll to see more positions">
               <button type="button" class="ghost-btn structure-top" data-structure-top ${locked} aria-disabled="${!pending}">+ Drop here for a top-level position</button>
-              ${plan.nodes.length ? flow(plan.nodes) : '<p class="structure-empty">Drag a PIC to the top-level drop zone, or add a planned position.</p>'}
+              ${plan.nodes.length ? `<div class="structure-stage">${flow(plan.nodes)}</div>` : '<p class="structure-empty">Drag a PIC to the top-level drop zone, or add a planned position.</p>'}
             </div>
           </section>
           <div class="structure-rail">
@@ -166,27 +200,70 @@
               ${node ? `<button type="button" class="ghost-btn" data-structure-action="cancel">Cancel</button><button type="button" class="ghost-btn" data-structure-action="remove" ${locked}>Remove</button>` : ""}</div>
           </form></div>
         </div>`);
+      updateZoom();
       if (scroll) {
         const canvas = host.querySelector(".structure-viewport");
         [canvas.scrollLeft,canvas.scrollTop] = scroll;
       }
     }
 
+    function printSheets(plan) {
+      const geometry = layout(plan.nodes);
+      const fit = Math.min(1,printWidth/geometry.width,printHeight/geometry.height);
+      const singlePage = fit >= .56;
+      const scale = singlePage ? fit : .75;
+      const width = Math.ceil(singlePage ? Math.min(printWidth,geometry.width*scale) : geometry.width*scale);
+      const height = Math.ceil(singlePage ? Math.min(printHeight,geometry.height*scale) : geometry.height*scale);
+      // Overlap adjacent sheets by more than one card so a boundary never hides the only full copy of a card.
+      function offsets(size, limit, overlap) {
+        const steps = [];
+        for (let offset=0; ; offset+=limit-overlap) {
+          steps.push(Math.min(offset,Math.max(0,size-limit)));
+          if (offset+limit >= size) return steps;
+        }
+      }
+      const columns = offsets(width,printWidth,Math.ceil(cardWidth*scale)+16);
+      const rows = offsets(height,printHeight,Math.ceil(cardHeight*scale)+16);
+      const total = rows.length*columns.length;
+      const diagram = flow(plan.nodes,true,geometry);
+      return rows.flatMap((y,row) => columns.map((x,column) => `<section class="structure-print-page">
+        <header><small>LMATS CONSULTING / ORGANIZATION PLANNING</small><h1>${esc(plan.name)}</h1>
+          <p>Planning only. Does not change system access.${total > 1 ? ` Sheet ${row*columns.length+column+1} of ${total} (row ${row+1}, column ${column+1}). Adjacent sheets overlap.` : ""}</p></header>
+        <div class="structure-print-tile" style="width:${Math.min(width,printWidth)}px;height:${Math.min(height,printHeight)}px">
+          <div class="structure-print-slice" style="left:${-x}px;top:${-y}px;--structure-print-scale:${scale}">${diagram}</div>
+        </div></section>`)).join("");
+    }
+
     function print() {
-      const plan = active(), printable = document.createElement("section");
-      printable.innerHTML = safeHtml(`<h2>${esc(plan.name)}</h2>${flow(plan.nodes,true)}`);
+      const plan = active();
+      if (!plan.nodes.length) return;
       const page = window.open("", "_blank", "width=960,height=760");
       if (!page) { tell("Allow popups to print this structure."); return; }
       page.opener = null;
       const doc = page.document;
       doc.documentElement.lang = "en";
-      doc.title = "Tax Dashboard | Structure";
-      const style = doc.createElement("style"), title = doc.createElement("h1"), note = doc.createElement("p");
-      style.textContent = "@page{size:A4 landscape;margin:12mm}body{font:12px 'Segoe UI',sans-serif;color:#162b31;margin:7mm}h1{border-bottom:2px solid #137d80;padding-bottom:8px}.structure-flow{position:relative;zoom:var(--structure-print-scale);break-inside:avoid}.structure-wires{position:absolute;inset:0;fill:none;stroke:#578778;stroke-width:1.75}.structure-card{box-sizing:border-box;position:absolute;width:176px;height:84px;border:1px solid #7ea699;border-top:3px solid #137d80;border-radius:8px;background:#fff}.structure-card-main{padding:8px}.structure-card-main>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.structure-tree{list-style:none;margin:0;padding-left:18px;border-left:1px solid #99afb0}.structure-node{border-bottom:1px solid #c6d5d4;padding:6px 0;break-inside:avoid;overflow-wrap:anywhere}small,strong{display:block}@media print{body{margin:0}}";
-      title.textContent = "LMATS Consulting | Organization Structure";
-      note.textContent = "Planning scenario only. Does not reflect or change system access.";
+      doc.title = `Tax Dashboard | ${plan.name}`;
+      const style = doc.createElement("style");
+      style.textContent = `@page{size:A4 landscape;margin:12mm}
+        body{font:12px 'Segoe UI',sans-serif;color:#162b31;margin:7mm}
+        .structure-print-page{break-inside:avoid;break-after:page;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+        .structure-print-page:last-child{break-after:auto}
+        header{border-bottom:2px solid #137d80;padding-bottom:8px;max-width:${printWidth}px}h1{font-size:20px;margin:4px 0;overflow-wrap:anywhere}p{margin:4px 0 0}
+        .structure-print-tile{position:relative;overflow:hidden}
+        .structure-print-slice{position:absolute}
+        .structure-flow{position:relative;transform-origin:0 0;transform:scale(var(--structure-print-scale))}
+        .structure-wires{position:absolute;inset:0;fill:none;stroke:#137d80;stroke-width:1.6}
+        .structure-card{box-sizing:border-box;position:absolute;width:${cardWidth}px;height:${cardHeight}px;border:1px solid #c5d6ce;border-top:3px solid #137d80;border-radius:9px;background:#fff}
+        .structure-card[data-kind="Partner"]{border-top-color:#066b77;background:#e7f4f3}.structure-card[data-kind="Team"]{border-top-color:#b76a0a}
+        .structure-card-main{box-sizing:border-box;width:100%;padding:12px 10px}
+        .structure-card-main>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .structure-card-main small{text-transform:uppercase;letter-spacing:.12em;color:#166b69;font-size:9px}
+        .structure-card-main strong{margin:2px 0;font-size:14px}.structure-card-main span{color:#506268;font-size:11px}
+        @media print{body{margin:0}}`;
       doc.head.append(style);
-      doc.body.append(title, note, doc.importNode(printable, true));
+      const printable = document.createElement("template");
+      printable.innerHTML = safeHtml(printSheets(plan));
+      doc.body.append(doc.importNode(printable.content, true));
       page.focus();
       page.print();
     }
@@ -282,6 +359,7 @@
       if (!canManage()) return;
       const button = event.target.closest("button");
       if (!button) return;
+      if (button.dataset.structureZoom) { changeZoom(button.dataset.structureZoom); return; }
       if (button.dataset.structurePic && people.has(button.dataset.structurePic)) { pick({pic:button.dataset.structurePic}); return; }
       if (button.dataset.structureMove && find(button.dataset.structureMove)) { pick({id:button.dataset.structureMove}); return; }
       if (button.hasAttribute("data-structure-top")) {

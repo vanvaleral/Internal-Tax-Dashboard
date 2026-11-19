@@ -13,9 +13,13 @@ Existing browser scenarios use the same saved data without a migration.
 Add manual Partner, Team or Role cards for future positions. Removing a position
 moves its direct reports to the removed position's parent.
 
-Print opens an A4 landscape view of the selected saved scenario. Very large
-charts use an indented print layout for legibility. The browser print dialog
-can also save a PDF. Only the chart is printed.
+Use the canvas zoom controls to zoom in or out, reset to 100%, or fit the
+entire chart. Zooming does not change the saved scenario.
+
+Print keeps the cards, positions, and connectors in A4 landscape, independent
+of the canvas zoom or scroll. Large charts use numbered, overlapping pages to
+keep cards readable instead of switching to a list. The browser print dialog
+can also save a PDF. Editing controls and the PIC roster aren't printed.
 
 Scenarios are saved only in the current browser, under the signed-in account's
 storage key. They are not shared, backed up or stored in Supabase. Browser

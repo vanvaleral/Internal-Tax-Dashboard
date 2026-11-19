@@ -70,12 +70,71 @@ test("printing outputs only the chosen scenario; removing a parent keeps its rep
     x.w.open = () => ({document:print.window.document,focus(){},print(){printed = true;}});
     x.click("print");
     assert.ok(printed);
+    assert.equal(print.window.document.querySelectorAll(".structure-print-page").length,1);
     assert.match(print.window.document.body.textContent!,/Accounting Team/);
     assert.equal(print.window.document.querySelectorAll(".structure-wires path").length,1);
     assert.equal(print.window.document.querySelector("button, img, form"),null);
     x.host.querySelector('[data-structure-edit="1"]').click();
     x.click("remove");
     assert.deepEqual(x.saved().plans[0].nodes.map((node:any) => [node.label,node.parent]),[["Accounting Team",""]]);
+  } finally { x.dom.window.close(); print.window.close(); }
+});
+
+test("zoom controls resize the canvas without rebuilding cards or changing the saved scenario", () => {
+  const x = setup();
+  try {
+    x.mount();
+    x.submit({label:"Managing Partner", pic:"a"});
+    x.submit({label:"Tax Team", kind:"Team", parent:"1", pic:"b"});
+    const original = x.saved();
+    const zoom = (action:string) => x.host.querySelector(`[data-structure-zoom="${action}"]`);
+    const stage = x.host.querySelector(".structure-stage"), graph = stage.firstElementChild;
+    const viewport = stage.parentElement;
+    Object.defineProperties(viewport,{clientWidth:{value:180},clientHeight:{value:450}});
+    Object.defineProperty(stage,"offsetTop",{value:40});
+    zoom("in").click();
+    assert.equal(zoom("reset").textContent,"125%");
+    assert.equal(graph.style.transform,"scale(1.25)");
+    assert.equal(parseInt(stage.style.width),Math.ceil(Number(graph.dataset.width)*1.25));
+    zoom("out").click();
+    assert.equal(zoom("reset").textContent,"100%");
+    zoom("fit").click();
+    assert.equal(zoom("reset").textContent,"78%");
+    assert.equal(viewport.scrollLeft,0);
+    zoom("reset").click();
+    assert.equal(x.host.querySelector(".structure-stage").firstElementChild,graph);
+    assert.equal(graph.style.transform,"scale(1)");
+    assert.deepEqual(x.saved(),original);
+  } finally { x.dom.window.close(); }
+});
+
+test("a large off-screen chart prints as overlapping pages, with every full card covered", () => {
+  const x = setup(), print = new JSDOM("<html></html>");
+  try {
+    const nodes = Array.from({length:18},(_,index) => ({ id:String(index+1), label:`Position ${index+1}`,
+      kind:"Role", parent:index===0 ? "" : index < 14 ? "1" : String(index), pic:"", picName:"" }));
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[{id:"1",name:"Wide Plan",nodes}]}));
+    x.mount();
+    x.host.querySelector('[data-structure-zoom="out"]').click();
+    x.host.querySelector(".structure-viewport").scrollLeft = 2000;
+    x.w.open = () => ({document:print.window.document,focus(){},print(){}});
+    x.click("print");
+    const doc = print.window.document, tiles = [...doc.querySelectorAll<HTMLElement>(".structure-print-tile")];
+    assert.ok(tiles.length > 1);
+    assert.match(doc.body.textContent!,/row 2, column 1/);
+    assert.equal(doc.querySelector(".structure-tree, button, form"),null);
+    const first = tiles[0].querySelectorAll<HTMLElement>(".structure-card");
+    assert.equal(first.length,nodes.length);
+    assert.equal(tiles[0].querySelectorAll(".structure-wires path").length,nodes.length-1);
+    for (const card of first) {
+      assert.ok(tiles.some(tile => {
+        const slice = tile.firstElementChild as HTMLElement;
+        const scale = Number(slice.style.getPropertyValue("--structure-print-scale"));
+        const x = parseFloat(slice.style.left) + parseFloat(card.style.left)*scale;
+        const y = parseFloat(slice.style.top) + parseFloat(card.style.top)*scale;
+        return x >= 0 && y >= 0 && x+176*scale <= parseFloat(tile.style.width) && y+84*scale <= parseFloat(tile.style.height);
+      }),`all of ${card.textContent} should appear on at least one sheet`);
+    }
   } finally { x.dom.window.close(); print.window.close(); }
 });
 
