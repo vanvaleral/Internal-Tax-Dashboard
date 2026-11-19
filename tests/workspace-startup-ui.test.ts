@@ -7,7 +7,7 @@ const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const html = read("public/demo.html");
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-function open(options: { view?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean } = {}) {
+function open(options: { view?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean } = {}) {
   const warnings: string[] = [], requests: string[] = [], idle: Array<() => void> = [];
   const vc = new VirtualConsole();
   for (const kind of ["warn", "error"] as const) vc.on(kind, (...items: any[]) => warnings.push(items.join(" ")));
@@ -30,13 +30,16 @@ function open(options: { view?: string; annual?: string; mobile?: boolean; statu
     "/api/operations?scope=monthly_compliance": { data: [] }, "/api/operations": { data: [] }
   };
   if (options.annual) packets[`annual:${options.annual}`] = { team: options.annual, userId: "user-a", version: 1, actor: { id: "a" }, staff: [], rows: [], columns: [] };
+  if (options.scoped) packets["/api/my-work?period=current"] = {tasks:[{id:"current-task",title:"Current task",done:false,steps:[]}],scope:"current"};
   let release!: () => void;
   const hold = new Promise<void>(resolve => { release = resolve; });
   w.fetch = async (url: string, init: any = {}) => {
     requests.push(url); assert.equal(init.method || "GET", "GET", "startup cannot write records");
     if (url.startsWith("/api/workspace/bootstrap")) {
       await hold;
-      return new Response(JSON.stringify(options.status ? { error: "Unavailable" } : { user: { id: "user-a" }, profile: staff[0], packets, timings: { auth: 50, clients: 80 } }), { status: options.status || 200 });
+      const initialPackets = {...packets};
+      if(options.scoped){delete initialPackets["/api/clients"];delete initialPackets["/api/staff"];delete initialPackets["/api/my-work"];}
+      return new Response(JSON.stringify(options.status ? { error: "Unavailable" } : { user: { id: "user-a" }, profile: staff[0], packets:initialPackets, ...(options.scoped?{readPlan:{version:1,clients:false,staff:false}}:{}), timings: { auth: 50, clients: 80 } }), { status: options.status || 200 });
     }
     return new Response(JSON.stringify(packets[url] || { data: [], tasks: [], announcements: [], staff }), { status: 200 });
   };
@@ -64,6 +67,63 @@ test("confirmed bootstrap supplies the first screen with one request and never e
       assert.deepEqual(Object.keys(hint).sort(), ["annualTeam", "currentView", "operationsMode"]);
     } finally { d.dom.window.close(); }
   }
+});
+
+test("scoped My Work startup unlocks before client/staff catalogs; navigation waits for real lists",async()=>{
+  const d=open({view:"my-work-view",scoped:true,saveData:true});try{
+    d.release();await d.opening;await tick();
+    assert.equal(d.requests.length,1);assert.equal(d.w.document.getElementById("app-loading-overlay").classList.contains("visible"),false);
+    const original=d.w.fetch;let releaseClients!:()=>void;
+    d.w.fetch=async(url:string,init:any)=>{if(url==="/api/clients")await new Promise<void>(resolve=>releaseClients=resolve);return original(url,init);};
+    d.w.document.querySelector('[data-view="client-management-view"]').click();await tick();
+    assert.match(d.w.document.getElementById("client-management-view").textContent,/Loading workspace lists/);
+    releaseClients();await tick();await tick();
+    assert.match(d.w.document.getElementById("client-management-view").textContent,/Confirmed database client/);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("scoped task archives fetch an index on opening and full task content only for the selected month",async()=>{
+  const d=open({view:"my-work-view",scoped:true,saveData:true});try{
+    d.release();await d.opening;await tick();const original=d.w.fetch,calls:string[]=[];
+    d.w.fetch=async(url:string,init:any)=>{
+      if(url.startsWith("/api/my-work?period=")){
+        calls.push(url);
+        const body=url.endsWith("archive-index")?{archiveMonths:[{key:"2020-02",count:1,titles:["Historical task"]}]}:{tasks:[{id:"history",title:"Historical task",done:true,completedAt:Date.parse("2020-02-10T12:00:00+08:00"),steps:[{title:"Historical subtask",done:true}]}],scope:"2020-02"};
+        return new Response(JSON.stringify(body));
+      }return original(url,init);
+    };
+    assert.equal(calls.length,0);d.w.document.querySelector('[data-my-work-tab="archived"]').click();await tick();
+    assert.deepEqual(calls,["/api/my-work?period=archive-index"]);
+    assert.equal(d.w.document.querySelector('[data-select-my-work="history"]'),null);
+    d.w.document.querySelector('[data-open-my-work-archive-period="2020-02"]').click();await tick();
+    assert.deepEqual(calls,["/api/my-work?period=archive-index","/api/my-work?period=2020-02"]);
+    assert.ok(d.w.document.querySelector('[data-select-my-work="history"]'));assert.ok(d.w.document.querySelector('[data-export-my-work-archive="2020-02"]'));
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("an incomplete client refresh retains confirmed clients instead of replacing them with a partial page",async()=>{
+  const d=open({view:"client-management-view"});try{
+    d.release();await d.opening;await tick();
+    const original=d.w.fetch;
+    d.w.fetch=(url:string,init:any)=>url==="/api/clients"?Promise.resolve(new Response(JSON.stringify({data:[],count:1001}))):original(url,init);
+    d.w.document.dispatchEvent(new d.w.Event("visibilitychange"));await tick();await tick();
+    assert.match(d.w.document.getElementById("client-management-view").textContent,/Confirmed database client/);
+    assert.ok(d.warnings.some(message=>message.includes("incomplete")));
+  }finally{d.dom.window.close();}
+});
+
+test("failed archive reads offer a local retry and keep Current tasks intact",async()=>{
+  const d=open({view:"my-work-view",scoped:true,saveData:true});try{
+    d.release();await d.opening;await tick();const original=d.w.fetch;
+    d.w.fetch=(url:string,init:any)=>url.includes("period=archive-index")?Promise.resolve(new Response(JSON.stringify({error:"Unavailable"}),{status:503})):original(url,init);
+    d.w.document.querySelector('[data-my-work-tab="archived"]').click();await tick();
+    assert.ok(d.w.document.querySelector("[data-retry-work-history]"));
+    assert.equal(d.w.document.querySelector("[data-export-my-work-archive]"),null);
+    d.w.document.querySelector('[data-my-work-tab="current"]').click();
+    assert.ok(d.w.document.querySelector('[data-select-my-work="current-task"]'));
+  }finally{d.dom.window.close();}
 });
 
 test("failed startup keeps the loader and offers retry without demo data or follow-up reads", async () => {
@@ -129,6 +189,7 @@ test("startup snapshots reject other users, expire, and constrained connections 
     assert.equal(ran, false);
     d.w.document.querySelector('[data-view="my-work-view"]').click(); await tick();
     assert.ok(d.requests.includes("/api/my-work"), "foreground navigation still works without preloads");
+    assert.equal(JSON.parse(d.w.localStorage.getItem("tax-dashboard-startup-view-v1")).currentView,"my-work-view");
   } finally { d.dom.window.close(); }
 });
 

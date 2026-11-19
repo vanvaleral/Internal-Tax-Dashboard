@@ -34,24 +34,22 @@ export async function GET(request: Request) {
       finally { timings[name] = Date.now() - start; }
     }
     // One verified actor, independent reads in parallel, no process-wide user cache.
-    const loads = [collect("/api/staff", "staff", () => readStaff(actor)), collect("/api/clients", "clients", async () => {
-      const result = await readClients(actor);
-      while (result.data.length < (result.count || 0)) {
-        const page = await readClients(actor, new URLSearchParams({ offset: String(result.data.length) }));
-        if (!page.data.length) throw new Error("Client list changed while loading. Please retry.");
-        result.data.push(...page.data);
-      }
-      return result;
-    })];
+    const broad = !annual && !["my-work-view", "announcement-view"].includes(view);
+    const readPlan = { version: 1, clients: broad, staff: broad };
+    const loads: Promise<void>[] = [];
+    if (broad) loads.push(collect("/api/staff", "staff", () => readStaff(actor)), collect("/api/clients", "clients", () => readClients(actor)));
     if (view === "matrix-view" && !annual) {
       loads.push(collect("/api/operations?scope=monthly_compliance", "monthly", () => readOperations(actor, "monthly_compliance")));
     }
     if (allowed("operations") && ["client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/operations", "operations", () => readOperations(actor, null)));
     if (allowed("cases") && ["cases-view", "my-work-view", "client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/cases", "cases", () => readCases(actor)));
-    if (allowed("myWork") && ["my-work-view", "client-view"].includes(view)) loads.push(collect("/api/my-work", "tasks", () => readMyWork(actor.admin, actor.profile)));
-    if (annual) loads.push(collect(`annual:${annualTeam}`, "annual", async () => annualResponseData(actor, annualTeam, await annualContext(actor, annualTeam))));
+    if (allowed("myWork") && ["my-work-view", "client-view"].includes(view)) loads.push(collect(view === "my-work-view" ? "/api/my-work?period=current" : "/api/my-work", "tasks", () => readMyWork(actor.admin, actor.profile, view === "my-work-view" ? "current" : "all")));
+    if (annual) loads.push(collect(`annual:${annualTeam}`, "annual", async () => {
+      const ctx = await annualContext(actor, annualTeam);
+      return annualResponseData(actor, annualTeam, ctx, ctx.workspace?.payload, "auto");
+    }));
     await Promise.all(loads);
-    return NextResponse.json({ user: { id: actor.userId }, profile: actor.profile, featureAccess, view, packets, timings }, { headers: headers() });
+    return NextResponse.json({ user: { id: actor.userId }, profile: actor.profile, featureAccess, view, readPlan, packets, timings }, { headers: headers() });
   } catch (error) {
     console.error("[workspace bootstrap] failed", error);
     return NextResponse.json({ error: "Workspace data could not be loaded. Please retry." }, { status: 503, headers: headers() });

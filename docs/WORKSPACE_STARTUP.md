@@ -24,15 +24,19 @@ within the current request. No user, role, permission or response is cached
 server-side. Existing write APIs retain all authentication and ownership checks.
 Root POSTs and path lookalikes do not receive the bypass.
 
-The bootstrap reads Client Master and the active staff directory, plus the chosen
-view's dependencies, concurrently. My Work loads Cases and Tasks; Cases loads its
+The bootstrap reads only the chosen view's required dependencies concurrently.
+My Work loads Cases and Current Tasks without global client/staff catalogs;
+Notifications also defers those catalogs. Cases loads its
 own records; Monthly loads its control state; Client Detail loads related tasks,
 cases and operational summaries; Management loads Cases and operational summaries.
-Annual loads only the
-selected team's sheet, using the same reader as `/api/annual-sheet?part=sheet`.
-Client Master is explicitly paginated when it exceeds 500 rows. My Work retains
+Annual loads only the selected team's year-scoped sheet and its own roster, using
+the same reader as `/api/annual-sheet?part=sheet&year=auto`.
+Client Master and Cases are explicitly paginated for complete authorized lists
+on both bootstrap and ordinary refreshes. My Work retains
 ownership/assignment scoping and pagination, fetches independent ownership and
-assignment queries in parallel, and batches preference reads.
+assignment queries in parallel, and batches preference reads. Archived month
+indexes and records load explicitly when opened. See `SCOPED_WORKSPACE_LOADING.md`
+for the versioned read plan, compatibility paths, year switching and limitations.
 
 Ordinary APIs and bootstrap share read implementations for PIC scoping, fee
 redaction, historical Monthly ownership and Annual permissions. Saves, generated

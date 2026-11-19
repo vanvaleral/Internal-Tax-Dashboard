@@ -4135,6 +4135,7 @@
       document.body.textContent = "The signed-in account changed. Open Cases Full Screen again from your current dashboard.";
       return;
     }
+    const scopedWorkspaceReads = bootstrapProfile.readPlan?.version === 1;
     const OBLIGATIONS = ["pph21", "unifikasi", "pph25", "phrpb1", "ppn"];
 
     const OBLIGATION_LABELS = {
@@ -7439,6 +7440,10 @@
 
     function renderClientManagement(rootOverride = null) {
       const root = rootOverride || document.getElementById("client-management-view");
+      if (!IS_OFFLINE_DEMO && !clientsLoadedFromDatabase) {
+        root.innerHTML = safeHtml('<section class="panel"><p role="status">Loading Client Master...</p><button class="ghost-btn" data-retry-client-list>Retry client list</button></section>');
+        return;
+      }
       const isMobileWorkspace = window.matchMedia("(max-width: 900px)").matches;
       const activeSample = clientFormTarget();
       const portfolio = clientPortfolioSnapshot();
@@ -9114,6 +9119,7 @@
     }
 
     function exportMyWorkArchivePeriod(period) {
+      if (scopedWorkspaceReads && !myWorkFullHistory && !myWorkPeriodsLoaded.has(period)) { window.alert("Load this archive month before exporting it."); return; }
       const tasks = state.myWork
         .filter((task) => {
           if (!task.done || !task.completedAt) return false;
@@ -9199,18 +9205,20 @@
       const archiveThreshold = new Date();
       archiveThreshold.setDate(1);
       archiveThreshold.setHours(0, 0, 0, 0);
-      const completedGroup = `completed:${archiveThreshold.getFullYear()}-${String(archiveThreshold.getMonth() + 1).padStart(2, "0")}`;
+      if (scopedWorkspaceReads) archiveThreshold.setTime(new Date(`${myWorkCurrentMonth || myWorkTaskPeriod({completedAt:Date.now()})}-01T00:00:00+08:00`).getTime());
+      const completedGroup = `completed:${scopedWorkspaceReads ? myWorkCurrentMonth || myWorkTaskPeriod({completedAt:Date.now()}) : `${archiveThreshold.getFullYear()}-${String(archiveThreshold.getMonth() + 1).padStart(2, "0")}`}`;
       const activeTasks = ordered("active", state.myWork.filter((task) => !task.done).sort((a, b) => Number(Boolean(b.favorite)) - Number(Boolean(a.favorite)) || Number(b.favoritedAt || 0) - Number(a.favoritedAt || 0)));
       const completedTasks = ordered(completedGroup, state.myWork.filter((task) => task.done && Number(task.completedAt || 0) >= archiveThreshold.getTime()).sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0)));
       const archivedTasks = state.myWork.filter((task) => task.done && Number(task.completedAt || 0) > 0 && Number(task.completedAt || 0) < archiveThreshold.getTime()).sort((a, b) => Number(b.completedAt || 0) - Number(a.completedAt || 0));
-      const archiveGroups = archivedTasks.reduce((groups, task) => {
+      let archiveGroups = archivedTasks.reduce((groups, task) => {
         const date = new Date(task.completedAt);
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        const key = scopedWorkspaceReads ? myWorkTaskPeriod(task) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
         const existing = groups.find((group) => group.key === key);
         if (existing) existing.tasks.push(task);
         else groups.push({ key, label: date.toLocaleDateString("id-ID", { month: "long", year: "numeric" }), tasks: [task] });
         return groups;
       }, []);
+      if (scopedWorkspaceReads && myWorkArchiveMonths) archiveGroups = myWorkArchiveMonths.map(month => ({ ...month, label: new Date(`${month.key}-15T12:00:00+08:00`).toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: "Asia/Makassar" }), tasks: archivedTasks.filter(task => myWorkTaskPeriod(task) === month.key) }));
       archiveGroups.forEach(group => { group.tasks = ordered(`completed:${group.key}`, group.tasks); });
       const selected = state.myWork.find((task) => task.id === state.selectedMyWorkId);
       const showStepDraft = Boolean(selected && (state.addingMyWorkStepId === selected.id || Object.prototype.hasOwnProperty.call(state.myWorkStepDrafts, selected.id)));
@@ -9233,12 +9241,15 @@
         : [];
       const visibleArchiveGroups = archiveGroups.filter((group) => {
         if (state.myWorkArchiveYear !== "all" && !group.key.startsWith(`${state.myWorkArchiveYear}-`)) return false;
-        return !archiveQuery || group.tasks.some((task) => task.title.toLocaleLowerCase("id-ID").includes(archiveQuery));
+        return !archiveQuery || (group.titles || group.tasks.map(task=>task.title)).some(title => title.toLocaleLowerCase("id-ID").includes(archiveQuery));
       });
       const archiveToolbar = `<div class="my-work-archive-toolbar"><input id="my-work-archive-search" class="field" type="search" value="${escapeAttr(state.myWorkArchiveQuery)}" placeholder="Search archived tasks..." />${selectedArchiveGroup ? "" : `<select id="my-work-archive-year" class="field" aria-label="Filter archive year"><option value="all">All years</option>${archiveYears.map((year) => `<option value="${year}" ${state.myWorkArchiveYear === year ? "selected" : ""}>${year}</option>`).join("")}</select>`}</div>`;
-      const archivedTaskMarkup = selectedArchiveGroup
+      const archiveWaiting = scopedWorkspaceReads && (!myWorkArchiveMonths && !myWorkFullHistory || state.myWorkArchivePeriod && !myWorkPeriodsLoaded.has(state.myWorkArchivePeriod) && !myWorkFullHistory);
+      const archivedTaskMarkup = archiveWaiting
+        ? `<div class="my-work-empty" role="status">${escapeHtml(myWorkHistoryError || "Loading task archive...")}${myWorkHistoryError ? '<button class="ghost-btn" data-retry-work-history>Retry archive</button>' : ""}<button class="ghost-btn" data-close-my-work-archive-period>Back to archive months</button></div>`
+        : selectedArchiveGroup
         ? `<section class="my-work-archive-detail"><div class="my-work-archive-detail-head"><div><strong>${escapeHtml(selectedArchiveGroup.label)}</strong><small>${selectedArchiveGroup.tasks.length} completed task${selectedArchiveGroup.tasks.length === 1 ? "" : "s"}</small></div><div class="my-work-archive-actions"><button data-close-my-work-archive-period="yes" aria-label="Back to archive months">&#8592; Back</button><button data-export-my-work-archive="${selectedArchiveGroup.key}">Export CSV</button></div></div>${archiveToolbar}${taskGroup(`completed:${selectedArchiveGroup.key}`, matchingArchiveTasks, "No archived tasks match this search.")}</section>`
-        : `${archiveToolbar}<div class="my-work-archive-months">${visibleArchiveGroups.map((group) => `<button class="my-work-archive-month" data-open-my-work-archive-period="${group.key}"><span><strong>${escapeHtml(group.label)}</strong><small>Open this month's completed tasks</small></span><span class="my-work-section-count">${group.tasks.length}</span><span aria-hidden="true">&#8250;</span></button>`).join("") || `<div class="my-work-empty">${archiveGroups.length ? "No archive months match these filters." : "Completed tasks from previous months will appear here automatically."}</div>`}</div>`;
+        : `${archiveToolbar}<div class="my-work-archive-months">${visibleArchiveGroups.map((group) => `<button class="my-work-archive-month" data-open-my-work-archive-period="${group.key}"><span><strong>${escapeHtml(group.label)}</strong><small>Open this month's completed tasks</small></span><span class="my-work-section-count">${group.count ?? group.tasks.length}</span><span aria-hidden="true">&#8250;</span></button>`).join("") || `<div class="my-work-empty">${archiveGroups.length ? "No archive months match these filters." : "Completed tasks from previous months will appear here automatically."}</div>`}</div>`;
       const timeDialog = state.myWorkMenu && state.myWorkMenu !== "case" && selected ? `
         <div class="my-work-time-dialog-backdrop" data-close-my-work-menu="yes">
           <section class="my-work-time-dialog" role="dialog" aria-modal="true" aria-label="${state.myWorkMenu === "case" ? "Link to Case" : `Set ${state.myWorkMenu === "due" ? "due date" : "reminder"}`}">
@@ -9265,7 +9276,7 @@
             <div class="my-work-list">
               <div class="eyebrow" style="color:#dce5ff">MY WORK</div><h2>Progress ${escapeHtml(state.selectedPic)}</h2>
               ${myWorkDemoMode ? `<div class="pill accent" style="align-self:flex-start; margin-top:8px;">Preview data · not saved</div>` : ""}
-              <div class="my-work-tabs"><button class="my-work-tab ${state.myWorkTab === "current" ? "active" : ""}" data-my-work-tab="current">Current</button><button class="my-work-tab ${state.myWorkTab === "archived" ? "active" : ""}" data-my-work-tab="archived">Archived <span class="my-work-section-count">${archivedTasks.length}</span></button></div>
+              <div class="my-work-tabs"><button class="my-work-tab ${state.myWorkTab === "current" ? "active" : ""}" data-my-work-tab="current">Current</button><button class="my-work-tab ${state.myWorkTab === "archived" ? "active" : ""}" data-my-work-tab="archived">Archived ${!scopedWorkspaceReads || myWorkFullHistory || myWorkArchiveMonths ? `<span class="my-work-section-count">${myWorkArchiveMonths?.reduce((sum,month)=>sum+month.count,0) ?? archivedTasks.length}</span>` : ""}</button></div>
               <div class="my-work-task-list" data-my-work-scroll-context="${escapeAttr(scrollContext)}">
                 ${state.myWorkTab === "archived" ? archivedTaskMarkup : currentTaskMarkup}
               </div>
@@ -9464,6 +9475,7 @@
 
     async function appFetch(url, options, message = "", { trackUpdate = true } = {}) {
       const method = String(options?.method || "GET").toUpperCase();
+      if (method !== "GET" && String(url).startsWith("/api/clients")) clientListReadRevision++;
       const isDatabaseUpdate = trackUpdate && ["POST", "PATCH", "PUT", "DELETE"].includes(method);
       if (isDatabaseUpdate) {
         appLoadingRequests += 1;
@@ -9481,7 +9493,9 @@
           const startupData = window.WorkspaceStartup?.take(url, bootstrapProfile.user.id);
           if (startupData) return new Response(JSON.stringify(startupData), { headers: { "Content-Type": "application/json" } });
         }
-        return await fetch(url, { ...options, headers });
+        const response = await fetch(url, { ...options, headers });
+        if (method !== "GET" && String(url).startsWith("/api/clients")) clientListReadRevision++;
+        return response;
       } finally {
         if (isDatabaseUpdate) {
           appLoadingRequests = Math.max(0, appLoadingRequests - 1);
@@ -9611,13 +9625,20 @@
       };
     }
 
+    let clientListFlight = null, clientListReadRevision = 0;
     async function loadSharedClients(background = false) {
+      if (clientListFlight?.revision === clientListReadRevision) return clientListFlight.promise;
+      const flight = {revision:clientListReadRevision,promise:null};
+      clientListFlight = flight;
+      flight.promise = (async()=>{
       try {
         const response = await appFetch("/api/clients", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading shared clients...");
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(result.error || `Client master could not be loaded (${response.status}).`);
         }
+        if (flight.revision !== clientListReadRevision) return true;
+        if (!Array.isArray(result.data) || typeof result.count === "number" && result.data.length < result.count) throw new Error("Client list response was incomplete. Existing clients are retained.");
         const rows = Array.isArray(result.data) ? result.data : [];
         const mapped = rows.map(databaseClientToDemo);
         clientMasterClients = mapped.filter((client) => !["Proposal", "Contract"].includes(client.clientStatus));
@@ -9639,12 +9660,17 @@
         if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
         if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
         if (!proposals.some((proposal) => proposal.id === state.activeProposalId)) state.activeProposalId = proposals[0]?.id || "";
-        renderAfterSharedDataUpdate(["client-management-view", "client-view", "matrix-view", "profile-view"]);
+        if (scopedWorkspaceReads && !startupPending && document.getElementById(state.currentView)?.querySelector("[data-retry-workspace-lists]")) rerender();
+        else renderAfterSharedDataUpdate(["client-management-view", "client-view", "matrix-view", "profile-view"]);
         clearSyncFailure("Client master");
+        return true;
       } catch (error) {
         console.warn("[clients] shared load failed", error);
         markSyncFailure("Client master", error);
-      }
+        return false;
+      } finally { if (clientListFlight === flight) clientListFlight = null; }
+      })();
+      return flight.promise;
     }
 
     async function loadSharedOperationalWorkspaces(background = false, scope = "") {
@@ -10800,23 +10826,59 @@
       return payload;
     }
 
-    async function loadSharedMyWork(background = false) {
+    let myWorkArchiveMonths = null, myWorkHistoryError = "", myWorkFullHistory = false, myWorkCurrentMonth = "";
+    const myWorkPeriodsLoaded = new Set(), myWorkReadFlights = new Map();
+    let myWorkReadSequence = 0;
+    function myWorkTaskPeriod(task) {
+      const date = new Date(task.completedAt || 0);
+      const parts = new Intl.DateTimeFormat("en", {timeZone:"Asia/Makassar",year:"numeric",month:"2-digit"}).formatToParts(date);
+      return `${parts.find(part=>part.type==="year").value}-${parts.find(part=>part.type==="month").value}`;
+    }
+    async function loadMyWorkArchive() {
+      if (!scopedWorkspaceReads) return;
+      if (!myWorkArchiveMonths && !myWorkFullHistory && !await loadSharedMyWork(true, "archive-index")) return;
+      if (state.myWorkArchivePeriod) await loadSharedMyWork(true, state.myWorkArchivePeriod);
+    }
+    async function loadSharedMyWork(background = false, requestedPeriod = "") {
       if (!window.WorkspaceFeatures.can("myWork")) return true;
       if (myWorkDemoMode) return true;
+      const period = scopedWorkspaceReads ? requestedPeriod || (state.currentView === "client-view" ? "all" : "current") : "all";
+      const url = period === "all" ? "/api/my-work" : `/api/my-work?period=${period}`;
+      const writeRevision = myWorkReadWriteRevision;
+      if (myWorkReadFlights.get(period)?.revision === writeRevision) return myWorkReadFlights.get(period).promise;
+      const sequence = ++myWorkReadSequence;
+      const pending = (async()=>{
       try {
-        const response = await appFetch("/api/my-work", { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading My Work...");
-        if (!response.ok) return false;
+        const response = await appFetch(url, { cache: "no-store", headers: { Accept: "application/json" } }, background ? "" : "Loading My Work...");
+        if (!response.ok) throw new Error("Task history could not be loaded. Please retry.");
         const result = await response.json();
+        if (writeRevision !== myWorkReadWriteRevision) return true;
+        if (result.currentMonth) myWorkCurrentMonth = result.currentMonth;
+        if (!window.WorkspaceFeatures.can("myWork")) return true;
+        if (period === "archive-index") {
+          if (!Array.isArray(result.archiveMonths)) throw new Error("Task archive response was incomplete. Please retry.");
+          myWorkArchiveMonths = result.archiveMonths; myWorkHistoryError = "";
+          if (state.currentView === "my-work-view" && state.myWorkTab === "archived") renderMyWorkUpdate();
+          return true;
+        }
+        if (!Array.isArray(result.tasks)) throw new Error("Task response was incomplete. Existing tasks are retained.");
+        if (sequence !== myWorkReadSequence && period === "all") return true;
         const tasks = Array.isArray(result.tasks) ? result.tasks : [];
         // Keep tasks waiting for their first successful POST. A transient API
         // failure must never make a task disappear when the shared list reloads.
         const pendingTasks = state.myWork.filter((task) => task.pendingSync || task.id?.startsWith("task-"));
         const sharedIds = new Set(tasks.map((task) => task.id));
         const pendingById = new Map(pendingTasks.map((task) => [task.id, task]));
+        const incomingIds = new Set(tasks.map(task=>task.id));
+        const retainedHistory = period === "all" ? [] : state.myWork.filter(task => !task.pendingSync && !incomingIds.has(task.id) && (period === "current" ? task.done && myWorkTaskPeriod(task) < (result.currentMonth || myWorkTaskPeriod({completedAt:Date.now()})) : myWorkTaskPeriod(task) !== period || !task.done));
         state.myWork = [
+          ...retainedHistory,
           ...pendingTasks.filter((task) => !sharedIds.has(task.id)),
           ...tasks.map((task) => pendingById.get(task.id) || { ...task, serverBase: myWorkValues(task) })
         ];
+        if (period === "all") myWorkFullHistory = true;
+        else myWorkPeriodsLoaded.add(period);
+        myWorkHistoryError = "";
         myWorkLoadedFromDatabase = true;
         if (!state.myWork.some((task) => task.id === state.selectedMyWorkId)) state.selectedMyWorkId = state.myWork[0]?.id || "";
         renderAfterSharedDataUpdate(["my-work-view", "client-view"]);
@@ -10825,12 +10887,17 @@
         });
         return true;
       } catch (error) {
+        if (period !== "all" && period !== "current") { myWorkHistoryError = error.message; if (state.currentView === "my-work-view" && state.myWorkTab === "archived") renderMyWorkUpdate(); }
         console.warn("[my-work] shared load failed", error);
         return false;
-      }
+      } finally { if (myWorkReadFlights.get(period)?.promise === pending) myWorkReadFlights.delete(period); }
+      })();
+      myWorkReadFlights.set(period,{revision:writeRevision,promise:pending});
+      return pending;
     }
 
     const myWorkSaveQueues = new WeakMap();
+    let myWorkReadWriteRevision = 0;
 
     function myWorkSaveState(task) {
       return !task.pendingSync ? "saved" : task.saving ? "saving" : "unsaved";
@@ -10846,6 +10913,7 @@
 
     function saveMyWorkTaskToDatabase(task, extra = {}) {
       if (myWorkDemoMode) return;
+      myWorkReadWriteRevision++;
       task.clientRequestId ||= crypto.randomUUID();
       task.pendingAssignees = [...new Set([...(task.pendingAssignees || []), ...(extra.addAssignees || [])])];
       if (typeof extra.favorite === "boolean") task.pendingFavorite = extra.favorite;
@@ -10924,6 +10992,8 @@
             throw new Error("Newer shared edits overlap your pending changes. Review the task conflict.");
           }
           Object.assign(task, restored.value);
+          myWorkReadWriteRevision++;
+          if (scopedWorkspaceReads) { myWorkArchiveMonths = null; if (state.currentView === "my-work-view" && state.myWorkTab === "archived") loadSharedMyWork(true,"archive-index"); }
           task.version = result.task.version;
           const oldSteps = new Map((task.serverBase?.steps || []).map(step => [step.id,Boolean(step.done)]));
           const stepCompletionChanged = (result.task.steps || []).some(step => Boolean(step.done) !== (oldSteps.get(step.id) || false));
@@ -11757,6 +11827,17 @@
     }
 
     function renderActiveView() {
+      if (scopedWorkspaceReads && state.currentView === "client-view" && window.WorkspaceFeatures.can("myWork") && !myWorkFullHistory) {
+        if (window.WorkspaceFeatures.blocked(state.currentView)) return;
+        document.getElementById(state.currentView).innerHTML = safeHtml('<section class="panel"><p role="status">Loading client work history...</p><button class="ghost-btn" data-retry-client-history>Retry history</button></section>');
+        loadSharedMyWork(true,"all");
+        return;
+      }
+      if (scopedWorkspaceReads && ["cases-view","client-management-view","client-view","profile-view","allocation-view","dashboard-view"].includes(state.currentView) && (!clientsLoadedFromDatabase || !staffDirectoryLoaded)) {
+        if (window.WorkspaceFeatures.blocked(state.currentView)) return;
+        document.getElementById(state.currentView).innerHTML = safeHtml('<section class="panel"><p role="status">Loading workspace lists...</p><button class="ghost-btn" data-retry-workspace-lists>Retry lists</button></section>');
+        return;
+      }
       normalizeMobileWorkspaceView();
       if (state.currentView !== "my-work-view") window.MyWorkReorder?.cancel();
       if (window.WorkspaceFeatures.blocked(state.currentView)) return;
@@ -11795,6 +11876,8 @@
       renderShellChrome();
       restoreVirtualTableScrollPositions();
       if (!window.WorkspaceFeatures.can(window.WorkspaceFeatures.featureForView(viewId))) return;
+      if (["cases-view","client-management-view","client-view","profile-view","allocation-view","dashboard-view"].includes(viewId) && !clientsLoadedFromDatabase) loadSharedClients(true);
+      if (scopedWorkspaceReads && ["cases-view","client-management-view","client-view","profile-view","allocation-view","dashboard-view"].includes(viewId) && !staffDirectoryLoaded) loadStaffDirectory(true);
       if (viewId === "cases-view" && !casesLoadedFromDatabase) loadSharedCases(true);
       if (viewId === "matrix-view" && state.operationsMode !== "annual" && !operationalScopesLoaded.has("monthly_compliance")) loadSharedOperationalWorkspaces(true, "monthly_compliance");
       if (viewId === "dashboard-view") {
@@ -11802,14 +11885,15 @@
         if (!casesLoadedFromDatabase) loadSharedCases(true);
       }
       if (viewId === "announcement-view") loadSharedAnnouncements(true);
-      if (["dashboard-view", "allocation-view", "profile-view"].includes(viewId)) loadStaffDirectory(true);
+      if (["dashboard-view", "allocation-view", "profile-view"].includes(viewId) && (!scopedWorkspaceReads || staffDirectoryLoaded)) loadStaffDirectory(true);
       if (viewId === "my-work-view") {
         loadSharedMyWork(true);
+        if (state.myWorkTab === "archived") loadMyWorkArchive();
         if (!casesLoadedFromDatabase) loadSharedCases(true);
       }
       if (viewId === "client-view") {
         if (!casesLoadedFromDatabase) loadSharedCases(true);
-        if (!myWorkLoadedFromDatabase) loadSharedMyWork(true);
+        if (!myWorkLoadedFromDatabase || scopedWorkspaceReads && !myWorkFullHistory) loadSharedMyWork(true,"all");
         if (["monthly_compliance", "annual_accounting", "annual_tax"].some(scope => !operationalScopesLoaded.has(scope))) loadSharedOperationalWorkspaces(true);
       }
     }
@@ -12119,6 +12203,9 @@
     document.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      if (target.closest("[data-retry-client-list]")) { loadSharedClients(true); return; }
+      if (target.closest("[data-retry-client-history]")) { loadSharedMyWork(true,"all"); return; }
+      if (target.closest("[data-retry-workspace-lists]")) { loadSharedClients(true); loadStaffDirectory(true); return; }
       if (target.closest("[data-retry-case-assets]")) { caseFeaturesError=""; renderCases(); return; }
       const annualCell = target.closest("[data-annual-accounting-cell]");
       if (annualCell) {
@@ -12343,10 +12430,11 @@
         if (event.detail === 0) document.querySelector(`[data-select-my-work="${escapeAttr(state.selectedMyWorkId)}"] .my-work-open-task`)?.focus({preventScroll:true});
         return;
       }
-      if (myWorkTabTrigger) { state.myWorkTab = myWorkTabTrigger.getAttribute("data-my-work-tab") === "archived" ? "archived" : "current"; state.myWorkDetailOpen = false; state.myWorkMenu = ""; commitMyWorkNavigation(); return; }
+      if (myWorkTabTrigger) { state.myWorkTab = myWorkTabTrigger.getAttribute("data-my-work-tab") === "archived" ? "archived" : "current"; state.myWorkDetailOpen = false; state.myWorkMenu = ""; commitMyWorkNavigation(); if (state.myWorkTab === "archived") loadMyWorkArchive(); return; }
       if (toggleMyWorkCompletedTrigger) { state.myWorkCompletedOpen = !state.myWorkCompletedOpen; commitMyWorkNavigation(); return; }
-      if (openMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = openMyWorkArchivePeriodTrigger.getAttribute("data-open-my-work-archive-period") || ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitMyWorkNavigation(); return; }
-      if (closeMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitMyWorkNavigation(); return; }
+      if (openMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = openMyWorkArchivePeriodTrigger.getAttribute("data-open-my-work-archive-period") || ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitMyWorkNavigation(); loadMyWorkArchive(); return; }
+      if (target.closest("[data-retry-work-history]")) { loadMyWorkArchive(); return; }
+      if (closeMyWorkArchivePeriodTrigger) { state.myWorkArchivePeriod = ""; state.myWorkArchiveQuery = ""; state.myWorkDetailOpen = false; commitMyWorkNavigation(); if (!myWorkArchiveMonths) loadMyWorkArchive(); return; }
       if (exportMyWorkArchiveTrigger) { exportMyWorkArchivePeriod(exportMyWorkArchiveTrigger.getAttribute("data-export-my-work-archive")); return; }
       if (setMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); if (task) { const date = new Date(); if (setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "tomorrow") date.setDate(date.getDate() + 1); date.setHours(setMyWorkTimeTrigger.getAttribute("data-set-my-work-time") === "later" ? 20 : 9, 0, 0, 0); if (date <= new Date()) date.setDate(date.getDate()+1); if (state.myWorkMenu === "due") task.dueDate = myWorkLocalDateTime(date).slice(0, 10); else task.reminder = date.toISOString(); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
       if (saveMyWorkTimeTrigger) { const task = state.myWork.find((item) => item.id === state.selectedMyWorkId); const value = document.getElementById("my-work-picker")?.value; if (task && value) { const date = new Date(value); if (!Number.isFinite(date.getTime()) || state.myWorkMenu === "reminder" && date <= new Date()) { window.alert("Choose a future reminder date and time."); return; } if (state.myWorkMenu === "due") task.dueDate = value.slice(0, 10); else task.reminder = date.toISOString(); } state.myWorkMenu = ""; commitUi("replace"); if (task) saveMyWorkTaskToDatabase(task); return; }
@@ -12446,12 +12534,14 @@
 
       if (navButton) {
         switchView(navButton.getAttribute("data-view"));
+        persistDemoState({defer:true});
         syncBrowserHistory("push");
         return;
       }
 
       if (switchViewTrigger) {
         switchView(switchViewTrigger.getAttribute("data-switch-view"));
+        persistDemoState({defer:true});
         syncBrowserHistory("push");
         return;
       }
@@ -14802,10 +14892,11 @@
     } else {
       normalizeMobileWorkspaceView();
       const initialView = state.currentView;
-      const initialLoads = [loadSharedClients(true)];
+      const needsInitialClients = bootstrapProfile.readPlan?.clients !== false;
+      const initialLoads = needsInitialClients ? [loadSharedClients(true)] : [];
       let initialFeatureError = null;
       if (initialView === "cases-view") initialLoads.push(ensureCaseFeatures().catch(error=>{initialFeatureError=error;return false;}));
-      if (window.WorkspaceStartup) initialLoads.push(loadStaffDirectory(true));
+      if (window.WorkspaceStartup && bootstrapProfile.readPlan?.staff !== false) initialLoads.push(loadStaffDirectory(true));
       const initialAnnualTeam = window.WorkspaceFeatures.can("operations") && initialView === "matrix-view" && state.operationsMode === "annual" ? (state.annualTeam === "tax" ? "tax" : "accounting") : "";
       const initialOperationScope = initialView === "matrix-view" && !initialAnnualTeam ? "monthly_compliance"
         : initialView === "annual-accounting-view" ? "annual_accounting"
@@ -14819,11 +14910,11 @@
         initialLoads.push(loadSharedCases(true), loadSharedMyWork(true), loadSharedOperationalWorkspaces(true));
       }
       const initialResults = await Promise.all(initialLoads);
-      if (!clientsLoadedFromDatabase || initialResults.some((result) => result === false)) {
+      if (needsInitialClients && !clientsLoadedFromDatabase || initialResults.some((result) => result === false)) {
         failStartup(initialFeatureError || new Error("Workspace data could not be loaded. Please retry."));
         return;
       }
-      databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Client Master loaded from the database." };
+      databaseHealthStatus = { text: "Database: connected", className: "database-status-chip is-connected", title: "Required workspace data loaded from the database." };
       if (initialAnnualTeam) {
         // The directory must be applied before seeding its matching annual snapshot.
         const data = window.WorkspaceStartup?.take(`annual:${initialAnnualTeam}`, bootstrapProfile.user.id);
@@ -14845,7 +14936,9 @@
       finishStartup();
       startupOverlay?.setAttribute("aria-busy", "false");
       window.WorkspaceStartup?.ready();
+      if (scopedWorkspaceReads && state.currentView === "my-work-view" && state.myWorkTab === "archived") loadMyWorkArchive();
       const remainingLoads = [];
+      if (!clientsLoadedFromDatabase) remainingLoads.push(() => loadSharedClients(true));
       if (IS_CASES_FULLSCREEN) {
         remainingLoads.push(() => loadStaffDirectory(true), () => loadSharedMyWork(true));
       } else {
@@ -14853,7 +14946,7 @@
         if (!operationalScopesLoaded.has("monthly_compliance")) remainingLoads.push(() => loadSharedOperationalWorkspaces(true, "monthly_compliance"));
         if (!casesLoadedFromDatabase) remainingLoads.push(() => loadSharedCases(true));
         if (!myWorkLoadedFromDatabase) remainingLoads.push(() => loadSharedMyWork(true));
-        if (!window.WorkspaceStartup) remainingLoads.push(() => loadStaffDirectory(true));
+        if (!staffDirectoryLoaded) remainingLoads.push(() => loadStaffDirectory(true));
         remainingLoads.push(() => loadSharedAnnouncements(true));
       }
       remainingLoads.push(() => refreshDatabaseStatus(true));

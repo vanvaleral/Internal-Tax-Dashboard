@@ -26,7 +26,7 @@ function fixture(creating=false){
     return {ok:true,json:async()=>({task:structuredClone(server)})};
   }};
   w.harness=harness;
-  w.eval(`const state=harness.state,myWorkDemoMode=false,caseProgressReadRevision=new Map();
+  w.eval(`const state=harness.state,myWorkDemoMode=false,scopedWorkspaceReads=false,caseProgressReadRevision=new Map();
     const appFetch=harness.appFetch,persistDemoState=()=>{},safeHtml=value=>value,escapeAttr=value=>String(value);
     const clearSyncFailure=()=>{},markSyncFailure=(scope,error)=>harness.issues.push(error.message);
     const activeEditorSnapshot=()=>harness.editing?{}:null,renderMyWorkUpdate=()=>{};

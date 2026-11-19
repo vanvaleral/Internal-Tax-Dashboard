@@ -211,6 +211,14 @@ per-request nonces there would require dynamic rendering; this pass deliberately
 does not trade away its static startup path. Trusted Types also remains pending.
 No database migration, data change or new package is required.
 
+## Scoped Loading Follow-Up
+
+Phase 5 adds complete paginated Clients/Cases/staff/task readers, narrower
+menu-specific startup dependencies, lazy My Work archive months and year-scoped
+Annual responses. Authorization and full-workspace compare-and-swap saves remain
+unchanged. See `SCOPED_WORKSPACE_LOADING.md` for compatibility, validation and the
+remaining team-wide Annual JSON read limitation. No migration is required.
+
 ## Remaining Work
 
 - Main business JavaScript and many renderers remain in canonical `demo.html`.

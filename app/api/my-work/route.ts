@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { readMyWork, taskResponse, TASK_SELECT, type TaskRow } from "@/lib/my-work-read";
+import { readMyWork, taskReadScope, taskResponse, TASK_SELECT, type TaskRow } from "@/lib/my-work-read";
 import { taskSteps, validateTaskSteps } from "@/lib/my-work-steps";
 import { reminderInstant } from "@/lib/my-work-reminders";
 
@@ -86,12 +86,15 @@ async function createFollowUpTask(admin: NonNullable<ReturnType<typeof createAdm
   if (assignees?.length) await admin.from("my_work_task_assignees").insert(assignees.map((item) => ({ task_id: created.id, staff_profile_id: item.staff_profile_id })));
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  let scope;
+  try { scope = taskReadScope(request ? new URL(request.url).searchParams.get("period") : "all"); }
+  catch { return NextResponse.json({ error: "Choose a valid task period." }, { status: 400 }); }
   const current = await currentProfile();
   if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ error: "Task service is not configured." }, { status: 503 });
-  try { return NextResponse.json(await readMyWork(admin, current.profile)); }
+  try { return NextResponse.json(await readMyWork(admin, current.profile, scope), { headers: { "Cache-Control": "private, no-store" } }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Tasks could not be loaded." }, { status: 500 }); }
 }
 

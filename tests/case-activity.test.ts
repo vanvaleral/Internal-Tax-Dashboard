@@ -22,7 +22,7 @@ test('activity query limits every embedded source to one timestamp, retains PIC 
   const result=await reads.readCases({admin:client,profile:{id:'pic',role:'staff'},userId:'user'});
   const query=urls[0].searchParams;assert.equal(urls.length,1);assert.match(query.get('or') || '',/tax_pic_profile_id.eq.pic,accounting_pic_profile_id.eq.pic/);
   for(const alias of ['latest_followup','latest_task','latest_completion','my_followup','my_task','my_completion'])assert.equal(query.get(`${alias}.limit`),'1');
-  assert.equal(query.get('limit'),null);assert.equal(query.get('my_followup.created_by_profile_id'),'eq.pic');assert.equal(query.get('my_task.actor_profile_id'),'eq.pic');
+  assert.equal(query.get('limit'),'500');assert.equal(query.get('my_followup.created_by_profile_id'),'eq.pic');assert.equal(query.get('my_task.actor_profile_id'),'eq.pic');
   assert.equal(query.get('latest_completion.is_completed'),'eq.true');assert.equal(result.data[0].last_activity_at,'2026-11-01');assert.equal(result.data[0].latest_followup,undefined);
 });
 

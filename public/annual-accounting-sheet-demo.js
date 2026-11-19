@@ -413,6 +413,7 @@
     document.querySelectorAll("[data-view]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.view === state.view)));
     document.querySelectorAll("[data-status]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.status === state.status)));
     $("undo-button").disabled = bulkSaving || (liveMode ? liveBusy || !window.AnnualSheetLive?.canUndo : !state.history.length); $("redo-button").disabled = bulkSaving || (liveMode ? liveBusy || !window.AnnualSheetLive?.canRedo : !state.future.length);
+    $("year-select").disabled = liveMode && (bulkSaving || liveBusy);
     $("visible-count").textContent = `${visible.length} ${taxMode ? "subject" : "client"}${visible.length === 1 ? "" : "s"} shown`;
     $("sort-status").textContent = `${state.sort.group ? state.sort.group.title + " / " : ""}${state.sort.title} ${state.sort.direction === "asc" ? "\u2191" : "\u2193"}`;
     $("sort-status").title = "Click a column heading to sort. Click again to reverse.";
@@ -996,7 +997,14 @@
     render();
     notify(`Filters cleared. ${taxMode ? "SPT subjects" : "Client names"} sorted A to Z.`);
   });
-  $("year-select").addEventListener("change", event => { finishEdit(false); state.year = Number(event.target.value); state.selection = { r: 0, c: 0 }; state.range = null; render(); });
+  $("year-select").addEventListener("change", event => {
+    if (liveMode && (bulkSaving || liveBusy || !finishEdit(true) || liveBusy)) { event.target.value = String(state.year); notify("Wait for pending changes to finish saving before changing the year."); return; }
+    finishEdit(false); state.year = Number(event.target.value); state.selection = { r: 0, c: 0 }; state.range = null;
+    if (liveMode) {
+      liveEpoch++; deferredRefresh = null; window.AnnualSheetLive.cancelLoad(); refreshPromise = null;
+      liveReady = false; liveYearRequested = true; render(); loadLive(true);
+    } else render();
+  });
   $("search").addEventListener("input", event => { state.search = event.target.value; state.range = null; render(); });
   document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => { if (button.dataset.view !== state.view) changeChecklistView(button.dataset.view); }));
   document.querySelectorAll("[data-status]").forEach(button => button.addEventListener("click", () => { finishEdit(false); state.status = button.dataset.status; state.selection.r = 0; state.range = null; render(); }));
@@ -1347,9 +1355,12 @@
     const updatedFilter = (value, id, division, names) => id ? operationalRoster(division).find(person => person.id === id)?.name || "__former__" : ["", "__unassigned__", "__former__", ...names].includes(value) ? value : "";
     state.pic = updatedFilter(state.pic, previousAccId, "Accounting Team", accPics);
     state.taxPic = updatedFilter(state.taxPic, previousTaxId, "Tax Team", taxPics);
-    if (firstLoad && !explicitYear && state.rows.length && !state.rows.some(row => row.year === state.year)) state.year = Math.max(...state.rows.map(row => row.year));
-    if (state.year === 0 && !state.rows.some(row => row.year === 0)) state.year = Math.max(new Date().getFullYear() - 1, ...state.rows.map(row => row.year));
-    const years = [...new Set([state.year, ...Array.from({ length: 101 }, (_, index) => 2000 + index), ...state.rows.map(row => row.year)])].sort((a, b) => b - a);
+    if (data.sheetYear !== undefined) { if (firstLoad && !explicitYear && !liveYearRequested) state.year = data.sheetYear; }
+    else {
+      if (firstLoad && !explicitYear && state.rows.length && !state.rows.some(row => row.year === state.year)) state.year = Math.max(...state.rows.map(row => row.year));
+      if (state.year === 0 && !state.rows.some(row => row.year === 0)) state.year = Math.max(new Date().getFullYear() - 1, ...state.rows.map(row => row.year));
+    }
+    const years = [...new Set([state.year, ...(data.availableYears || []), ...Array.from({ length: 101 }, (_, index) => 2000 + index), ...state.rows.map(row => row.year)])].sort((a, b) => b - a);
     $("year-select").innerHTML = years.map(year => `<option value="${year}" ${year === state.year ? "selected" : ""}>${year || "Year not set"}</option>`).join("");
     for (const [id, names, title] of [["pic-filter", accPics, "All ACC PIC"], ["tax-pic-filter", taxPics, "All Tax PIC"]]) {
       const division = id === "pic-filter" ? "Accounting Team" : "Tax Team";
@@ -1398,6 +1409,7 @@
     $("save-status").textContent = "Connected. Latest database changes loaded.";
     if (Date.now() - checkedAt >= 30000) loadLive();
   }
+  let liveYearRequested = false;
   function loadLive(force = false) {
     if (liveBusy) return Promise.resolve();
     if (refreshPromise) return refreshPromise;
@@ -1409,7 +1421,7 @@
     const pending = Promise.resolve().then(async () => {
       try {
         if (!window.AnnualSheetLive) throw new Error("Annual workspace transport could not be loaded. Reload the page.");
-        const data = await window.AnnualSheetLive.load();
+        const data = await window.AnnualSheetLive.load(liveYearRequested || explicitYear || liveReady ? state.year : undefined);
         if (!data || epoch !== liveEpoch || liveBusy) return;
         if (!initial && liveSnapshot(data) === lastLiveSnapshot) return;
         if (!initial && interactingWithSheet()) { deferredRefresh = { data, epoch, checkedAt: Date.now() }; return; }

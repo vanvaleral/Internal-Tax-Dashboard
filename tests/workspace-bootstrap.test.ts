@@ -37,14 +37,18 @@ test("startup authenticates once and preserves staff scoping, fee redaction, tas
   const result = await f.route.GET(request("my-work-view"));
   assert.equal(result.status, 200); assert.equal(f.authCalls(), 1);
   const packets = result.body.packets;
-  assert.deepEqual(Array.from(packets["/api/clients"].data, (row: any) => row.id), ["client-a"]);
+  assert.equal(packets["/api/clients"],undefined);
   assert.equal(JSON.stringify(packets).includes("monthly_fee"), false);
   assert.equal(JSON.stringify(packets).includes("fee_notes"), false);
   assert.deepEqual(Array.from(packets["/api/cases"].data, (row: any) => row.id), ["case-a"]);
-  assert.deepEqual(Array.from(packets["/api/my-work"].tasks, (row: any) => row.id), ["assigned", "own"]);
-  assert.equal(packets["/api/my-work"].tasks[1].favorite, true);
-  assert.equal(packets["/api/staff"].staff.length, 1);
-  assert.equal("auth_user_id" in packets["/api/staff"].staff[0], false);
+  assert.deepEqual(Array.from(packets["/api/my-work?period=current"].tasks, (row: any) => row.id), ["assigned", "own"]);
+  assert.equal(packets["/api/my-work?period=current"].tasks[1].favorite, true);
+  assert.equal(packets["/api/staff"],undefined);
+  assert.equal(result.body.readPlan.clients,false);assert.equal(result.body.readPlan.staff,false);
+  const clientResult = await f.route.GET(request("client-management-view"));
+  assert.equal(clientResult.body.packets["/api/clients"].data.length,1);
+  assert.equal("monthly_fee" in clientResult.body.packets["/api/clients"].data[0],false);
+  assert.equal("auth_user_id" in clientResult.body.packets["/api/staff"].staff[0],false);
   assert.match(result.headers["Cache-Control"], /private, no-store/);
   assert.match(result.headers["Server-Timing"], /auth;dur=/);
   assert.equal(result.headers.Vary, "Cookie");
@@ -103,13 +107,13 @@ test("required startup reads launch together", async () => {
       readCases: async () => { started.push("cases"); return { data: [] }; },
       readOperations: async () => { started.push("monthly"); return { data: [] }; }
     },
-    "@/lib/my-work-read": { readMyWork: async () => { started.push("tasks"); return { tasks: [] }; } },
+    "@/lib/my-work-read": { readMyWork: () => { started.push("tasks"); return pending; } },
     "@/lib/annual-sheet-read": {}
     ,"@/lib/feature-access": { ...featureAccess, readFeatureSettings: async () => ({ policy: featureAccess.defaultFeaturePolicy(), version: 1, ready: true }) }
   });
   const loading = route.GET(request("my-work-view"));
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(started, ["staff", "clients", "cases", "tasks"]);
+  assert.deepEqual(started, ["cases", "tasks"]);
   release(); assert.equal((await loading).status, 200);
 });
 

@@ -43,7 +43,7 @@
     warm = entry;
     entry.timeout = window.setTimeout(() => { if (warm === entry) discardPreload(); }, 8000);
     entry.promise = (async () => {
-      const response = await fetch(`/api/annual-sheet?team=${team}&part=sheet`, {
+      const response = await fetch(`/api/annual-sheet?team=${team}&part=sheet&year=auto`, {
         method: "GET", credentials: "same-origin", cache: "no-store", signal: entry.controller.signal,
         headers: { Accept: "application/json", "x-workspace-user": entry.userId }
       });

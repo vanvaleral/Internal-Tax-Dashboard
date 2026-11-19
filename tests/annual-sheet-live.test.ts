@@ -826,12 +826,46 @@ test("generation lazy-loads Client Master and resolves uppercase PIC labels by p
     assert.equal(d.requests.some(url => url.includes("part=clients")), false);
     d.db.tables.client_master[0].accounting_pic_name = "REAL ACC";
     const year = d.w.document.getElementById("year-select"); year.value = "2026"; year.dispatchEvent(new d.w.Event("change", { bubbles: true }));
+    await d.tick();
     d.w.document.getElementById("generate-button").click(); await d.tick();
     assert.equal(d.requests.filter(url => url.includes("part=clients")).length, 1);
     assert.equal(d.w.document.querySelectorAll("#candidate-list input:not(:disabled)").length, 1);
     d.w.document.getElementById("confirm-generate").click(); await d.tick();
     assert.equal(d.api.visible.length, 1); assert.equal(d.api.visible[0].year, 2026); assert.equal(d.api.visible[0].accountingPic, "Real Acc");
   } finally { d.dom.window.close(); }
+});
+
+test("Accounting and Tax load historical years on demand and scoped saves preserve other years",async()=>{
+  for(const team of ["accounting","tax"]){
+    const d=await openRefreshFixture({team,stylesReady:true});try{
+      const stored=d.db.tables.operational_workspace_state[0],original=structuredClone(stored.payload[0]);
+      stored.payload.push({...structuredClone(original),id:"older-year",annualWorkId:"22222222-2222-4222-8222-222222222222",taxYear:2024,notes:"Historical note",changeLog:[]});
+      assert.equal(d.api.state.rows.length,1);assert.equal(d.api.state.rows[0].year,2025);
+      const year=d.w.document.getElementById("year-select");year.value="2024";year.dispatchEvent(new d.w.Event("change",{bubbles:true}));await d.tick();
+      assert.equal(d.api.state.rows.length,1);assert.equal(d.api.state.rows[0].id,"older-year");assert.ok(d.requests.some(url=>url.includes("year=2024")));
+      d.choose();const paste=new d.w.Event("paste",{bubbles:true,cancelable:true});Object.defineProperty(paste,"clipboardData",{value:{getData:()=>"Updated historical note"}});d.w.document.getElementById("annual-grid").dispatchEvent(paste);await d.tick();await d.tick();
+      assert.equal(stored.payload.find((row:any)=>row.id==="older-year").notes,"Updated historical note");
+      assert.equal(JSON.stringify(stored.payload.find((row:any)=>row.id===original.id)),JSON.stringify(original),"a scoped response must never become a truncated whole-workspace save");
+      year.value="2025";year.dispatchEvent(new d.w.Event("change",{bubbles:true}));await d.tick();
+      assert.equal(d.api.state.rows.length,1);assert.equal(d.api.state.rows[0].year,2025);assert.equal(d.w.AnnualSheetLive.canUndo,false,"undo history is scoped to the loaded year");
+    }finally{d.dom.window.close();}
+  }
+});
+
+test("a late Annual year response cannot replace a subsequently selected year",async()=>{
+  const d=await openRefreshFixture();try{
+    const transport=d.w.AnnualSheetLive,fetch=d.w.fetch;
+    let release: (()=>void)|undefined;
+    d.w.fetch=async(...args:any[])=>{
+      const response=await fetch(...args);
+      if(String(args[0]).includes("year=2024"))await new Promise<void>(resolve=>{release=resolve;});
+      return response;
+    };
+    const old=transport.load(2024);await d.tick();
+    await transport.load(2025);release!();await old;
+    assert.equal(transport.context.sheetYear,2025);
+    assert.equal(transport.context.rows[0].year,2025);
+  }finally{d.dom.window.close();}
 });
 
 test("temporary read failures keep confirmed rows usable but access errors clear the sheet", async () => {

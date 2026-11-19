@@ -6,7 +6,7 @@
   const expectedUserId = new URLSearchParams(location.search).get("account") || "";
   let context = null, undoStack = [], redoStack = [], revision = 0, readPromise = null, readController = null, clientsPromise = null;
   let clientsCache = null, clientsCheckedAt = 0, clientsEpoch = 0, clientsController = null;
-  let initialRead = true, accessRevision = 0;
+  let initialRead = true, accessRevision = 0, selectedYear = null;
   const equal = (a, b) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
   function cancelLoad() { revision++; readController?.abort(); readController = null; readPromise = null; }
   async function request(body, options = {}) {
@@ -25,10 +25,12 @@
     }
     if (options.readRevision !== undefined && options.readRevision !== revision) return null;
     if (options.signal?.aborted) throw new DOMException("Annual read cancelled.", "AbortError");
-    const response = preloaded ? null : await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}${options.sourceYear ? `&source=previous-annual&sourceYear=${options.sourceYear}` : ""}`}`, {
+    const year = options.year ?? selectedYear ?? "auto";
+    if (preloaded && preloaded.sheetYear !== undefined && year !== "auto" && preloaded.sheetYear !== year) preloaded = null;
+    const response = preloaded ? null : await fetch(`/api/annual-sheet${body ? "" : `?team=${team}&part=${options.clients ? "clients" : "sheet"}${options.clients ? "" : `&year=${year}`}${options.sourceYear ? `&source=previous-annual&sourceYear=${options.sourceYear}` : ""}`}`, {
       method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
       headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(boundUser ? { "x-workspace-user": boundUser } : {}) },
-      ...(body ? { body: JSON.stringify({ ...body, team }) } : {}),
+      ...(body ? { body: JSON.stringify({ ...body, team, sheetYear: context?.sheetYear ?? selectedYear ?? undefined }) } : {}),
       ...(options.signal ? { signal: options.signal } : {})
     });
     const data = preloaded || await response.json().catch(() => ({}));
@@ -36,14 +38,19 @@
     if (options.readRevision !== undefined && options.readRevision !== revision) return null;
     if (response && !response.ok || boundUser && data.userId && data.userId !== boundUser) { clientsCache = null; const error = new Error(data.error || (!response || response.ok ? "Annual workspace access changed. Reload and retry." : "Annual request failed. Please retry.")); error.status = !response || response.ok ? 409 : response.status; throw error; }
     if (options.clients) return data.clients || [];
+    if (data.sheetYear !== undefined && context?.sheetYear !== undefined && data.sheetYear !== context.sheetYear) { undoStack = []; redoStack = []; }
+    selectedYear = data.sheetYear ?? selectedYear;
     context = data;
     if (window.parent !== window) window.parent.postMessage({ type: "annual-sheet:state", team, year: data.rows?.[0]?.year || 0, version: data.version, saved: !!body, clientsChanged: !!body && data.registeredExternalClients === true }, location.origin);
     return data;
   }
-  function load() {
+  function load(year) {
+    const nextYear = year ?? selectedYear ?? "auto";
+    if (selectedYear !== null && nextYear !== selectedYear) cancelLoad();
+    selectedYear = nextYear;
     if (readPromise) return readPromise;
     const controller = new AbortController(); readController = controller;
-    const pending = request(undefined, { signal: controller.signal, readRevision: revision }).finally(() => { if (readPromise === pending) { readPromise = null; readController = null; } });
+    const pending = request(undefined, { year: nextYear, signal: controller.signal, readRevision: revision }).finally(() => { if (readPromise === pending) { readPromise = null; readController = null; } });
     readPromise = pending; return pending;
   }
   function loadClients(force = false) {
@@ -135,6 +142,6 @@
     undoStack = []; redoStack = []; return result;
   }
   function invalidateClients() { clientsEpoch++; clientsController?.abort(); clientsController = null; clientsPromise = null; clientsCache = null; }
-  function clearAccess() { accessRevision++; cancelLoad(); invalidateClients(); initialRead = false; context = null; undoStack = []; redoStack = []; }
+  function clearAccess() { accessRevision++; cancelLoad(); invalidateClients(); initialRead = false; context = null; selectedYear = null; undoStack = []; redoStack = []; }
   window.AnnualSheetLive = { load, cancelLoad, clearAccess, invalidateClients, loadClients, loadPreviousClients, rebase, commit, manageRow, undo: () => replay(false), redo: () => replay(true), get canUndo() { return !!undoStack.length; }, get canRedo() { return !!redoStack.length; }, get context() { return context; } };
 })();
