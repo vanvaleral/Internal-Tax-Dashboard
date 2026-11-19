@@ -3,6 +3,7 @@ const path = require("node:path");
 const { createHash } = require("node:crypto");
 const { buildWorkspace } = require("./build-workspace-shell.cjs");
 const { resourcePolicyFor } = require("../lib/resource-policy.cjs");
+const { workspaceEntryPolicies } = require("../lib/workspace-entry.cjs");
 const root = path.resolve(__dirname,"..","public");
 
 function scriptHashes(html) {
@@ -35,4 +36,4 @@ function documentPolicies(production) {
   });
 }
 
-module.exports = {scriptHashes,documentPolicies};
+module.exports = {scriptHashes,documentPolicies,workspaceEntryPolicies};

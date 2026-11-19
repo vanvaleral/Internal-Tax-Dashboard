@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { currentActor, isLeadership } from "@/lib/access";
-import { annualContext, annualReadYear, annualResponseData } from "@/lib/annual-sheet-read";
+import { annualContext, annualReadYear, annualResponseData, readAnnualSheet } from "@/lib/annual-sheet-read";
 import { readAllPages } from "@/lib/read-all-pages";
 import { addAnnualRows, annualIndividualClient, annualPreviousCandidates, annualScope, annualTeam, applyAnnualEdits, manageAnnualRow, type AnnualTeam } from "@/lib/annual-sheet";
 import { canUseFeature, readFeatureSettings } from "@/lib/feature-access";
@@ -41,8 +41,8 @@ export async function GET(request: Request) {
       });
       return NextResponse.json({ userId: actor.userId, clients: (data || []).filter((client: any) => client[picField] && (team !== "tax" || annualIndividualClient(client))).map((client: any) => ({ clientId: team === "tax" ? `client:${client.id}` : client.id, ...(team === "tax" ? { sourceClientId: client.id, linkedClientId: client.id, subjectId: client.id, subjectType: "Individual", groupName: "", recordMethod: "Pencatatan" } : {}), name: client.legal_name, accountingPic: client.accounting_pic_name || "", accountingPicId: client.accounting_pic_profile_id || "", taxPic: client.tax_pic_name || "", taxPicId: client.tax_pic_profile_id || "", active: true })) }, { headers: headers() });
     }
-    const ctx = await annualContext(actor, team, true, team === "accounting" && params.get("part") !== "sheet");
-    return NextResponse.json(annualResponseData(actor, team, ctx, ctx.workspace?.payload, year), { headers: headers() });
+    const data = await readAnnualSheet(actor, team, year, team === "accounting" && params.get("part") !== "sheet");
+    return NextResponse.json(data, { headers: headers() });
   }
   catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 500 }); }
 }

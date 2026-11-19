@@ -42,6 +42,6 @@ test("middleware forwards the nonce to Next without losing refreshed Supabase co
   assert.equal(reads,2);assert.equal(profiles,0);
   const root=await context.exports.middleware({method:"GET",url:"https://fixture.invalid/",nextUrl:new URL("https://fixture.invalid/"),headers:new Headers(),cookies:{getAll:()=>[]}});
   assert.equal(root.status,200);assert.equal(root.requestHeaders,undefined);assert.equal(reads,2,"static dashboard still adds no auth round trip");
-  for(const file of ["app/page.tsx","app/dashboard/page.tsx","app/layout.tsx"])assert.doesNotMatch(read(file),/force-dynamic|await headers\(|await connection\(/);
+  for(const file of ["app/route.ts","app/dashboard/route.ts","app/layout.tsx"])assert.doesNotMatch(read(file),/force-dynamic|await headers\(|await connection\(/);
   for(const file of ["app/login/page.tsx","app/onboarding/page.tsx"])assert.match(read(file),/dynamic = "force-dynamic"/);
 });

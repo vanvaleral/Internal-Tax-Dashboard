@@ -2,10 +2,11 @@
 
 ## Scope And Deployment
 
-This application-only change addresses incomplete lists, broad startup reads and
-eager historical downloads. No migration, cron, dependency, RLS alteration or
-production data rewrite is required. Existing saves remain server-authorized,
-version checked and audited. Roll back with the application deployment.
+The original application-only change addresses incomplete lists, broad startup
+reads and eager historical downloads. The Annual read projection follow-up uses
+an optional additive migration described below. No cron, dependency, RLS change
+or production data rewrite is required. Existing saves remain server-authorized,
+version checked and audited.
 
 ## Complete Lists
 
@@ -83,10 +84,31 @@ fields, soft-deleted records and audit logs remain stored. Undo/Redo resets when
 successfully loading a different year. Exports still include the full selected
 year, all statuses required by the existing export, not just a filtered tab.
 
-Important limitation: Annual data still resides in a team-wide JSON workspace.
-These changes reduce response serialization, transfer and client rendering; the
-server still reads that JSON to authorize/filter/save it. A future normalized or
-year-partitioned database design requires a separate migration and history plan.
+### Database Projection Follow-Up
+
+`20261119053656_annual_sheet_year_projection.sql` adds a read-only, security
+invoker function. Only the server's service role can execute it. It projects
+full rows for the requested team/year and a thin index of year and assignment
+fields for the existing server permission checks, never full notes or audit
+history from other years. The application rechecks permissions on both the
+index and selected rows, so hidden years and records stay hidden. If Auto needs
+an older year, the app verifies that both reads have the same workspace version.
+
+Rollout: apply the function in a test environment, verify both Annual teams,
+then compare response size and timings on representative workspaces. The
+application can ship before the migration; a missing RPC, a concurrent version
+change or a projection that disagrees with legacy year parsing falls back to the
+old authorized read. Permission or network errors fail rather than bypassing
+checks. Rollback can redeploy the previous app build; the unused function does
+not affect writes and can be removed separately.
+
+Important limitation: Postgres still scans the team's original JSON to produce
+the projection. This saves database-to-app transfer and application parsing,
+not JSON scan/storage cost. Legacy unscoped reads, previous-year generation, and
+compare-and-swap saves keep reading the original JSON; there is no dual write,
+new authority, or data backfill. If the scan still dominates production timings,
+the next step is an indexed per-year storage migration with a separately
+validated write and rollback strategy.
 
 ## Validation
 

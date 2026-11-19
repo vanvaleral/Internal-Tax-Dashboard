@@ -83,9 +83,9 @@ test("offline preview loads its sample module once and gives a retryable error w
   }
 });
 
-test("Tailwind 4 emits the existing shell utilities and custom theme without scanning private artifacts",async()=>{
+test("Tailwind 4 emits app utilities and custom theme without scanning private artifacts",async()=>{
   const globals=read("app/globals.css"),pkg=JSON.parse(read("package.json"));assert.equal(pkg.devDependencies.tailwindcss,"4.3.5");assert.equal(pkg.devDependencies.autoprefixer,undefined);
   assert.match(globals,/@import "tailwindcss" source\(none\)/);assert.doesNotMatch(globals,/@source.*(?:tmp|output|public)/);
   const plugin=require("@tailwindcss/postcss");const result=await postcss([plugin()]).process(globals,{from:fileURLToPath(new URL("../app/globals.css",import.meta.url))});
-  assert.match(result.css,/\.w-full/);assert.match(result.css,/\.border-0/);assert.match(result.css,/\.text-ink/);assert.match(result.css,/\.shadow-panel/);assert.match(result.css,/0f766e/);
+  assert.match(result.css,/\.w-full/);assert.match(result.css,/\.text-ink/);assert.match(result.css,/\.shadow-panel/);assert.match(result.css,/0f766e/);
 });

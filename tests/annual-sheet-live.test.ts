@@ -20,6 +20,7 @@ function setup(profile: any = actor) {
   db.tables.feature_access_settings = [{ id: true, version: 1, policy }];
   // Model the RPC response/atomic CAS contract here; SQL invariants are also tested in PostgreSQL.
   db.rpc = async (name, args) => {
+    if (name === "read_annual_sheet_year") return { data: null, error: { code: "PGRST202" } };
     assert.equal(name, "commit_annual_external_clients");
     const current = db.tables.operational_workspace_state.find(row => row.scope === args.p_scope);
     if ((current?.version || 0) !== args.p_expected_version) return { data: { saved: false }, error: null };

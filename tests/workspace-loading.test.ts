@@ -58,13 +58,12 @@ test("dashboard and annual first-paint loaders need no image, font, external sty
 });
 
 test("shell loader is server-renderable and iframe handover checks origin and source with a late-listener handshake", () => {
-  const frame = read("components/demo/demo-frame.tsx");
-  assert.match(frame, /useState\(true\)/);
-  assert.match(frame, /starting && <WorkspaceLoader/);
-  assert.match(frame, /event\.origin !== window\.location\.origin/);
-  assert.match(frame, /event\.source !== frame\.current\?\.contentWindow/);
+  const frame = read("lib/workspace-entry.cjs");
+  assert.match(frame, /id="workspace-boot"[^>]+aria-busy="true"/);
+  assert.match(frame, /event\.origin !== location\.origin/);
+  assert.match(frame, /event\.source !== frame\.contentWindow/);
   assert.match(frame, /dashboard:mounted/);
-  assert.match(frame, /onLoad=\{requestLoadingStatus\}/);
+  assert.match(frame, /frame\.addEventListener\("load", requestLoadingStatus\)/);
   assert.match(frame, /workspace:status/);
   assert.match(read("app/loading.tsx"), /<WorkspaceLoader/);
   const loader = read("components/demo/workspace-loader.tsx");

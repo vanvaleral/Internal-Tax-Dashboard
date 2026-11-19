@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { CalendarClock, DatabaseZap } from "lucide-react";
 
 export function Topbar({
@@ -22,13 +21,13 @@ export function Topbar({
             <CalendarClock className="h-4 w-4 text-accent" />
             Monthly obligations auto-generated
           </div>
-          <Link
+          <a
             href="/dashboard"
             className="flex items-center gap-2 rounded-2xl bg-ink px-4 py-2.5 text-sm font-semibold text-white"
           >
             <DatabaseZap className="h-4 w-4" />
             KPI foundation
-          </Link>
+          </a>
         </div>
       </div>
     </header>

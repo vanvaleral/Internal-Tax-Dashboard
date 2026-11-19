@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentActor } from "@/lib/access";
 import { readClients, readCases, readOperations, readStaff } from "@/lib/workspace-reads";
 import { readMyWork } from "@/lib/my-work-read";
-import { annualContext, annualResponseData } from "@/lib/annual-sheet-read";
+import { readAnnualSheet } from "@/lib/annual-sheet-read";
 import { allowedView, canUseFeature, readFeatureSettings } from "@/lib/feature-access";
 
 export const dynamic = "force-dynamic";
@@ -44,10 +44,7 @@ export async function GET(request: Request) {
     if (allowed("operations") && ["client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/operations", "operations", () => readOperations(actor, null)));
     if (allowed("cases") && ["cases-view", "my-work-view", "client-view", "dashboard-view"].includes(view)) loads.push(collect("/api/cases", "cases", () => readCases(actor)));
     if (allowed("myWork") && ["my-work-view", "client-view"].includes(view)) loads.push(collect(view === "my-work-view" ? "/api/my-work?period=current" : "/api/my-work", "tasks", () => readMyWork(actor.admin, actor.profile, view === "my-work-view" ? "current" : "all")));
-    if (annual) loads.push(collect(`annual:${annualTeam}`, "annual", async () => {
-      const ctx = await annualContext(actor, annualTeam);
-      return annualResponseData(actor, annualTeam, ctx, ctx.workspace?.payload, "auto");
-    }));
+    if (annual) loads.push(collect(`annual:${annualTeam}`, "annual", () => readAnnualSheet(actor, annualTeam, "auto")));
     await Promise.all(loads);
     return NextResponse.json({ user: { id: actor.userId }, profile: actor.profile, featureAccess, view, readPlan, packets, timings }, { headers: headers() });
   } catch (error) {

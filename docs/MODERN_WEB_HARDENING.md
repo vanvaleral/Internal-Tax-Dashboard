@@ -19,10 +19,9 @@ not a framework rewrite or a change to tax business rules.
   calculated from trusted repository templates. Unexpected inline scripts,
   inline event attributes and string evaluation are not authorized. Reviewed
   same-origin external scripts remain allowed. See the Phase 2 notes below.
-- The outer static Next.js shell's script policy remains report-only. Resource
-  restrictions are now enforced on the shell, auth pages and workspace documents.
-  There is no report collection endpoint; violations are visible in DevTools.
-  No client data or CSP reports go to another service.
+- The two static workspace entry routes now enforce a hash-only script policy
+  and Trusted Types for the outer shell. Auth and workspace documents keep
+  their separate policies. No client data or CSP reports go to another service.
 
 ## Keyboard And Responsive UI
 
@@ -205,11 +204,9 @@ script execution. Dashboard and Annual scripts retain exact build hashes; auth
 pages retain per-response nonces. Development alone permits loopback WebSockets
 for Next hot reload; production does not. Policies follow the [MDN CSP reference](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy).
 
-The outer static React shell still cannot honestly be labelled a strict script
-policy: its framework-generated inline bootstrap remains report-only. Enforcing
-per-request nonces there would require dynamic rendering; this pass deliberately
-does not trade away its static startup path. Trusted Types also remains pending.
-No database migration, data change or new package is required.
+Phase 4 left the static React shell's framework bootstrap report-only to avoid
+turning it into a dynamic route. The static entry follow-up below supersedes
+that limitation for the outer shell.
 
 ## Scoped Loading Follow-Up
 
@@ -242,17 +239,28 @@ showed the bootstrap Function in `iad1`, while the Supabase project configured
 locally reports Sydney. Confirm the matching production project, then compare the
 same signed-in views on a Sydney preview before changing production.
 
+## Static Entry Policy
+
+`/` and `/dashboard` now serve the same prerendered, data-free HTML without
+React hydration or a per-request nonce. The loader, PWA links, frame, first
+paint, same-origin sign-in/onboarding redirects and startup timing handshake
+are retained. Both routes enforce one exact script hash, one stylesheet hash,
+no script attributes and Trusted Types with no permitted policies. The entry
+does not use Trusted Types sinks or need an identity policy. The protected
+iframe and all workspace APIs keep their existing middleware and server checks.
+
+Trusted Types enforcement stops at the outer entry document: the dashboard
+and Annual are separate frames with legacy HTML/asset sinks. Inventory and
+refactor those sinks in a separate release, starting with the shared sanitizer
+and loader, rather than permitting a bypass with a broad default policy.
+
 ## Remaining Work
 
 - Main business JavaScript and many renderers remain in canonical `demo.html`.
   Extract modules incrementally behind existing regression tests, rather than
   converting the entire iframe/spreadsheet architecture in one release.
-- Extend enforced script CSP to the static outer Next.js shell after choosing a
-  framework-compatible strategy. Auth pages now use nonces, but applying that
-  strategy globally would sacrifice the static startup path. The existing
-  framing/MIME/base and inline-event-attribute protections apply on the shell.
-- Continue Trusted Types discovery. Resource restrictions are now enforced, but
-  existing sanitization and server authorization must not be replaced by CSP.
+- Continue Trusted Types discovery inside the workspace frames; the entry
+  policy does not change the children or replace sanitization and authorization.
 - Compare real Vercel cold/warm startup and interaction timings after deployment;
   fictional local UI checks do not measure production Supabase performance.
 

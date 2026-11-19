@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-const { documentPolicies } = require("./scripts/workspace-security.cjs");
+const { documentPolicies, workspaceEntryPolicies } = require("./scripts/workspace-security.cjs");
 const { resourcePolicyFor } = require("./lib/resource-policy.cjs");
 const resourcePolicy = resourcePolicyFor(process.env.NODE_ENV === "development");
 
@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
       { key: "X-Frame-Options", value: "SAMEORIGIN" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" }
-    ] }, ...documentPolicies(process.env.NODE_ENV === "production")];
+    ] }, ...workspaceEntryPolicies(), ...documentPolicies(process.env.NODE_ENV === "production")];
   },
   experimental: {
     serverActions: {
