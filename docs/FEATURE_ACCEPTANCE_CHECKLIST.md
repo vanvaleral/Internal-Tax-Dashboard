@@ -215,7 +215,7 @@ and cross-browser persistence separately; an optimistic UI update is not a durab
 - [ ] **MG-04** PIC Access creates/edits/restores approved test staff correctly and updates PIC choices in Clients, Cases and Annual sheets.
 - [ ] **MG-05** Archived access appears separately with the expected 14-day retention information; scheduled purge requires controlled administrative verification, not a live-user deletion test.
 - [ ] **MG-06** Recognition/points reconcile to the currently implemented earning/reversal rules, without assuming the proposed milestone/pending-points system is live.
-- [ ] **MG-07** Quick Access links reach the intended menu/submenu, including after older saved navigation settings.
+- [ ] **MG-07** Management opens KPI Overview if an older saved preference points to the removed Quick Access tab.
 - [ ] **MG-08** Monthly Report is clearly labeled illustrative/preview; finalize is currently backend pending. Record live historical finalization as PLANNED unless a later verified implementation exists.
 
 ## Profile, Alerts And Settings

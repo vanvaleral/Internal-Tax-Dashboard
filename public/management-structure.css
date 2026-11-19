@@ -1,0 +1,31 @@
+[data-structure-host] {
+  --structure-line: var(--line, #cdd7d2);
+  --structure-soft: var(--neutral-soft, #edf4f1);
+}
+.structure-toolbar, .structure-toolbar form, .structure-actions {
+  display:flex; flex-wrap:wrap; align-items:end; gap:8px;
+}
+.structure-toolbar { padding:12px 0 4px; }
+.structure-toolbar label, .structure-editor label { display:grid; gap:4px; font-size:12px; }
+.structure-toolbar .field, .structure-editor .field { width:100%; }
+.structure-layout {
+  display:grid; grid-template-columns:minmax(0, 1.6fr) minmax(220px, 1fr);
+  gap:18px; align-items:start; margin-top:12px;
+}
+.structure-chart, .structure-editor { min-width:0; padding:14px; border:1px solid var(--structure-line); border-radius:12px; }
+.structure-chart h4, .structure-editor h4 { margin:0 0 8px; }
+.structure-editor { display:grid; gap:10px; background:var(--structure-soft); }
+.structure-editor h4 { margin:0 0 2px; }
+.structure-tree { list-style:none; padding:0 0 0 clamp(8px, 1.4vw, 20px); margin:0; border-inline-start:1px solid var(--structure-line); }
+.structure-chart > .structure-tree { padding:0; border:0; }
+.structure-node {
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  margin-block:6px; padding:7px 9px; border:1px solid var(--structure-line);
+  border-radius:8px; background:var(--structure-soft); overflow-wrap:anywhere;
+}
+.structure-node small, .structure-node strong, .structure-node span { display:block; }
+.structure-node small { font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+.structure-node span { font-size:12px; }
+@media (max-width:850px) {
+  .structure-layout { grid-template-columns:minmax(0, 1fr); gap:10px; }
+}

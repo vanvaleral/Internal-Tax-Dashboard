@@ -28,6 +28,8 @@ const PUBLIC_UI_ASSETS = new Set([
   "/workspace-modals.js",
   "/workspace-navigation.js",
   "/workspace-assets.js",
+  "/management-structure.js",
+  "/management-structure.css",
   "/workspace-shell.css",
   "/my-work-reorder.js",
   "/my-work-reorder.css",

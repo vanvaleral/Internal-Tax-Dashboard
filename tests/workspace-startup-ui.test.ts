@@ -7,7 +7,7 @@ const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const html = read("public/demo.html");
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-function open(options: { view?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean; coldAllocation?: boolean } = {}) {
+function open(options: { view?: string; managementTab?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean; coldAllocation?: boolean } = {}) {
   const warnings: string[] = [], requests: string[] = [], idle: Array<() => void> = [];
   const vc = new VirtualConsole();
   for (const kind of ["warn", "error"] as const) vc.on(kind, (...items: any[]) => warnings.push(items.join(" ")));
@@ -23,7 +23,7 @@ function open(options: { view?: string; annual?: string; mobile?: boolean; statu
   function requestStatus(source = parent, origin = w.location.origin) {
     w.dispatchEvent(new w.MessageEvent("message", { source, origin, data: { type: "workspace:status" } }));
   }
-  const ui = { currentView: options.view || "cases-view", operationsMode: options.annual ? "annual" : "monthly", annualTeam: options.annual || "accounting", casesTab: "himbauan" };
+  const ui = { currentView: options.view || "cases-view", managementTab: options.managementTab || "overview", operationsMode: options.annual ? "annual" : "monthly", annualTeam: options.annual || "accounting", casesTab: "himbauan" };
   const cache = new Map<string, string>([["tax-practice-v2:user-a", JSON.stringify({ ui })], ["tax-dashboard-startup-view-v1", JSON.stringify(ui)]]);
   Object.defineProperty(w, "localStorage", { value: { getItem: (key: string) => cache.get(key) ?? null, setItem: (key: string, value: string) => cache.set(key, value), removeItem: (key: string) => cache.delete(key) } });
   Object.defineProperty(w.document, "visibilityState", { value: "visible", configurable: true });
@@ -108,6 +108,34 @@ test("saved Allocation starts the sheet request during bootstrap but cannot rend
     assert.equal(d.requests.length,1);
     assert.deepEqual(d.warnings,[]);
   }finally{d.dom.window.close();}
+});
+
+test("an old Management Quick Access preference falls back to KPI Overview", async () => {
+  const d = open({ view: "dashboard-view", managementTab: "access" });
+  try {
+    d.release(); await d.opening;
+    const doc = d.w.document;
+    assert.ok(doc.querySelector('[data-management-tab="overview"].solid-btn'));
+    assert.equal(doc.querySelector('[data-management-tab="access"]'), null);
+  } finally { d.dom.window.close(); }
+});
+
+test("Management opens Structure on demand with the confirmed staff directory", async () => {
+  const d = open({ view: "dashboard-view" });
+  try {
+    d.release(); await d.opening;
+    const doc = d.w.document;
+    d.w.eval(read("public/workspace-assets.js"));
+    assert.equal(doc.querySelector('[src$="/management-structure.js"]'), null);
+    doc.querySelector('[data-management-tab="structure"]').click();
+    assert.match(doc.querySelector("[data-structure-host]").textContent, /Loading Structure/);
+    d.w.eval(read("public/management-structure.js"));
+    doc.querySelector('[src$="/management-structure.js"]').dispatchEvent(new d.w.Event("load"));
+    doc.querySelector('[href$="/management-structure.css"]').dispatchEvent(new d.w.Event("load"));
+    await tick();
+    assert.equal(doc.querySelector('[data-structure-host] select[name="pic"] option[value="a"]').textContent, "PIC A");
+    assert.equal(d.requests.length, 1);
+  } finally { d.dom.window.close(); }
 });
 
 test("scoped My Work startup unlocks before client/staff catalogs; navigation waits for real lists",async()=>{

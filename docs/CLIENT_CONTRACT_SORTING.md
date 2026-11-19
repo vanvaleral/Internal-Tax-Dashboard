@@ -17,6 +17,13 @@ account-scoped browser UI settings and do not update business records.
 
 No API change, database migration or data rewrite is needed.
 
+## Client Search
+
+Client list search keeps the current field and cursor in place while it filters
+the loaded records. Results update after a short typing pause, or immediately
+when the search is cleared. One- and two-character queries are kept and applied.
+The search does not request records or save changes to the database.
+
 ## Floating Create Action
 
 The New Client action is a compact floating plus button, not a footer row in the

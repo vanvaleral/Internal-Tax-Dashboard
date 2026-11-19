@@ -6,9 +6,11 @@
     report:{file:"case-report.js",ready:()=>Boolean(window.CaseReports)},
     caseStyle:{file:"case-workflow-dashboard.css",style:true},
     allocation:{file:"allocation-report.js",ready:()=>Boolean(window.AllocationReports)},
-    allocationSheet:{file:"allocation-sheet.js",revisionMeta:"workspace-allocation-revision",ready:()=>typeof window.AllocationSheet?.create === "function"}
+    allocationSheet:{file:"allocation-sheet.js",revisionMeta:"workspace-allocation-revision",ready:()=>typeof window.AllocationSheet?.create === "function"},
+    structure:{file:"management-structure.js",ready:()=>typeof window.ManagementStructure?.create === "function"},
+    structureStyle:{file:"management-structure.css",style:true}
   };
-  const groups = {cases:["assessment","report","caseStyle"],"allocation-pdf":["allocation"],"allocation-sheet":["allocationSheet"]};
+  const groups = {cases:["assessment","report","caseStyle"],"allocation-pdf":["allocation"],"allocation-sheet":["allocationSheet"],structure:["structure","structureStyle"]};
   const pending = new Map(), complete = new Set();
   const readyFile = key => complete.has(key) || Boolean(files[key].ready?.());
   function ready(group) { return Object.hasOwn(groups,group) && groups[group].every(readyFile); }

@@ -8,7 +8,7 @@ import * as featureAccess from "../lib/feature-access.ts";
 import * as authSecurity from "../lib/auth-document-security.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
-  for (const path of ["/allocation-report.js","/allocation-sheet.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf","/workspace-navigation.js"]) {
+  for (const path of ["/allocation-report.js","/allocation-sheet.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf","/workspace-navigation.js","/management-structure.js","/management-structure.css"]) {
     assert.ok(existsSync(new URL(`../public${path}`,import.meta.url)));
     assert.equal(isPublicUiAsset(path,"GET"),true);assert.equal(isPublicUiAsset(path,"HEAD"),true);assert.equal(isPublicUiAsset(path,"POST"),false);
   }

@@ -37,12 +37,56 @@ async function clients(mobile = false, ui: Record<string, any> = {}) {
       : url === "/api/clients" ? { data: rows } : url === "/api/staff" ? { staff } : { data: [], staff: [], tasks: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
-  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/client-engagement.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
+  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/client-engagement.js", "public/annual-sheet-dashboard.js", "public/allocation-sheet.js"]) w.eval(read(file));
   await w.eval(read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1]); await tick();
   const choose = (id: string, value: string) => { const input = w.document.getElementById(id); assert.ok(input); input.value = value; input.dispatchEvent(new w.Event("change", { bubbles: true })); };
   const order = () => Array.from(w.document.querySelectorAll(mobile ? "#client-management-view .client-mobile-name .client-link" : '#client-management-view tr[data-keyboard-row="client"] .client-link'), (element: any) => element.textContent.replace(/^\d+\. /, ""));
   return { dom, w, choose, order, warnings, writes, stored: () => JSON.parse(w.localStorage.getItem("tax-practice-v2:user-1")) };
 }
+
+test("Client search keeps the same focused field and full text across short queries, typing bursts and clearing", async () => {
+  for (const mobile of [false, true]) {
+    const d = await clients(mobile);
+    try {
+      const w = d.w, search = w.document.getElementById("active-client-search");
+      const timers = new Map<number, () => void>();
+      let id = 0;
+      w.setTimeout = (callback: () => void, delay: number) => {
+        if (delay !== 160) return 0;
+        timers.set(++id, callback);
+        return id;
+      };
+      w.clearTimeout = (key: number) => timers.delete(key);
+      const type = (value: string, cursor = value.length) => {
+        search.value = value;
+        search.setSelectionRange(cursor, cursor);
+        search.dispatchEvent(new w.InputEvent("input", { bubbles: true }));
+      };
+      const flush = () => {
+        assert.equal(timers.size, 1);
+        for (const [key, callback] of timers) { timers.delete(key); callback(); }
+      };
+      const initialRows = d.order();
+      search.focus();
+      type("F"); type("Fu");
+      assert.deepEqual(d.order(), initialRows);
+      flush();
+      assert.equal(search.value, "Fu");
+      assert.deepEqual(d.order(), ["Future"]);
+      type("Fut"); type("Futur"); type("Future", 3);
+      flush();
+      assert.equal(w.document.getElementById(search.id), search);
+      assert.equal(w.document.activeElement, search);
+      assert.equal(search.selectionStart, 3);
+      assert.equal(search.value, "Future");
+      type("");
+      assert.equal(timers.size, 0);
+      assert.deepEqual(d.order(), initialRows);
+      assert.deepEqual(d.writes, []);
+      assert.deepEqual(d.warnings, []);
+    } finally { d.dom.window.close(); }
+  }
+});
 
 test("Clients contract sorting works on desktop and mobile, persists, reverses, and preserves unknown dates", async () => {
   for (const mobile of [false, true]) {
@@ -87,6 +131,7 @@ test("On Demand clients have a separate tab, can move to contracts, and Allocati
     d.w.document.querySelector('[data-client-tab="on-demand"]').click();
     assert.deepEqual(d.order(), ["Annual Only"]);
     d.w.document.querySelector('.nav-btn[data-view="allocation-view"]').click();
+    await tick();
     d.choose('allocation-engagement-filter','on_demand');
     assert.equal(d.w.document.querySelectorAll('#allocation-view [data-allocation-select]').length,1);
     d.choose('allocation-tax-filter','Budi');

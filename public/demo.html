@@ -4749,10 +4749,10 @@
           portfolio: ["Management / Portfolio Dashboard", "Management Workspace", "Executive portfolio summary for client-master health, fee base, and PIC coverage."],
           workload: ["Management / PIC Access", "Management Workspace", "Leadership-only directory controls for PIC roles, teams, and access status."],
           features: ["Management / PIC Features", "Management Workspace", "Configure Associate and Leader menu access, maintenance restrictions, and development notices."],
+          structure: ["Management / Structure", "Management Workspace", "Plan reporting lines without changing live roles or PIC assignments."],
           recognition: ["Management / Recognition", "Management Workspace", "Transparent points, monthly recognition, and supervisor-ready incentive estimates."],
           report: ["Management / Monthly Report", "Management Workspace", "Printable monthly partner briefing and period-end activity review."],
-          announcements: ["Management / Notifications", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."],
-          access: ["Management / Quick Access", "Management Workspace", "Launch directly into clients, cases, and operations that need attention."]
+          announcements: ["Management / Notifications", "Management Workspace", "Supervisor broadcast workspace for briefings, meetings, and firm-wide notices."]
         },
         profile: ["Profile / My Scope", "Profile Workspace", "Update your display name and review clients assigned to you."],
         myWork: ["My Work / Daily Tasks", "My Work", "Personal and shared daily tasks, reminders, and next actions."],
@@ -5149,7 +5149,6 @@
 
     let searchDebounceTimer = 0;
     const SEARCH_STATE_BY_INPUT = {
-      "active-client-search": "clientSearch",
       "profile-client-search": "profileClientSearch",
       "proposal-search": "proposalSearch",
       "case-search": "caseSearch",
@@ -5162,6 +5161,24 @@
       if (path === "filters.query") state.filters.query = value;
       else if (path === "historyFilters.query") state.historyFilters.query = value;
       else state[path] = value;
+    }
+
+    let clientSearchTimer = 0;
+    function updateClientSearch(input, { immediate = false, composing = false } = {}) {
+      if (state.currentView !== "client-management-view") return;
+      if (immediate && !clientSearchTimer && state.clientSearch === input.value) return;
+      state.clientSearch = input.value;
+      window.clearTimeout(clientSearchTimer);
+      clientSearchTimer = 0;
+      if (composing) return;
+      const apply = () => {
+        clientSearchTimer = 0;
+        if (!input.isConnected || state.currentView !== "client-management-view" || document.getElementById(input.id) !== input) return;
+        renderClientManagement(null, { resultsOnly: true, resetScroll: true });
+        persistDemoState({ defer: true });
+      };
+      if (immediate || !input.value) apply();
+      else clientSearchTimer = window.setTimeout(apply, 160);
     }
 
     function scheduleAutoSearch(input) {
@@ -6722,7 +6739,33 @@
       await loadSharedAnnouncements();
     }
 
+    let structureEditor, structureLoading, structureError = "";
+    function mountManagementStructure(host) {
+      if (window.WorkspaceAssets.ready("structure")) {
+        structureEditor ||= window.ManagementStructure.create({
+          account: bootstrapProfile.user.id,
+          canManage: () => window.WorkspaceFeatures.manager() && window.WorkspaceFeatures.can("management"),
+          safeHtml
+        });
+        structureEditor.mount(host, staffDirectory);
+      } else if (!structureLoading && !structureError) {
+        structureLoading = window.WorkspaceAssets.load("structure").catch(() => {
+          structureError = "Structure tools could not be loaded.";
+        }).finally(() => {
+          structureLoading = null;
+          if (state.currentView === "dashboard-view" && state.managementTab === "structure" && window.WorkspaceFeatures.manager()) renderDashboard();
+        });
+      }
+    }
+
     function renderDashboard() {
+      const root = document.getElementById("dashboard-view");
+      const showStructure = state.managementTab === "structure" && window.WorkspaceFeatures.manager();
+      const existingStructure = showStructure && root.querySelector("[data-structure-host]");
+      if (existingStructure && !structureError) {
+        mountManagementStructure(existingStructure);
+        return;
+      }
       const list = visibleClients();
       const stats = supervisorStats(list);
       const attention = mostProblematicClients(list);
@@ -6781,8 +6824,6 @@
       const maxGrowthFee = Math.max(...clientGrowth.map((row) => row.monthlyFee), 1);
       const regions = ["Singaraja", "Denpasar Timur", "Denpasar Barat", "Badung Utara", "Badung Selatan", "Madya", "Jakarta", "Tangerang Selatan", "Tabanan", "Pasar Minggu", "Gianyar", "Bojong", "Lombok", "Lainnya"];
       const regionalCounts = regions.map((region) => ({ region, count: currentActiveClients.filter((client) => normalizeTaxOfficeRegion(client.taxOfficeRegion) === region).length }));
-      const root = document.getElementById("dashboard-view");
-
       root.innerHTML = safeHtml(`
         <div class="workspace-frame workspace-management">
           <section class="panel">
@@ -6792,10 +6833,10 @@
                 <button class="${state.managementTab === "trends" ? "solid-btn" : "ghost-btn"}" data-management-tab="trends">Client Growth</button>
                 <button class="${state.managementTab === "portfolio" ? "solid-btn" : "ghost-btn"}" data-management-tab="portfolio">Portfolio Dashboard</button>
                 ${window.WorkspaceFeatures.manager() ? `<button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button><button class="${state.managementTab === "features" ? "solid-btn" : "ghost-btn"}" data-management-tab="features">PIC Features</button>` : ""}
+                ${window.WorkspaceFeatures.manager() ? `<button class="${showStructure ? "solid-btn" : "ghost-btn"}" data-management-tab="structure">Structure</button>` : ""}
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
                 <button class="${state.managementTab === "report" ? "solid-btn" : "ghost-btn"}" data-management-tab="report">Monthly Report</button>
                 <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Notifications</button>
-                <button class="${state.managementTab === "access" ? "solid-btn" : "ghost-btn"}" data-management-tab="access">Quick Access</button>
               </div>
             </div>
           </section>
@@ -6876,6 +6917,7 @@
           ` : ``}
 
           ${state.managementTab === "features" && window.WorkspaceFeatures.manager() ? window.WorkspaceFeatures.editor() : ""}
+          ${showStructure ? `<section class="panel" data-structure-host><p role="status">${structureError || "Loading Structure..."}</p>${structureError ? '<button type="button" class="ghost-btn" data-retry-structure>Retry</button>' : ""}</section>` : ""}
 
           ${state.managementTab === "workload" && window.WorkspaceFeatures.manager() ? `
             <section class="panel">
@@ -7009,36 +7051,9 @@
             </section>
           ` : ``}
 
-          ${state.managementTab === "access" ? `
-            <section class="dashboard-grid">
-              <div class="panel">
-                <div class="section-title"><div><h3>Open Operations</h3><p>Jump directly into live recurring work.</p></div></div>
-                <div class="detail-list">
-                  <button class="ghost-btn" data-switch-view="matrix-view">Operations / Active Queue</button>
-                  <button class="ghost-btn" data-operations-tab-shortcut="history">Operations / Completed History</button>
-                  <button class="ghost-btn" data-operations-tab-shortcut="claim">Operations / Claim Status</button>
-                </div>
-              </div>
-              <div class="panel">
-                <div class="section-title"><div><h3>Open Cases</h3><p>Jump into the relevant case workspace lane.</p></div></div>
-                <div class="detail-list">
-                  <button class="ghost-btn" data-cases-tab-shortcut="active">Cases / Active Cases</button>
-                  <button class="ghost-btn" data-cases-tab-shortcut="closed">Cases / Closed Cases</button>
-                </div>
-              </div>
-              <div class="panel">
-                <div class="section-title"><div><h3>Open Clients</h3><p>Jump into master data and proposals without mixing them into management.</p></div></div>
-                <div class="detail-list">
-                  <button class="ghost-btn" data-client-tab-shortcut="active">Clients / Active Clients</button>
-                  <button class="ghost-btn" data-client-tab-shortcut="proposal">Clients / Proposal / Quotation</button>
-                  <button class="ghost-btn" data-client-tab-shortcut="contracts">Clients / Contract Monitoring</button>
-                  <button class="ghost-btn" data-switch-view="allocation-view">Allocation / PIC Reassignment</button>
-                </div>
-              </div>
-            </section>
-          ` : ``}
         </div>
       `);
+      if (showStructure) mountManagementStructure(root.querySelector("[data-structure-host]"));
     }
 
     let allocationSheet = null, allocationSheetFlight = null, allocationSheetError = "";
@@ -7164,7 +7179,7 @@
       });
     }
 
-    function renderClientManagement(rootOverride = null) {
+    function renderClientManagement(rootOverride = null, { resultsOnly = false, resetScroll = false } = {}) {
       const root = rootOverride || document.getElementById("client-management-view");
       if (!IS_OFFLINE_DEMO && !clientsLoadedFromDatabase) {
         root.innerHTML = safeHtml('<section class="panel"><p role="status">Loading Client Master...</p><button class="ghost-btn" data-retry-client-list>Retry client list</button></section>');
@@ -7191,46 +7206,19 @@
       const clientTabRecords = managedClients.filter(client => viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client) && (viewingOnDemandClients ? client.engagementType === "on_demand" : viewingFreeClients ? client.engagementType === "free_of_charge" : !["on_demand","free_of_charge"].includes(client.engagementType)));
       const picFilterOptions = [...new Set(clientTabRecords.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
       if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
-      const activeClientRows = sortClientMasterRows([...managedClients].filter((client) => {
-        const matchesStatus = clientTabRecords.includes(client);
+      const activeClientRows = sortClientMasterRows(clientTabRecords.filter((client) => {
         const matchesPic = state.clientPicFilter === "all" || client.taxPic === state.clientPicFilter || client.accountingPic === state.clientPicFilter;
-        return matchesStatus && matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
+        return matchesPic && (!clientSearch || [displayClientName(client), client.businessForm, client.npwp, client.taxPic, client.accountingPic, client.industry].join(" ").toLowerCase().includes(clientSearch));
       }), "clients");
+      const oldTable = resultsOnly ? root.querySelector('[data-virtual-table="active-clients"]') : null;
+      if (oldTable) state.virtualScrollTop["active-clients"] = resetScroll ? 0 : oldTable.scrollTop;
       const activeClientWindow = windowedRows(activeClientRows, "active-clients", 43);
       const clientSortOptions = [["form", "Form"], ["name", "Name"], ["taxPic", "Tax PIC"], ["accPic", "ACC PIC"], ["industry", "Industry"], ["monthlyFee", "Monthly Fee"], ["contract-oldest", "Contract: oldest first"], ["contract-newest", "Contract: newest first"]];
       const clientSortValue = state.sorts.clients.key === "contractStart" ? (state.sorts.clients.dir === "desc" ? "contract-newest" : "contract-oldest") : state.sorts.clients.key;
       const proposalQuery = state.proposalSearch.trim().toLowerCase();
       const proposalRows = proposals.filter((proposal) => !proposalQuery || [displayClientName(proposal), proposal.proposedPic, proposal.proposedAccPic, proposal.status, proposal.notes].join(" ").toLowerCase().includes(proposalQuery));
 
-      root.innerHTML = safeHtml(`
-        <div class="workspace-frame workspace-clients">
-          <section class="panel">
-            <div class="toolbar">
-              <div class="workspace-tabs">
-                <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
-                <button class="${viewingOnDemandClients ? "solid-btn" : "ghost-btn"}" data-client-tab="on-demand">On Demand Clients</button>
-                <button class="${viewingFreeClients ? "solid-btn" : "ghost-btn"}" data-client-tab="free-of-charge">Free of Charge</button>
-                ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
-                <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
-                <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
-              </div>
-              <div class="toolbar-right">
-                ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
-                ${!isMobileWorkspace ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
-              </div>
-            </div>
-          </section>
-
-          ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
-            <section class="client-master-layout">
-            <div class="panel client-register-panel">
-              <div class="section-title">
-                <div>
-                  <h3>${viewingInactiveClients ? "Inactive Clients" : viewingOnDemandClients ? "On Demand Clients" : viewingFreeClients ? "Free of Charge Clients" : "Active Clients"}</h3>
-                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : viewingOnDemandClients ? "Annual and occasional work without a recurring contract." : viewingFreeClients ? "Recurring monthly tax work without a fee. Excluded from the paid Active Clients portfolio; stored fee history is retained." : "Contract clients, newest contract first by default. Unknown dates appear last."}</p>
-                </div>
-                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="client-sort-controls"><select id="client-order" class="filter-select" aria-label="Sort clients" title="Contract order uses Contract Start, or Engagement Start for older records. Unknown dates appear last.">${clientSortOptions.map(([key, label]) => `<option value="${key}" ${clientSortValue === key ? "selected" : ""}>${label}</option>`).join("")}${clientSortOptions.some(([key]) => key === clientSortValue) ? "" : `<option value="column" selected disabled>Column sort</option>`}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
-              </div>
+      const registerResults = () => `
               <div class="table-wrap desktop-only" data-virtual-table="active-clients" data-row-height="43" tabindex="0" aria-label="Client list, scroll for more rows and columns">
                 <table class="client-table">
                   <colgroup>
@@ -7288,7 +7276,7 @@
                   </tbody>
                 </table>
               </div>
-              <div class="mobile-only">
+              <div class="mobile-only" data-client-register-cards>
                 <div class="list-grid">
                   ${activeClientRows.map((client, index) => {
                     const identity = splitBusinessName(client);
@@ -7299,6 +7287,54 @@
                   }).join("")}
                 </div>
               </div>
+      `;
+      const enhanceEngagement = () => window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : type === "free_of_charge" ? "free-of-charge" : "active"; commitWorkspaceNavigation("replace"); } });
+      if (resultsOnly) {
+        const cards = root.querySelector("[data-client-register-cards]");
+        if (!oldTable || !cards) return;
+        const next = document.createElement("template");
+        next.innerHTML = safeHtml(registerResults());
+        const [nextTable, nextCards] = next.content.children;
+        const scrollLeft = oldTable.scrollLeft;
+        root.querySelector(".client-engagement-actions")?.remove();
+        oldTable.replaceWith(nextTable);
+        cards.replaceWith(nextCards);
+        enhanceEngagement();
+        nextTable.scrollLeft = scrollLeft;
+        nextTable.scrollTop = state.virtualScrollTop["active-clients"];
+        return;
+      }
+
+      root.innerHTML = safeHtml(`
+        <div class="workspace-frame workspace-clients">
+          <section class="panel">
+            <div class="toolbar">
+              <div class="workspace-tabs">
+                <button class="${state.clientManagementTab === "active" ? "solid-btn" : "ghost-btn"}" data-client-tab="active">Active Clients</button>
+                <button class="${viewingOnDemandClients ? "solid-btn" : "ghost-btn"}" data-client-tab="on-demand">On Demand Clients</button>
+                <button class="${viewingFreeClients ? "solid-btn" : "ghost-btn"}" data-client-tab="free-of-charge">Free of Charge</button>
+                ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
+                <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
+                <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
+              </div>
+              <div class="toolbar-right">
+                ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
+                ${!isMobileWorkspace ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
+              </div>
+            </div>
+          </section>
+
+          ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
+            <section class="client-master-layout">
+            <div class="panel client-register-panel">
+              <div class="section-title">
+                <div>
+                  <h3>${viewingInactiveClients ? "Inactive Clients" : viewingOnDemandClients ? "On Demand Clients" : viewingFreeClients ? "Free of Charge Clients" : "Active Clients"}</h3>
+                  <p>${viewingInactiveClients ? "Inactive records remain available for history and can be reactivated." : viewingOnDemandClients ? "Annual and occasional work without a recurring contract." : viewingFreeClients ? "Recurring monthly tax work without a fee. Excluded from the paid Active Clients portfolio; stored fee history is retained." : "Contract clients, newest contract first by default. Unknown dates appear last."}</p>
+                </div>
+                <div class="client-list-filters"><select id="active-client-pic-filter" class="filter-select" aria-label="Filter clients by PIC"><option value="all">All PIC</option>${picFilterOptions.map((pic) => `<option value="${escapeAttr(pic)}" ${state.clientPicFilter === pic ? "selected" : ""}>${escapeHtml(pic)}</option>`).join("")}</select><input id="active-client-search" class="filter-input" type="search" value="${escapeAttr(state.clientSearch)}" placeholder="Search name, PIC, NPWP..." /><span class="client-sort-controls"><select id="client-order" class="filter-select" aria-label="Sort clients" title="Contract order uses Contract Start, or Engagement Start for older records. Unknown dates appear last.">${clientSortOptions.map(([key, label]) => `<option value="${key}" ${clientSortValue === key ? "selected" : ""}>${label}</option>`).join("")}${clientSortOptions.some(([key]) => key === clientSortValue) ? "" : `<option value="column" selected disabled>Column sort</option>`}</select><button class="ghost-btn" data-sort-scope="clients" data-sort-key="${state.sorts.clients.key}" aria-label="Reverse client sort">${state.sorts.clients.dir === "asc" ? "↑" : "↓"}</button></span></div>
+              </div>
+              ${registerResults()}
             </div>
 
             <div class="panel client-setup-panel">
@@ -7631,7 +7667,7 @@
           <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>
         </div>
       `);
-      window.ClientEngagement?.enhance({ rows: activeClientRows, tab: state.clientManagementTab, canManage: hasLeadershipAccess(), offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), render: () => renderClientManagement(), moved: type => { state.clientManagementTab = type === "on_demand" ? "on-demand" : type === "free_of_charge" ? "free-of-charge" : "active"; commitWorkspaceNavigation("replace"); } });
+      enhanceEngagement();
     }
 
     function renderMatrix() {
@@ -10950,7 +10986,11 @@
         syncOperationalPicLists(staff);
         staffDirectoryLoaded = true;
         notifyAnnualDirectoryChanged(staff);
-        if (!startupPending) rerender();
+        if (!startupPending) {
+          if (background && state.currentView === "client-management-view" && document.activeElement?.id === "active-client-search") {
+            renderClientManagement(null, { resultsOnly: true });
+          } else rerender();
+        }
         return true;
       } catch (error) {
         console.warn("[staff directory] request failed", error);
@@ -11534,14 +11574,14 @@
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
         clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"],
-        managementTab: ["overview", "trends", "portfolio", "workload", "features", "recognition", "report", "announcements", "access"]
+        managementTab: ["overview", "trends", "portfolio", "workload", "features", "structure", "recognition", "report", "announcements"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
       for (const [key, values] of Object.entries(choices)) if (!values.includes(state[key])) state[key] = values[0];
       if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
       window.WorkspaceFeatures.setRole(state.role);
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
-      if (["workload", "features"].includes(state.managementTab) && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
+      if (["workload", "features", "structure"].includes(state.managementTab) && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
     }
 
     function normalizeMobileWorkspaceView() {
@@ -12012,9 +12052,6 @@
       const annualTeamTrigger = target.closest("[data-annual-team]");
       const casesTabTrigger = target.closest("[data-cases-tab]");
       const managementTabTrigger = target.closest("[data-management-tab]");
-      const operationsShortcutTrigger = target.closest("[data-operations-tab-shortcut]");
-      const casesShortcutTrigger = target.closest("[data-cases-tab-shortcut]");
-      const clientShortcutTrigger = target.closest("[data-client-tab-shortcut]");
       const newClientTrigger = target.closest("[data-new-client]");
       const closeClientEditorTrigger = target.closest("[data-close-client-editor]");
       const newProposalTrigger = target.closest("[data-new-proposal]");
@@ -12729,8 +12766,14 @@
         return;
       }
 
+      if (target.closest("[data-retry-structure]") && state.managementTab === "structure" && window.WorkspaceFeatures.manager()) {
+        structureError = "";
+        target.closest("[data-structure-host]").innerHTML = safeHtml('<p role="status">Loading Structure...</p>');
+        renderDashboard();
+        return;
+      }
       if (managementTabTrigger) {
-        if (["workload", "features"].includes(managementTabTrigger.getAttribute("data-management-tab")) && !window.WorkspaceFeatures.manager()) return;
+        if (["workload", "features", "structure"].includes(managementTabTrigger.getAttribute("data-management-tab")) && !window.WorkspaceFeatures.manager()) return;
         if (managementTabTrigger.getAttribute("data-management-tab") !== "workload") {
           latestStaffClaimCode = "";
           latestStaffClaimFor = "";
@@ -12835,28 +12878,6 @@
         } catch (error) {
           window.alert(error instanceof Error ? error.message : "Staff profile could not be archived.");
         }
-        return;
-      }
-
-      if (operationsShortcutTrigger) {
-        state.operationsTab = operationsShortcutTrigger.getAttribute("data-operations-tab-shortcut");
-        state.currentView = "matrix-view";
-        commitWorkspaceNavigation("push");
-        if (state.operationsTab === "claim") loadSavedTaxClaims();
-        return;
-      }
-
-      if (casesShortcutTrigger) {
-        state.casesTab = casesShortcutTrigger.getAttribute("data-cases-tab-shortcut");
-        state.currentView = "cases-view";
-        commitWorkspaceNavigation("push");
-        return;
-      }
-
-      if (clientShortcutTrigger) {
-        state.clientManagementTab = clientShortcutTrigger.getAttribute("data-client-tab-shortcut");
-        state.currentView = "client-management-view";
-        commitWorkspaceNavigation("push");
         return;
       }
 
@@ -13766,6 +13787,11 @@
       }
     });
 
+    document.addEventListener("compositionend", (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.id === "active-client-search") updateClientSearch(target);
+    });
+
     document.addEventListener("input", (event) => {
       const target = event.target instanceof HTMLInputElement ? event.target : null;
       if (target?.id === "proposal-monthly-fee") {
@@ -13791,6 +13817,10 @@
         const replacement = document.getElementById("case-search");
         replacement?.focus({ preventScroll: true });
         if (replacement && start !== null) replacement.setSelectionRange(start, start);
+        return;
+      }
+      if (target?.id === "active-client-search") {
+        updateClientSearch(target, { composing: event.isComposing });
         return;
       }
       if (target && SEARCH_STATE_BY_INPUT[target.id]) scheduleAutoSearch(target);
@@ -14106,8 +14136,7 @@
       }
 
       if (target.id === "active-client-search") {
-        state.clientSearch = target.value.trim().length >= 3 ? target.value.trim() : "";
-        commitUi("replace");
+        updateClientSearch(target, { immediate: true });
         return;
       }
 
