@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Structure Lab | Tax Dashboard</title>
+  <link rel="stylesheet" href="structure-flowchart-mockup.css">
+  <script src="structure-flowchart-mockup.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">S</span><div><strong>Tax Dashboard</strong><small>Management / Structure</small></div></div>
+    <span class="prototype-tag">Interactive mockup</span>
+  </header>
+  <main>
+    <header class="intro">
+      <div><div class="kicker">Organization planning</div><h1>Structure Lab</h1><p>Try a new reporting line before making it official.</p></div>
+      <div class="toolbar"><button type="button" id="reset">Reset demo</button><button type="button" id="print">Print chart</button><button type="button" class="primary" id="add">+ Add person or team</button></div>
+    </header>
+    <div class="layout">
+      <section class="board" aria-labelledby="chart-title">
+        <header class="board-head"><div><h2 id="chart-title">Proposed firm structure</h2><p>Drop a PIC name or card onto a manager to connect them.</p></div><span class="count" id="count"></span></header>
+        <div class="viewport" tabindex="0" aria-label="Organization chart, scroll to see more positions">
+          <button type="button" id="top-level" aria-disabled="true">+ Drop here for a top-level position</button>
+          <div class="graph" id="graph">
+            <svg id="links" aria-hidden="true"></svg>
+            <div id="cards"></div>
+          </div>
+        </div>
+        <footer class="board-foot"><span class="legend"><i></i> Reporting line</span><span id="status" role="status" aria-live="polite">Sample data only. Nothing is saved to the dashboard.</span></footer>
+      </section>
+      <div class="side-rail">
+      <section class="roster" aria-labelledby="roster-title">
+        <div class="kicker">PIC Access sample</div><h2 id="roster-title">Available PICs</h2>
+        <p>Drag a name onto the chart, or select a name and then its manager.</p>
+        <ul id="pic-roster"></ul>
+      </section>
+      <aside class="inspector" aria-labelledby="editor-title">
+        <div class="kicker">Position details</div><h2 id="editor-title">Edit card</h2>
+        <form id="editor">
+          <label>Name or team<input id="person" required maxlength="42" autocomplete="off" placeholder="e.g. Future Partner"></label>
+          <label>Role or title<input id="position" required maxlength="44" autocomplete="off" placeholder="e.g. Tax Team Lead"></label>
+          <label>Card type<select id="kind"><option value="partner">Partner</option><option value="lead">Team / Lead</option><option value="staff">Team member</option></select></label>
+          <label>Reports to<select id="manager"></select></label>
+          <button class="primary" id="save" type="submit">Save card</button>
+          <button id="connect" type="button">Connect to a manager</button>
+          <button class="text-danger" id="remove" type="button">Remove card</button>
+        </form>
+        <div class="inspector-note"><strong>Try it</strong><p>Drop Sari onto Bima for a new direct report, or drop Arman at the top level.</p></div>
+      </aside>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
