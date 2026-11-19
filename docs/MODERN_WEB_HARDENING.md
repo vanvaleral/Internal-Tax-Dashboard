@@ -219,6 +219,29 @@ Annual responses. Authorization and full-workspace compare-and-swap saves remain
 unchanged. See `SCOPED_WORKSPACE_LOADING.md` for compatibility, validation and the
 remaining team-wide Annual JSON read limitation. No migration is required.
 
+## Allocation Code Split
+
+The Allocation table, simulation display and spreadsheet interactions now load
+from `public/allocation-sheet.js` only on entering Allocation. The dashboard
+retains draft persistence, the Apply action, and shared filters and PDF snapshot
+data. PDF generation remains a separate on-click load.
+
+The build adds a content revision to the sheet URL. A saved Allocation startup
+hint can start that data-free download during bootstrap; it neither grants access
+nor activates the UI. The sheet renders only after the authorized view and data
+are available. In-session navigation coalesces the request, shows local Retry on
+failure, and does not render over another menu if a late response arrives.
+
+The local comparison against the preceding build removes about 24 KB of raw HTML
+and 3.5 KB of Brotli-compressed HTML. Allocation itself still downloads the
+separate script, and its first-open latency must be measured independently.
+No database, access-control or deployment changes are required for this split.
+
+The separate Vercel region check remains pending account access: public headers
+showed the bootstrap Function in `iad1`, while the Supabase project configured
+locally reports Sydney. Confirm the matching production project, then compare the
+same signed-in views on a Sydney preview before changing production.
+
 ## Remaining Work
 
 - Main business JavaScript and many renderers remain in canonical `demo.html`.

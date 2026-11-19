@@ -3,7 +3,7 @@
   "use strict";
   const views = new Set(["matrix-view", "cases-view", "my-work-view", "client-view", "client-management-view", "allocation-view", "profile-view", "dashboard-view", "announcement-view"]);
   const hintKey = "tax-dashboard-startup-view-v1";
-  let pending, owner = "", receivedAt = 0;
+  let pending, owner = "", receivedAt = 0, plannedView = "";
   const packets = new Map();
   const metrics = { requestMs: 0, server: {}, readyMs: 0 };
   function normalize(value = {}) {
@@ -19,6 +19,7 @@
     let hint = {};
     try { hint = JSON.parse(localStorage.getItem(hintKey) || "{}"); } catch {}
     const plan = normalize(hint);
+    plannedView = plan.currentView;
     const params = new URLSearchParams({ view: plan.currentView, mode: plan.operationsMode, team: plan.annualTeam });
     const started = performance.now();
     const controller = new AbortController();
@@ -78,6 +79,6 @@
     window.addEventListener("pagehide", () => { stopped = true; waiting.length = 0; document.removeEventListener("visibilitychange", schedule); }, { once: true });
     schedule();
   }
-  window.WorkspaceStartup = { begin, take, ready, remember, backgroundQueue };
+  window.WorkspaceStartup = { begin, take, ready, remember, backgroundQueue, get plannedView() { return plannedView; } };
   begin();
 })();

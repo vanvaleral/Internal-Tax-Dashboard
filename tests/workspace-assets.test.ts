@@ -43,16 +43,17 @@ test("shared PSA summaries and filters do not change when the detailed assessmen
   }finally{d.dom.window.close();}
 });
 
-async function dashboard(view="my-work-view"){
+async function dashboard(view="my-work-view",warmAllocation=false){
   const warnings:string[]=[],writes:any[]=[],vc=new VirtualConsole();vc.on("jsdomError",e=>warnings.push(e.message));vc.on("error",(...args:any[])=>warnings.push(args.map(String).join(" ")));
   const dom=new JSDOM(read("public/demo.html"),{url:"http://localhost/demo.html",runScripts:"outside-only",virtualConsole:vc}),w=dom.window as any;
   w.localStorage.setItem("tax-practice-v2:asset-user",JSON.stringify({ui:{currentView:view}}));
   w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.requestIdleCallback=()=>0;w.setTimeout=()=>0;w.setInterval=()=>0;w.structuredClone=structuredClone;w.Headers=Headers;w.Response=Response;w.alert=()=>{};
   w.fetch=async(url:string,options:any={})=>{if(options.method&&options.method!=="GET"){writes.push(url);throw Error("No write expected");}const body=url==="/api/profile"?{user:{id:"asset-user"},profile:{id:"pic",role:"supervisor",display_name:"Demo PIC",directory_active:true}}:url==="/api/clients"?{data:[{id:"client-a",client_code:"CL-1",legal_name:"Fictional Client",status:"Active",accounting_pic_name:"Demo PIC",tax_pic_name:"Demo PIC"}]}:url==="/api/cases"?{data:[{id:"saved-case",client_name:"Fictional Client",case_category:"Himbauan",created_at:"2026-01-01",updated_at:"v1"}]}:{data:[],tasks:[],staff:[],announcements:[]};return {ok:true,status:200,json:async()=>body};};
   for(const file of ["vendor/purify.min.js","workspace-sync.js","feature-access.js","annual-sheet-dashboard.js","workspace-assets.js","case-tax-types.js","case-workflow-dashboard.js"])w.eval(read(`public/${file}`));
+  if(warmAllocation)w.eval(read("public/allocation-sheet.js"));
   const source=read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>","    window.__assetTest={state,previewAllocation,getCases:()=>taxCases};\n    })().catch(error =>");
-  const opening=w.eval(source);if(view!=="cases-view")await opening;await tick();
-  const nodes=()=>[...w.document.head.querySelectorAll('script[src],link[href]')].filter((n:any)=>/(case-assessment-dashboard\.js|case-report\.js|case-workflow-dashboard\.css|allocation-report\.js)$/.test(n.src||n.href)) as any[];
+  const opening=w.eval(source);if(!["cases-view","allocation-view"].includes(view))await opening;await tick();
+  const nodes=()=>[...w.document.head.querySelectorAll('script[src],link[href]')].filter((n:any)=>/(case-assessment-dashboard\.js|case-report\.js|case-workflow-dashboard\.css|allocation-report\.js|allocation-sheet\.js)$/.test(new URL(n.src||n.href).pathname)) as any[];
   const finish=(file:string,success=true)=>{const node=nodes().find(n=>(n.src||n.href).endsWith(file));assert.ok(node,file);if(success&&node.tagName==="SCRIPT")w.eval(read(`public/${file}`));node.dispatchEvent(new w.Event(success?"load":"error"));};
   return {dom,w,warnings,writes,opening,nodes,finish,api:()=>w.__assetTest};
 }
@@ -79,8 +80,8 @@ test("Cases startup keeps the initial cover until feature assets and confirmed d
 });
 
 test("Allocation reserves a popup before a cold code download, and passes it to the PDF engine exactly once",async()=>{
-  const d=await dashboard();try{
-    d.w.document.querySelector('[data-view="allocation-view"]').click();let opens=0,previews=0;
+  const d=await dashboard("my-work-view",true);try{
+    d.w.document.querySelector('[data-view="allocation-view"]').click();await tick();let opens=0,previews=0;
     const popup={closed:false,opener:{},document:{title:"",body:{textContent:""}}};d.w.open=()=>{opens++;return popup;};
     const work=d.api().previewAllocation();assert.equal(opens,1);assert.equal(popup.opener,null);assert.match(popup.document.body.textContent,/Preparing/);assert.equal(d.nodes().length,1);
     await d.api().previewAllocation();assert.equal(opens,1,"duplicate clicks cannot open competing previews");
@@ -90,8 +91,8 @@ test("Allocation reserves a popup before a cold code download, and passes it to 
 });
 
 test("Allocation load failures retain an explanatory popup, unlock Preview and require an explicit retry",async()=>{
-  const d=await dashboard();try{
-    d.w.document.querySelector('[data-view="allocation-view"]').click();let opens=0,previews=0;const alerts:string[]=[];
+  const d=await dashboard("my-work-view",true);try{
+    d.w.document.querySelector('[data-view="allocation-view"]').click();await tick();let opens=0,previews=0;const alerts:string[]=[];
     const popup={closed:false,opener:{},document:{title:"",body:{textContent:""}}};d.w.open=()=>{opens++;return popup;};d.w.alert=(message:string)=>alerts.push(message);
     const failed=d.api().previewAllocation();d.finish("allocation-report.js",false);await failed;
     assert.match(popup.document.body.textContent,/Check your connection and retry/);assert.equal(alerts.length,1);assert.equal(d.w.document.querySelector("[data-preview-allocation]").disabled,false);
@@ -106,6 +107,40 @@ test("blocked or closed PDF windows cannot trigger a second popup or fetch the P
     const popup={closed:false,opener:{},document:{title:"",body:{textContent:""}}};d.w.open=()=>popup;
     const pending=d.api().previewAllocation();popup.closed=true;d.w.AllocationReports={preview:async()=>{previews++;}};d.nodes()[0].dispatchEvent(new d.w.Event("load"));await pending;
     assert.equal(previews,0);assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Allocation sheet is fetched only on opening, supports retry, and does not redraw another view",async()=>{
+  const d=await dashboard();try{
+    const doc=d.w.document, open=(id:string)=>doc.querySelector(`[data-view="${id}"]`).click();
+    assert.equal(d.nodes().length,0);
+    const meta=doc.createElement("meta");meta.name="workspace-allocation-revision";meta.content="012345abcdef";doc.head.append(meta);
+    open("allocation-view");await tick();
+    assert.match(doc.getElementById("allocation-view").textContent,/Loading Allocation tools/);
+    assert.equal(d.nodes().length,1);
+    assert.match(d.nodes()[0].src,/allocation-sheet\.js\?v=012345abcdef$/);
+    d.nodes()[0].dispatchEvent(new d.w.Event("error"));await tick();
+    doc.querySelector("[data-retry-allocation-sheet]").click();await tick();
+    assert.equal(d.nodes().length,1);
+    open("my-work-view");await tick();const marker=doc.createElement("span");doc.getElementById("my-work-view").append(marker);
+    d.w.eval(read("public/allocation-sheet.js"));d.nodes()[0].dispatchEvent(new d.w.Event("load"));await tick();
+    assert.ok(marker.isConnected);
+    open("allocation-view");await tick();
+    assert.ok(doc.querySelector("[data-allocation-row]"));
+    assert.equal(d.nodes().length,1,"no redownload and no PDF engine fetched");
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("saved Allocation startup waits for the sheet and displays confirmed rows",async()=>{
+  const d=await dashboard("allocation-view");try{
+    const doc=d.w.document,overlay=doc.getElementById("app-loading-overlay");
+    assert.ok(overlay.classList.contains("visible"));
+    assert.equal(doc.querySelector("[data-allocation-row]"),null);
+    d.finish("allocation-sheet.js");await d.opening;await tick();
+    assert.equal(overlay.classList.contains("visible"),false);
+    assert.ok(doc.querySelector("[data-allocation-row]"));
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
   }finally{d.dom.window.close();}
 });
 

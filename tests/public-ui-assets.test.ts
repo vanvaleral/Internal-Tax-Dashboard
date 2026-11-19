@@ -8,7 +8,7 @@ import * as featureAccess from "../lib/feature-access.ts";
 import * as authSecurity from "../lib/auth-document-security.ts";
 
 test("only reviewed public UI assets bypass auth; data, HTML and extension-lookalike APIs never do", () => {
-  for (const path of ["/allocation-report.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf","/workspace-navigation.js"]) {
+  for (const path of ["/allocation-report.js","/allocation-sheet.js","/vendor/jspdf.umd.min.js","/fonts/NotoSans-Regular.ttf","/workspace-navigation.js"]) {
     assert.ok(existsSync(new URL(`../public${path}`,import.meta.url)));
     assert.equal(isPublicUiAsset(path,"GET"),true);assert.equal(isPublicUiAsset(path,"HEAD"),true);assert.equal(isPublicUiAsset(path,"POST"),false);
   }
@@ -47,7 +47,7 @@ test("middleware delegates exact self-authenticating APIs and the data-free shel
   const run = (path: string, workspaceUser = "") => context.exports.middleware({ method: "GET", nextUrl: new URL(`https://test.local${path}`), url: `https://test.local${path}`, headers: { get: () => workspaceUser }, cookies: { getAll: () => [] } });
   assert.equal((await run("/annual-sheet-live.js")).status, 200);
   assert.equal((await run("/favicon.svg")).status, 200);
-  for (const path of ["/workspace-assets.js","/case-report.js","/case-workflow-dashboard.js","/case-workflow-dashboard.css"]) assert.equal((await run(path)).status,200,"reviewed code/style assets do not need Supabase identity or profile reads");
+  for (const path of ["/workspace-assets.js","/allocation-sheet.js","/case-report.js","/case-workflow-dashboard.js","/case-workflow-dashboard.css"]) assert.equal((await run(path)).status,200,"reviewed code/style assets do not need Supabase identity or profile reads");
   for (const path of ["/manifest.webmanifest", "/icons/app-192.png", "/icons/app-512.png", "/icons/app-desktop-v2-192.png", "/icons/app-desktop-v2-512.png", "/icons/app-maskable-512.png", "/icons/apple-touch-icon.png", "/favicon-32.png"]) assert.equal((await run(path)).status, 200, "installation assets do not need a session");
   assert.equal((await run("/api/annual-sheet")).status, 200, "annual handler performs fresh user, staff and account checks itself");
   assert.equal((await run("/api/workspace/bootstrap")).status, 200);

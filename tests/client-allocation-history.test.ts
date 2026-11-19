@@ -7,6 +7,7 @@ import ts from "typescript";
 
 const root = process.cwd();
 const demo = fs.readFileSync(path.join(root, "public", "demo.html"), "utf8");
+const sheet = fs.readFileSync(path.join(root, "public", "allocation-sheet.js"), "utf8");
 const route = fs.readFileSync(path.join(root, "app", "api", "clients", "allocation", "route.ts"), "utf8");
 const migration = fs.readFileSync(path.join(root, "supabase", "migrations", "202609240002_client_pic_allocation_history.sql"), "utf8");
 const canonicalLabelsMigration = fs.readFileSync(path.join(root, "supabase", "migrations", "202609240003_canonical_staff_labels.sql"), "utf8");
@@ -37,7 +38,7 @@ test("allocation API enforces leadership and permanent staff identity", () => {
 
 test("Allocation UI applies one year-tagged batch from Client Master", () => {
   assert.match(demo, /allocationYear: Number\(/);
-  assert.match(demo, /id="allocation-year"/);
+  assert.match(sheet, /id="allocation-year"/);
   assert.match(demo, /function allocationRows\(\) \{[\s\S]*?return sortClientMasterRows\(clientMasterClients\.filter\(isActiveClientRecord\)/);
   assert.match(demo, /fetch\("\/api\/clients\/allocation"|appFetch\("\/api\/clients\/allocation"/);
   assert.match(demo, /allocationYear: state\.allocationYear/);

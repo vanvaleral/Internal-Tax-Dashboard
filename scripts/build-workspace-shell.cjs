@@ -14,7 +14,9 @@ function buildWorkspace({write=true}={}) {
   styles.push(fs.readFileSync(path.join(root,"public/submenu-tabs.css"),"utf8"));
   const css = styles.join("\n");
   const hash = createHash("sha256").update(css).digest("hex").slice(0,12);
+  const allocationRevision = createHash("sha256").update(fs.readFileSync(path.join(root,"public/allocation-sheet.js"))).digest("hex").slice(0,12);
   head = head.replace(/<link rel="stylesheet" href="submenu-tabs.css"\s*\/>/,"");
+  head += `<meta name="workspace-allocation-revision" content="${allocationRevision}">\n`;
   const critical = `<style data-workspace-critical>html,body{margin:0;background:#f0f2ee}html:not(.workspace-style-ready) .shell{display:none}.app-loading-overlay.initial-load{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;background:#f0f2ee;color:#35575d;font:13px "Segoe UI",sans-serif}.app-loading-overlay:not(.visible){display:none}.app-loading-card{display:grid;justify-items:center;gap:14px}.workspace-bars{display:flex;align-items:flex-end;gap:5px;height:30px}.workspace-bars i{display:block;width:5px;height:12px;background:#0891a6;transform-origin:bottom;animation:workspace-pulse 1.1s ease-in-out infinite}.workspace-bars i:nth-child(2){height:18px}.workspace-bars i:nth-child(3){height:24px}.workspace-bars i:nth-child(4){height:30px}@keyframes workspace-pulse{0%,100%{transform:scaleY(.6);opacity:.45}50%{transform:scaleY(1);opacity:1}}@media(prefers-reduced-motion:reduce){.workspace-bars i{animation:none}}</style>
 <link rel="preload" href="/workspace-shell.css?v=${hash}" as="style">
 <link id="workspace-shell-style" rel="stylesheet" href="/workspace-shell.css?v=${hash}" media="print">

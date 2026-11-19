@@ -23,6 +23,7 @@ const PUBLIC_UI_ASSETS = new Set([
   "/fonts/NotoSans-Regular.ttf",
   "/fonts/PlusJakartaSans.ttf",
   "/allocation-report.js",
+  "/allocation-sheet.js",
   "/workspace-sync.js",
   "/workspace-modals.js",
   "/workspace-navigation.js",

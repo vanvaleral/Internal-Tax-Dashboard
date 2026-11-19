@@ -7,7 +7,7 @@ const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const html = read("public/demo.html");
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-function open(options: { view?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean } = {}) {
+function open(options: { view?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean; coldAllocation?: boolean } = {}) {
   const warnings: string[] = [], requests: string[] = [], idle: Array<() => void> = [];
   const vc = new VirtualConsole();
   for (const kind of ["warn", "error"] as const) vc.on(kind, (...items: any[]) => warnings.push(items.join(" ")));
@@ -46,6 +46,8 @@ function open(options: { view?: string; annual?: string; mobile?: boolean; statu
   w.eval(read("public/workspace-startup.js"));
   w.eval(read("public/vendor/purify.min.js")); w.eval(read("public/workspace-sync.js")); w.eval(read("public/feature-access.js")); w.eval(read("public/annual-sheet-dashboard.js"));
   for (const file of ["case-tax-types.js","case-workflow-dashboard.js","case-assessment-dashboard.js","case-report.js"]) w.eval(read(`public/${file}`));
+  if (options.coldAllocation) w.eval(read("public/workspace-assets.js"));
+  else if (options.view === "allocation-view") w.eval(read("public/allocation-sheet.js"));
   const opening = w.eval(html.match(/<script>([\s\S]*?)<\/script>/)![1]);
   return { dom, w, opening, release, requests, idle, cache, warnings };
 }
@@ -67,6 +69,21 @@ test("confirmed bootstrap supplies the first screen with one request and never e
       assert.deepEqual(Object.keys(hint).sort(), ["annualTeam", "currentView", "operationsMode"]);
     } finally { d.dom.window.close(); }
   }
+});
+
+test("saved Allocation starts the sheet request during bootstrap but cannot render until data is verified",async()=>{
+  const d=open({view:"allocation-view",coldAllocation:true});try{
+    const doc=d.w.document,asset=doc.querySelector('script[src$="/allocation-sheet.js"]');
+    assert.ok(asset,"the sheet request starts before the held bootstrap is released");
+    assert.equal(d.requests.length,1);
+    d.w.eval(read("public/allocation-sheet.js"));asset.dispatchEvent(new d.w.Event("load"));
+    await tick();
+    assert.equal(doc.querySelector("[data-allocation-row]"),null);
+    d.release();await d.opening;await tick();
+    assert.ok(doc.querySelector("[data-allocation-row]"));
+    assert.equal(d.requests.length,1);
+    assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
 });
 
 test("scoped My Work startup unlocks before client/staff catalogs; navigation waits for real lists",async()=>{

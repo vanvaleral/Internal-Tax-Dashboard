@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { JSDOM, VirtualConsole } from "jsdom";
+import { defaultFeaturePolicy } from "../lib/feature-access.ts";
 
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve)); };
 
 async function allocation(mobile = false, role = "supervisor") {
+  const policy = defaultFeaturePolicy();
+  policy.associate.allocation.mode = "enabled";
   const warnings: string[] = [], writes: any[] = [], alerts: string[] = [], confirmations: string[] = [];
   const vc = new VirtualConsole(); vc.on("jsdomError", error => warnings.push(error.message));
   vc.on("error", (...items: any[]) => warnings.push(items.map(String).join(" ")));
@@ -42,16 +45,16 @@ async function allocation(mobile = false, role = "supervisor") {
       }
       return { ok:true, json:async () => ({ updated:body.changes.length }) };
     }
-    const body = url === "/api/profile" ? { user:{ id:"user-1" }, profile:{ id:"acc-1", role, display_name:"Ivan", directory_active:true, team_division:"Accounting Team" } }
+    const body = url === "/api/profile" ? { user:{ id:"user-1" }, profile:{ id:"acc-1", role, display_name:"Ivan", directory_active:true, team_division:"Accounting Team" }, featureAccess:{policy,version:1,ready:true} }
       : url === "/api/clients" ? { data:rows }
       : url === "/api/staff" ? { staff }
       : { data:[], staff:[], tasks:[], announcements:[] };
     return { ok:true, json:async () => structuredClone(body) };
   };
-  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js", "public/allocation-report.js"]) w.eval(read(file));
+  for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js", "public/allocation-report.js", "public/allocation-sheet.js"]) w.eval(read(file));
   const script = read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__allocationTest = { state, renderAllocation, allocationRows, loadSharedClients, loadStaffDirectory, getClients:() => clientMasterClients };\n    })().catch(error =>");
   await w.eval(script); await tick();
-  const api = w.__allocationTest; assert.ok(api, warnings.join("\n")); api.state.currentView = "allocation-view"; api.renderAllocation();
+  const api = w.__allocationTest; assert.ok(api, warnings.join("\n")); api.state.currentView = "allocation-view"; api.renderAllocation(); await tick();
   const choose = (field: string, value: string, id = "client-00001") => {
     const select = w.document.querySelector(`#allocation-view [data-allocation-${field}="${id}"]`);
     assert.ok(select); select.value = value; select.dispatchEvent(new w.Event("change", { bubbles:true }));
@@ -76,6 +79,54 @@ const projection=(d:any,team:string,pic:string)=>{
 };
 
 const sheetCell = (d:any,id:string,field="acc") => d.w.document.querySelector(`[data-allocation-row="${id}"] [data-allocation-cell="${field}"]`);
+
+function setAllocationFilter(d: any, type: "acc" | "tax", value: string) {
+  const filter = d.w.document.getElementById(`allocation-${type}-filter`);
+  filter.value = value;
+  filter.dispatchEvent(new d.w.Event("change", { bubbles:true }));
+}
+
+test("Allocation switches both PIC filters between current and draft assignments without saving", async()=>{
+  const d=await allocation();try{
+    const toggle=()=>d.w.document.getElementById("allocation-filter-next-pic");
+    const visible=()=>Array.from(d.api.allocationRows(),(row:any)=>row.clientCode);
+    assert.equal(toggle().checked,false);
+    d.choose("acc","Dina");d.choose("tax","Denny");
+    setAllocationFilter(d,"acc","Dina");setAllocationFilter(d,"tax","Denny");
+    assert.deepEqual(visible(),[]);
+    toggle().focus();toggle().click();
+    assert.equal(d.w.document.activeElement,toggle());
+    assert.deepEqual(visible(),["CL-00001"]);
+    assert.equal(d.w.document.getElementById("allocation-acc-filter").value,"Dina");
+    assert.equal(d.w.document.getElementById("allocation-tax-filter").value,"Denny");
+    assert.equal(JSON.parse(d.w.localStorage.getItem("tax-practice-v2:user-1")).ui.allocationFilterNextPic,true);
+    let snapshot:any;
+    d.w.AllocationReports.preview=async(value:any)=>{snapshot=value;};
+    d.w.document.querySelector("[data-preview-allocation]").click();await tick();
+    assert.ok(snapshot.filters.includes("PIC filter: Next PIC"));
+    assert.deepEqual(Array.from(snapshot.rows,(row:any)=>row.code),["CL-00001"]);
+    toggle().click();
+    assert.deepEqual(visible(),[]);
+    assert.equal(d.api.state.allocationDrafts["client-00001"].nextAccPic,"Dina");
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("the Next PIC filter honors explicit No PIC and refilters a draft without discarding it", async()=>{
+  const d=await allocation();try{
+    const visible=()=>Array.from(d.api.allocationRows(),(row:any)=>row.clientCode);
+    d.choose("acc","");
+    setAllocationFilter(d,"acc","__no_pic__");setAllocationFilter(d,"tax","Bagus");
+    assert.deepEqual(visible(),["CL-00002"]);
+    d.w.document.getElementById("allocation-filter-next-pic").click();
+    assert.deepEqual(visible().sort(),["CL-00001","CL-00002"]);
+    d.choose("tax","","client-00002");
+    assert.deepEqual(visible(),["CL-00001"]);
+    assert.equal(d.w.document.querySelector('[data-allocation-row="client-00002"]'),null);
+    assert.equal(d.api.state.allocationDrafts["client-00002"].nextTaxPic,"");
+    assert.equal(d.writes.length,0);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
 
 test("Allocation PDF preview captures the filtered/sorted draft simulation without applying or mutating clients",async()=>{
   const d=await allocation();try{

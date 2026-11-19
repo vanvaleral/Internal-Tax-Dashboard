@@ -48,6 +48,8 @@ test("production extracts head styles, compacts runtime formatting and protects 
   const {minify_sync}=require("next/dist/compiled/terser/bundle.min.js");
   const compact=(code:string)=>minify_sync(code,{compress:false,mangle:false,ecma:2022,format:{comments:false,inline_script:true}}).code;
   const runtime=(html:string)=>html.match(/<script>([\s\S]*?)<\/script>/)![1];
+  assert.match(built.html, /name="workspace-allocation-revision" content="[a-f0-9]{12}"/);
+  assert.doesNotMatch(runtime(built.html), /allocation-range-anchor/,"Allocation range interactions are no longer in the startup code");
   assert.equal(compact(runtime(source)),runtime(built.html));assert.equal(compact(runtime(built.html)),runtime(built.html),"formatting is deterministic");
   assert.ok(built.scriptBytes<built.scriptSourceBytes*.87);assert.ok(built.htmlBytes<built.sourceBytes*.74);
   assert.ok(built.htmlBytes<built.sourceBytes*.87);assert.match(built.css,/@container my-work/);assert.match(built.css,/\.submenu/);

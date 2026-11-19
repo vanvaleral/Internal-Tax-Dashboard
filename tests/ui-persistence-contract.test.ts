@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const demoPath = new URL("../public/demo.html", import.meta.url);
+const allocationSheetPath = new URL("../public/allocation-sheet.js", import.meta.url);
 
 test("My Work uses a per-task save queue and avoids stale full-record replacement", async () => {
   const demo = await readFile(demoPath, "utf8");
@@ -142,7 +143,7 @@ test("client master load surfaces failed syncs and does not retain sample record
 test("database connection status uses the verified profile before background schema checks", async () => {
   const demo = await readFile(demoPath, "utf8");
   assert.match(demo, /Database: loading/);
-  assert.match(demo, /Client Master loaded from the database\./);
+  assert.match(demo, /Required workspace data loaded from the database\./);
   assert.match(demo, /remainingLoads\.push\(\(\) => refreshDatabaseStatus\(true\)\)/);
   assert.doesNotMatch(demo, /loadPerformanceLedger\(true\);\s+refreshDatabaseStatus\(true\);/);
 });
@@ -154,10 +155,10 @@ test("production startup never renders demo records before shared data arrives",
   assert.match(demo, /let taxCases = IS_OFFLINE_DEMO \? restoreCollection\("taxCases", DEFAULT_TAX_CASES\) : \[\]/);
   assert.match(demo, /Loading secure workspace\.\.\./);
   assert.match(demo, /app-loading-overlay visible initial-load/);
-  assert.match(demo, /const initialLoads = \[loadSharedClients\(true\)\]/);
+  assert.match(demo, /const initialLoads = needsInitialClients \? \[loadSharedClients\(true\)\] : \[\]/);
   assert.match(demo, /remainingLoads\.push\(\(\) => loadStaffDirectory\(true\)\)/);
   assert.doesNotMatch(demo, /Updating workspace\.\.\./);
-  assert.match(demo, /const initialResults = await Promise\.all\(initialLoads\);\s*if \(!clientsLoadedFromDatabase \|\| initialResults\.some/);
+  assert.match(demo, /const initialResults = await Promise\.all\(initialLoads\);\s*if \(needsInitialClients && !clientsLoadedFromDatabase \|\| initialResults\.some/);
   assert.match(demo, /WorkspaceStartup\.backgroundQueue\(remainingLoads, backgroundComplete\)/);
   assert.match(demo, /startupOverlay\?\.classList\.remove\("visible", "initial-load", "is-entering"\)/);
 });
@@ -184,7 +185,7 @@ test("client master is not restored from browser storage after a shared-data sav
 
 test("sub-menu navigation uses the complete renderer without triggering an autosave", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{\s*rerender\(\);\s*persistDemoState\(\);/);
+  assert.match(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{\s*rerender\(\);\s*persistDemoState\(\{defer:true\}\);/);
   assert.doesNotMatch(demo, /function commitWorkspaceNavigation\(mode = "push"\) \{[\s\S]{0,240}saveMonthlyProgress\(/);
 });
 
@@ -196,34 +197,38 @@ test("non-Operations UI changes never enqueue an Operations workspace save", asy
 
 test("allocation uses native table scrolling and does not build the hidden mobile layout on desktop", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /const allocationWindow = windowedRows\(rows, "allocation-clients", 48\)/);
-  assert.match(demo, /data-virtual-table="allocation-clients"/);
-  assert.match(demo, /\$\{!isMobileLayout \? `<div class="table-wrap"/);
+  const sheet = await readFile(allocationSheetPath, "utf8");
+  assert.match(sheet, /const allocationWindow = windowedRows\(rows, "allocation-clients", 48\)/);
+  assert.match(sheet, /\$\{!isMobileLayout \? `<div class="allocation-sheet-help">[^\n]+<div class="table-wrap" data-virtual-table="allocation-clients"/);
   assert.match(demo, /rows,\s*top: 0,\s*bottom: 0/);
 });
 
 test("Allocation combines ACC PIC and Tax PIC dropdown filters", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /id="allocation-acc-filter"/);
-  assert.match(demo, /id="allocation-tax-filter"/);
-  assert.match(demo, /state\.allocationAccFilter !== "all" && client\.accountingPic !== state\.allocationAccFilter/);
-  assert.match(demo, /state\.allocationTaxFilter !== "all" && client\.taxPic !== state\.allocationTaxFilter/);
+  const sheet = await readFile(allocationSheetPath, "utf8");
+  assert.match(sheet, /id="allocation-acc-filter"/);
+  assert.match(sheet, /id="allocation-tax-filter"/);
+  assert.match(sheet, /id="allocation-filter-next-pic" type="checkbox"/);
+  assert.match(demo, /state\.allocationAccFilter !== "all" && accPic !== state\.allocationAccFilter/);
+  assert.match(demo, /state\.allocationTaxFilter !== "all" && taxPic !== state\.allocationTaxFilter/);
   assert.match(demo, /allocationAccFilter: state\.allocationAccFilter/);
   assert.match(demo, /allocationTaxFilter: state\.allocationTaxFilter/);
 });
 
 test("Allocation separates company form from the client name", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /<th>\$\{sortHeader\("allocation", "form", "Form"\)\}<\/th>\s*<th>\$\{sortHeader\("allocation", "name", "Client Name"\)\}<\/th>/);
-  assert.match(demo, /escapeHtml\(identity\.form \|\| "Individual"\)/);
-  assert.match(demo, /virtualSpacer\(10, allocationWindow\.top\)/);
+  const sheet = await readFile(allocationSheetPath, "utf8");
+  assert.match(sheet, /<th>\$\{sortHeader\("allocation", "form", "Form"\)\}<\/th>\s*<th>\$\{sortHeader\("allocation", "name", "Client Name"\)\}<\/th>/);
+  assert.match(sheet, /escapeHtml\(identity\.form \|\| "Individual"\)/);
+  assert.match(sheet, /virtualSpacer\(10, allocationWindow\.top\)/);
   assert.match(demo, /sortClientMasterRows\(clientMasterClients\.filter\(isActiveClientRecord\)/);
 });
 
 test("Clients and Allocation number their filtered client rows", async () => {
   const demo = await readFile(demoPath, "utf8");
-  assert.match(demo, /allocationWindow\.rows\.map\(\(client, index\) =>/);
-  assert.match(demo, /allocationWindow\.start \+ index \+ 1/);
+  const sheet = await readFile(allocationSheetPath, "utf8");
+  assert.match(sheet, /allocationWindow\.rows\.map\(\(client, index\) =>/);
+  assert.match(sheet, /allocationWindow\.start \+ index \+ 1/);
   assert.match(demo, /activeClientWindow\.rows\.map\(\(client, index\) =>/);
   assert.match(demo, /activeClientWindow\.start \+ index \+ 1/);
   assert.match(demo, /client-number-col/);
@@ -283,9 +288,9 @@ test("My Work demo mode previews every task section without touching shared data
   assert.match(demo, /makeTask\("demo-completed-1"/);
   assert.match(demo, /makeTask\("demo-archive-1"/);
   assert.match(demo, /Preview data · not saved/);
-  assert.match(demo, /async function loadSharedMyWork\(background = false\) \{\s*if \(!window\.WorkspaceFeatures\.can\("myWork"\)\) return true;\s*if \(myWorkDemoMode\) return true;/);
+  assert.match(demo, /async function loadSharedMyWork\(background = false, requestedPeriod = ""\) \{\s*if \(!window\.WorkspaceFeatures\.can\("myWork"\)\) return true;\s*if \(myWorkDemoMode\) return true;/);
   assert.match(demo, /function saveMyWorkTaskToDatabase\(task, extra = \{\}\) \{\s*if \(myWorkDemoMode\) return;/);
-  assert.match(demo, /myWork: myWorkDemoMode \? \[\] : state\.myWork/);
+  assert.match(demo, /myWork: IS_OFFLINE_DEMO && !myWorkDemoMode \? state\.myWork : \[\]/);
 });
 
 test("My Work returns to a full-width list when moving from mobile to desktop", async () => {

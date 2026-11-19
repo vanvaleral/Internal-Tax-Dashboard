@@ -9,7 +9,10 @@ An empty draft string means remove the PIC, not keep the current PIC. Unspecifie
 draft fields still retain their existing assignment. Pending counts, Changed
 only, sorting, the request payload, failure retries and printed reports follow
 the same distinction. Current values and reports label empty assignments No PIC.
-The PIC filters can also show clients with no current Accounting or Tax PIC.
+The PIC filters can also show clients with no Accounting or Tax PIC. The
+`Filter by Next PIC` checkbox switches both dropdowns from saved to proposed
+assignments without clearing either selection. Unchanged fields still filter
+by their saved PIC, and an explicit blank draft matches No PIC.
 
 Only leadership can apply an allocation batch; server authorization is unchanged.
 The API requires both destination PIC fields explicitly to avoid clearing an
@@ -53,8 +56,9 @@ removes it. Case/whitespace variants still share one PIC entry. Both saved and
 proposed division totals always equal Visible Clients, including unassigned rows.
 
 The view is explicitly labelled Draft simulation while its visible clients have
-pending changes. It respects existing current-PIC, engagement, search and Changed
-only filters; it does not refilter rows by their proposed PIC. Hidden clients and
+pending changes. It respects the selected Current/Next PIC basis, engagement,
+search and Changed only filters. In Next mode, a draft edit can move a client out
+of the filtered view immediately without discarding the draft. Hidden clients and
 hidden pending drafts are not part of this filtered preview. Clear the filters to
 review overall impact before applying the batch. Chip order follows saved counts
 so simulation alone does not reshuffle the people being compared.
