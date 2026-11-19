@@ -5,8 +5,8 @@ import { JSDOM } from "jsdom";
 
 const read = (file: string) => readFileSync(new URL(`../public/${file}`, import.meta.url), "utf8");
 const roster = [
-  {id:"a", display_name:"Dewa"},
-  {id:"b", display_name:"Future Lead"},
+  {id:"a", display_name:"Dewa",role:"partner",employment_title:"Managing Partner"},
+  {id:"b", display_name:"Future Lead",role:"leader"},
   {id:"c", display_name:"Archived PIC", directory_active:false}
 ];
 
@@ -18,7 +18,7 @@ function setup() {
   w.eval(read("vendor/purify.min.js"));
   w.eval(read("management-structure.js"));
   const mount = (account = "manager", canManage = () => true) => {
-    const editor = w.ManagementStructure.create({account, canManage, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true}})});
+    const editor = w.ManagementStructure.create({account, canManage, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true,svg:true}})});
     editor.mount(host, roster);
     return editor;
   };
@@ -39,7 +39,7 @@ test("a manager can chart new partners and teams, save PIC links and independent
     assert.doesNotMatch(x.host.textContent,/Archived PIC/);
     x.submit({label:"Managing Partner", pic:"a"});
     x.submit({label:"Tax Team", kind:"Team", parent:"1", pic:"b"});
-    assert.equal(x.host.querySelectorAll(".structure-tree .structure-tree .structure-node").length,1);
+    assert.equal(x.host.querySelectorAll(".structure-wires path").length,1);
     assert.match(x.host.querySelector(".structure-chart").textContent,/Dewa/);
     x.click("copy");
     x.submit({scenarioTitle:"New Partner Proposal"},"name");
@@ -71,11 +71,53 @@ test("printing outputs only the chosen scenario; removing a parent keeps its rep
     x.click("print");
     assert.ok(printed);
     assert.match(print.window.document.body.textContent!,/Accounting Team/);
+    assert.equal(print.window.document.querySelectorAll(".structure-wires path").length,1);
     assert.equal(print.window.document.querySelector("button, img, form"),null);
     x.host.querySelector('[data-structure-edit="1"]').click();
     x.click("remove");
     assert.deepEqual(x.saved().plans[0].nodes.map((node:any) => [node.label,node.parent]),[["Accounting Team",""]]);
   } finally { x.dom.window.close(); print.window.close(); }
+});
+
+test("Structure Lab reopens saved scenarios and connects live PICs and existing branches", () => {
+  const x = setup();
+  try {
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[{id:"1",name:"Saved company plan",nodes:[
+      {id:"1",label:"Planning Team",kind:"Team",parent:"",pic:"",picName:""},
+      {id:"2",label:"Analyst",kind:"Role",parent:"1",pic:"",picName:""}
+    ]}]}));
+    x.mount();
+    const pick = (id:string) => x.host.querySelector(`[data-structure-pic="${id}"]`);
+    const edit = (id:string) => x.host.querySelector(`[data-structure-edit="${id}"]`);
+    const emit = (at:any,type:string,xValue:number) => {
+      const event = new x.w.MouseEvent(type,{bubbles:true,clientX:xValue,clientY:10,button:0});
+      Object.defineProperties(event,{pointerId:{value:1},isPrimary:{value:true}});
+      at.dispatchEvent(event);
+    };
+    const move = (source:any,target:any) => {
+      x.w.document.elementFromPoint = () => target;
+      emit(source,"pointerdown",0);
+      emit(x.w.window,"pointermove",30);
+      emit(x.w.window,"pointerup",30);
+    };
+    assert.match(x.host.querySelector(".structure-chart").textContent,/Saved company plan/);
+    assert.equal(pick("c"),null);
+    assert.match(pick("a").textContent,/Dewa.*Partner/);
+    move(pick("a"),x.host.querySelector("[data-structure-top]"));
+    assert.equal(pick("a"),null);
+    assert.deepEqual(x.saved().plans[0].nodes[2],{id:"3",parent:"",pic:"a",picName:"Dewa",label:"Managing Partner",kind:"Partner"});
+    move(x.host.querySelector('[data-structure-move="1"]'),edit("3"));
+    assert.match(edit("1").getAttribute("aria-label"),/reports to Dewa/);
+    assert.match(edit("2").getAttribute("aria-label"),/reports to Planning Team/);
+    move(x.host.querySelector('[data-structure-move="3"]'),edit("2"));
+    assert.equal(x.saved().plans[0].nodes[2].parent,"");
+    assert.match(x.host.querySelector("[data-structure-status]").textContent,/cannot loop/);
+    pick("b").click();
+    edit("1").click();
+    assert.match(edit("4").getAttribute("aria-label"),/Future Lead, Leader, reports to Planning Team/);
+    assert.equal(pick("b"),null);
+    assert.equal(x.host.querySelectorAll(".structure-wires path").length,3);
+  } finally { x.dom.window.close(); }
 });
 
 test("planning is role-gated and browser storage is account-scoped", () => {
