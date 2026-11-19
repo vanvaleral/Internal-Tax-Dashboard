@@ -65,8 +65,10 @@ its confirmed snapshot to the registered same-origin sheet using the existing
 account-bound preload mechanism and waits for that sheet to report readiness.
 The entry page keeps one opaque loader visible through iframe mounting, stylesheet
 loading and required reads. It releases the cover only when that iframe reports
-readiness or has an error to show. Direct workspace pages show their own loader.
-There is no minimum animation duration or exit animation.
+readiness or has an error to show. On success, the cover fades from blur into focus
+in about half a second while the ready workspace is already interactive. Reduced
+motion and startup errors skip the fade. This changes the visible handoff, not the
+required reads or the ready metric. Direct workspace pages show their own loader.
 
 ## Background Work
 

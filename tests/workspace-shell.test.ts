@@ -40,7 +40,8 @@ function openShell() {
   const location={origin:"https://test.local",replace:(url:string)=>redirects.push(url)};
   const frameWindow={location:new URL("https://test.local/demo.html"),postMessage:(message:any,origin:string)=>messages.push([message.type,origin])};
   const frame={contentWindow:frameWindow,inert:true,addEventListener:(name:string,callback:any)=>listeners.set(name,callback)};
-  const loader={hidden:false,busy:"true",setAttribute(name:string,value:string){if(name==="aria-busy")this.busy=value;}};
+  const attrs = new Map([["aria-busy","true"]]);
+  const loader={hidden:false,attrs,setAttribute(name:string,value:string){this.attrs.set(name,value);}};
   const window:any={addEventListener:(name:string,callback:any)=>listeners.set(name,callback)};
   vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
     window, location, document:{getElementById:(id:string)=>id==="workspace-frame"?frame:loader},
@@ -53,18 +54,23 @@ test("the entry cover stays in place on iframe mount and opens only for verified
   const { receive, messages, location, frameWindow, frame, loader, marks, window } = openShell();
   assert.match(html, /<iframe[^>]*\binert>/);
   assert.match(html, /\.workspace-boot\{[^}]*background:#f0f2ee/);
+  assert.match(html, /\.workspace-boot\[data-revealing\]\{opacity:0;visibility:hidden;pointer-events:none\}/);
+  assert.match(html, /@media\(prefers-reduced-motion:no-preference\)\{\s*\.workspace-boot\[data-revealing\]\{animation:workspace-reveal/);
   assert.deepEqual(messages,[["workspace:status",location.origin]]);
   receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:mounted"}});
   receive({origin:"https://unrelated.invalid",source:frameWindow,data:{type:"dashboard:ready"}});
   receive({origin:location.origin,source:{},data:{type:"dashboard:startup-error"}});
   assert.equal(loader.hidden,false);
-  assert.equal(loader.busy,"true");
+  assert.equal(loader.attrs.get("aria-busy"),"true");
+  assert.equal(loader.attrs.has("data-revealing"),false);
   assert.equal(frame.inert,true);
   assert.deepEqual(marks,[]);
   receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:ready",timing:{requestMs:850,server:{auth:100,nonTiming:"ignored"}}}});
   receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:ready"}});
-  assert.equal(loader.hidden,true);
-  assert.equal(loader.busy,"false");
+  assert.equal(loader.hidden,false);
+  assert.equal(loader.attrs.get("aria-busy"),"false");
+  assert.equal(loader.attrs.get("aria-hidden"),"true");
+  assert.equal(loader.attrs.has("data-revealing"),true);
   assert.equal(frame.inert,false);
   assert.equal(window.__workspaceStartupTiming.readyMs,1200);
   assert.equal(window.__workspaceStartupTiming.requestMs,850);
@@ -77,7 +83,8 @@ test("a verified startup error reveals the iframe without reporting readiness", 
   const { receive, location, frameWindow, frame, loader, marks, window } = openShell();
   receive({origin:location.origin,source:frameWindow,data:{type:"dashboard:startup-error"}});
   assert.equal(loader.hidden,true);
-  assert.equal(loader.busy,"false");
+  assert.equal(loader.attrs.get("aria-busy"),"false");
+  assert.equal(loader.attrs.has("data-revealing"),false);
   assert.equal(frame.inert,false);
   assert.deepEqual(marks,[]);
   assert.equal(window.__workspaceStartupTiming,undefined);
