@@ -8,7 +8,7 @@ import { loadRoute, mockDatabase } from "./route-harness.ts";
 function parser(role="supervisor"){
   return loadRoute("app/api/clients/parse-import/route.ts",{
     xlsx:XLSX,"@/lib/client-import":imports,"@/lib/client-import-workbook":{clientImportWorkbookRows},
-    "@/lib/access":{currentActor:async()=>({profile:{role}}),canImportClientMaster:(value:string)=>["leader","supervisor"].includes(value)}
+    "@/lib/access":{currentActor:async()=>({profile:{role}}),canUseClientTransfer:({role}: {role:string})=>["leader","supervisor"].includes(role)}
   });
 }
 async function parse(file:File,role="supervisor"){
@@ -62,7 +62,7 @@ test("invalid dates and formula-derived dates are rejected rather than silently 
 test("exported client workbooks reimport their dates and categories without mutating the database",async()=>{
   const records=[{id:"existing",client_code:"CL-001",legal_name:"Example",status:"Active",engagement_type:"free_of_charge",engagement_start:"2026-01-01",engagement_end:"2026-12-31",contract_started_at:"2026-01-02",inactivated_at:null}];
   const db=mockDatabase({client_master:structuredClone(records)});
-  const route=loadRoute("app/api/clients/export/route.ts",{xlsx:XLSX,"next/server":{NextResponse:Response},"@/lib/access":{currentActor:async()=>({admin:db,profile:{role:"supervisor"}}),isLeadership:()=>true}});
+  const route=loadRoute("app/api/clients/export/route.ts",{xlsx:XLSX,"next/server":{NextResponse:Response},"@/lib/access":{currentActor:async()=>({admin:db,profile:{role:"supervisor"}}),isLeadership:()=>true,canUseClientTransfer:()=>true}});
   const exported=await route.GET(),result=await parse(new File([await exported.arrayBuffer()],"exported-clients.xlsx"));
   assert.equal(result.body.valid,1);assert.equal(result.body.rows[0].engagementStart,"2026-01-01");assert.equal(result.body.rows[0].contractStartedAt,"2026-01-02");
   assert.equal(result.body.rows[0].engagementEnd,"2026-12-31");assert.equal(result.body.rows[0].engagementType,"Free of Charge");

@@ -1,4 +1,4 @@
-import { isLeadership, type CurrentActor } from "@/lib/access";
+import type { CurrentActor } from "@/lib/access";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { taskSteps } from "@/lib/my-work-steps";
 import { readAllPages } from "@/lib/read-all-pages";
@@ -29,9 +29,10 @@ function displayName(profile: { display_name?: string | null; full_name?: string
   return profile.display_name || profile.full_name || "Unknown";
 }
 
-export function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; favorited_at?: string | null } | null) {
+export function taskResponse(task: TaskRow, preference?: { favorite?: boolean | null; favorited_at?: string | null } | null, actorId?: string) {
   return {
     id: task.id,
+    canDelete: Boolean(actorId && task.created_by_profile_id === actorId),
     version: task.updated_at,
     title: task.title,
     note: task.notes || "",
@@ -78,10 +79,7 @@ function taskQuery(query: any, scope: string) {
 }
 async function visibleTasks(admin: NonNullable<ReturnType<typeof createAdminClient>>, profile: { id: string; role?: string | null }, scope: string) {
   const select = scope === "archive-index" ? "id, title, completed_at" : TASK_SELECT;
-  const build = () => taskQuery(admin.from("my_work_tasks").select(select, { count: "exact" }).order("created_at", { ascending: false }).order("id"),scope);
-  if (isLeadership(profile.role)) {
-    return readAllPages((from, to) => build().range(from, to));
-  }
+  const build = () => taskQuery(admin.from("my_work_tasks").select(select, { count: "exact" }).is("deleted_at",null).order("created_at", { ascending: false }).order("id"),scope);
   const [assigned, own] = await Promise.all([
     readAllPages((from, to) => admin.from("my_work_task_assignees").select("task_id", { count: "exact" }).eq("staff_profile_id", profile.id).order("task_id").range(from, to)),
     readAllPages((from, to) => build().eq("created_by_profile_id", profile.id).range(from, to))
@@ -115,5 +113,5 @@ export async function readMyWork(admin: CurrentActor["admin"], profile: { id: st
     preferences.push(...(data || []));
   }
   const preferenceByTask = new Map(preferences.map(item => [item.task_id, item]));
-  return { tasks: visible.map(task => taskResponse(task, preferenceByTask.get(task.id))), scope, currentMonth: currentTaskMonth() };
+  return { tasks: visible.map(task => taskResponse(task, preferenceByTask.get(task.id), profile.id)), scope, currentMonth: currentTaskMonth() };
 }

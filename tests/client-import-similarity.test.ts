@@ -50,7 +50,7 @@ function fixture(records = [master()]) {
   };
   const route = loadRoute("app/api/clients/route.ts", {
     "@/lib/client-import": imports,
-    "@/lib/access": { currentActor: async () => ({ admin: db, profile: { id: "actor", role: "supervisor" }, userId: "user" }), isLeadership: () => true, canImportClientMaster: () => true },
+    "@/lib/access": { currentActor: async () => ({ admin: db, profile: { id: "actor", role: "supervisor" }, userId: "user" }), isLeadership: () => true, canUseClientTransfer: () => true },
     "@/lib/notifications": {}, "@/lib/workspace-reads": {}
   });
   return { route, calls, failCatalog: () => { failCatalog = true; }, conflict: () => { commitConflict = true; }, wrongTarget: () => { wrongTarget = true; }, changedVersion: () => { changedVersion = true; } };

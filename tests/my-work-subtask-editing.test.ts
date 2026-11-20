@@ -7,7 +7,7 @@ const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve)); };
 
 async function fixture(mobile = false) {
-  const warnings: string[] = [], writes: any[] = [];
+  const warnings: string[] = [], writes: any[] = [], deletes: any[] = [];
   const vc = new VirtualConsole(); vc.on("jsdomError", error => warnings.push(error.message));
   const dom = new JSDOM(read("public/demo.html"), { url: "http://localhost/demo.html", runScripts: "outside-only", virtualConsole: vc });
   const w = dom.window as any;
@@ -16,12 +16,18 @@ async function fixture(mobile = false) {
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
-  let task: any = { id: "saved-task", title: "SP2DK work", creatorName: "Ivan", createdAt: 1, done: false, version: "v1", steps: [
+  let task: any = { id: "saved-task", title: "SP2DK work", creatorName: "Ivan", createdAt: 1, done: false, version: "v1", canDelete:true, steps: [
     { id: "stable-step", title: "Worksheet", done: false }, { id: "completed-step", title: "Meeting", done: true }
   ] };
   const otherTask={id:"other-task",title:"Another task",creatorName:"Ivan",createdAt:2,done:false,version:"v1",steps:[]};
   let delayed = false, failed = false, release: (() => void) | undefined;
   w.fetch = async (url: string, init: any = {}) => {
+    if (url === "/api/my-work" && init.method === "DELETE") {
+      const body = JSON.parse(init.body); deletes.push(body);
+      if (failed) return {ok:false,status:503,json:async()=>({error:"Database unavailable"})};
+      task = null;
+      return {ok:true,status:200,json:async()=>({deleted:body.id})};
+    }
     if (url === "/api/my-work" && init.method === "PATCH") {
       const body = JSON.parse(init.body); writes.push(body);
       if (writes.length > 8) throw Error("Unexpected repeated save");
@@ -31,7 +37,7 @@ async function fixture(mobile = false) {
       return { ok: true, status: 200, json: async () => ({ task: structuredClone(task) }) };
     }
     const body = url === "/api/profile" ? { user: { id: "step-user" }, profile: { id: "ivan", role: "supervisor", display_name: "Ivan", directory_active: true } }
-      : url === "/api/my-work" ? { tasks: [task,otherTask] } : { data: [], tasks: [], staff: [], announcements: [] };
+      : url === "/api/my-work" ? { tasks: [task,otherTask].filter(Boolean) } : { data: [], tasks: [], staff: [], announcements: [] };
     return { ok: true, status: 200, json: async () => structuredClone(body) };
   };
   for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js"]) w.eval(read(file));
@@ -41,8 +47,37 @@ async function fixture(mobile = false) {
   const input = (index = 0) => w.document.querySelector(`[data-my-work-step-title="saved-task:${index}"]`);
   const checkbox = (index = 0) => w.document.querySelector(`[data-my-work-step-done="saved-task:${index}"]`);
   const key = (node: any, key: string) => node.dispatchEvent(new w.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  return { dom, w, writes, warnings, input, checkbox, key, api:w.__stepDraftTest, server: () => task, delay: () => { delayed = true; }, release: () => { delayed = false; release?.(); }, fail: () => { failed = true; } };
+  return { dom, w, writes, deletes, warnings, input, checkbox, key, api:w.__stepDraftTest, server: () => task, delay: () => { delayed = true; }, release: () => { delayed = false; release?.(); }, fail: (value = true) => { failed = value; } };
 }
+
+test("subtask menus delete one stable step and the task footer waits for a confirmed deletion", async () => {
+  const d = await fixture();
+  try {
+    d.w.confirm = () => true;
+    const messages: string[] = [];
+    d.w.alert = (message:string) => messages.push(message);
+    const q = (selector:string) => d.w.document.querySelector(selector);
+    q('.my-work-step-menu summary').click();
+    assert.equal(q('.my-work-step-menu').open,true);
+    q('[data-delete-my-work-step="0"]').click();
+    await tick();
+    assert.deepEqual(d.server().steps.map((step:any) => step.id),["completed-step"]);
+    const task = () => q('[data-select-my-work="saved-task"]');
+    d.fail();
+    q('.my-work-meta [data-delete-my-work]').click();
+    await tick();
+    assert.ok(task());
+    assert.deepEqual(messages,["Database unavailable"]);
+    d.fail(false);
+    q('.my-work-meta [data-delete-my-work]').click();
+    await tick();
+    assert.equal(task(),null);
+    assert.deepEqual(d.deletes,[{id:"saved-task",version:"v2"},{id:"saved-task",version:"v2"}]);
+    assert.ok(q('[data-select-my-work="other-task"]'));
+    assert.equal(q('.my-work-detail'),null);
+    assert.deepEqual(d.warnings,[]);
+  } finally { d.dom.window.close(); }
+});
 
 const newStep=(d:any)=>d.w.document.getElementById("my-work-step");
 const startStep=(d:any,id="saved-task")=>{d.w.document.querySelector(`[data-start-my-work-step="${id}"]`).click();return newStep(d);};

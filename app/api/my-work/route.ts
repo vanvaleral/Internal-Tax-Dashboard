@@ -139,7 +139,7 @@ export async function POST(request: Request) {
   }).select(TASK_SELECT).single();
   if (error?.code === "23505") {
     replayed = true;
-    const existing = await admin.from("my_work_tasks").select(TASK_SELECT).eq("created_by_profile_id", current.profile.id).eq("client_request_id", requestId).maybeSingle();
+    const existing = await admin.from("my_work_tasks").select(TASK_SELECT).eq("created_by_profile_id", current.profile.id).eq("client_request_id", requestId).is("deleted_at",null).maybeSingle();
     data = existing.data;
     error = existing.error;
   }
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       console.error("[my-work] assignment notification could not be created", error);
     }
   });
-  const responseTask = taskResponse(data as TaskRow);
+  const responseTask = taskResponse(data as TaskRow, undefined, current.profile.id);
   responseTask.creatorName = displayName(current.profile);
   if (additional.length) responseTask.assignees = [...new Set([...responseTask.assignees, ...additional.map(displayName)])];
   return NextResponse.json({ task: responseTask, replayed }, { status: 201 });
@@ -179,9 +179,9 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Task id is required." }, { status: 400 });
-  const { data: task, error: taskError } = await admin.from("my_work_tasks").select(TASK_MUTATION_SELECT).eq("id", id).maybeSingle();
+  const { data: task, error: taskError } = await admin.from("my_work_tasks").select(TASK_MUTATION_SELECT).eq("id", id).is("deleted_at",null).maybeSingle();
   if (taskError || !task) return NextResponse.json({ error: taskError?.message || "Task was not found." }, { status: 404 });
-  const visible = isLeadership(current.profile.role) || task.created_by_profile_id === current.profile.id || (task.my_work_task_assignees || []).some((assignee: { staff_profile_id: string }) => assignee.staff_profile_id === current.profile.id);
+  const visible = task.created_by_profile_id === current.profile.id || (task.my_work_task_assignees || []).some((assignee: { staff_profile_id: string }) => assignee.staff_profile_id === current.profile.id);
   if (!visible) return NextResponse.json({ error: "You do not have access to this task." }, { status: 403 });
 
   if (body.version !== task.updated_at) return NextResponse.json({ error: "This task changed in another session. Your edits are retained for reconciliation.", code: "VERSION_CONFLICT", task: taskResponse(task as TaskRow) }, { status: 409 });
@@ -220,7 +220,7 @@ export async function PATCH(request: Request) {
   }
   let updated = task as TaskRow;
   if (Object.keys(update).length) {
-    const { data, error } = await admin.from("my_work_tasks").update(update).eq("id", id).eq("updated_at", body.version).select(TASK_MUTATION_SELECT).maybeSingle();
+    const { data, error } = await admin.from("my_work_tasks").update(update).eq("id", id).eq("updated_at", body.version).is("deleted_at",null).select(TASK_MUTATION_SELECT).maybeSingle();
     if (!error && !data) return NextResponse.json({ error: "Another session saved this task first.", code: "VERSION_CONFLICT" }, { status: 409 });
     if (error || !data) return NextResponse.json({ error: error?.message || "Task could not be updated." }, { status: 500 });
     updated = data as TaskRow;
@@ -274,7 +274,25 @@ export async function PATCH(request: Request) {
     }
   }
   if (body.done === true && !task.is_completed) await createFollowUpTask(admin, updated);
-  const responseTask = taskResponse(updated, savedPreference);
+  const responseTask = taskResponse(updated, savedPreference, current.profile.id);
   if (addedAssigneeNames.length) responseTask.assignees = [...new Set([...responseTask.assignees, ...addedAssigneeNames])];
   return NextResponse.json({ task: responseTask });
+}
+
+export async function DELETE(request: Request) {
+  const current = await currentProfile();
+  if ("error" in current) return NextResponse.json({ error: current.error }, { status: current.status });
+  const admin = createAdminClient();
+  if (!admin) return NextResponse.json({ error: "Task service is not configured." }, { status: 503 });
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body.id !== "string" || typeof body.version !== "string") {
+    return NextResponse.json({ error: "Choose a saved task to delete." }, { status: 400 });
+  }
+  const { data, error } = await admin.from("my_work_tasks")
+    .update({ deleted_at: new Date().toISOString(), deleted_by_profile_id: current.profile.id, reminder_at: null })
+    .eq("id",body.id).eq("created_by_profile_id",current.profile.id).eq("updated_at",body.version)
+    .is("deleted_at",null).select("id").maybeSingle();
+  if (error) return NextResponse.json({ error: "Task could not be deleted." }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Only the creator can delete this task, and it must be up to date. Refresh My Work and retry." }, { status: 409 });
+  return NextResponse.json({ deleted: data.id });
 }

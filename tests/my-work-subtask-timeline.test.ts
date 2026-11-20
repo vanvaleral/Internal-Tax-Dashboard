@@ -73,6 +73,29 @@ test("creating checked steps attributes the real actor and returns stable step I
   assert.equal(d.db.tables.my_work_tasks[1].step_change_actor_profile_id, "pic");
 });
 
+test("supervisors see only their own and assigned tasks, and only creators can soft-delete", async () => {
+  const d = fixture();
+  d.profile.role = "supervisor";
+  const [own] = d.db.tables.my_work_tasks;
+  own.deleted_at = null;
+  const coworkerTask = { ...own, id:"coworker-task", title:"Private coworker task", created_by_profile_id:"someone-else" };
+  const assignedTask = { ...coworkerTask, id:"assigned", title:"Assigned to supervisor", my_work_task_assignees:[{staff_profile_id:"pic"}] };
+  d.db.tables.my_work_tasks.push(coworkerTask,assignedTask);
+  d.db.tables.my_work_task_assignees = [{task_id:"assigned",staff_profile_id:"pic"}];
+  const read = () => d.route.GET(new Request("https://test.local/api/my-work"));
+  const visible = await read();
+  assert.equal(visible.status,200);
+  assert.deepEqual(new Map(visible.body.tasks.map((task:any) => [task.id,task.canDelete])),new Map([[taskId,true],["assigned",false]]));
+  assert.equal((await d.route.PATCH(request({id:"coworker-task",version:"v1",title:"Unauthorized"}))).status,403);
+  assert.equal((await d.route.DELETE(request({id:"assigned",version:"v1"}))).status,409);
+  assert.equal((await d.route.DELETE(request({id:taskId,version:"stale"}))).status,409);
+  assert.equal((await d.route.DELETE(request({id:taskId,version:"v1"}))).status,200);
+  assert.equal(own.deleted_by_profile_id,"pic");
+  assert.ok(own.deleted_at);
+  assert.equal(own.case_id,"case","soft-delete retains case history");
+  assert.deepEqual(Array.from((await read()).body.tasks,(task:any) => task.id),["assigned"]);
+});
+
 test("the Cases timeline shows checked steps independently of parent completion, with context and honest historical labels", () => {
   const html = readFileSync(new URL("../public/demo.html", import.meta.url), "utf8");
   const start = html.indexOf("    function caseTimeline(item, progress) {"), end = html.indexOf("    function renderCaseProgressPanel", start);

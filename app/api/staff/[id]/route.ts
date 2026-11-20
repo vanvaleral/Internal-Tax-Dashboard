@@ -66,7 +66,14 @@ export async function PATCH(request: Request, context: Context) {
   if (!canManageDirectoryRole(actor.profile.role, existing.role as StaffRole, nextRole)) return NextResponse.json({ error: "Only a Partner can change a Partner/Admin profile or grant that role." }, { status: 403 });
   if (id === actor.profile.id && !nextActive) return NextResponse.json({ error: "You cannot archive your own profile." }, { status: 400 });
 
-  let update = actor.admin.from("staff_profiles").update({ full_name: nextFullName, display_name: nextDisplayName, employment_title: nextTitle || null, team_division: nextTeam, role: nextRole, directory_active: nextActive, ...(existing.directory_active === false ? { archived_at: null } : {}) }).eq("id", id);
+  const permissions: Record<string, boolean | null | string> = {};
+  for (const [field,column] of [["clientImportAllowed","client_import_allowed"],["clientExportAllowed","client_export_allowed"]]) {
+    if (!(field in body)) continue;
+    if (body[field] !== null && typeof body[field] !== "boolean") return NextResponse.json({ error: "Choose a valid client permission." }, { status: 400 });
+    permissions[column] = body[field];
+    permissions.client_permissions_updated_by = actor.profile.id;
+  }
+  let update = actor.admin.from("staff_profiles").update({ full_name: nextFullName, display_name: nextDisplayName, employment_title: nextTitle || null, team_division: nextTeam, role: nextRole, directory_active: nextActive, ...permissions, ...(existing.directory_active === false ? { archived_at: null } : {}) }).eq("id", id);
   if (existing.directory_active === false) {
     const restoreCutoff = new Date(Date.now() - 14 * 86400000).toISOString();
     update = update.eq("directory_active", false).is("access_deletion_started_at", null).is("access_deleted_at", null)
@@ -74,7 +81,7 @@ export async function PATCH(request: Request, context: Context) {
   } else {
     update = update.eq("directory_active", true);
   }
-  const { data, error } = await update.select("id, full_name, display_name, employment_title, team_division, role, auth_user_id, claimed_at, directory_active, archived_at").maybeSingle();
+  const { data, error } = await update.select("id, full_name, display_name, employment_title, team_division, role, auth_user_id, claimed_at, directory_active, archived_at, client_import_allowed, client_export_allowed").maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "This profile changed while it was being restored. Refresh PIC Access." }, { status: 409 });
   try { await notifyLeadership(actor, nextActive ? "Updated staff access" : "Archived staff profile", nextDisplayName); } catch (notificationError) { console.error("[staff] directory notification failed", notificationError); }

@@ -346,7 +346,11 @@
     .my-work-assignment select { flex:1; min-width:0; width:100%; }
     .my-work-assignees { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 12px; }
     .my-work-assignee-chip { padding:4px 8px; border-radius:999px; color:#31517d; background:#e8f0ff; font-size:12px; }
-    .my-work-meta { margin-top:auto; padding-top:16px; color:#7a8493; font-size:12px; }
+    .my-work-meta { margin-top:auto; padding-top:16px; color:#7a8493; font-size:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .my-work-step-menu { position:relative; }
+    .my-work-step-menu summary { cursor:pointer; list-style:none; text-align:center; }
+    .my-work-step-menu summary::-webkit-details-marker { display:none; }
+    .my-work-step-menu button { position:absolute; z-index:3; inset-inline-end:0; white-space:nowrap; background:var(--panel-solid); border:1px solid var(--line); }
     .my-work-save-status { display:flex; align-items:center; gap:8px; min-height:32px; margin:0; padding:0; border:0; color:var(--muted); font-size:12px; line-height:20px; }
     .my-work-save-status .ghost-btn { flex:0 0 auto; min-height:28px; padding:4px 8px; font-size:12px; line-height:20px; }
     .my-work-save-status .ghost-btn:hover { transform:none; }
@@ -4246,7 +4250,13 @@
     let latestStaffClaimFor = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
     const canReassignCasePic = () => ["leader", "supervisor", "partner"].includes(String(state.role || "").toLowerCase());
-    const canImportClientMaster = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
+    const canReviewClientDuplicates = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
+    const canImportClientMaster = () => bootstrapProfile.profile.client_import_allowed ?? canReviewClientDuplicates();
+    const canExportClientMaster = () => bootstrapProfile.profile.client_export_allowed ?? hasLeadershipAccess();
+    const staffClientPermission = (staff, action) => {
+      const allowed = staff[`client_${action}_allowed`];
+      return `<select class="field" data-staff-client-${action}="${escapeAttr(staff.id)}" aria-label="Client ${action} permission for ${escapeAttr(staff.display_name || staff.full_name)}">${[["default","Role default"],["allow","Allow"],["block","Block"]].map(([value,label]) => `<option value="${value}" ${value === (allowed == null ? "default" : allowed ? "allow" : "block") ? "selected" : ""}>${label}</option>`).join("")}</select>`;
+    };
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
     const SERVICE_PACKAGES = ["Monthly Compliance", "Monthly + Annual", "Annual Only", "Case Support"];
@@ -6922,7 +6932,7 @@
 
           ${state.managementTab === "workload" && window.WorkspaceFeatures.manager() ? `
             <section class="panel">
-              <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff roles, teams, and account access. Changes notify Supervisors and Partners.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
+              <div class="section-title"><div><h3>PIC Access</h3><p>Manage staff roles, teams, and account access. Client permissions apply to the full Client Master; fee access still follows role.</p></div><button class="ghost-btn" data-refresh-staff-access="yes">Refresh</button></div>
               <div class="workspace-tabs submenu-secondary" style="margin-bottom:16px;" role="group" aria-label="PIC access status">
                 <button class="${state.staffAccessTab === "active" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="active">Active <span class="submenu-count">${staffDirectory.filter((staff) => staff.directory_active !== false).length}</span></button>
                 <button class="${state.staffAccessTab === "deleted" ? "solid-btn" : "ghost-btn"}" data-staff-access-tab="deleted">Recently Deleted <span class="submenu-count">${staffDirectory.filter((staff) => staff.directory_active === false && !staff.access_deleted_at).length}</span></button>
@@ -6957,7 +6967,7 @@
                         <td><input class="field" data-staff-display-name="${staff.id}" value="${escapeAttr(staff.display_name || staff.full_name || "")}" /></td>
                         <td><input class="field" data-staff-title="${staff.id}" value="${escapeAttr(staff.employment_title || "")}" placeholder="Position" /></td>
                         <td><select class="field" data-staff-team="${staff.id}"><option value="Tax Team" ${staff.team_division === "Tax Team" ? "selected" : ""}>Tax Team</option><option value="Accounting Team" ${staff.team_division === "Accounting Team" ? "selected" : ""}>Accounting Team</option></select></td>
-                        <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner"].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role === "staff" ? "Associate" : role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select></td>
+                        <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner", ...(staff.role === "admin" ? ["admin"] : [])].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role === "staff" ? "Associate" : role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select><details><summary>Client permissions</summary><label>Import ${staffClientPermission(staff,"import")}</label><label>Export ${staffClientPermission(staff,"export")}</label></details></td>
                         <td><span class="pill ${staff.auth_user_id ? "accent" : "neutral"}">${staff.auth_user_id ? "Registered" : "Pending"}</span></td>
                         <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${!staff.auth_user_id && (!["partner", "admin"].includes(staff.role) || ["partner", "admin"].includes(state.role)) ? `<button class="ghost-btn" data-regenerate-staff-claim="${staff.id}" aria-label="Regenerate claim code for ${escapeAttr(staff.display_name || staff.full_name)}">Regenerate code</button>` : ""}<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">${deleteIcon()}</button></div></td>
                       </tr>
@@ -7319,8 +7329,9 @@
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
               </div>
               <div class="toolbar-right">
-                ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button><button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
-                ${!isMobileWorkspace ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
+                ${!isMobileWorkspace && canReviewClientDuplicates() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button>` : ""}
+                ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
+                ${!isMobileWorkspace && canExportClientMaster() ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
               </div>
             </div>
           </section>
@@ -8492,7 +8503,13 @@
       const ready = !draft && !progress?.accessDenied;
       const saving = caseFollowUpPending.has(item.id);
       const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
-      const removal=(entry,restore=false)=>window.CaseAssessmentUI&&entry.id&&(hasLeadershipAccess()||entry.creatorProfileId===bootstrapProfile.profile.id)?window.CaseAssessmentUI.action(item,restore?"restore-progress":"remove-progress",restore?"Restore":"Remove incorrect update",entry.id,IS_OFFLINE_DEMO||!item.workflowAvailable,!restore):"";
+      const removal = (entry, restore = false) => {
+        if (!entry.id || !item.workflowAvailable || IS_OFFLINE_DEMO ||
+            !(hasLeadershipAccess() || (entry.creatorProfileId && entry.creatorProfileId === bootstrapProfile.profile.id))) return "";
+        return `<button type="button" class="tiny-btn${restore ? "" : " case-progress-remove"}"
+          data-case-follow-up-correction="${restore ? "restore-progress" : "remove-progress"}" data-entry-id="${escapeAttr(entry.id)}"
+          aria-label="${restore ? "Restore follow-up" : "Delete follow-up"}" title="${restore ? "Restore follow-up" : "Delete follow-up"}">${restore ? "Restore" : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg>'}</button>`;
+      };
       const removed=(item.workflow?.removedProgress||[]).filter(entry=>!entry.restoredAt);
       return `<div class="case-progress-viewport"><div class="case-progress-summary" aria-label="Case overview"><span>Tax PIC <strong>${escapeHtml(item.taxPic || "Unassigned")}</strong></span><span>ACC PIC <strong>${escapeHtml(item.accountingPic || "Unassigned")}</strong></span>${item.dueDate ? `<span>Due <strong>${escapeHtml(formatIsoToDisplayDate(item.dueDate))}</strong></span>` : ""}</div>
         ${IS_OFFLINE_DEMO ? `<div class="case-progress-notice">Demo preview. Changes are not saved.</div>` : draft ? `<div class="case-progress-notice"><span>Select a Client Master client and leave the cell to save automatically.</span><button class="tiny-btn" data-case-focus-client="${escapeAttr(item.id)}">Choose client</button></div>` : ""}
@@ -9045,7 +9062,7 @@
               </div>
               ${state.myWorkTab === "current" ? `<div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>` : ""}
             </div>
-            ${showMyWorkDetail ? `<aside class="my-work-detail ${shouldAnimateDrawer ? "is-opening" : ""}">
+            ${showMyWorkDetail ? `<aside class="my-work-detail ${shouldAnimateDrawer ? "is-opening" : ""}" ${selected.deleting ? "inert" : ""}>
               <button class="my-work-detail-close" data-close-my-work-detail="yes" aria-label="Close task details" title="Close task details"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
               <button class="my-work-detail-back" data-close-my-work-detail="yes" aria-label="Back to task list">&#8592; Back to tasks</button>
               ${selected ? `
@@ -9053,7 +9070,7 @@
                   <button class="${selected.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${selected.id}" aria-label="Favorite task">☆</button>
                   <input class="circle-check" type="checkbox" data-my-work-done="${selected.id}" ${selected.done ? "checked" : ""} />
                   <textarea id="my-work-title-detail" class="my-work-title-input" rows="1" aria-label="Task title">${escapeHtml(selected.title)}</textarea>
-                  ${(selected.steps || []).map((step, index) => `<div class="my-work-step-row ${step.done ? "is-complete" : ""}"><input class="circle-check" type="checkbox" data-my-work-step-done="${selected.id}:${index}" aria-label="Complete subtask: ${escapeAttr(step.title)}" ${step.done ? "checked" : ""} /><input id="my-work-step-title-${index}" class="my-work-step-title" type="text" data-my-work-step-title="${selected.id}:${index}" value="${escapeAttr(step.title)}" maxlength="1000" aria-label="Edit subtask title" autocomplete="off" /><span aria-hidden="true">&#8942;</span></div>`).join("")}
+                  ${(selected.steps || []).map((step, index) => `<div class="my-work-step-row ${step.done ? "is-complete" : ""}"><input class="circle-check" type="checkbox" data-my-work-step-done="${selected.id}:${index}" aria-label="Complete subtask: ${escapeAttr(step.title)}" ${step.done ? "checked" : ""} /><input id="my-work-step-title-${index}" class="my-work-step-title" type="text" data-my-work-step-title="${selected.id}:${index}" value="${escapeAttr(step.title)}" maxlength="1000" aria-label="Edit subtask title" autocomplete="off" /><details class="my-work-step-menu"><summary aria-label="Subtask options: ${escapeAttr(step.title)}"><span aria-hidden="true">&#8942;</span></summary><button type="button" class="ghost-btn" data-delete-my-work-step="${index}">Delete subtask</button></details></div>`).join("")}
                   ${showStepDraft ? `<div class="my-work-step-entry"><span class="circle-check" aria-hidden="true"></span><input id="my-work-step" data-my-work-step-task="${escapeAttr(selected.id)}" value="${escapeAttr(state.myWorkStepDrafts[selected.id] || "")}" placeholder="Type a step and press Enter" aria-label="New subtask" aria-describedby="my-work-step-draft-hint" maxlength="1000" autocomplete="off" /><small id="my-work-step-draft-hint" class="my-work-step-draft-hint">Draft (not saved). Enter to add; Esc to cancel.</small></div>` : ""}
                   <button class="my-work-add-step" data-start-my-work-step="${selected.id}"><span aria-hidden="true">+</span><span>Add step</span></button>
                 </div>
@@ -9065,7 +9082,7 @@
                 ${(selected.assignees || []).length ? `<div class="my-work-assignees">${selected.assignees.map((assignee) => `<span class="my-work-assignee-chip">${escapeHtml(assignee)}</span>`).join("")}</div>` : ""}
                 <div class="my-work-card"><textarea id="my-work-note" class="inline-textarea" placeholder="Add note">${escapeHtml(selected.note || "")}</textarea></div>
                 <div class="my-work-save-status" data-sync-state="${myWorkSaveState(selected)}" role="status" aria-atomic="true" data-my-work-save-status>${myWorkSaveStatus(selected)}</div>` : `<div class="empty-state">Select a task to open details.</div>`}
-              ${selected ? `<div class="my-work-meta">Created by ${escapeHtml(selected.creatorName || state.selectedPic)} · ${selected.createdAtText ? new Date(selected.createdAtText).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : new Date(selected.createdAt || Date.now()).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div>` : ""}
+              ${selected ? `<div class="my-work-meta"><span>Created by ${escapeHtml(selected.creatorName || state.selectedPic)} · ${selected.createdAtText ? new Date(selected.createdAtText).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : new Date(selected.createdAt || Date.now()).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</span>${selected.canDelete || IS_OFFLINE_DEMO ? `<button type="button" class="ghost-btn" data-delete-my-work="${escapeAttr(selected.id)}" ${selected.pendingSync || selected.deleting ? "disabled" : ""}>${selected.deleting ? "Deleting..." : "Delete task"}</button>` : ""}</div>` : ""}
             </aside>` : ""}
           </section>
         </div>${timeDialog}`);
@@ -10765,6 +10782,7 @@
           myWorkReadWriteRevision++;
           if (scopedWorkspaceReads) { myWorkArchiveMonths = null; if (state.currentView === "my-work-view" && state.myWorkTab === "archived") loadSharedMyWork(true,"archive-index"); }
           task.version = result.task.version;
+          task.canDelete = result.task.canDelete ?? task.canDelete;
           const oldSteps = new Map((task.serverBase?.steps || []).map(step => [step.id,Boolean(step.done)]));
           const stepCompletionChanged = (result.task.steps || []).some(step => Boolean(step.done) !== (oldSteps.get(step.id) || false));
           const timelineChanged=previousCaseId!==(result.task.caseId||"")||Boolean(task.serverBase?.done)!==Boolean(result.task.done)||stepCompletionChanged;
@@ -12227,6 +12245,57 @@
         return;
       }
       if (target.closest("[data-clear-my-work-reminder]")) { const task = state.myWork.find(item => item.id === state.selectedMyWorkId); if (task) { task.reminder = ""; state.myWorkMenu = ""; commitUi("replace"); saveMyWorkTaskToDatabase(task); } return; }
+      const deleteStep = target.closest("[data-delete-my-work-step]");
+      const deleteTask = target.closest("[data-delete-my-work]");
+      const correctFollowUp = target.closest("[data-case-follow-up-correction]");
+      if (correctFollowUp) {
+        const id = correctFollowUp.closest("[data-case-progress-id]")?.dataset.caseProgressId;
+        const item = taxCases.find(row => row.id === id);
+        if (item) window.CaseAssessmentUI?.open({item,...caseWorkflowHost(item)},correctFollowUp.dataset.caseFollowUpCorrection,correctFollowUp.dataset.entryId);
+        return;
+      }
+      if (deleteStep || deleteTask) {
+        const task = state.myWork.find(item => item.id === state.selectedMyWorkId);
+        if (!task || task.deleting) return;
+        if (deleteStep) {
+          const index = Number(deleteStep.dataset.deleteMyWorkStep);
+          if (!task.steps?.[index] || !window.confirm("Delete this subtask? Completed case history will be kept.")) return;
+          task.steps.splice(index,1);
+          commitMyWorkNavigation();
+          if (!IS_OFFLINE_DEMO) saveMyWorkTaskToDatabase(task);
+          return;
+        }
+        if ((!task.canDelete && !IS_OFFLINE_DEMO) || task.pendingSync || !window.confirm("Delete this task? Completed case history will be kept.")) return;
+        task.deleting = true;
+        myWorkReadWriteRevision++;
+        renderMyWorkUpdate();
+        try {
+          if (!IS_OFFLINE_DEMO) {
+            const response = await appFetch("/api/my-work", {
+              method:"DELETE", headers:{"Content-Type":"application/json",Accept:"application/json"},
+              body:JSON.stringify({id:task.id,version:task.version})
+            });
+            if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Task could not be deleted.");
+          }
+          myWorkReadWriteRevision++;
+          state.myWork = state.myWork.filter(item => item.id !== task.id);
+          delete state.myWorkStepDrafts[task.id];
+          for (const key of Object.keys(state.myWorkOrder)) state.myWorkOrder[key] = state.myWorkOrder[key].filter(id => id !== task.id);
+          if (state.selectedMyWorkId === task.id) {
+            state.selectedMyWorkId = "";
+            state.myWorkDetailOpen = false;
+            state.addingMyWorkStepId = "";
+          }
+          myWorkArchiveMonths = null;
+          commitMyWorkNavigation();
+          if (scopedWorkspaceReads && state.myWorkTab === "archived") loadMyWorkArchive();
+        } catch (error) {
+          task.deleting = false;
+          renderMyWorkUpdate();
+          window.alert(error instanceof Error ? error.message : "Task could not be deleted.");
+        }
+        return;
+      }
       if (startMyWorkStepTrigger) {
         state.addingMyWorkStepId = startMyWorkStepTrigger.getAttribute("data-start-my-work-step");
         state.myWorkStepDrafts[state.addingMyWorkStepId] ??= "";
@@ -12855,12 +12924,15 @@
         const id = (saveStaffTrigger || restoreStaffTrigger).getAttribute(saveStaffTrigger ? "data-save-staff" : "data-restore-staff");
         if (!id) return;
         const readStaffField = (name) => document.querySelector(`[data-staff-${name}="${id}"]`)?.value || "";
+        const readClientPermission = (name) => { const value = readStaffField(`client-${name}`); return value === "allow" ? true : value === "block" ? false : null; };
         const payload = restoreStaffTrigger ? { directoryActive: true } : {
           fullName: readStaffField("full-name"),
           displayName: readStaffField("display-name"),
           employmentTitle: readStaffField("title"),
           teamDivision: readStaffField("team"),
-          role: readStaffField("role")
+          role: readStaffField("role"),
+          clientImportAllowed: readClientPermission("import"),
+          clientExportAllowed: readClientPermission("export")
         };
         try {
           const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) });
@@ -12923,7 +12995,7 @@
 
       if (importClientsTrigger) {
         if (!canImportClientMaster()) {
-          window.alert("Only a Supervisor or Leader can import the client master.");
+          window.alert("Client import is not granted for your account.");
           return;
         }
         document.getElementById("client-csv-input").click();

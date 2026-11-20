@@ -176,15 +176,16 @@ test('assessment registers retain confirmed state on failed cell edits and combi
   }finally{d.dom.window.close();}
 });
 
-test('manual removal integrates with retained timeline entries without offering deletion of automatic events',async()=>{
-  const d=await dashboard();try{
+test('staff can remove their own manual update, but not another author or an automatic event',async()=>{
+  const d=await dashboard("staff");try{
     const row=d.api.getRows()[0],entry={id:'manual-note',entry:'Wrong case note',creatorProfileId:'tax-a',creatorName:'tax-a',createdAt:'2026-11-01T00:00:00Z'};
-    d.api.state.expandedHimbauanId=row.id;d.api.state.caseProgressById[row.id]={progressEntries:[entry],completedTasks:[],taskTimeline:[],loadedAt:Date.now()};d.api.renderCases();
-    const remove=d.w.document.querySelector('[data-ca-action="remove-progress"]');
+    d.api.state.expandedHimbauanId=row.id;d.api.state.caseProgressById[row.id]={progressEntries:[entry,{...entry,id:"other-note",creatorProfileId:"tax-b"}],completedTasks:[{id:"linked-task",title:"Completed task"}],taskTimeline:[],loadedAt:Date.now()};d.api.renderCases();
+    assert.equal(d.w.document.querySelectorAll('[data-case-follow-up-correction="remove-progress"]').length,1);
+    const remove=d.w.document.querySelector('[data-case-follow-up-correction="remove-progress"]');
     assert.ok(remove);
     assert.equal(remove.textContent.trim(),'','remove is icon-only');
-    assert.equal(remove.getAttribute('aria-label'),'Remove incorrect update');
-    assert.equal(remove.getAttribute('title'),'Remove incorrect update');
+    assert.equal(remove.getAttribute('aria-label'),'Delete follow-up');
+    assert.equal(remove.getAttribute('title'),'Delete follow-up');
     assert.ok(remove.querySelector('svg[aria-hidden="true"]'));
     assert.equal(remove.parentElement.dataset.caseTimelineKey,'progress:manual-note','X belongs to the timeline card, not its text block');
     assert.ok(remove.parentElement.classList.contains('has-remove'));
@@ -197,7 +198,7 @@ test('manual removal integrates with retained timeline entries without offering 
     assert.equal(d.writes.length,0,'opening the dialog does not remove a follow-up');
     d.w.document.querySelector('#case-assessment-dialog [data-ca-close]').click();
     row.workflow={result:null,products:[],schedule:[],payments:[],events:[],removedProgress:[{id:entry.id,entry:entry.entry,creatorId:'tax-a',reason:'Wrong client',at:'2026-11-05T00:00:00Z',actorId:'tax-a'}]};d.api.renderCases();
-    assert.equal(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'),null);assert.match(d.w.document.querySelector('.case-removed-progress').textContent,/Wrong case note/);assert.equal(d.w.document.querySelector('[data-ca-action="restore-progress"]').textContent,'Restore');
+    assert.equal(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'),null);assert.match(d.w.document.querySelector('.case-removed-progress').textContent,/Wrong case note/);assert.equal(d.w.document.querySelector('[data-case-follow-up-correction="restore-progress"]').textContent,'Restore');
     row.workflow.removedProgress[0].restoredAt='2026-11-05T01:00:00Z';d.api.renderCases();assert.ok(d.w.document.querySelector('[data-case-timeline-key="progress:manual-note"]'));assert.equal(d.w.document.querySelector('.case-removed-progress'),null);assert.deepEqual(d.warnings,[]);
   }finally{d.dom.window.close();}
 });

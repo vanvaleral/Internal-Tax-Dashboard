@@ -4,17 +4,28 @@ import * as XLSX from "xlsx";
 import { clientImportPayload, validateClientImportRows } from "../lib/client-import.ts";
 import { loadRoute, mockDatabase } from "./route-harness.ts";
 
-function fixture(rows: any[], role = "supervisor", denied = false) {
+function fixture(rows: any[], role = "supervisor", denied = false, clientExportAllowed?: boolean) {
   const db = mockDatabase({ client_master: structuredClone(rows) });
   const route = loadRoute("app/api/clients/export/route.ts", {
     "next/server": { NextResponse: Response }, "xlsx": XLSX,
     "@/lib/access": {
-      currentActor: async () => denied ? { error: "Unauthenticated", status: 401 } : { admin: db, profile: { role } },
+      currentActor: async () => denied ? { error: "Unauthenticated", status: 401 } : { admin: db, profile: { role, client_export_allowed:clientExportAllowed } },
+      canUseClientTransfer: (profile: {role:string; client_export_allowed?:boolean}) => profile.client_export_allowed ?? ["leader","supervisor","partner","admin"].includes(profile.role),
       isLeadership: (value: string) => ["leader", "supervisor", "partner", "admin"].includes(value)
     }
   });
   return { db, route };
 }
+
+test("delegated export uses the client master but excludes fees for Associates", async () => {
+  const rows = [{ client_code:"CL-001", legal_name:"Exported client", monthly_fee:850, annual_fee:370 }];
+  const result = await workbook(fixture(rows,"staff",false,true).route);
+  const [headers,data] = XLSX.utils.sheet_to_json<any[]>(result,{header:1});
+  assert.ok(data.includes("Exported client"));
+  assert.ok(!headers.includes("monthlyFee") && !headers.includes("annualFee"));
+  assert.ok(!data.includes(850) && !data.includes(370));
+  assert.equal((await fixture(rows,"leader",false,false).route.GET()).status,403);
+});
 
 async function workbook(route: any) {
   const response = await route.GET();

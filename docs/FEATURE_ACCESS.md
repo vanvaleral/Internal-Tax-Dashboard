@@ -32,6 +32,25 @@ Associate leadership rights, fee access or a different client ownership scope.
 Notification delivery rules are unchanged; these controls govern the feature and
 its development notice, not which events generate notifications.
 
+**Per-person client permissions:** In Management > PIC Access, open Client
+permissions on a staff row, choose Role default, Allow or Block independently
+for Import and Export, then click Save. Defaults preserve existing roles.
+Overrides still require the Clients feature to be enabled. They do not
+grant general Client Master editing or duplicate merging. Imports and exports
+can cover the full Client Master; Associates cannot read or change fees.
+Grant these permissions only to staff who need them. Reopen or refresh the
+workspace after changing permissions; the server enforces changes immediately.
+
+Deploy `20261120081713_personal_tasks_and_client_permissions.sql` before the
+matching app. It adds nullable permission overrides and audit records, plus
+soft-delete fields for My Work. The app's API is the only authenticated
+access path for task tables. My Work shows tasks created by or assigned to
+the signed-in staff member regardless of role. Only creators can delete a
+main task; deletion suppresses its reminder and keeps existing case history
+and links. Editable subtasks can be removed without erasing past completions.
+Manual case follow-ups can be removed by the author or existing leadership
+moderators; automatic events must be corrected at their source.
+
 ## Enforcement And Refresh
 
 Next middleware checks feature APIs against the current active staff role and

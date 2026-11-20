@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { canImportClientMaster, currentActor, isLeadership } from "@/lib/access";
+import { canUseClientTransfer, currentActor, isLeadership } from "@/lib/access";
 import { asSafeText, clientImportPayload, findSimilarClientNames, normalizeImportedDate, normalizeNpwp, validateClientImportRows, type ClientNameRecord } from "@/lib/client-import";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { readClients } from "@/lib/workspace-reads";
@@ -83,14 +83,19 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
-  if (!isLeadership(actor.profile.role)) return NextResponse.json({ error: "Only leadership can change the client master." }, { status: 403 });
   const body = await request.json();
-  const rows: ClientInput[] = Array.isArray(body.clients) ? body.clients : [];
-  if (!rows.length) return NextResponse.json({ error: "No clients supplied." }, { status: 400 });
-  if (["bulk-import", "validate-import"].includes(body.operation) && !canImportClientMaster(actor.profile.role)) {
-    return NextResponse.json({ error: "Only a Supervisor or Leader can import the client master." }, { status: 403 });
-  }
   const importing = ["bulk-import", "validate-import"].includes(body.operation);
+  if (importing ? !canUseClientTransfer(actor.profile,"import") : !isLeadership(actor.profile.role)) {
+    return NextResponse.json({ error: importing ? "Client import is not granted for your account." : "Only leadership can change the client master directly." }, { status: 403 });
+  }
+  let rows: ClientInput[] = Array.isArray(body.clients) ? body.clients : [];
+  if (!rows.length) return NextResponse.json({ error: "No clients supplied." }, { status: 400 });
+  if (importing && !isLeadership(actor.profile.role)) {
+    if (rows.some(row => [row?.monthlyFee,row?.annualFee].some(value => value != null && String(value).trim() !== ""))) {
+      return NextResponse.json({ error: "Remove the monthly and annual fee columns before importing. Your account cannot change fees." }, { status: 403 });
+    }
+    rows = rows.map(({monthlyFee,annualFee,...row}) => row);
+  }
   const validation = validateClientImportRows(rows, { allowMissingCodes: importing });
   let ownership: Awaited<ReturnType<typeof resolveStaffIds>>;
   try { ownership = await resolveStaffIds(actor.admin, rows); }

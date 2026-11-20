@@ -3,7 +3,7 @@ import test from "node:test";
 import * as imports from "../lib/client-import.ts";
 import { loadRoute, mockDatabase, request } from "./route-harness.ts";
 
-function fixture(role = "supervisor") {
+function fixture(role = "supervisor", importAllowed?: boolean) {
   const db = mockDatabase({ staff_profiles: [{ id: "pic", full_name: "Ivan", display_name: "Ivan", directory_active: true }] });
   const calls: any[] = [];
   const match = { row: 2, action: "update", matchedBy: "name", clientId: "existing-id", clientCode: "CL-OLD", updatedAt: "2026-11-01T00:00:00Z", errors: [] as string[] };
@@ -15,11 +15,21 @@ function fixture(role = "supervisor") {
   };
   const route = loadRoute("app/api/clients/route.ts", {
     "@/lib/client-import": imports,
-    "@/lib/access": { currentActor: async () => ({ admin: db, profile: { id: "actor", role }, userId: "user" }), isLeadership: (value: string) => ["leader", "supervisor", "partner"].includes(value), canImportClientMaster: (value: string) => ["leader", "supervisor"].includes(value) },
+    "@/lib/access": { currentActor: async () => ({ admin: db, profile: { id: "actor", role, client_import_allowed:importAllowed }, userId: "user" }), isLeadership: (value: string) => ["leader", "supervisor", "partner"].includes(value), canUseClientTransfer: (profile: {role:string; client_import_allowed?:boolean}) => profile.client_import_allowed ?? ["leader", "supervisor"].includes(profile.role) },
     "@/lib/notifications": {}, "@/lib/workspace-reads": {}
   });
   return { route, calls, match, fail: (value: any) => { failure = value; } };
 }
+
+test("delegated import does not allow fee changes, direct edits, or bypassing a block", async () => {
+  const d = fixture("staff",true);
+  const preview = (row: Record<string,string>) => d.route.POST(request({operation:"validate-import",clients:[{name:"Existing Client",...row}]}));
+  assert.equal((await preview({monthlyFee:"2000000"})).status,403);
+  assert.equal((await preview({monthlyFee:"",annualFee:""})).status,200);
+  assert.deepEqual(Object.keys(d.calls[0].args.p_rows[0]),["legal_name"],"blank fee columns cannot zero out existing fees");
+  assert.equal((await d.route.POST(request({clients:[{name:"Existing Client"}]}))).status,403);
+  assert.equal((await fixture("leader",false).route.POST(request({operation:"validate-import",clients:[{name:"Existing Client"}]}))).status,403);
+});
 
 test("name-matched preview counts an update, including an omitted code", async () => {
   const d = fixture();
