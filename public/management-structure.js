@@ -11,6 +11,7 @@
   const nameKey = value => String(value || "").trim().replace(/\s+/g," ").toLowerCase();
   const ownerRoles = ["partner","supervisor","leader"];
   const allocationRoles = [["Tax PIC","tax team"],["Accounting PIC","accounting team"]];
+  const teamLoadLimit = 60;
 
   function resolveStaff(people) {
     const aliases = new Map();
@@ -84,6 +85,25 @@
     }).sort((a,b) => String(a.client.name || "").localeCompare(String(b.client.name || "")) || a.key.localeCompare(b.key));
     if (recommend) suggestTeamPics(rows,people,teamOf,plannedPartners,resolve);
     return rows;
+  }
+
+  function teamClientLoad({split,rows}) {
+    const teams = [split.a,split.b].map(id => ({id,total:0,tax:0,accounting:0}));
+    let shared = 0, unmapped = 0;
+    for (const row of rows) {
+      const [tax,accounting] = row.shown;
+      const mapped = teams.filter(team => team.id === tax.team || team.id === accounting.team);
+      if (!mapped.length) unmapped++;
+      if (mapped.length === 2) shared++;
+      for (const team of mapped) {
+        team.total++;
+        if (team.id === tax.team) team.tax++;
+        if (team.id === accounting.team) team.accounting++;
+      }
+    }
+    const combined = teams[0].total + teams[1].total;
+    const heavy = teams.find(team => 100 * team.total > teamLoadLimit * combined);
+    return {teams,shared,unmapped,combined,heavy};
   }
 
   function suggestTeamPics(rows, people, teamOf, plannedPartners, resolve) {
@@ -160,6 +180,7 @@
     try {
       baseline = localStorage.getItem(key);
       if (baseline) {
+        // Keep the last active chart and leave older saved plans intact.
         const stored = JSON.parse(baseline);
         if (!Array.isArray(stored.plans) || !stored.plans.length || stored.plans.length > maxPlans ||
             !stored.plans.some(plan => plan.id === stored.active) ||
@@ -169,7 +190,7 @@
         model = stored;
       }
     } catch {
-      storageError = "Saved plans could not be read. Reload before editing.";
+      storageError = "The saved structure could not be read. Reload before editing.";
     }
 
     const active = () => model.plans.find(plan => plan.id === model.active);
@@ -283,6 +304,33 @@
       return {split,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,mode,mode === "next" ? getAllocationDrafts() : {},recommend) : []};
     }
 
+    function clientLoadSummary(plan, comparison, heading = "h4") {
+      const title = "Current team client load";
+      if (!comparison.ready || !clientRows) {
+        const hint = comparison.ready ? "Waiting for confirmed Client Master data." : "Choose two separate branches in Team Split to compare their client load.";
+        return `<section class="structure-load" aria-labelledby="structure-load-title">
+          <${heading} id="structure-load-title">${title}</${heading}><p>${hint}</p></section>`;
+      }
+      const {teams,shared,unmapped,combined,heavy} = teamClientLoad(comparison);
+      const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
+      const status = !combined ? "No clients mapped" : heavy ? `Uneven: Team ${heavy === teams[0] ? "A" : "B"} has more clients` : "Balanced by client count";
+      return `<section class="structure-load" aria-labelledby="structure-load-title">
+        <div class="structure-load-heading"><${heading} id="structure-load-title">${title}</${heading}>
+          <span class="pill ${heavy ? "warn" : "neutral"}" data-structure-load-status>${status}</span></div>
+        <div class="structure-load-teams">${teams.map((team,index) => `<div class="structure-load-team" data-structure-load-team="${index === 0 ? "a" : "b"}">
+          <div><strong>Team ${index === 0 ? "A" : "B"}: ${esc(names.get(team.id))}</strong><small>Tax: ${team.tax} &middot; Accounting: ${team.accounting}</small></div>
+          <span><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
+        <p><strong>${shared} shared</strong> (counted once in each team) &middot; <strong>${unmapped} with no PIC mapped to either team.</strong>
+          Flagged if one team exceeds ${teamLoadLimit}% of the combined count. Client counts do not account for difficulty or staffing.</p>
+      </section>`;
+    }
+
+    function refreshLoadSummary() {
+      const slot = host.querySelector("[data-structure-load]");
+      const plan = active();
+      if (slot) slot.innerHTML = safeHtml(clientLoadSummary(plan,splitResult(plan,"current",false)));
+    }
+
     function splitView(plan) {
       const {split,ready,rows} = splitResult(plan);
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
@@ -355,7 +403,7 @@
         tell("Team A and Team B must be separate branches.");
         return;
       }
-      if (Object.keys(split.owners).length && !window.confirm("Changing the team branches clears confirmed owners for this scenario. Continue?")) {
+      if (Object.keys(split.owners).length && !window.confirm("Changing the team branches clears confirmed owners for this structure. Continue?")) {
         control.value = split[field];
         return;
       }
@@ -398,16 +446,9 @@
         validate(plan.nodes.map(entry => entry.id === node.id ? {...entry, parent: row.id} : entry))));
       const locked = storageError ? "disabled" : "";
       host.innerHTML = safeHtml(`
-        <div class="section-title"><div><div class="eyebrow">Organization planning</div><h3>Structure Lab</h3><p>Plan reporting lines without changing live assignments or access. Scenarios stay in this browser.</p></div>
-          <button type="button" class="ghost-btn" data-structure-action="print" title="Print the flowchart and include flagged clients when Team Split is ready" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
-        <div class="structure-toolbar">
-          <label>Scenario <select class="field" data-structure-plan ${locked}>${model.plans.map(row => option(row.id,row.name,plan.id)).join("")}</select></label>
-          <form data-structure-form="name" aria-label="Rename scenario"><label>Scenario name <input class="field" name="scenarioTitle" maxlength="100" required value="${esc(plan.name)}"></label>
-            <button type="submit" class="ghost-btn" ${locked}>Rename</button></form>
-          <button type="button" class="ghost-btn" data-structure-action="new" ${locked}>New scenario</button>
-          <button type="button" class="ghost-btn" data-structure-action="copy" ${locked}>Duplicate</button>
-          <button type="button" class="ghost-btn" data-structure-action="delete-plan" ${locked || (model.plans.length < 2 ? "disabled" : "")}>Delete scenario</button>
-        </div>
+        <div class="section-title"><div><div class="eyebrow">Organization planning</div><h3>Structure Lab</h3><p>Plan reporting lines without changing live assignments or access. This chart stays in this browser.</p></div>
+          <button type="button" class="ghost-btn" data-structure-action="print" title="Print the flowchart, client load and flagged clients when Team Split is ready" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
+        <div data-structure-load>${clientLoadSummary(plan,splitResult(plan,"current",false))}</div>
         <div class="workspace-tabs structure-subtabs" role="group" aria-label="Structure Lab views">
           <button type="button" class="${section === "chart" ? "solid-btn" : "ghost-btn"}" data-structure-section="chart" aria-pressed="${section === "chart"}">Flowchart</button>
           <button type="button" class="${section === "split" ? "solid-btn" : "ghost-btn"}" data-structure-section="split" aria-pressed="${section === "split"}">Team Split</button>
@@ -455,7 +496,7 @@
       }
     }
 
-    function printSheet(plan) {
+    function printSheet(plan, report) {
       const {points,width,height} = layout(plan.nodes);
       const cards = plan.nodes.map(node => {
         const {x,y} = points.get(node.id);
@@ -472,7 +513,8 @@
       }).join("");
       return `<main class="structure-print-page">
         <header><small>LMATS CONSULTING / ORGANIZATION PLANNING</small><h1>${esc(plan.name)}</h1>
-          <p>Planning only. Does not change system access.</p></header>
+          <p>Planning only. Does not change system access.</p>
+          ${report ? clientLoadSummary(plan,report,"h2") : ""}</header>
         <div class="structure-print-frame"><svg class="structure-print-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Organization flowchart">
           <g class="structure-wires">${connections(plan.nodes,points)}</g>${cards}
         </svg></div></main>`;
@@ -531,6 +573,14 @@
         .structure-print-detail{fill:#506268;font-size:11px}
         .structure-print-report .structure-print-page{position:static;block-size:min(170mm,calc(100vh - 8mm));break-inside:avoid;break-after:page}
         .structure-print-report .structure-print-page,.structure-print-findings{margin:0 auto;max-width:275mm;padding:10px;box-sizing:border-box}
+        .structure-load{border:1px solid #c5d6ce;border-radius:6px;margin-top:8px;padding:6px 8px;font-size:10px}
+        .structure-load-heading,.structure-load-team{display:flex;align-items:baseline;justify-content:space-between;gap:6px;overflow-wrap:anywhere}
+        .structure-load h2{font-size:12px;margin:0}
+        .structure-load .warn{color:#8b4e10;font-weight:700}
+        .structure-load-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:4px}
+        .structure-load-team{background:#edf4f1;padding:4px 6px}
+        .structure-load-team small{display:block}
+        .structure-load-team span{flex:none}
         .structure-print-findings header{break-after:avoid}
         .structure-print-findings h2{font-size:19px;margin:5px 0}
         .structure-print-findings table{width:100%;margin-top:12px;border-collapse:collapse;table-layout:fixed}
@@ -542,7 +592,7 @@
         @media print{.structure-print-report .structure-print-page,.structure-print-findings{padding:0}}`;
       doc.head.append(style);
       const printable = document.createElement("template");
-      printable.innerHTML = safeHtml(printSheet(plan) + (report ? printFindings(plan,report) : ""));
+      printable.innerHTML = safeHtml(printSheet(plan,report) + (report ? printFindings(plan,report) : ""));
       doc.body.append(doc.importNode(printable.content, true));
       page.focus();
       page.print();
@@ -674,53 +724,35 @@
       const action = button.dataset.structureAction;
       if (action === "print") { print(); return; }
       if (action === "cancel") { editing = ""; pending = null; render(); return; }
+      if (action !== "remove") return;
       const draft = structuredClone(model), plan = draft.plans.find(item => item.id === draft.active);
-      if (action === "new" || action === "copy") {
-        if (draft.plans.length >= maxPlans) { tell(`Up to ${maxPlans} scenarios can be saved.`); return; }
-        const id = nextId(draft.plans);
-        draft.plans.push({id, name: action === "copy" ? `${plan.name.slice(0, 93)} (copy)` : "New scenario", nodes: action === "copy" ? structuredClone(plan.nodes) : []});
-        draft.active = id;
-      } else if (action === "delete-plan") {
-        if (draft.plans.length < 2 || !window.confirm(`Delete "${plan.name}" from this browser?`)) return;
-        draft.plans = draft.plans.filter(item => item.id !== plan.id);
-        draft.active = draft.plans[0].id;
-      } else if (action === "remove") {
-        const node = plan.nodes.find(item => item.id === editing);
-        const split = plan.teamSplit;
-        const removesBranch = node && split && [split.a,split.b].includes(node.id);
-        if (!node || !window.confirm(`Remove "${node.label}"? Direct reports will move up one level.${removesBranch ? " This also clears the removed Team Split branch and its confirmed ownership plan." : ""}`)) return;
-        if (removesBranch) plan.teamSplit = {...split,a:split.a === node.id ? "" : split.a,b:split.b === node.id ? "" : split.b,owners:{}};
-        plan.nodes = plan.nodes.filter(item => item.id !== node.id);
-        for (const child of plan.nodes) if (child.parent === node.id) child.parent = node.parent;
-      } else return;
-      if (save(draft, "Scenario saved in this browser.", true) && action === "new") {
-        host.querySelector('[name="scenarioTitle"]').focus();
-        host.querySelector('[name="scenarioTitle"]').select();
-      }
+      const node = plan.nodes.find(item => item.id === editing);
+      const split = plan.teamSplit;
+      const removesBranch = node && split && [split.a,split.b].includes(node.id);
+      if (!node || !window.confirm(`Remove "${node.label}"? Direct reports will move up one level.${removesBranch ? " This also clears the removed Team Split branch and its confirmed ownership plan." : ""}`)) return;
+      if (removesBranch) plan.teamSplit = {...split,a:split.a === node.id ? "" : split.a,b:split.b === node.id ? "" : split.b,owners:{}};
+      plan.nodes = plan.nodes.filter(item => item.id !== node.id);
+      for (const child of plan.nodes) if (child.parent === node.id) child.parent = node.parent;
+      save(draft, "Structure saved in this browser.", true);
     }
 
     function onSubmit(event) {
-      const form = event.target, type = form.dataset.structureForm;
-      if (!type) return;
+      const form = event.target;
+      if (form.dataset.structureForm !== "node") return;
       event.preventDefault();
       if (!canManage()) return;
       const fields = new FormData(form);
       const value = field => String(fields.get(field) || "").trim().slice(0,100);
       const draft = structuredClone(model), plan = draft.plans.find(item => item.id === draft.active);
-      if (type === "name") {
-        if (!value("scenarioTitle")) { tell("Enter a scenario name."); return; }
-        plan.name = value("scenarioTitle");
-      } else {
-        const index = plan.nodes.findIndex(item => item.id === editing), old = plan.nodes[index];
-        if (!old && plan.nodes.length >= maxNodes) { tell(`Up to ${maxNodes} positions can be saved per scenario.`); return; }
-        const label = value("label"), kind = value("kind"), pic = value("pic");
-        if (!label || !kinds.includes(kind) || (pic && pic !== old?.pic && (!people.has(pic) || usedByAnother(pic,old?.id)))) { tell("Check the name, type and PIC."); return; }
-        const node = { id: old?.id || nextId(plan.nodes), label, kind, parent: value("parent"), pic, picName: people.get(pic)?.name || (pic ? old?.picName || "" : "") };
-        if (old) plan.nodes[index] = node; else plan.nodes.push(node);
-        if (!validate(plan.nodes)) { tell(`Reporting lines cannot form a loop or exceed ${maxDepth} levels.`); return; }
-      }
-      if (save(draft, "Scenario saved in this browser.", type === "node")) {
-        host.querySelector(type === "node" ? '[name="label"]' : '[name="scenarioTitle"]').focus();
+      const index = plan.nodes.findIndex(item => item.id === editing), old = plan.nodes[index];
+      if (!old && plan.nodes.length >= maxNodes) { tell(`Up to ${maxNodes} positions can be saved in the structure.`); return; }
+      const label = value("label"), kind = value("kind"), pic = value("pic");
+      if (!label || !kinds.includes(kind) || (pic && pic !== old?.pic && (!people.has(pic) || usedByAnother(pic,old?.id)))) { tell("Check the name, type and PIC."); return; }
+      const node = { id: old?.id || nextId(plan.nodes), label, kind, parent: value("parent"), pic, picName: people.get(pic)?.name || (pic ? old?.picName || "" : "") };
+      if (old) plan.nodes[index] = node; else plan.nodes.push(node);
+      if (!validate(plan.nodes)) { tell(`Reporting lines cannot form a loop or exceed ${maxDepth} levels.`); return; }
+      if (save(draft, "Structure saved in this browser.", true)) {
+        host.querySelector('[name="label"]').focus();
       }
     }
 
@@ -735,8 +767,12 @@
             title:person.employment_title || roleLabel,kind:ownerRoles.includes(role) ? roleLabel : "Role"}];
         }).sort((a,b) => a[1].name.localeCompare(b[1].name));
       const signature = JSON.stringify(roster);
+      const clientsChanged = nextClients !== clientRows;
       clientRows = nextClients;
-      if (target === host && signature === rosterKey && section === "chart") return;
+      if (target === host && signature === rosterKey && section === "chart") {
+        if (clientsChanged) refreshLoadSummary();
+        return;
+      }
       if (drag) clearDrag();
       pending = null;
       if (target !== host) {
@@ -757,14 +793,7 @@
         });
         host.addEventListener("submit", onSubmit);
         host.addEventListener("change", event => {
-          if (!canManage()) return;
-          if (event.target.matches("[data-structure-split]")) {
-            updateSplit(event.target);
-            return;
-          }
-          if (!event.target.matches("[data-structure-plan]")) return;
-          if (!model.plans.some(plan => plan.id === event.target.value) ||
-              !save({...model, active: event.target.value}, "Scenario selected.", true)) event.target.value = model.active;
+          if (canManage() && event.target.matches("[data-structure-split]")) updateSplit(event.target);
         });
       }
       rosterKey = signature;
@@ -774,7 +803,9 @@
     function refreshClients(nextClients) {
       if (!canManage()) return;
       clientRows = nextClients;
-      if (section !== "chart" && host?.isConnected) render();
+      if (!host?.isConnected) return;
+      if (section === "chart") refreshLoadSummary();
+      else render();
     }
     return { mount,refreshClients };
   }

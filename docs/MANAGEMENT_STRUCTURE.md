@@ -1,37 +1,45 @@
 # Management Structure
 
 Structure is a planning-only Management tab for Supervisors, Partners and legacy
-Admins. Structure Lab displays each named scenario as an editable flowchart.
+Admins. Structure Lab displays one editable flowchart.
 Drag an active PIC from the existing directory onto a manager or the top-level
 drop zone. The card starts with the directory name and employment title (or the
 access role when the title is absent). You can also click the name and then its
 destination. Moving an existing card moves its whole branch. Cycles and
 reporting lines deeper than six levels are rejected.
 
-Each PIC already on the chart is hidden from that scenario's available roster.
-Existing browser scenarios use the same saved data without a migration.
+Each PIC already on the chart is hidden from the available roster.
+The last active chart is used automatically. Older plans are retained in the
+browser, but the scenario controls are no longer shown. No migration is required.
 Add manual Partner, Team or Role cards for future positions. Removing a position
 moves its direct reports to the removed position's parent.
 
 Use the canvas zoom controls to zoom in or out, reset to 100%, or fit the
-entire chart. Zooming does not change the saved scenario.
+entire chart. Zooming does not change the saved chart.
 On desktop, the canvas and the PIC/editor sidebar share the same bottom edge.
 The chart scrolls inside the canvas; narrower windows stack the panels.
 
 **Team Split** is a planning comparison for two separate branches in the
-selected chart. If the scenario has exactly two non-nested leader cards, they
+chart. If it has exactly two non-nested leader cards, they
 are preselected; management can select other branch roots. Active clients
 get a suggested team when their Current Tax and Accounting PICs are in the
 same branch, or when their only assigned PIC maps to one branch. Confirm
 suggestions or set individual intended teams. Cross-team, unmapped, and
 unassigned clients do not receive automatic suggestions.
 
+**Current team client load** at the top of Structure compares those same
+branches using saved Current PICs only. Each active client counts once per
+team, even if both roles are assigned to that team. A shared client counts
+once in each team. Clients without a PIC mapped to either branch are shown
+separately. A split is flagged as uneven if one team holds more than 60%
+of the combined count. This measures volume, not case complexity or staffing.
+
 Compare **Current PICs** or **Next PICs** to show differences from the confirmed
 intended team. Next reads the current browser's unsaved Allocation drafts,
 retains the current PIC for a role without a draft, and honors explicit
 unassignment. The preview also shows split assignments and whole-team moves
 when an intended team has not been confirmed. Confirmations store only
-client IDs and chart branch IDs in the browser scenario. Changing branch
+client IDs and chart branch IDs in the browser. Changing branch
 roots requires confirmation if intended teams are already saved.
 
 **Recommend PIC changes** keeps in-team PICs and blank roles unchanged. For
@@ -55,14 +63,14 @@ larger paper size if the labels are too small. You can also save it as a PDF.
 Editing controls and the PIC roster aren't printed.
 
 The same **Print** button works from either tab. When both Team Split branches
-are selected and client data is available, it puts the flowchart first and
-lists the flagged active clients on subsequent pages. Otherwise it prints only
-the flowchart. The report compares saved
+are selected and client data is available, the first page shows the client
+load summary above the flowchart and subsequent pages list the flagged active
+clients. Otherwise it prints only the flowchart. The report compares saved
 Current PICs against the selected branches and confirmed intended teams; it
 includes all flagged rows regardless of the on-screen filter. It does not
 include Next PIC drafts or modify any assignments.
 
-Scenarios are saved only in the current browser, under the signed-in account's
+Charts are saved only in the current browser, under the signed-in account's
 storage key. They are not shared, backed up or stored in Supabase. Browser
 storage is not an access-control boundary; use it on a trusted device and do
 not enter confidential plans on a shared browser. No role, client assignment,

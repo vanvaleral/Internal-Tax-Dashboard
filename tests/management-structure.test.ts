@@ -23,8 +23,8 @@ function setup(staff = roster) {
     return editor;
   };
   const click = (action:string) => host.querySelector(`[data-structure-action="${action}"]`).click();
-  const submit = (fields:Record<string,string>, type = "node") => {
-    const form = host.querySelector(`[data-structure-form="${type}"]`);
+  const submit = (fields:Record<string,string>) => {
+    const form = host.querySelector('[data-structure-form="node"]');
     for (const [name,value] of Object.entries(fields)) form.elements.namedItem(name).value = value;
     form.requestSubmit();
   };
@@ -155,21 +155,24 @@ test("PIC recommendations keep existing in-team and blank roles, balance replace
   } finally { x.dom.window.close(); }
 });
 
-test("a manager can chart new partners and teams, save PIC links and independently duplicate a scenario", () => {
+test("Structure edits the last active chart without exposing scenario controls or deleting other saved plans", () => {
   const x = setup();
   try {
+    const older = {id:"1",name:"Earlier proposal",nodes:[{id:"1",parent:"",pic:"",kind:"Partner",label:"Earlier position"}]};
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"2",plans:[
+      older,{id:"2",name:"Company structure",nodes:[]}
+    ]}));
     x.mount();
+    assert.equal(x.host.querySelector('[data-structure-plan], [data-structure-form="name"], [data-structure-action="new"], [data-structure-action="copy"], [data-structure-action="delete-plan"]'),null);
     assert.doesNotMatch(x.host.textContent,/Archived PIC/);
     x.submit({label:"Managing Partner", pic:"a"});
     x.submit({label:"Tax Team", kind:"Team", parent:"1", pic:"b"});
     assert.equal(x.host.querySelectorAll(".structure-wires path").length,1);
     assert.match(x.host.querySelector(".structure-chart").textContent,/Dewa/);
-    x.click("copy");
-    x.submit({scenarioTitle:"New Partner Proposal"},"name");
     x.host.querySelector('[data-structure-edit="1"]').click();
     assert.equal(x.host.querySelector('[name="parent"] option[value="2"]'),null,"can't report to a descendant");
     x.submit({label:"Incoming Partner",pic:""});
-    assert.equal(x.saved().plans[0].nodes[0].label,"Managing Partner");
+    assert.deepEqual(x.saved().plans[0],older);
     assert.equal(x.saved().plans[1].nodes[0].label,"Incoming Partner");
     assert.equal(x.saved().plans[1].nodes[0].pic,"");
     const refreshed = x.host.cloneNode(false);
@@ -179,6 +182,48 @@ test("a manager can chart new partners and teams, save PIC links and independent
     assert.match(refreshed.querySelector(".structure-chart").textContent,/Incoming Partner/);
     editor.mount(refreshed,[{id:"b",display_name:"New Display Name"}]);
     assert.match(refreshed.querySelector(".structure-chart").textContent,/New Display Name/);
+  } finally { x.dom.window.close(); }
+});
+
+test("Structure summarizes current team loads without double-counting roles or rebuilding the chart on data refresh", () => {
+  const x = setup();
+  try {
+    const nodes = [
+      {id:"1",kind:"Leader",label:"Branch A",parent:"",pic:"a"},
+      {id:"2",kind:"Leader",label:"Branch B",parent:"",pic:"b"}
+    ];
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[
+      {id:"1",name:"Split baseline",nodes,teamSplit:{a:"1",b:"2",owners:{bothRoles:"2"}}}
+    ]}));
+    const editor = x.mount();
+    const summary = () => x.host.querySelector("[data-structure-load]");
+    const count = (team:string) => summary().querySelector(`[data-structure-load-team="${team}"] [data-structure-load-count]`).textContent;
+    const status = () => summary().querySelector("[data-structure-load-status]").textContent;
+    assert.match(summary().textContent,/Waiting for confirmed Client Master data/);
+    const canvas = x.host.querySelector(".structure-viewport");
+    const client = (id:string,taxPicProfileId:string,accountingPicProfileId="",clientStatus="Active") =>
+      ({id,name:id,clientStatus,taxPicProfileId,accountingPicProfileId});
+    const clients = [
+      client("bothRoles","a","a"),
+      client("oneMapped","a","unknown"),
+      client("bOnly","b"),
+      client("shared","a","b"),
+      client("noPIC",""),
+      client("archived","b","","Inactive")
+    ];
+    editor.mount(x.host,roster,clients);
+    assert.equal(x.host.querySelector(".structure-viewport"),canvas);
+    assert.equal(count("a"),"3");
+    assert.equal(count("b"),"2");
+    assert.match(summary().querySelector('[data-structure-load-team="a"] small').textContent,/Tax: 3 .* Accounting: 1/);
+    assert.match(summary().textContent,/1 shared .* 1 with no PIC mapped/);
+    assert.equal(status(),"Balanced by client count","a 60/40 split is within the threshold");
+    editor.refreshClients(clients.filter(client => client.id !== "bOnly"));
+    assert.equal(x.host.querySelector(".structure-viewport"),canvas);
+    assert.equal(count("b"),"1");
+    assert.equal(status(),"Uneven: Team A has more clients");
+    editor.refreshClients([]);
+    assert.equal(status(),"No clients mapped");
   } finally { x.dom.window.close(); }
 });
 
@@ -221,6 +266,11 @@ test("the split report prints the chart followed by all Current PIC conflicts, r
     assert.ok(printed);
     const doc = print.window.document;
     assert.ok(doc.body.classList.contains("structure-print-report"));
+    const summary = doc.body.children[0].querySelector(".structure-load")!;
+    assert.match(summary.textContent!,/Current team client load/);
+    assert.deepEqual([...summary.querySelectorAll("[data-structure-load-count]")].map(count => count.textContent),["2","2"]);
+    assert.match(summary.textContent!,/1 shared .* 1 with no PIC mapped/);
+    assert.match(summary.textContent!,/Balanced by client count/);
     assert.equal(doc.body.children[0].querySelectorAll(".structure-wires path").length,1);
     assert.ok(doc.body.children[1].classList.contains("structure-print-findings"));
     assert.equal(doc.querySelectorAll(".structure-print-findings tbody tr").length,2);
