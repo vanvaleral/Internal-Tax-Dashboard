@@ -11,7 +11,11 @@
   const nameKey = value => String(value || "").trim().replace(/\s+/g," ").toLowerCase();
   const ownerRoles = ["partner","supervisor","leader"];
   const allocationRoles = [["Tax PIC","tax team"],["Accounting PIC","accounting team"]];
-  const teamLoadLimit = 60;
+  const teamSlots = ["a","b","c"];
+  const teamLabel = slot => `Team ${slot.toUpperCase()}`;
+  const selectedTeams = split => teamSlots.filter(slot => split[slot]).map(slot => ({slot,id:split[slot],label:teamLabel(slot)}));
+  const flagged = row => row.conflict || row.cross || row.moved;
+  const loadGapLimit = 20;
 
   function resolveStaff(people) {
     const aliases = new Map();
@@ -36,18 +40,20 @@
   }
 
   const clientKey = client => String(client.databaseId || client.id || "");
-  function teamSplitRows(plan, people, clients, split, mode, drafts, recommend) {
+  function teamSplitRows(plan, people, clients, split, teams, mode, drafts, recommend) {
     const resolve = resolveStaff(people);
     const byId = new Map(plan.nodes.map(node => [node.id,node]));
+    const teamIds = new Set(teams.map(team => team.id));
     const memberships = new Map();
     const plannedPartners = new Set();
     for (const position of plan.nodes) {
       const kind = nameKey(position.kind);
       const id = position.pic || (ownerRoles.includes(kind) ? resolve(["",position.label]) : "");
       if (!id) continue;
-      if (kind === "partner") plannedPartners.add(id);
+      if (kind === "partner" || position.id === split.c) plannedPartners.add(id);
       let node = position;
-      while (node && node.id !== split.a && node.id !== split.b) node = byId.get(node.parent);
+      // A supervisor branch can contain A or B; the nearest selected root owns the position.
+      while (node && !teamIds.has(node.id)) node = byId.get(node.parent);
       if (!memberships.has(id)) memberships.set(id,new Set());
       memberships.get(id).add(node?.id || "");
     }
@@ -72,7 +78,7 @@
       const shown = mode === "next" ? project(client,true) : current;
       const key = clientKey(client);
       const stored = Object.hasOwn(split.owners,key) ? split.owners[key] : "";
-      const owner = stored === split.a || stored === split.b ? stored : "";
+      const owner = teamIds.has(stored) ? stored : "";
       const suggested = ownerSuggestion(current);
       const assigned = shown.filter(item => item.assigned);
       const teams = new Set(assigned.map(item => item.team).filter(Boolean));
@@ -87,23 +93,27 @@
     return rows;
   }
 
-  function teamClientLoad({split,rows}) {
-    const teams = [split.a,split.b].map(id => ({id,total:0,tax:0,accounting:0}));
+  function teamClientLoad({teams:selected,rows}) {
+    const teams = selected.map(team => ({...team,total:0,tax:0,accounting:0,flagged:0}));
     let shared = 0, unmapped = 0;
     for (const row of rows) {
       const [tax,accounting] = row.shown;
       const mapped = teams.filter(team => team.id === tax.team || team.id === accounting.team);
       if (!mapped.length) unmapped++;
-      if (mapped.length === 2) shared++;
-      for (const team of mapped) {
+      if (mapped.length > 1) shared++;
+      for (const team of teams) {
+        if (flagged(row) && (mapped.includes(team) || row.owner === team.id || (row.moved && row.suggested === team.id))) team.flagged++;
+        if (!mapped.includes(team)) continue;
         team.total++;
         if (team.id === tax.team) team.tax++;
         if (team.id === accounting.team) team.accounting++;
       }
     }
-    const combined = teams[0].total + teams[1].total;
-    const heavy = teams.find(team => 100 * team.total > teamLoadLimit * combined);
-    return {teams,shared,unmapped,combined,heavy};
+    const combined = teams.reduce((sum,team) => sum + team.total,0);
+    const highest = Math.max(...teams.map(team => team.total)), lowest = Math.min(...teams.map(team => team.total));
+    const uneven = 100 * (highest - lowest) > loadGapLimit * combined;
+    const busiest = teams.filter(team => team.total === highest);
+    return {teams,shared,unmapped,combined,uneven,leader:busiest.length === 1 ? busiest[0] : null};
   }
 
   function suggestTeamPics(rows, people, teamOf, plannedPartners, resolve) {
@@ -290,76 +300,83 @@
 
     function splitFor(plan) {
       if (plan.teamSplit) {
-        return {a:plan.teamSplit.a || "",b:plan.teamSplit.b || "",owners:plan.teamSplit.owners || {}};
+        return {a:plan.teamSplit.a || "",b:plan.teamSplit.b || "",c:plan.teamSplit.c || "",owners:plan.teamSplit.owners || {}};
       }
       const leaders = plan.nodes.filter(node => node.kind === "Leader" || (node.kind === "Role" && people.get(node.pic)?.role === "leader"));
-      if (leaders.length === 2 && !branchesOverlap(plan.nodes,leaders[0].id,leaders[1].id)) return {a:leaders[0].id,b:leaders[1].id,owners:{}};
-      return {a:"",b:"",owners:{}};
+      if (leaders.length === 2 && !branchesOverlap(plan.nodes,leaders[0].id,leaders[1].id)) return {a:leaders[0].id,b:leaders[1].id,c:"",owners:{}};
+      return {a:"",b:"",c:"",owners:{}};
     }
 
-    function splitResult(plan, mode = splitMode, recommend = showRecommendations) {
+    function splitResult(plan, mode, recommend) {
       const split = splitFor(plan);
-      const ready = Boolean(split.a && split.b && plan.nodes.some(node => node.id === split.a) &&
-        plan.nodes.some(node => node.id === split.b) && !branchesOverlap(plan.nodes,split.a,split.b));
-      return {split,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,mode,mode === "next" ? getAllocationDrafts() : {},recommend) : []};
+      const teams = selectedTeams(split);
+      const ready = Boolean(split.a && split.b && new Set(teams.map(team => team.id)).size === teams.length &&
+        teams.every(team => plan.nodes.some(node => node.id === team.id)) && !branchesOverlap(plan.nodes,split.a,split.b));
+      return {split,teams,mode,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,teams,mode,mode === "next" ? getAllocationDrafts() : {},recommend) : []};
     }
 
     function clientLoadSummary(plan, comparison, heading = "h4") {
-      const title = "Current team client load";
+      const next = comparison.mode === "next";
+      const title = next ? "Forecast team client load" : "Current team client load";
+      const compare = heading === "h4" ? `<select class="field" data-structure-split="mode" aria-label="Compare team client load">
+        ${option("current","Current PICs",comparison.mode)}${option("next","Next PICs (Allocation drafts)",comparison.mode)}</select>` : "";
+      const headingHtml = `<${heading} id="structure-load-title">${title}</${heading}>`;
       if (!comparison.ready || !clientRows) {
-        const hint = comparison.ready ? "Waiting for confirmed Client Master data." : "Choose two separate branches in Team Split to compare their client load.";
+        const hint = comparison.ready ? "Waiting for confirmed Client Master data." : "Choose Team A and B in Team Split to compare their client load. Team C is optional.";
         return `<section class="structure-load" aria-labelledby="structure-load-title">
-          <${heading} id="structure-load-title">${title}</${heading}><p>${hint}</p></section>`;
+          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${hint}</p></section>`;
       }
-      const {teams,shared,unmapped,combined,heavy} = teamClientLoad(comparison);
+      const {teams,shared,unmapped,combined,uneven,leader} = teamClientLoad(comparison);
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
-      const status = !combined ? "No clients mapped" : heavy ? `Uneven: Team ${heavy === teams[0] ? "A" : "B"} has more clients` : "Balanced by client count";
+      const status = !combined ? "No clients mapped" : !uneven ? "Balanced by client count"
+        : leader ? `Uneven: ${leader.label} has more clients` : "Uneven by client count";
       return `<section class="structure-load" aria-labelledby="structure-load-title">
-        <div class="structure-load-heading"><${heading} id="structure-load-title">${title}</${heading}>
-          <span class="pill ${heavy ? "warn" : "neutral"}" data-structure-load-status>${status}</span></div>
-        <div class="structure-load-teams">${teams.map((team,index) => `<div class="structure-load-team" data-structure-load-team="${index === 0 ? "a" : "b"}">
-          <div><strong>Team ${index === 0 ? "A" : "B"}: ${esc(names.get(team.id))}</strong><small>Tax: ${team.tax} &middot; Accounting: ${team.accounting}</small></div>
+        <div class="structure-load-heading">${headingHtml}<div class="structure-load-controls">
+          <span class="pill ${uneven ? "warn" : "neutral"}" data-structure-load-status>${status}</span>${compare}</div></div>
+        <div class="structure-load-teams">${teams.map(team => `<div class="structure-load-team" data-structure-load-team="${team.slot}">
+          <div><strong>${team.label}: ${esc(names.get(team.id))}</strong><small>Tax: ${team.tax} &middot; Accounting: ${team.accounting} &middot; <strong class="${team.flagged ? "structure-load-flagged" : ""}">${team.flagged} flagged</strong></small></div>
           <span><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
-        <p><strong>${shared} shared</strong> (counted once in each team) &middot; <strong>${unmapped} with no PIC mapped to either team.</strong>
-          Flagged if one team exceeds ${teamLoadLimit}% of the combined count. Client counts do not account for difficulty or staffing.</p>
+        <p><strong>${shared} shared</strong> (counted once per involved team) &middot; <strong>${unmapped} with no PIC mapped to any team.</strong>
+          Uneven when team shares differ by more than ${loadGapLimit} percentage points. Client counts do not account for difficulty or staffing.
+          ${next ? "Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft." : ""}</p>
       </section>`;
     }
 
     function refreshLoadSummary() {
       const slot = host.querySelector("[data-structure-load]");
       const plan = active();
-      if (slot) slot.innerHTML = safeHtml(clientLoadSummary(plan,splitResult(plan,"current",false)));
+      if (slot) slot.innerHTML = safeHtml(clientLoadSummary(plan,splitResult(plan,splitMode,false)));
     }
 
-    function splitView(plan) {
-      const {split,ready,rows} = splitResult(plan);
+    function splitView(plan, {split,teams,ready,rows}) {
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
-      const teamName = id => id === split.a ? `Team A: ${names.get(id)}` : `Team B: ${names.get(id)}`;
-      const rootOptions = id => option("","Choose a branch",id) + plan.nodes.map(node => option(node.id,nodeName(node),id)).join("");
+      const teamName = team => `${team.label}: ${names.get(team.id)}`;
+      const teamNames = new Map(teams.map(team => [team.id,teamName(team)]));
+      const rootOptions = slot => option("",slot === "c" ? "No Team C" : "Choose a branch",split[slot]) +
+        plan.nodes.map(node => option(node.id,nodeName(node),split[slot])).join("");
       const result = row => row.conflict ? "Outside intended team" : row.cross ? "Tax and Accounting split" :
         row.moved ? "Projected team change" : row.incomplete ? "Check PIC or chart" : "Within one team";
       const counts = {
-        all:rows.length, conflicts:rows.filter(row => row.conflict || row.cross || row.moved).length,
+        all:rows.length, conflicts:rows.filter(flagged).length,
         owners:rows.filter(row => !row.owner).length, review:rows.filter(row => row.incomplete).length
       };
       const suggested = rows.filter(row => !row.owner && row.suggested).length;
       const proposed = rows.reduce((total,row) => total + (row.recommendations?.filter(item => item.to).length || 0),0);
-      const visible = rows.filter(row => splitFilter === "all" || (splitFilter === "conflicts" && (row.conflict || row.cross || row.moved)) ||
+      const visible = rows.filter(row => splitFilter === "all" || (splitFilter === "conflicts" && flagged(row)) ||
         (splitFilter === "owners" && !row.owner) || (splitFilter === "review" && row.incomplete));
-      const picCell = item => `<td><strong>${esc(item.label)}</strong><small>${esc(item.team ? teamName(item.team) : item.assigned ? "Not mapped to either team" : "")}</small></td>`;
+      const picCell = item => `<td><strong>${esc(item.label)}</strong><small>${esc(item.team ? teamNames.get(item.team) : item.assigned ? "Not mapped to a team" : "")}</small></td>`;
       const recommendationCell = row => `<td data-structure-recommendation>${row.recommendations.length
         ? row.recommendations.map(item => `<div><strong>${esc(item.role)}</strong>: ${item.to ? `${esc(item.from)} &rarr; ${esc(item.to)}` : esc(item.note)}</div>`).join("")
         : !row.owner ? "Confirm an intended team first." : row.incomplete ? "Review unassigned or unmapped PICs." : "Keep existing PICs."}
         ${row.recommendations.length && row.incomplete ? "<small>Also review unassigned or unmapped PICs.</small>" : ""}</td>`;
       return `<section class="structure-review" aria-labelledby="structure-split-title">
         <div class="structure-review-head"><div><h4 id="structure-split-title">Team Split</h4>
-          <p>Compare two branches in <strong>${esc(plan.name)}</strong>. Intended teams are planning labels only and are saved in this browser.</p>
-          <p>Suggestions use the Current PICs when they agree, or the only assigned PIC. Next PICs use unsaved Allocation drafts here; a role without a draft keeps its current PIC.</p>
+          <p>Compare up to three branches in <strong>${esc(plan.name)}</strong>. Intended teams are planning labels only and are saved in this browser.</p>
+          <p>Choose the current supervisor's branch for Team C. Where branches are nested, each PIC belongs to the closest selected team. Suggestions use saved Current PICs.</p>
         </div></div>
         <div class="structure-split-controls">
-          <label>Team A branch <select class="field" data-structure-split="a" ${storageError ? "disabled" : ""}>${rootOptions(split.a)}</select></label>
-          <label>Team B branch <select class="field" data-structure-split="b" ${storageError ? "disabled" : ""}>${rootOptions(split.b)}</select></label>
-          <label>Compare <select class="field" data-structure-split="mode">${option("current","Current PICs",splitMode)}${option("next","Next PICs (Allocation drafts)",splitMode)}</select></label>
+          ${teamSlots.map(slot => `<label>${teamLabel(slot)} ${slot === "c" ? "(incoming partner)" : "branch"}
+            <select class="field" data-structure-split="${slot}" ${storageError ? "disabled" : ""}>${rootOptions(slot)}</select></label>`).join("")}
           <label>Show <select class="field" data-structure-split="filter">
             ${[["all","All active clients"],["conflicts","Conflicts & team moves"],["owners","No confirmed team"],["review","Unmapped / unassigned PICs"]].map(([key,label]) =>
               option(key,`${label} (${counts[key]})`,splitFilter)).join("")}</select></label>
@@ -367,17 +384,17 @@
           <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && clientRows ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
         </div>
         ${showRecommendations && ready && clientRows ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
-        ${!ready ? "<p>Choose two separate leader branches to see client assignments. The branches cannot be nested.</p>"
+        ${!ready ? "<p>Choose separate branches for Teams A and B. Team C is optional and must use a different position.</p>"
         : !clientRows ? "<p>Waiting for confirmed Client Master data.</p>"
         : `<div class="structure-review-summary" role="status"><strong>${counts.conflicts} flagged client${counts.conflicts === 1 ? "" : "s"}</strong><span>${counts.owners} without a confirmed team</span><span>${visible.length} shown</span></div>
           ${visible.length ? `<div class="table-wrap structure-review-table" tabindex="0" aria-label="Planned team assignment findings">
             <table><thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Finding</th>${showRecommendations ? '<th scope="col">Recommendation</th>' : ""}</tr></thead>
             <tbody>${visible.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
               <td><div class="structure-split-owner"><select class="field" data-structure-owner aria-label="Intended team for ${esc(row.client.name)}" ${storageError ? "disabled" : ""}>
-                ${option("","No confirmed team",row.owner || row.suggested)}${[split.a,split.b].map(id => option(id,teamName(id),row.owner || row.suggested)).join("")}
+                ${option("","No confirmed team",row.owner || row.suggested)}${teams.map(team => option(team.id,teamName(team),row.owner || row.suggested)).join("")}
               </select><button type="button" class="ghost-btn" data-structure-confirm-owner="${esc(row.key)}" ${storageError ? "disabled" : ""}>Confirm</button></div>
               ${row.owner ? "<small>Confirmed</small>" : ""}</td>
-              ${row.shown.map(picCell).join("")}<td><span class="pill ${row.conflict || row.cross ? "warn" : "neutral"}" data-structure-split-result>${result(row)}</span></td>
+              ${row.shown.map(picCell).join("")}<td><span class="pill ${flagged(row) ? "warn" : "neutral"}" data-structure-split-result>${result(row)}</span></td>
               ${showRecommendations ? recommendationCell(row) : ""}</tr>`).join("")}</tbody></table></div>`
             : "<p>No clients match this filter.</p>"}`}
       </section>`;
@@ -388,40 +405,49 @@
       const value = control.value;
       const focus = () => host.querySelector(`[data-structure-split="${field}"]`)?.focus();
       if (field === "mode" || field === "filter") {
-        if (field === "mode") splitMode = value === "next" ? "next" : "current";
-        else splitFilter = ["all","conflicts","owners","review"].includes(value) ? value : "all";
-        render();
+        if (field === "mode") {
+          splitMode = value === "next" ? "next" : "current";
+          if (section === "chart") refreshLoadSummary();
+          else render();
+        } else {
+          splitFilter = ["all","conflicts","owners","review"].includes(value) ? value : "all";
+          render();
+        }
         focus();
         return;
       }
-      if (field !== "a" && field !== "b") return;
+      if (!teamSlots.includes(field)) return;
       const plan = active(), split = splitFor(plan);
       if (value === split[field]) return;
+      const updated = {...split,[field]:value};
       if ((value && !plan.nodes.some(node => node.id === value)) ||
-          branchesOverlap(plan.nodes,field === "a" ? value : split.a,field === "b" ? value : split.b)) {
+          (value && teamSlots.some(slot => slot !== field && split[slot] === value)) ||
+          branchesOverlap(plan.nodes,updated.a,updated.b)) {
         control.value = split[field];
-        tell("Team A and Team B must be separate branches.");
+        tell("Team A and Team B must be separate branches. Team C must use a distinct position.");
         return;
       }
-      if (Object.keys(split.owners).length && !window.confirm("Changing the team branches clears confirmed owners for this structure. Continue?")) {
+      const owners = field === "c" ? Object.fromEntries(Object.entries(split.owners).filter(([,id]) => id !== split.c)) : {};
+      if (Object.keys(owners).length !== Object.keys(split.owners).length &&
+          !window.confirm("Changing this branch clears affected confirmed teams. Continue?")) {
         control.value = split[field];
         return;
       }
       const draft = structuredClone(model);
-      draft.plans.find(row => row.id === plan.id).teamSplit = {...split,[field]:value,owners:{}};
+      draft.plans.find(row => row.id === plan.id).teamSplit = {...updated,owners};
       if (save(draft,"Team branches saved in this browser.")) focus();
       else control.value = split[field];
     }
 
     function confirmTeams(button) {
-      const plan = active(), {split,ready,rows} = splitResult(plan);
+      const plan = active(), {split,teams,ready,rows} = splitResult(plan,splitMode,false);
       if (!ready || storageError) return;
       const owners = new Map(Object.entries(split.owners));
       const key = button.dataset.structureConfirmOwner;
       if (key) {
         const row = rows.find(item => item.key === key);
         const value = button.closest("tr").querySelector("[data-structure-owner]").value;
-        if (!row || (value && value !== split.a && value !== split.b)) return;
+        if (!row || (value && !teams.some(team => team.id === value))) return;
         if (value) owners.set(key,value);
         else owners.delete(key);
       } else {
@@ -445,16 +471,17 @@
       const parentOptions = plan.nodes.filter(row => !node || (row.id !== node.id &&
         validate(plan.nodes.map(entry => entry.id === node.id ? {...entry, parent: row.id} : entry))));
       const locked = storageError ? "disabled" : "";
+      const comparison = splitResult(plan,splitMode,section === "split" && showRecommendations);
       host.innerHTML = safeHtml(`
         <div class="section-title"><div><div class="eyebrow">Organization planning</div><h3>Structure Lab</h3><p>Plan reporting lines without changing live assignments or access. This chart stays in this browser.</p></div>
           <button type="button" class="ghost-btn" data-structure-action="print" title="Print the flowchart, client load and flagged clients when Team Split is ready" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
-        <div data-structure-load>${clientLoadSummary(plan,splitResult(plan,"current",false))}</div>
+        <div data-structure-load>${clientLoadSummary(plan,comparison)}</div>
         <div class="workspace-tabs structure-subtabs" role="group" aria-label="Structure Lab views">
           <button type="button" class="${section === "chart" ? "solid-btn" : "ghost-btn"}" data-structure-section="chart" aria-pressed="${section === "chart"}">Flowchart</button>
           <button type="button" class="${section === "split" ? "solid-btn" : "ghost-btn"}" data-structure-section="split" aria-pressed="${section === "split"}">Team Split</button>
         </div>
         <p class="subline" role="status" data-structure-status>${esc(message)}</p>
-        ${section === "split" ? splitView(plan) : `<div class="structure-layout">
+        ${section === "split" ? splitView(plan,comparison) : `<div class="structure-layout">
           <section class="structure-chart" aria-label="Reporting structure">
             <header class="structure-chart-head"><div><h4>${esc(plan.name)}</h4><p>Drop a PIC or drag a card by its grip onto a manager.</p></div><div class="structure-chart-tools"><span class="pill neutral">${plan.nodes.length} position${plan.nodes.length === 1 ? "" : "s"}</span>
               <div class="structure-zoom-tools" role="group" aria-label="Chart zoom">
@@ -520,33 +547,34 @@
         </svg></div></main>`;
     }
 
-    function printFindings(plan, {split,rows}) {
-      const flagged = rows.filter(row => row.conflict || row.cross);
+    function printFindings(plan, {teams,mode,rows}) {
+      const flaggedRows = rows.filter(flagged);
       const unmapped = rows.filter(row => row.incomplete).length;
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
-      const team = id => id === split.a ? "Team A" : id === split.b ? "Team B" : "";
-      const pic = item => `<td><strong>${esc(item.label)}</strong>${item.assigned ? `<small>${team(item.team) || "Not mapped to either team"}</small>` : ""}</td>`;
+      const labels = new Map(teams.map(team => [team.id,team.label]));
+      const next = mode === "next";
+      const pic = item => `<td><strong>${esc(item.label)}</strong>${item.assigned ? `<small>${labels.get(item.team) || "Not mapped to a team"}</small>` : ""}</td>`;
       return `<section class="structure-print-findings" aria-labelledby="structure-print-findings-title">
         <header><small>LMATS CONSULTING / TEAM SPLIT REPORT</small>
-          <h2 id="structure-print-findings-title">Flagged clients: Current PICs</h2>
-          <p><strong>${esc(plan.name)}</strong> &middot; Team A: ${esc(names.get(split.a))} &middot; Team B: ${esc(names.get(split.b))}</p>
-          <p>${flagged.length} of ${rows.length} active clients flagged. This comparison uses saved Current PICs only, not unsaved Next PIC drafts.</p>
+          <h2 id="structure-print-findings-title">Flagged clients: ${next ? "Next PICs (draft forecast)" : "Current PICs"}</h2>
+          <p><strong>${esc(plan.name)}</strong> &middot; ${teams.map(team => `${team.label}: ${esc(names.get(team.id))}`).join(" &middot; ")}</p>
+          <p>${flaggedRows.length} of ${rows.length} active clients flagged. ${next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only."}</p>
           ${unmapped ? `<p>Unassigned or unmapped PICs to review: ${unmapped} active client${unmapped === 1 ? "" : "s"}.</p>` : ""}
         </header>
-        ${flagged.length ? `<table aria-label="Flagged active clients">
+        ${flaggedRows.length ? `<table aria-label="Flagged active clients">
           <colgroup><col style="width:26%"><col style="width:17%"><col style="width:18%"><col style="width:18%"><col style="width:21%"></colgroup>
           <thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Reason flagged</th></tr></thead>
-          <tbody>${flagged.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
-            <td>${team(row.owner) || "Not confirmed"}</td>${row.shown.map(pic).join("")}
-            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : ""].filter(Boolean).join("; ")}</td></tr>`).join("")}</tbody></table>`
-          : "<p>No current client conflicts were found for these branches.</p>"}
+          <tbody>${flaggedRows.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
+            <td>${labels.get(row.owner) || "Not confirmed"}</td>${row.shown.map(pic).join("")}
+            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : "",row.moved ? "Projected team change" : ""].filter(Boolean).join("; ")}</td></tr>`).join("")}</tbody></table>`
+          : `<p>No ${next ? "forecast" : "current"} client conflicts were found for these branches.</p>`}
       </section>`;
     }
 
     function print() {
       const plan = active();
       if (!plan.nodes.length) return;
-      const split = clientRows ? splitResult(plan,"current",false) : null;
+      const split = clientRows ? splitResult(plan,splitMode,false) : null;
       const report = split?.ready ? split : null;
       const page = window.open("", "_blank", "width=960,height=760");
       if (!page) { tell("Allow popups to print this structure."); return; }
@@ -577,7 +605,7 @@
         .structure-load-heading,.structure-load-team{display:flex;align-items:baseline;justify-content:space-between;gap:6px;overflow-wrap:anywhere}
         .structure-load h2{font-size:12px;margin:0}
         .structure-load .warn{color:#8b4e10;font-weight:700}
-        .structure-load-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:4px}
+        .structure-load-teams{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;margin-top:4px}
         .structure-load-team{background:#edf4f1;padding:4px 6px}
         .structure-load-team small{display:block}
         .structure-load-team span{flex:none}
@@ -728,9 +756,12 @@
       const draft = structuredClone(model), plan = draft.plans.find(item => item.id === draft.active);
       const node = plan.nodes.find(item => item.id === editing);
       const split = plan.teamSplit;
-      const removesBranch = node && split && [split.a,split.b].includes(node.id);
-      if (!node || !window.confirm(`Remove "${node.label}"? Direct reports will move up one level.${removesBranch ? " This also clears the removed Team Split branch and its confirmed ownership plan." : ""}`)) return;
-      if (removesBranch) plan.teamSplit = {...split,a:split.a === node.id ? "" : split.a,b:split.b === node.id ? "" : split.b,owners:{}};
+      const removedSlot = node && split && teamSlots.find(slot => split[slot] === node.id);
+      if (!node || !window.confirm(`Remove "${node.label}"? Direct reports will move up one level.${removedSlot ? " This also clears the removed Team Split branch and affected confirmed teams." : ""}`)) return;
+      if (removedSlot) {
+        const owners = removedSlot === "c" ? Object.fromEntries(Object.entries(split.owners || {}).filter(([,id]) => id !== node.id)) : {};
+        plan.teamSplit = {...split,[removedSlot]:"",owners};
+      }
       plan.nodes = plan.nodes.filter(item => item.id !== node.id);
       for (const child of plan.nodes) if (child.parent === node.id) child.parent = node.parent;
       save(draft, "Structure saved in this browser.", true);
@@ -770,7 +801,7 @@
       const clientsChanged = nextClients !== clientRows;
       clientRows = nextClients;
       if (target === host && signature === rosterKey && section === "chart") {
-        if (clientsChanged) refreshLoadSummary();
+        if (clientsChanged || splitMode === "next") refreshLoadSummary();
         return;
       }
       if (drag) clearDrag();

@@ -96,7 +96,7 @@ test("Team Split suggests ownership from Current PICs and checks confirmed owner
     x.host.querySelector('[data-structure-section="chart"]').click();
     x.host.querySelector('[data-structure-edit="2"]').click();
     x.click("remove");
-    assert.deepEqual(x.saved().plans[0].teamSplit,{a:"1",b:"",owners:{}});
+    assert.deepEqual(x.saved().plans[0].teamSplit,{a:"1",b:"",c:"",owners:{}});
   } finally { x.dom.window.close(); }
 });
 
@@ -227,7 +227,91 @@ test("Structure summarizes current team loads without double-counting roles or r
   } finally { x.dom.window.close(); }
 });
 
-test("the split report prints the chart followed by all Current PIC conflicts, regardless of Next mode and filters", () => {
+test("Team C can use the supervisor branch above A and B and forecast its conflicts and load", () => {
+  const staff = [...roster,
+    {id:"s",display_name:"Incoming Supervisor",role:"supervisor",team_division:"Tax Team"},
+    {id:"ct",display_name:"C Tax",role:"staff",team_division:"Tax Team"}
+  ];
+  const x = setup(staff), print = new JSDOM("<html></html>");
+  try {
+    const nodes = [
+      {id:"3",kind:"Supervisor",label:"Incoming Supervisor",parent:"",pic:"s"},
+      {id:"1",kind:"Leader",label:"Branch A",parent:"3",pic:"a"},
+      {id:"2",kind:"Leader",label:"Branch B",parent:"3",pic:"b"},
+      {id:"4",kind:"Role",label:"C Tax",parent:"3",pic:"ct"}
+    ];
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[
+      {id:"1",name:"Split baseline",nodes,teamSplit:{a:"1",b:"2",owners:{branchOnly:"1"}}}
+    ]}));
+    const client = (id:string,taxPicProfileId:string,accountingPicProfileId="") =>
+      ({id,name:id,clientStatus:"Active",taxPicProfileId,accountingPicProfileId});
+    const clients = [
+      client("bothRoles","ct","ct"),client("shared","a","ct"),client("foreign","b"),
+      client("branchOnly","a"),client("lead","s"),client("projectedMove","b"),client("noPIC","")
+    ];
+    const drafts = {shared:{nextAccPic:"Dewa"},foreign:{nextTaxPic:"C Tax"},bothRoles:{nextTaxPic:""},projectedMove:{nextTaxPic:"C Tax"}};
+    x.mount("manager",() => true,clients,() => drafts);
+    const select = (field:string,value:string) => {
+      const input = x.host.querySelector(`[data-structure-split="${field}"]`);
+      input.value = value;
+      input.dispatchEvent(new x.w.Event("change",{bubbles:true}));
+    };
+    const tab = (name:string) => x.host.querySelector(`[data-structure-section="${name}"]`).click();
+    const row = (key:string) => x.host.querySelector(`[data-structure-confirm-owner="${key}"]`).closest("tr");
+    const team = (slot:string) => x.host.querySelector(`[data-structure-load-team="${slot}"]`);
+    const counts = () => [...x.host.querySelectorAll("[data-structure-load-count]")].map((node:any) => node.textContent);
+    assert.equal(team("c"),null);
+    tab("split");
+    select("c","1");
+    assert.match(x.host.querySelector("[data-structure-status]").textContent,/must use a distinct position/);
+    select("c","3");
+    assert.deepEqual(x.saved().plans[0].teamSplit.owners,{branchOnly:"1"},"adding Team C preserves existing confirmations");
+    assert.deepEqual(counts(),["2","2","3"]);
+    assert.match(team("c").textContent,/Team C: Incoming Supervisor/);
+    assert.match(team("c").textContent,/1 flagged/);
+    assert.equal(row("bothRoles").querySelector("[data-structure-owner]").value,"3","Team C can be suggested");
+    assert.match(row("shared").querySelector("[data-structure-split-result]").textContent,/Tax and Accounting split/);
+    row("foreign").querySelector("[data-structure-owner]").value = "3";
+    row("foreign").querySelector("[data-structure-confirm-owner]").click();
+    assert.match(row("foreign").querySelector("[data-structure-split-result]").textContent,/Outside intended team/);
+    assert.match(team("c").textContent,/2 flagged/);
+    x.click("recommend-pics");
+    assert.match(row("foreign").querySelector("[data-structure-recommendation]").textContent,/Future Lead .* C Tax/);
+
+    tab("chart");
+    const chart = x.host.querySelector(".structure-viewport");
+    const saved = x.saved();
+    select("mode","next");
+    assert.equal(x.host.querySelector(".structure-viewport"),chart);
+    assert.deepEqual(counts(),["2","0","4"]);
+    assert.match(team("c").textContent,/Tax: 3 .* Accounting: 1 .* 1 flagged/);
+    assert.match(x.host.querySelector("[data-structure-load-status]").textContent,/Uneven: Team C/);
+    assert.deepEqual(x.saved(),saved,"changing projection does not save anything");
+    tab("split");
+    assert.equal(x.host.querySelector('[data-structure-split="mode"]').value,"next");
+    assert.match(row("foreign").querySelector("[data-structure-split-result]").textContent,/Within one team/);
+    assert.match(row("projectedMove").querySelector("[data-structure-split-result]").textContent,/Projected team change/);
+    select("filter","review");
+    assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/projectedMove/);
+    x.w.open = () => ({document:print.window.document,focus(){},print(){}});
+    x.click("print");
+    const doc = print.window.document;
+    assert.match(doc.querySelector(".structure-load")!.textContent!,/Forecast team client load/);
+    assert.deepEqual([...doc.querySelectorAll("[data-structure-load-count]")].map(node => node.textContent),["2","0","4"]);
+    assert.match(doc.querySelector(".structure-print-findings h2")!.textContent!,/Next PICs \(draft forecast\)/);
+    assert.match(doc.querySelector(".structure-print-findings tbody")!.textContent!,/projectedMove/);
+    assert.equal(doc.querySelector("select"),null);
+    select("mode","current");
+    assert.deepEqual(counts(),["2","2","3"]);
+    tab("chart");
+    x.host.querySelector('[data-structure-edit="3"]').click();
+    x.click("remove");
+    assert.deepEqual(x.saved().plans[0].teamSplit,{a:"1",b:"2",c:"",owners:{branchOnly:"1"}});
+    assert.equal(team("c"),null);
+  } finally { x.dom.window.close(); print.window.close(); }
+});
+
+test("the Current split report prints the chart followed by all saved PIC conflicts regardless of filters", () => {
   const x = setup(), print = new JSDOM("<html></html>");
   try {
     const nodes = [
@@ -256,7 +340,6 @@ test("the split report prints the chart followed by all Current PIC conflicts, r
       control.value = value;
       control.dispatchEvent(new x.w.Event("change",{bubbles:true}));
     };
-    select("mode","next");
     select("filter","review");
     assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Wrong intended team/);
     let printed = false;
