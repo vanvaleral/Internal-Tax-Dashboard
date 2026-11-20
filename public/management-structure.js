@@ -276,11 +276,11 @@
       return {a:"",b:"",owners:{}};
     }
 
-    function splitResult(plan) {
+    function splitResult(plan, mode = splitMode, recommend = showRecommendations) {
       const split = splitFor(plan);
       const ready = Boolean(split.a && split.b && plan.nodes.some(node => node.id === split.a) &&
         plan.nodes.some(node => node.id === split.b) && !branchesOverlap(plan.nodes,split.a,split.b));
-      return {split,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,splitMode,getAllocationDrafts(),showRecommendations) : []};
+      return {split,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,mode,mode === "next" ? getAllocationDrafts() : {},recommend) : []};
     }
 
     function splitView(plan) {
@@ -317,6 +317,7 @@
               option(key,`${label} (${counts[key]})`,splitFilter)).join("")}</select></label>
           <button type="button" class="ghost-btn" data-structure-action="confirm-suggestions" ${suggested && !storageError ? "" : "disabled"}>Confirm ${suggested} suggested teams</button>
           <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && clientRows ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
+          <button type="button" class="ghost-btn" data-structure-action="print-split-report" ${ready && clientRows ? "" : "disabled"}>Print split report</button>
         </div>
         ${showRecommendations && ready && clientRows ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
         ${!ready ? "<p>Choose two separate leader branches to see client assignments. The branches cannot be nested.</p>"
@@ -478,15 +479,41 @@
         </svg></div></main>`;
     }
 
-    function print() {
+    function printFindings(plan, {split,rows}) {
+      const flagged = rows.filter(row => row.conflict || row.cross);
+      const unmapped = rows.filter(row => row.incomplete).length;
+      const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
+      const team = id => id === split.a ? "Team A" : id === split.b ? "Team B" : "";
+      const pic = item => `<td><strong>${esc(item.label)}</strong>${item.assigned ? `<small>${team(item.team) || "Not mapped to either team"}</small>` : ""}</td>`;
+      return `<section class="structure-print-findings" aria-labelledby="structure-print-findings-title">
+        <header><small>LMATS CONSULTING / TEAM SPLIT REPORT</small>
+          <h2 id="structure-print-findings-title">Flagged clients: Current PICs</h2>
+          <p><strong>${esc(plan.name)}</strong> &middot; Team A: ${esc(names.get(split.a))} &middot; Team B: ${esc(names.get(split.b))}</p>
+          <p>${flagged.length} of ${rows.length} active clients flagged. This comparison uses saved Current PICs only, not unsaved Next PIC drafts.</p>
+          ${unmapped ? `<p>Unassigned or unmapped PICs to review: ${unmapped} active client${unmapped === 1 ? "" : "s"}.</p>` : ""}
+        </header>
+        ${flagged.length ? `<table aria-label="Flagged active clients">
+          <colgroup><col style="width:26%"><col style="width:17%"><col style="width:18%"><col style="width:18%"><col style="width:21%"></colgroup>
+          <thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Reason flagged</th></tr></thead>
+          <tbody>${flagged.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
+            <td>${team(row.owner) || "Not confirmed"}</td>${row.shown.map(pic).join("")}
+            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : ""].filter(Boolean).join("; ")}</td></tr>`).join("")}</tbody></table>`
+          : "<p>No current client conflicts were found for these branches.</p>"}
+      </section>`;
+    }
+
+    function print(includeSplit = false) {
       const plan = active();
       if (!plan.nodes.length) return;
+      const report = includeSplit ? splitResult(plan,"current",false) : null;
+      if (report && (!report.ready || !clientRows)) { tell("Choose both team branches and load Client Master before printing the report."); return; }
       const page = window.open("", "_blank", "width=960,height=760");
       if (!page) { tell("Allow popups to print this structure."); return; }
       page.opener = null;
       const doc = page.document;
       doc.documentElement.lang = "en";
-      doc.title = `Tax Dashboard | ${plan.name}`;
+      doc.title = `Tax Dashboard | ${plan.name}${report ? " | Team Split Report" : ""}`;
+      if (report) doc.body.classList.add("structure-print-report");
       const style = doc.createElement("style");
       style.textContent = `@page{size:landscape;margin:12mm}
         body{font:12px 'Segoe UI',sans-serif;color:#162b31;margin:0}
@@ -503,10 +530,20 @@
         .structure-print-kind{fill:#166b69;font-size:9px;letter-spacing:1px}
         .structure-print-name{fill:#162b31;font-weight:700;font-size:14px}
         .structure-print-detail{fill:#506268;font-size:11px}
-        @media print{.structure-print-page{inset:0}}`;
+        .structure-print-report .structure-print-page{position:static;block-size:min(170mm,calc(100vh - 8mm));break-inside:avoid;break-after:page}
+        .structure-print-report .structure-print-page,.structure-print-findings{margin:0 auto;max-width:275mm;padding:10px;box-sizing:border-box}
+        .structure-print-findings header{break-after:avoid}
+        .structure-print-findings h2{font-size:19px;margin:5px 0}
+        .structure-print-findings table{width:100%;margin-top:12px;border-collapse:collapse;table-layout:fixed}
+        .structure-print-findings thead{display:table-header-group;break-inside:avoid;background:#e7f4f3}
+        .structure-print-findings tr{break-inside:avoid;page-break-inside:avoid}
+        .structure-print-findings th,.structure-print-findings td{padding:6px 7px;border:1px solid #c5d6ce;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+        .structure-print-findings table small{display:block;color:#506268}
+        @media print{.structure-print-page{inset:0}}
+        @media print{.structure-print-report .structure-print-page,.structure-print-findings{padding:0}}`;
       doc.head.append(style);
       const printable = document.createElement("template");
-      printable.innerHTML = safeHtml(printSheet(plan));
+      printable.innerHTML = safeHtml(printSheet(plan) + (report ? printFindings(plan,report) : ""));
       doc.body.append(doc.importNode(printable.content, true));
       page.focus();
       page.print();
@@ -621,6 +658,7 @@
         host.querySelector('[data-structure-action="recommend-pics"]').focus();
         return;
       }
+      if (section === "split" && button.dataset.structureAction === "print-split-report") { print(true); return; }
       if (button.dataset.structureZoom) { changeZoom(button.dataset.structureZoom); return; }
       if (button.dataset.structurePic && people.has(button.dataset.structurePic)) { pick({pic:button.dataset.structurePic}); return; }
       if (button.dataset.structureMove && find(button.dataset.structureMove)) { pick({id:button.dataset.structureMove}); return; }

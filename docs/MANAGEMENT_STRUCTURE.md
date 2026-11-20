@@ -54,6 +54,12 @@ Canvas zoom and scroll do not affect the result. With a large chart, choose a
 larger paper size if the labels are too small. You can also save it as a PDF.
 Editing controls and the PIC roster aren't printed.
 
+From **Team Split**, **Print split report** puts the selected flowchart first
+and lists the flagged active clients on subsequent pages. It compares saved
+Current PICs against the selected branches and confirmed intended teams; it
+includes all flagged rows regardless of the on-screen filter. It does not
+include Next PIC drafts or modify any assignments.
+
 Scenarios are saved only in the current browser, under the signed-in account's
 storage key. They are not shared, backed up or stored in Supabase. Browser
 storage is not an access-control boundary; use it on a trusted device and do

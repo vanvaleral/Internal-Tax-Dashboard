@@ -179,6 +179,67 @@ test("a manager can chart new partners and teams, save PIC links and independent
   } finally { x.dom.window.close(); }
 });
 
+test("the split report prints the chart followed by all Current PIC conflicts, regardless of Next mode and filters", () => {
+  const x = setup(), print = new JSDOM("<html></html>");
+  try {
+    const nodes = [
+      {id:"1",kind:"Leader",label:"Branch A",parent:"",pic:"a"},
+      {id:"2",kind:"Leader",label:"Branch B",parent:"",pic:"b"},
+      {id:"3",kind:"Role",label:"Future role",parent:"1",pic:""}
+    ];
+    const owners = {wrong:"1",aligned:"1",inactive:"1"};
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[
+      {id:"1",name:"Split baseline",nodes,teamSplit:{a:"1",b:"2",owners}}
+    ]}));
+    const client = (id:string,name:string,taxPicProfileId:string,accountingPicProfileId="",clientStatus="Active") =>
+      ({id,name,clientCode:`CL-${id}`,clientStatus,taxPicProfileId,accountingPicProfileId});
+    const clients = [
+      client("wrong","Wrong intended team","b","b"),
+      client("cross","<Cross team>","a","b"),
+      client("aligned","Next-only conflict","a"),
+      client("inactive","Inactive row","b","","Inactive"),
+      client("missing","Unmapped only","unknown")
+    ];
+    const drafts = {wrong:{nextTaxPic:"Dewa",nextAccPic:"Dewa"},aligned:{nextTaxPic:"Future Lead"}};
+    const editor = x.mount("manager",() => true,clients,() => drafts);
+    x.host.querySelector('[data-structure-section="split"]').click();
+    const select = (field:string,value:string) => {
+      const control = x.host.querySelector(`[data-structure-split="${field}"]`);
+      control.value = value;
+      control.dispatchEvent(new x.w.Event("change",{bubbles:true}));
+    };
+    select("mode","next");
+    select("filter","review");
+    assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Wrong intended team/);
+    let printed = false;
+    x.w.open = () => ({document:print.window.document,focus(){},print(){printed = true;}});
+    x.click("print-split-report");
+    assert.ok(printed);
+    const doc = print.window.document;
+    assert.ok(doc.body.classList.contains("structure-print-report"));
+    assert.equal(doc.body.children[0].querySelectorAll(".structure-wires path").length,1);
+    assert.ok(doc.body.children[1].classList.contains("structure-print-findings"));
+    assert.equal(doc.querySelectorAll(".structure-print-findings tbody tr").length,2);
+    assert.match(doc.body.textContent!,/2 of 4 active clients flagged/);
+    assert.match(doc.body.textContent!,/<Cross team>/);
+    assert.match(doc.body.textContent!,/Wrong intended team/);
+    assert.match(doc.body.textContent!,/PIC outside intended team/);
+    assert.match(doc.body.textContent!,/Tax and Accounting split/);
+    assert.doesNotMatch(doc.body.textContent!,/Next-only conflict|Inactive row|Unmapped only/);
+    assert.equal(doc.querySelector("button, select, img"),null);
+    assert.match(doc.querySelector("style")!.textContent!,/break-after:page/);
+    assert.match(doc.querySelector("style")!.textContent!,/display:table-header-group/);
+    assert.deepEqual(drafts,{wrong:{nextTaxPic:"Dewa",nextAccPic:"Dewa"},aligned:{nextTaxPic:"Future Lead"}});
+    editor.refreshClients([clients[2]]);
+    const empty = new JSDOM("<html></html>");
+    try {
+      x.w.open = () => ({document:empty.window.document,focus(){},print(){}});
+      x.click("print-split-report");
+      assert.match(empty.window.document.body.textContent!,/No current client conflicts/);
+    } finally { empty.window.close(); }
+  } finally { x.dom.window.close(); print.window.close(); }
+});
+
 test("printing outputs only the chosen scenario; removing a parent keeps its reports", () => {
   const x = setup(), print = new JSDOM("<html></html>");
   try {
