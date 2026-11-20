@@ -90,6 +90,32 @@ button {
   margin-top: 24px;
 }
 
+.auth-registration-fields {
+  display: grid;
+  gap: inherit;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.auth-success,
+.auth-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.auth-success {
+  background: #e6f4ed;
+  color: #20543d;
+}
+
+.auth-error {
+  background: #fbeeee;
+  color: #8b3232;
+}
+
 .auth-form label {
   display: grid;
   gap: 7px;
@@ -166,6 +192,30 @@ button {
 .auth-submit:disabled {
   cursor: wait;
   opacity: .65;
+}
+
+.auth-registration-fields .auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.auth-submit-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: auth-spin .75s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-submit-spinner { animation: none; }
 }
 
 .auth-mode-button {

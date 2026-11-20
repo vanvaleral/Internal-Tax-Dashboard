@@ -39,6 +39,8 @@ The second migration does not delete or rewrite existing prototype tables.
 
 The login page creates an account only when the supplied one-time staff claim code matches an active, unregistered staff profile. A Supervisor or Partner can issue a code in Management > PIC Access. Keep each code private; a used code is invalidated automatically. No referral-code environment variable is required.
 
+After registration, the login page confirms that the account was created, prefills the username, and asks the staff member to sign in with their password. Registration does not sign them in automatically or send a confirmation email.
+
 To make this gate effective, open **Supabase Authentication > General Configuration** and turn off **Allow new users to sign up**. The application creates approved staff through the private service-role route, while direct Supabase signups would otherwise bypass the claim-code check.
 
 ## 3. Start the app

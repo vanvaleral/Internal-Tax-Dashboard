@@ -10,6 +10,13 @@
       virtualSpacer, windowedRows
     } = live;
 
+    function allocationFormLabel(form) {
+      const normalized = String(form || "").trim().toLowerCase();
+      return !normalized || normalized === "individual"
+        ? '<abbr title="Orang Pribadi (Individual)">OP</abbr>'
+        : escapeHtml(form);
+    }
+
     function allocationPicOptions(people, selected) {
       const choices = selected && !people.includes(selected) ? [...people, selected] : people;
       return `<option value="" ${!selected ? "selected" : ""}>No PIC</option>${optionsMarkup(choices, selected)}`;
@@ -105,7 +112,7 @@
                         <td class="allocation-check-cell"><input type="checkbox" data-allocation-select="${escapeAttr(client.id)}" aria-label="Select ${escapeAttr(client.name)}" ${selectedIds.has(client.id) ? "checked" : ""} ${!canEdit ? "disabled" : ""} /></td>
                         <td>${allocationWindow.start + index + 1}</td>
                         <td>${escapeHtml(client.clientCode)}</td>
-                        <td>${escapeHtml(identity.form || "Individual")}</td>
+                        <td>${allocationFormLabel(identity.form)}</td>
                         <td>${escapeHtml(identity.name)}</td>
                         <td>${escapeHtml(client.accountingPic || "No PIC")}</td>
                         <td>${escapeHtml(client.taxPic || "No PIC")}</td>
@@ -140,7 +147,7 @@
                       <div class="mobile-card-header">
                         <div>
                           <div class="mobile-card-title"><label class="allocation-card-select"><input type="checkbox" data-allocation-select="${escapeAttr(client.id)}" aria-label="Select ${escapeAttr(client.name)}" ${selectedIds.has(client.id) ? "checked" : ""} ${!canEdit ? "disabled" : ""} />${index + 1}. ${escapeHtml(identity.name)}</label></div>
-                          <div class="subline">${escapeHtml(identity.form || "Individual")} · ${escapeHtml(client.clientCode)}</div>
+                          <div class="subline">${allocationFormLabel(identity.form)} · ${escapeHtml(client.clientCode)}</div>
                         </div>
                         <span data-allocation-status class="pill ${changed ? "warning" : "accent"}">${changed ? "Pending" : "Stable"}</span>
                       </div>

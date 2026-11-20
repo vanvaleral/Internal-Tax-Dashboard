@@ -30,8 +30,8 @@ async function allocation(mobile = false, role = "supervisor") {
     { id:"acc-2", display_name:"Dina", full_name:"Dina", team_division:"Accounting Team", directory_active:true }
   ];
   const rows = [
-    { id:"master-1", client_code:"CL-00001", legal_name:"Individual Alpha", business_form:"Individual", status:"Active", tax_pic_name:"Bagus", tax_pic_profile_id:"tax-1", accounting_pic_name:"Ivan", accounting_pic_profile_id:"acc-1", created_at:"2026-10-20T00:00:00Z" },
-    { id:"master-2", client_code:"CL-00002", legal_name:"Beta", business_form:"PT", status:"Active", tax_pic_name:"Bagus", tax_pic_profile_id:"tax-1", accounting_pic_name:"", accounting_pic_profile_id:null, created_at:"2026-10-10T00:00:00Z" }
+    { id:"master-1", client_code:"CL-00001", legal_name:"Individual Alpha", company_form:"Individual", status:"Active", tax_pic_name:"Bagus", tax_pic_profile_id:"tax-1", accounting_pic_name:"Ivan", accounting_pic_profile_id:"acc-1", created_at:"2026-10-20T00:00:00Z" },
+    { id:"master-2", client_code:"CL-00002", legal_name:"Beta", company_form:"PT", status:"Active", tax_pic_name:"Bagus", tax_pic_profile_id:"tax-1", accounting_pic_name:"", accounting_pic_profile_id:null, created_at:"2026-10-10T00:00:00Z" }
   ];
   w.fetch = async (url: string, init: any = {}) => {
     if (url === "/api/clients/allocation") {
@@ -85,6 +85,25 @@ function setAllocationFilter(d: any, type: "acc" | "tax", value: string) {
   filter.value = value;
   filter.dispatchEvent(new d.w.Event("change", { bubbles:true }));
 }
+
+test("Allocation abbreviates Individual as OP on desktop and mobile without changing the client type", async () => {
+  for (const mobile of [false,true]) {
+    const d = await allocation(mobile);
+    try {
+      const doc = d.w.document;
+      const label = () => doc.querySelector('[data-allocation-row="client-00001"] abbr');
+      assert.equal(label().textContent,"OP");
+      assert.equal(label().title,"Orang Pribadi (Individual)");
+      assert.match(doc.querySelector('[data-allocation-row="client-00002"]').textContent,/\bPT\b/);
+      const client = d.api.getClients().find((item:any) => item.id === "client-00001");
+      assert.equal(client.businessForm,"Individual");
+      client.businessForm = "";
+      d.api.renderAllocation();
+      assert.equal(label().textContent,"OP");
+      assert.equal(d.writes.length,0);
+    } finally { d.dom.window.close(); }
+  }
+});
 
 test("Allocation switches both PIC filters between current and draft assignments without saving", async()=>{
   const d=await allocation();try{
