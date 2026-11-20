@@ -328,7 +328,7 @@
               <td><div class="structure-split-owner"><select class="field" data-structure-owner aria-label="Intended team for ${esc(row.client.name)}" ${storageError ? "disabled" : ""}>
                 ${option("","No confirmed team",row.owner || row.suggested)}${[split.a,split.b].map(id => option(id,teamName(id),row.owner || row.suggested)).join("")}
               </select><button type="button" class="ghost-btn" data-structure-confirm-owner="${esc(row.key)}" ${storageError ? "disabled" : ""}>Confirm</button></div>
-              ${row.owner || row.suggested ? `<small>${row.owner ? "Confirmed" : "Suggested from Current PICs"}</small>` : ""}</td>
+              ${row.owner ? "<small>Confirmed</small>" : ""}</td>
               ${row.shown.map(picCell).join("")}<td><span class="pill ${row.conflict || row.cross ? "warn" : "neutral"}" data-structure-split-result>${result(row)}</span></td>
               ${showRecommendations ? recommendationCell(row) : ""}</tr>`).join("")}</tbody></table></div>`
             : "<p>No clients match this filter.</p>"}`}

@@ -144,7 +144,8 @@ test("Management opens Team Split with confirmed Client Master assignments witho
     assert.equal(doc.querySelector('[data-structure-section="conflicts"]'),null);
     doc.querySelector('[data-structure-section="split"]').click();
     assert.match(doc.querySelector(".structure-review tbody").textContent,/Client to review/);
-    assert.match(doc.querySelector(".structure-review tbody").textContent,/Suggested from Current PICs/);
+    assert.equal(doc.querySelector(".structure-review tbody [data-structure-owner]").value,"1");
+    assert.match(doc.querySelector('[data-structure-action="confirm-suggestions"]').textContent,/Confirm 1 suggested teams/);
     assert.equal(d.requests.length, 1);
   } finally { d.dom.window.close(); }
 });

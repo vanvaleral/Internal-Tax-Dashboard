@@ -65,8 +65,9 @@ test("Team Split suggests ownership from Current PICs and checks confirmed owner
     x.host.querySelector('[data-structure-section="split"]').click();
     assert.equal(x.host.querySelector('[data-structure-split="a"]').value,"1");
     assert.equal(x.host.querySelector('[data-structure-split="b"]').value,"2");
-    assert.match(row("db-c1").textContent,/Suggested from Current PICs/);
-    assert.match(row("c3").textContent,/Suggested from Current PICs/);
+    assert.equal(row("db-c1").querySelector("[data-structure-owner]").value,"1");
+    assert.equal(row("c3").querySelector("[data-structure-owner]").value,"2");
+    for (const key of ["db-c1","c3"]) assert.equal(row(key).querySelector(".structure-split-owner + small"),null);
     assert.match(findings("c2"),/split/);
     assert.equal(row("c4").querySelector(".structure-split-owner + small"),null);
     assert.equal(row("c4").querySelector("[data-structure-owner]").value,"");
@@ -78,6 +79,7 @@ test("Team Split suggests ownership from Current PICs and checks confirmed owner
     assert.match(row("c3").textContent,/Unassigned/);
     x.click("confirm-suggestions");
     assert.deepEqual(x.saved().plans[0].teamSplit.owners,{"db-c1":"1",c3:"2"});
+    assert.equal(row("db-c1").querySelector(".structure-split-owner + small").textContent,"Confirmed");
     assert.equal(findings("db-c1"),"Outside intended team");
     assert.equal(findings("c3"),"Check PIC or chart");
     select('[data-structure-split="mode"]',"current");
