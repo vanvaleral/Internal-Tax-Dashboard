@@ -311,6 +311,107 @@ test("Team C can use the supervisor branch above A and B and forecast its confli
   } finally { x.dom.window.close(); print.window.close(); }
 });
 
+test("Team Split column filters search, combine checklists, and remain available when no rows match", () => {
+  const x = setup(), print = new JSDOM("<html></html>");
+  try {
+    const nodes = [
+      {id:"1",kind:"Leader",label:"Branch A",parent:"",pic:"a"},
+      {id:"2",kind:"Leader",label:"Branch B",parent:"",pic:"b"}
+    ];
+    const split = {a:"1",b:"2",owners:{wrong:"1"}};
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[
+      {id:"1",name:"Split baseline",nodes,teamSplit:split}
+    ]}));
+    const client = (id:string,name:string,clientCode:string,taxPicProfileId:string,accountingPicProfileId="") =>
+      ({id,name,clientCode,clientStatus:"Active",taxPicProfileId,accountingPicProfileId});
+    x.mount("manager",() => true,[
+      client("a1","North","CL-001","a","a"),client("a2","North","CL-002","a","b"),
+      client("b1","East","CL-003","b","b"),client("u1","Unassigned","CL-004",""),
+      client("wrong","West","CL-005","b","b")
+    ],() => ({a2:{nextAccPic:"Dewa"}}));
+    x.host.querySelector('[data-structure-section="split"]').click();
+    const trigger = (column:string) => x.host.querySelector(`[data-structure-column="${column}"]`);
+    const menu = () => x.host.querySelector(".structure-column-menu");
+    const all = () => menu().querySelector("[data-column-all]");
+    const apply = () => menu().querySelector('button[type="submit"]').click();
+    const shown = () => [...x.host.querySelectorAll("[data-structure-confirm-owner]")]
+      .map((button:any) => button.dataset.structureConfirmOwner).sort();
+    const value = (label:string) => [...menu().querySelectorAll("[data-column-option]")].find((item:any) =>
+      item.querySelector("span").textContent === label) as any;
+    const search = (query:string) => {
+      const input = menu().querySelector("[data-column-query]");
+      input.value = query;
+      input.dispatchEvent(new x.w.Event("input",{bubbles:true}));
+    };
+    const scope = (key:string,next:string) => {
+      const input = x.host.querySelector(`[data-structure-split="${key}"]`);
+      input.value = next;
+      input.dispatchEvent(new x.w.Event("change",{bubbles:true}));
+    };
+
+    assert.equal(x.host.querySelectorAll("thead [data-structure-column]").length,5);
+    trigger("client").click();
+    assert.equal(trigger("client").getAttribute("aria-expanded"),"true");
+    assert.equal(x.w.document.activeElement,menu().querySelector("[data-column-query]"));
+    all().click();
+    search("CL-002");
+    assert.ok(value("North / CL-001").hidden);
+    assert.equal(value("North / CL-002").hidden,false);
+    all().click();
+    assert.deepEqual(shown(),["a1","a2","b1","u1","wrong"],"options only apply when confirmed");
+    apply();
+    assert.deepEqual(shown(),["a2"],"same-name clients can be filtered separately by code");
+    assert.ok(trigger("client").classList.contains("is-filtered"));
+    assert.equal(x.w.document.activeElement,trigger("client"));
+    trigger("client").click();
+    menu().querySelector("[data-column-clear]").click();
+    assert.equal(trigger("client").classList.contains("is-filtered"),false);
+
+    trigger("team").click();
+    assert.ok(value("No confirmed team"));
+    assert.ok(value("Team A: Dewa"),"confirmed and suggested teams are available");
+    search("not a team");
+    assert.equal(all().disabled,true);
+    menu().dispatchEvent(new x.w.KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
+    assert.equal(menu(),null);
+    assert.equal(x.w.document.activeElement,trigger("team"));
+
+    trigger("tax").click();
+    value("Unassigned").querySelector("input").click();
+    assert.equal(all().indeterminate,true);
+    apply();
+    assert.deepEqual(shown(),["a1","a2","b1","wrong"],"checked PIC values are alternatives");
+    trigger("accounting").click();
+    all().click();
+    value("Future Lead").querySelector("input").click();
+    apply();
+    assert.deepEqual(shown(),["a2","b1","wrong"],"different columns are combined");
+    trigger("finding").click();
+    all().click();
+    value("Tax and Accounting split").querySelector("input").click();
+    apply();
+    assert.deepEqual(shown(),["a2"]);
+    scope("mode","next");
+    assert.deepEqual(shown(),[]);
+    assert.match(x.host.querySelector("tbody").textContent,/No clients match these filters/);
+    assert.ok(trigger("accounting"),"headers remain usable with zero results");
+    scope("mode","current");
+    assert.deepEqual(shown(),["a2"]);
+
+    scope("filter","review");
+    assert.deepEqual(shown(),[]);
+    x.w.open = () => ({document:print.window.document,focus(){},print(){}});
+    x.click("print");
+    assert.equal(print.window.document.querySelectorAll(".structure-print-findings tbody tr").length,2,"printing ignores column filters");
+    x.click("clear-column-filters");
+    assert.deepEqual(shown(),["u1"],"clearing columns keeps the Show filter");
+    trigger("finding").click();
+    x.host.querySelector(".structure-review-head").dispatchEvent(new x.w.Event("pointerdown",{bubbles:true}));
+    assert.equal(menu(),null);
+    assert.deepEqual(x.saved().plans[0].teamSplit,split,"filters never change saved plans");
+  } finally { x.dom.window.close(); print.window.close(); }
+});
+
 test("the Current split report prints the chart followed by all saved PIC conflicts regardless of filters", () => {
   const x = setup(), print = new JSDOM("<html></html>");
   try {

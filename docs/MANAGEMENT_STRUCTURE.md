@@ -49,6 +49,12 @@ roots A or B requires confirmation if intended teams are already saved.
 Adding Team C preserves existing confirmations; replacing or clearing Team C
 only clears ownership confirmations for that branch, with a prompt.
 
+Click a Team Split column header to search its values and choose which ones to
+show. Selections within one column are alternatives; filters across columns
+and the **Show** selector combine. **Select all shown** changes only the
+choices matching the search. **Clear column filters** resets the table without
+changing **Show**. These filters do not change totals, saved teams, or reports.
+
 **Recommend PIC changes** keeps in-team PICs and blank roles unchanged. For
 each assigned PIC known to be outside the confirmed team, it chooses the
 eligible Tax or Accounting PIC in that team with the fewest assigned clients

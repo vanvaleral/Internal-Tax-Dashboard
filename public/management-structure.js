@@ -15,7 +15,24 @@
   const teamLabel = slot => `Team ${slot.toUpperCase()}`;
   const selectedTeams = split => teamSlots.filter(slot => split[slot]).map(slot => ({slot,id:split[slot],label:teamLabel(slot)}));
   const flagged = row => row.conflict || row.cross || row.moved;
+  const finding = row => row.conflict ? "Outside intended team" : row.cross ? "Tax and Accounting split" :
+    row.moved ? "Projected team change" : row.incomplete ? "Check PIC or chart" : "Within one team";
+  const splitColumns = {client:"Client",team:"Intended team",tax:"Tax PIC",accounting:"Accounting PIC",finding:"Finding"};
   const loadGapLimit = 20;
+
+  function splitColumnValue(row, column, teamNames) {
+    if (column === "client") {
+      const {name,clientCode} = row.client;
+      return [row.key,[name,clientCode].filter(Boolean).join(" / ") || row.key];
+    }
+    if (column === "team") {
+      const id = row.owner || row.suggested;
+      return [id || "",teamNames.get(id) || "No confirmed team"];
+    }
+    if (column === "finding") return [finding(row),finding(row)];
+    const pic = row.shown[column === "tax" ? 0 : 1];
+    return [pic.id ? `id:${pic.id}` : pic.assigned ? `name:${nameKey(pic.label)}` : "",pic.label];
+  }
 
   function resolveStaff(people) {
     const aliases = new Map();
@@ -187,6 +204,8 @@
     let zoom = 1;
     let clientRows = null, section = "chart", chartScroll = [0,0];
     let splitMode = "current", splitFilter = "all", showRecommendations = false;
+    const columnFilters = new Map();
+    let columnSource, columnMenu;
     try {
       baseline = localStorage.getItem(key);
       if (baseline) {
@@ -348,22 +367,146 @@
       if (slot) slot.innerHTML = safeHtml(clientLoadSummary(plan,splitResult(plan,splitMode,false)));
     }
 
+    function columnHeading(column,label) {
+      const active = columnFilters.has(column);
+      return `<th scope="col"><button type="button" class="structure-column-toggle${active ? " is-filtered" : ""}"
+        data-structure-column="${column}" aria-haspopup="dialog" aria-expanded="false" aria-label="Filter by ${label}${active ? " (active)" : ""}">
+        ${label}<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2.5 3.5h11L9.5 8v3.5l-3 1V8z" fill="none" stroke="currentColor" stroke-linejoin="round"></path></svg>
+      </button></th>`;
+    }
+
+    function closeColumnMenu(restoreFocus = false) {
+      if (!columnMenu) return;
+      const {panel,trigger,events} = columnMenu;
+      columnMenu = null;
+      events.abort();
+      panel.remove();
+      trigger.setAttribute("aria-expanded","false");
+      trigger.removeAttribute("aria-controls");
+      trigger.removeAttribute("popovertarget");
+      if (restoreFocus) trigger.focus({preventScroll:true});
+    }
+
+    function openColumnMenu(trigger) {
+      const column = trigger.dataset.structureColumn;
+      if (!columnSource || !Object.hasOwn(splitColumns,column)) return;
+      const wasOpen = columnMenu?.trigger === trigger;
+      closeColumnMenu();
+      if (wasOpen) return;
+      const {rows,teamNames} = columnSource;
+      const choices = [...new Map(rows.map(row => splitColumnValue(row,column,teamNames)))]
+        .sort((a,b) => a[1].localeCompare(b[1],undefined,{numeric:true,sensitivity:"base"}));
+      const applied = columnFilters.get(column), label = splitColumns[column];
+      const panel = document.createElement("div");
+      panel.id = "structure-column-filter";
+      panel.className = "structure-column-menu";
+      panel.setAttribute("role","dialog");
+      panel.setAttribute("aria-label",`Filter by ${label}`);
+      panel.innerHTML = safeHtml(`<form class="structure-column-form">
+        <strong>Filter by ${label}</strong>
+        <input type="search" class="field" data-column-query aria-label="Search ${label} values" placeholder="Search values">
+        <label class="structure-column-check"><input type="checkbox" data-column-all> Select all shown</label>
+        <div class="structure-column-options">
+          ${choices.map(([key,text]) => `<label class="structure-column-check" data-column-option>
+            <input type="checkbox" value="${esc(key)}" ${!applied || applied.has(key) ? "checked" : ""}> <span>${esc(text)}</span>
+          </label>`).join("")}
+          <p data-column-empty hidden>No matching values.</p>
+        </div>
+        <div class="structure-column-footer">
+          <button type="button" class="ghost-btn" data-column-clear ${applied ? "" : "disabled"}>Clear filter</button>
+          <button type="button" class="ghost-btn" data-column-cancel>Cancel</button>
+          <button type="submit" class="solid-btn">Apply</button>
+        </div>
+      </form>`);
+      const search = panel.querySelector("[data-column-query]"), all = panel.querySelector("[data-column-all]");
+      const entries = [...panel.querySelectorAll("[data-column-option]")].map(entry => ({
+        entry, box:entry.querySelector("input"), text:nameKey(entry.textContent)
+      }));
+      const shown = () => entries.filter(item => !item.entry.hidden);
+      function updateCheckAll() {
+        const items = shown(), checked = items.filter(item => item.box.checked).length;
+        all.disabled = !items.length;
+        all.checked = !!items.length && checked === items.length;
+        all.indeterminate = checked > 0 && checked < items.length;
+        panel.querySelector("[data-column-empty]").hidden = !!items.length;
+      }
+      search.addEventListener("input",() => {
+        const query = nameKey(search.value);
+        for (const item of entries) item.entry.hidden = !item.text.includes(query);
+        updateCheckAll();
+      });
+      panel.addEventListener("change",event => {
+        if (event.target === all) for (const {box} of shown()) box.checked = all.checked;
+        updateCheckAll();
+      });
+      function apply(selection) {
+        if (selection) columnFilters.set(column,selection);
+        else columnFilters.delete(column);
+        render();
+        host.querySelector(`[data-structure-column="${column}"]`)?.focus({preventScroll:true});
+      }
+      panel.querySelector("form").addEventListener("submit",event => {
+        event.preventDefault();
+        const selection = new Set(entries.filter(({box}) => box.checked).map(({box}) => box.value));
+        apply(selection.size === entries.length ? null : selection);
+      });
+      panel.querySelector("[data-column-clear]").addEventListener("click",() => apply(null));
+      panel.querySelector("[data-column-cancel]").addEventListener("click",() => closeColumnMenu(true));
+      updateCheckAll();
+
+      // The menu lives outside the scroll container so sticky headers do not clip it.
+      const events = new AbortController(), signal = events.signal;
+      const anchor = trigger.getBoundingClientRect();
+      columnMenu = {panel,trigger,events};
+      trigger.setAttribute("aria-expanded","true");
+      trigger.setAttribute("aria-controls",panel.id);
+      if (typeof panel.showPopover === "function") {
+        panel.setAttribute("popover","auto");
+        trigger.setAttribute("popovertarget",panel.id);
+        panel.addEventListener("toggle",event => {
+          if (event.newState === "closed" && columnMenu?.panel === panel) closeColumnMenu();
+        });
+      } else {
+        document.addEventListener("pointerdown",event => {
+          if (!panel.contains(event.target) && !trigger.contains(event.target)) closeColumnMenu();
+        },{signal});
+      }
+      host.append(panel);
+      if (panel.hasAttribute("popover")) panel.showPopover();
+      const width = document.documentElement.clientWidth || window.innerWidth;
+      const height = document.documentElement.clientHeight || window.innerHeight;
+      const below = anchor.bottom + 6;
+      panel.style.left = `${Math.max(8,Math.min(anchor.left,width - panel.offsetWidth - 8))}px`;
+      panel.style.top = `${below + panel.offsetHeight <= height - 8 ? below : Math.max(8,anchor.top - panel.offsetHeight - 6)}px`;
+      search.focus({preventScroll:true});
+      document.addEventListener("keydown",event => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        closeColumnMenu(true);
+      },{signal});
+      document.addEventListener("scroll",event => {
+        if (!panel.contains(event.target)) closeColumnMenu();
+      },{capture:true,passive:true,signal});
+      window.addEventListener("resize",() => closeColumnMenu(),{signal});
+    }
+
     function splitView(plan, {split,teams,ready,rows}) {
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
       const teamName = team => `${team.label}: ${names.get(team.id)}`;
       const teamNames = new Map(teams.map(team => [team.id,teamName(team)]));
+      columnSource = ready && clientRows ? {rows,teamNames} : null;
       const rootOptions = slot => option("",slot === "c" ? "No Team C" : "Choose a branch",split[slot]) +
         plan.nodes.map(node => option(node.id,nodeName(node),split[slot])).join("");
-      const result = row => row.conflict ? "Outside intended team" : row.cross ? "Tax and Accounting split" :
-        row.moved ? "Projected team change" : row.incomplete ? "Check PIC or chart" : "Within one team";
       const counts = {
         all:rows.length, conflicts:rows.filter(flagged).length,
         owners:rows.filter(row => !row.owner).length, review:rows.filter(row => row.incomplete).length
       };
       const suggested = rows.filter(row => !row.owner && row.suggested).length;
       const proposed = rows.reduce((total,row) => total + (row.recommendations?.filter(item => item.to).length || 0),0);
-      const visible = rows.filter(row => splitFilter === "all" || (splitFilter === "conflicts" && flagged(row)) ||
-        (splitFilter === "owners" && !row.owner) || (splitFilter === "review" && row.incomplete));
+      const activeColumns = [...columnFilters];
+      const visible = rows.filter(row => (splitFilter === "all" || (splitFilter === "conflicts" && flagged(row)) ||
+        (splitFilter === "owners" && !row.owner) || (splitFilter === "review" && row.incomplete)) &&
+        activeColumns.every(([column,allowed]) => allowed.has(splitColumnValue(row,column,teamNames)[0])));
       const picCell = item => `<td><strong>${esc(item.label)}</strong><small>${esc(item.team ? teamNames.get(item.team) : item.assigned ? "Not mapped to a team" : "")}</small></td>`;
       const recommendationCell = row => `<td data-structure-recommendation>${row.recommendations.length
         ? row.recommendations.map(item => `<div><strong>${esc(item.role)}</strong>: ${item.to ? `${esc(item.from)} &rarr; ${esc(item.to)}` : esc(item.note)}</div>`).join("")
@@ -386,17 +529,17 @@
         ${showRecommendations && ready && clientRows ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
         ${!ready ? "<p>Choose separate branches for Teams A and B. Team C is optional and must use a different position.</p>"
         : !clientRows ? "<p>Waiting for confirmed Client Master data.</p>"
-        : `<div class="structure-review-summary" role="status"><strong>${counts.conflicts} flagged client${counts.conflicts === 1 ? "" : "s"}</strong><span>${counts.owners} without a confirmed team</span><span>${visible.length} shown</span></div>
-          ${visible.length ? `<div class="table-wrap structure-review-table" tabindex="0" aria-label="Planned team assignment findings">
-            <table><thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Finding</th>${showRecommendations ? '<th scope="col">Recommendation</th>' : ""}</tr></thead>
+        : `<div class="structure-review-summary"><div role="status"><strong>${counts.conflicts} flagged client${counts.conflicts === 1 ? "" : "s"}</strong><span>${counts.owners} without a confirmed team</span><span>${visible.length} shown</span></div>
+          ${activeColumns.length ? '<button type="button" class="ghost-btn" data-structure-action="clear-column-filters">Clear column filters</button>' : ""}</div>
+          <div class="table-wrap structure-review-table" tabindex="0" aria-label="Planned team assignment findings">
+            <table><thead><tr>${Object.entries(splitColumns).map(([column,label]) => columnHeading(column,label)).join("")}${showRecommendations ? '<th scope="col">Recommendation</th>' : ""}</tr></thead>
             <tbody>${visible.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
               <td><div class="structure-split-owner"><select class="field" data-structure-owner aria-label="Intended team for ${esc(row.client.name)}" ${storageError ? "disabled" : ""}>
                 ${option("","No confirmed team",row.owner || row.suggested)}${teams.map(team => option(team.id,teamName(team),row.owner || row.suggested)).join("")}
               </select><button type="button" class="ghost-btn" data-structure-confirm-owner="${esc(row.key)}" ${storageError ? "disabled" : ""}>Confirm</button></div>
               ${row.owner ? "<small>Confirmed</small>" : ""}</td>
-              ${row.shown.map(picCell).join("")}<td><span class="pill ${flagged(row) ? "warn" : "neutral"}" data-structure-split-result>${result(row)}</span></td>
-              ${showRecommendations ? recommendationCell(row) : ""}</tr>`).join("")}</tbody></table></div>`
-            : "<p>No clients match this filter.</p>"}`}
+              ${row.shown.map(picCell).join("")}<td><span class="pill ${flagged(row) ? "warn" : "neutral"}" data-structure-split-result>${finding(row)}</span></td>
+              ${showRecommendations ? recommendationCell(row) : ""}</tr>`).join("") || `<tr><td colspan="${showRecommendations ? 6 : 5}">No clients match these filters.</td></tr>`}</tbody></table></div>`}
       </section>`;
     }
 
@@ -462,6 +605,7 @@
     }
 
     function render(message = storageError) {
+      closeColumnMenu();
       const plan = active(), node = plan.nodes.find(row => row.id === editing);
       const list = [...people].filter(([id]) => !usedByAnother(id));
       const oldCanvas = host.querySelector(".structure-viewport");
@@ -717,6 +861,17 @@
       if (!canManage()) return;
       const button = event.target.closest("button");
       if (!button) return;
+      if (section === "split" && button.dataset.structureColumn) {
+        event.preventDefault();
+        openColumnMenu(button);
+        return;
+      }
+      if (section === "split" && button.dataset.structureAction === "clear-column-filters") {
+        columnFilters.clear();
+        render();
+        host.querySelector("[data-structure-column]")?.focus();
+        return;
+      }
       if (["chart","split"].includes(button.dataset.structureSection)) {
         section = button.dataset.structureSection;
         clearDrag();
