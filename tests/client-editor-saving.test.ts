@@ -11,14 +11,23 @@ async function fixture(mobile = false) {
   const vc = new VirtualConsole(); vc.on("jsdomError", error => warnings.push(error.message));
   const dom = new JSDOM(read("public/demo.html"), { url: "http://localhost/demo.html", runScripts: "outside-only", virtualConsole: vc });
   const w = dom.window as any;
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new w.Event("close")); };
   w.localStorage.setItem("tax-practice-v2:editor-user", JSON.stringify({ ui: { currentView: "client-management-view" } }));
   w.matchMedia = (query: string) => ({ matches: mobile && /max-width: (760|900)px/.test(query), addEventListener() {}, removeEventListener() {} });
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone; w.alert = (text: string) => alerts.push(text);
-  const rows = [{ id: "master-client", client_code: "CL-00001", legal_name: "Original Client", company_form: "PT", status: "Active", tax_pic_name: "Denny", accounting_pic_name: "Ivan", monthly_fee: 1000000, contract_started_at: "2024-12-05", engagement_start: "2024-12-05", engagement_end: "2027-06-30" }];
+  const rows = [{ id: "11111111-1111-4111-8111-111111111111", client_code: "CL-00001", legal_name: "Original Client", company_form: "PT", status: "Active", tax_pic_name: "Denny", accounting_pic_name: "Ivan", monthly_fee: 1000000, contract_started_at: "2024-12-05", engagement_start: "2024-12-05", engagement_end: "2027-06-30", updated_at: "2026-11-20T01:02:03Z" }];
+  const trashWrites: any[] = [];
   let release: (() => void) | undefined, mode = "success";
   w.fetch = async (url: string, init: any = {}) => {
+    if (url === "/api/clients/trash" && init.method === "PATCH") {
+      const body = JSON.parse(init.body); trashWrites.push(body);
+      if (mode === "error") return { ok: false, status: 409, json: async () => ({ error: "Refresh the client list before retrying." }) };
+      rows[0].status = body.action === "delete" ? "Deleted" : "Active";
+      return { ok: true, json: async () => ({ data: { id: body.id } }) };
+    }
     if (url === "/api/clients" && init.method === "POST") {
       const body = JSON.parse(init.body); writes.push(body);
       await new Promise<void>(resolve => { release = resolve; });
@@ -29,7 +38,8 @@ async function fixture(mobile = false) {
       return { ok: true, status: 200, json: async () => ({ data: structuredClone(rows) }) };
     }
     const body = url === "/api/profile" ? { user: { id: "editor-user" }, profile: { id: "supervisor", role: "supervisor", display_name: "Supervisor", directory_active: true } }
-      : url === "/api/clients" ? { data: rows }
+      : url === "/api/clients/trash" ? { data: rows.filter(row => row.status === "Deleted") }
+      : url === "/api/clients" ? { data: rows.filter(row => row.status !== "Deleted") }
       : url === "/api/staff" ? { staff: [
         { id: "tax", full_name: "Denny", display_name: "Denny", role: "staff", directory_active: true, team_division: "Tax Team" },
         { id: "acc", full_name: "Ivan", display_name: "Ivan", role: "staff", directory_active: true, team_division: "Accounting Team" }
@@ -40,8 +50,37 @@ async function fixture(mobile = false) {
   await w.eval(read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1]); await tick();
   const doc = w.document;
   doc.querySelector(mobile ? ".client-mobile-card [data-edit-client]" : ".client-table [data-edit-client]").click();
-  return { dom, w, doc, rows, writes, alerts, warnings, release: () => release?.(), mode: (value: string) => { mode = value; }, modal: () => doc.querySelector("#client-editor-root [data-client-editor-id]") };
+  return { dom, w, doc, rows, writes, trashWrites, alerts, warnings, release: () => release?.(), mode: (value: string) => { mode = value; }, modal: () => doc.querySelector("#client-editor-root [data-client-editor-id]") };
 }
+
+test("Client Setup confirms deletion, handles rejection, and restores from the separate Deleted Clients tab", async () => {
+  const d = await fixture();
+  try {
+    const open = () => d.modal().querySelector("[data-delete-client-master]").click();
+    const dialog = () => d.doc.querySelector(".client-trash-dialog");
+    open(); assert.equal(dialog().open, true);
+    dialog().querySelector('[type="button"]').click(); await tick();
+    assert.equal(d.trashWrites.length, 0);
+    open(); d.mode("error");
+    dialog().querySelector('[type="submit"]').click(); await tick();
+    assert.equal(dialog().open, true); assert.match(dialog().querySelector('[role="status"]').textContent, /Refresh/);
+    assert.equal(d.rows[0].status, "Active");
+    d.mode("success");
+    dialog().querySelector('[type="submit"]').click(); await tick();
+    assert.equal(d.modal(), null); assert.equal(d.rows[0].status, "Deleted");
+    d.doc.querySelector('[data-client-tab="inactive"]').click();
+    assert.equal(d.doc.querySelector(".client-table .client-link"), null);
+    d.doc.querySelector('[data-client-tab="deleted"]').click(); await tick();
+    d.doc.querySelector("[data-restore-client-master]").click();
+    dialog().querySelector('[type="submit"]').click(); await tick();
+    assert.equal(d.rows[0].status, "Active");
+    assert.equal(d.trashWrites.at(-1).action, "restore");
+    assert.equal(d.doc.querySelector("[data-restore-client-master]"), null);
+    d.doc.querySelector('[data-client-tab="active"]').click();
+    assert.match(d.doc.querySelector(".client-table .client-link").textContent, /Original Client/);
+    assert.deepEqual(d.warnings, []);
+  } finally { d.dom.window.close(); }
+});
 
 test("client popup shows a pending save, prevents duplicate/close actions, and keeps a confirmed success visible on desktop and mobile", async () => {
   for (const mobile of [false, true]) {

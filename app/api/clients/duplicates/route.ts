@@ -22,6 +22,12 @@ async function deleteDuplicateBatch(actor: CurrentActor, plans: DuplicateDeleteP
 }
 
 async function mergeDuplicateBatch(actor: CurrentActor, plans: DuplicateDeletePlan[]) {
+  const ids = [...new Set(plans.flatMap(plan => [plan.canonicalId, ...plan.duplicateIds]))];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const result = await actor.admin.from("client_master").select("id").in("id", ids.slice(offset, offset + 100)).eq("status", "Deleted");
+    if (result.error) throw new Error(result.error.message);
+    if (result.data?.length) throw new Error("Restore deleted clients before merging them.");
+  }
   const { data, error } = await actor.admin.rpc("merge_duplicate_clients", { p_plans: plans, p_actor_profile_id: actor.profile.id });
   if (error) throw new Error(error.message);
   return data as { deleted: number; groups: number };
@@ -31,7 +37,7 @@ export async function GET() {
   const actor = await currentActor();
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   if (!canImportClientMaster(actor.profile.role)) return NextResponse.json({ error: "Only a Supervisor or Leader can review duplicate clients." }, { status: 403 });
-  const { data, error } = await actor.admin.from("client_master").select("id, client_code, legal_name, npwp, status, created_at").order("created_at");
+  const { data, error } = await actor.admin.from("client_master").select("id, client_code, legal_name, npwp, status, created_at").not("status", "eq", "Deleted").order("created_at");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const ids = (data || []).map((client) => client.id);
   const [cases, claims, activities] = ids.length ? await Promise.all([
@@ -76,7 +82,7 @@ export async function PATCH(request: Request) {
   if (body.action === "resolve-all") {
     const keep = body.keep === "newest" ? "newest" : body.keep === "oldest" ? "oldest" : "";
     if (!keep) return NextResponse.json({ error: "Choose whether to retain the oldest or newest record in each duplicate group." }, { status: 400 });
-    const { data, error } = await actor.admin.from("client_master").select("id, client_code, legal_name, npwp, created_at").order("created_at");
+    const { data, error } = await actor.admin.from("client_master").select("id, client_code, legal_name, npwp, created_at").not("status", "eq", "Deleted").order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const groups = findDuplicateClientGroups((data || []).map((client) => ({ id: client.id, clientCode: client.client_code, name: client.legal_name, npwp: client.npwp, createdAt: client.created_at })));
     try {

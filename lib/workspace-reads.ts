@@ -23,7 +23,7 @@ export async function readClients(actor: CurrentActor, params = new URLSearchPar
   const limit = Math.min(Math.max(Number(params.get("limit") || 500), 1), 1000);
   const offset = Math.max(Number(params.get("offset") || 0), 0);
   const build = (from: number, to: number) => {
-  let query = actor.admin.from("client_master").select("*", { count: "exact" }).order("legal_name").order("id").range(from, to);
+  let query = actor.admin.from("client_master").select("*", { count: "exact" }).not("status", "eq", "Deleted").order("legal_name").order("id").range(from, to);
   if (!isLeadership(actor.profile.role)) query = query.or(`tax_pic_profile_id.eq.${actor.profile.id},accounting_pic_profile_id.eq.${actor.profile.id}`);
   if (search) query = query.or(`legal_name.ilike.%${search}%,client_code.ilike.%${search}%,npwp.ilike.%${search}%`);
   return query;

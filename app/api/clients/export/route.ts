@@ -20,7 +20,7 @@ export async function GET() {
   const headers = feeAccess ? columns : columns.filter(key => !["monthlyFee","annualFee"].includes(key));
   const data: any[] = [];
   for (let from = 0; ; from += 500) {
-    const page = await actor.admin.from("client_master").select("*").order("legal_name").range(from, from + 499);
+    const page = await actor.admin.from("client_master").select("*").not("status", "eq", "Deleted").order("legal_name").order("id").range(from, from + 499);
     if (page.error) return NextResponse.json({ error: page.error.message }, { status: 500 });
     data.push(...(page.data || []));
     if ((page.data || []).length < 500) break;
