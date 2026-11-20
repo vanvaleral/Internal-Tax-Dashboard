@@ -214,7 +214,8 @@ test("the split report prints the chart followed by all Current PIC conflicts, r
     assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Wrong intended team/);
     let printed = false;
     x.w.open = () => ({document:print.window.document,focus(){},print(){printed = true;}});
-    x.click("print-split-report");
+    assert.equal(x.host.querySelectorAll('[data-structure-action^="print"]').length,1);
+    x.click("print");
     assert.ok(printed);
     const doc = print.window.document;
     assert.ok(doc.body.classList.contains("structure-print-report"));
@@ -234,8 +235,10 @@ test("the split report prints the chart followed by all Current PIC conflicts, r
     editor.refreshClients([clients[2]]);
     const empty = new JSDOM("<html></html>");
     try {
+      x.host.querySelector('[data-structure-section="chart"]').click();
+      assert.equal(x.host.querySelectorAll('[data-structure-action^="print"]').length,1);
       x.w.open = () => ({document:empty.window.document,focus(){},print(){}});
-      x.click("print-split-report");
+      x.click("print");
       assert.match(empty.window.document.body.textContent!,/No current client conflicts/);
     } finally { empty.window.close(); }
   } finally { x.dom.window.close(); print.window.close(); }
@@ -253,6 +256,7 @@ test("printing outputs only the chosen scenario; removing a parent keeps its rep
     x.click("print");
     assert.ok(printed);
     assert.equal(print.window.document.querySelectorAll(".structure-print-page").length,1);
+    assert.equal(print.window.document.querySelector(".structure-print-findings"),null);
     assert.match(print.window.document.body.textContent!,/Accounting Team/);
     assert.equal(print.window.document.querySelectorAll(".structure-wires path").length,1);
     assert.equal(print.window.document.querySelector("button, img, form"),null);

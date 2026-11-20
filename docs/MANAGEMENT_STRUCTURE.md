@@ -54,8 +54,10 @@ Canvas zoom and scroll do not affect the result. With a large chart, choose a
 larger paper size if the labels are too small. You can also save it as a PDF.
 Editing controls and the PIC roster aren't printed.
 
-From **Team Split**, **Print split report** puts the selected flowchart first
-and lists the flagged active clients on subsequent pages. It compares saved
+The same **Print** button works from either tab. When both Team Split branches
+are selected and client data is available, it puts the flowchart first and
+lists the flagged active clients on subsequent pages. Otherwise it prints only
+the flowchart. The report compares saved
 Current PICs against the selected branches and confirmed intended teams; it
 includes all flagged rows regardless of the on-screen filter. It does not
 include Next PIC drafts or modify any assignments.

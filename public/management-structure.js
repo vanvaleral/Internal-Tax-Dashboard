@@ -317,7 +317,6 @@
               option(key,`${label} (${counts[key]})`,splitFilter)).join("")}</select></label>
           <button type="button" class="ghost-btn" data-structure-action="confirm-suggestions" ${suggested && !storageError ? "" : "disabled"}>Confirm ${suggested} suggested teams</button>
           <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && clientRows ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
-          <button type="button" class="ghost-btn" data-structure-action="print-split-report" ${ready && clientRows ? "" : "disabled"}>Print split report</button>
         </div>
         ${showRecommendations && ready && clientRows ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
         ${!ready ? "<p>Choose two separate leader branches to see client assignments. The branches cannot be nested.</p>"
@@ -400,7 +399,7 @@
       const locked = storageError ? "disabled" : "";
       host.innerHTML = safeHtml(`
         <div class="section-title"><div><div class="eyebrow">Organization planning</div><h3>Structure Lab</h3><p>Plan reporting lines without changing live assignments or access. Scenarios stay in this browser.</p></div>
-          <button type="button" class="ghost-btn" data-structure-action="print" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
+          <button type="button" class="ghost-btn" data-structure-action="print" title="Print the flowchart and include flagged clients when Team Split is ready" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
         <div class="structure-toolbar">
           <label>Scenario <select class="field" data-structure-plan ${locked}>${model.plans.map(row => option(row.id,row.name,plan.id)).join("")}</select></label>
           <form data-structure-form="name" aria-label="Rename scenario"><label>Scenario name <input class="field" name="scenarioTitle" maxlength="100" required value="${esc(plan.name)}"></label>
@@ -502,11 +501,11 @@
       </section>`;
     }
 
-    function print(includeSplit = false) {
+    function print() {
       const plan = active();
       if (!plan.nodes.length) return;
-      const report = includeSplit ? splitResult(plan,"current",false) : null;
-      if (report && (!report.ready || !clientRows)) { tell("Choose both team branches and load Client Master before printing the report."); return; }
+      const split = clientRows ? splitResult(plan,"current",false) : null;
+      const report = split?.ready ? split : null;
       const page = window.open("", "_blank", "width=960,height=760");
       if (!page) { tell("Allow popups to print this structure."); return; }
       page.opener = null;
@@ -658,7 +657,6 @@
         host.querySelector('[data-structure-action="recommend-pics"]').focus();
         return;
       }
-      if (section === "split" && button.dataset.structureAction === "print-split-report") { print(true); return; }
       if (button.dataset.structureZoom) { changeZoom(button.dataset.structureZoom); return; }
       if (button.dataset.structurePic && people.has(button.dataset.structurePic)) { pick({pic:button.dataset.structurePic}); return; }
       if (button.dataset.structureMove && find(button.dataset.structureMove)) { pick({id:button.dataset.structureMove}); return; }
