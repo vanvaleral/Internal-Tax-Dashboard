@@ -68,7 +68,8 @@ test("Team Split suggests ownership from Current PICs and checks confirmed owner
     assert.match(row("db-c1").textContent,/Suggested from Current PICs/);
     assert.match(row("c3").textContent,/Suggested from Current PICs/);
     assert.match(findings("c2"),/split/);
-    assert.match(row("c4").textContent,/Choose manually/);
+    assert.equal(row("c4").querySelector(".structure-split-owner + small"),null);
+    assert.equal(row("c4").querySelector("[data-structure-owner]").value,"");
     assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Archived/);
     assert.equal(x.saved().plans[0].teamSplit,undefined,"suggestions must not confirm themselves");
     select('[data-structure-split="mode"]',"next");
