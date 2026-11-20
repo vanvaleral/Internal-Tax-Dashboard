@@ -1858,6 +1858,9 @@
     .case-external-dialog:modal { overscroll-behavior:contain; }
     .case-external-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
     .case-external-dialog form, .case-external-dialog label { display:grid; gap:9px; }
+    .case-external-dialog h3, .case-external-dialog p { margin:0; }
+    .case-external-dialog [role="status"][data-error="true"] { color:var(--danger); }
+    .case-external-dialog .inline-controls { justify-content:flex-end; }
     .solid-btn.danger { background: #b42318; color:#fff; }
     .delete-icon { width:16px; height:16px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
     .solid-btn .delete-icon { margin-right:6px; vertical-align:-3px; }
@@ -3606,6 +3609,7 @@
 
       .workspace-cases .case-mobile-actions [data-toggle-case-trash]::before { content: "\21BA"; font-size: 16px; line-height: 1; }
       .workspace-cases .case-mobile-actions [data-new-case]::before { content: "+"; font-size: 20px; line-height: 1; }
+      .workspace-cases .case-mobile-actions [data-external-case] .case-tool-icon { display:block; width:15px; height:15px; }
 
       .workspace-clients .client-fab {
         right: 18px;
@@ -8853,6 +8857,7 @@
               <div class="toolbar-right case-mobile-actions">
                 ${IS_CASES_FULLSCREEN ? `<a class="case-fullscreen-link" href="${IS_OFFLINE_DEMO ? "./demo.html" : "/dashboard"}" aria-label="Back to Dashboard">${toolIcon('<path d="m10 5-7 7 7 7M3 12h18"/>')}Dashboard</a>` : `<a class="case-fullscreen-link" data-case-fullscreen="yes" href="${escapeAttr(caseFullScreenUrl())}" target="_blank" rel="noopener noreferrer" aria-label="Open Cases in full screen">${toolIcon('<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>')}Full Screen</a>`}
                 <button class="ghost-btn" data-toggle-case-trash="yes" aria-expanded="${state.caseTrashOpen}" aria-label="Archived Cases">${toolIcon('<path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/>')}Archived Cases${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
+                ${!assessmentTab && !IS_OFFLINE_DEMO ? `<button type="button" class="ghost-btn" data-external-case="yes" aria-label="Add external client case" title="Add external client case">${toolIcon('<path d="M15 3h6v6m0-6-9 9m8 1v7H4V4h8"/>')}External client</button>` : ""}
                 ${assessmentTab?'':`<button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>`}
               </div>
             </div>
@@ -10028,6 +10033,68 @@
       taxCases.unshift(restored);
       state.selectedCaseId = restored.id;
       renderCases();
+    }
+
+    function openExternalCaseDialog(trigger) {
+      if (IS_OFFLINE_DEMO || document.querySelector(".case-external-dialog")) return;
+      const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
+      const requestId = crypto.randomUUID();
+      const dialog = document.createElement("dialog");
+      dialog.className = "case-external-dialog";
+      dialog.setAttribute("aria-labelledby","case-external-title");
+      dialog.innerHTML = safeHtml(`<form>
+        <h3 id="case-external-title">Add external client</h3>
+        <p class="subline">Create a ${category} case. A new taxpayer will be saved under On Demand Clients without a fee or contract.</p>
+        <label>Taxpayer name <input class="field" name="taxpayer" maxlength="160" required placeholder="Legal name, including PT or CV if applicable"></label>
+        <div class="subline" role="status"></div>
+        <div class="inline-controls"><button class="ghost-btn" type="button">Cancel</button><button type="submit" class="solid-btn">Create case</button></div>
+      </form>`);
+      const form = dialog.querySelector("form"), input = form.elements.namedItem("taxpayer");
+      const status = dialog.querySelector('[role="status"]'), cancel = dialog.querySelector('[type="button"]'), submit = dialog.querySelector('[type="submit"]');
+      function close() {
+        dialog.close();
+        dialog.remove();
+        if (trigger.isConnected) trigger.focus({preventScroll:true});
+      }
+      cancel.addEventListener("click",close);
+      dialog.addEventListener("cancel",event => { event.preventDefault(); if (!submit.disabled) close(); });
+      form.addEventListener("submit",async event => {
+        event.preventDefault();
+        if (submit.disabled || !input.value.trim()) return;
+        input.disabled = cancel.disabled = submit.disabled = true;
+        status.dataset.error = "false";
+        status.textContent = "Saving case...";
+        caseSheetWriteRevision++;
+        try {
+          const response = await appFetch("/api/cases",{
+            method:"POST", headers:{"Content-Type":"application/json",Accept:"application/json"},
+            body:JSON.stringify({externalClient:{name:input.value.trim(),requestId},case:{caseCategory:category}})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.data?.id) throw new Error(result.error || "External case could not be confirmed. Try again.");
+          const record = databaseCaseToDemo(result.data);
+          const existing = taxCases.find(item => item.id === record.id);
+          if (existing) Object.assign(existing,record); else taxCases.push(record);
+          caseSheetWriteRevision++;
+          state.caseSearch = record.clientName; state.caseAccFilter = "all"; state.caseTaxFilter = "all"; state.caseWorkflowFilter = "all";
+          state.selectedCaseId = record.id;
+          close();
+          commitUi("replace");
+          caseSheetMessage(result.announcementStatus === "failed" ? "Case saved, but the announcement could not be sent." : "External case saved.",result.announcementStatus === "failed");
+          document.querySelector(`[data-case-sheet-id="${record.id}"][data-case-sheet-field="letterNumber"]`)?.focus();
+          clientListReadRevision++;
+          loadSharedClients(true);
+          loadSharedAnnouncements(true);
+        } catch (error) {
+          status.dataset.error = "true";
+          status.textContent = error instanceof Error ? error.message : "External case could not be confirmed. Try again.";
+          input.disabled = cancel.disabled = submit.disabled = false;
+          input.focus();
+        }
+      });
+      document.body.append(dialog);
+      dialog.showModal();
+      input.focus();
     }
 
     async function saveCaseToDatabase(record, { showLoading = true, acceptServerDerivedFields = true } = {}) {
@@ -12769,6 +12836,8 @@
         return;
       }
 
+      const externalCaseTrigger = target.closest("[data-external-case]");
+      if (externalCaseTrigger) { openExternalCaseDialog(externalCaseTrigger); return; }
       if (newCaseTrigger) {
         state.caseSearch = ""; state.caseAccFilter = "all"; state.caseTaxFilter = "all"; state.caseWorkflowFilter = "all";
         const record = createCaseRecord();

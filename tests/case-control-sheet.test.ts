@@ -46,6 +46,11 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       const body = JSON.parse(init.body); writes.push(body);
       if (delay) await new Promise(resolve => { hold = resolve; });
       if (fail || failId && body.id === failId) return { ok: false, status: 409, json: async () => ({ error: "Case was changed by another user. Reload before editing." }) };
+      if (url === "/api/cases" && init.method === "POST" && body.externalClient) {
+        const data = { ...dbCase(body.externalClient.requestId,body.externalClient.name,"tax-a","",body.case.caseCategory), client_id:"external-client" };
+        rows.push(data);
+        return { ok:true,status:201,json:async()=>({data,announcementStatus:"delivered"}) };
+      }
       if (body.action === "add-progress") return { ok:true, status:200, json:async()=>({progressEntry:{id:`note-${writes.length}`,entry:body.entry,creatorName:"tax-a",createdAt:"2026-11-06T08:00:00Z"}}) };
       const previous = rows.find(row => row.id === body.id) || (body.id ? dbCase(body.id, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory) : { ...dbCase(++created === 1 ? "saved-new" : `saved-new-${created}`, body.case?.clientName, "tax-a", "acc-a", body.case?.caseCategory), created_at:new Date().toISOString() });
       const data: Record<string, any> = { ...previous, client_name: body.case?.clientName || previous.client_name, subject: body.case?.subject ?? previous.subject, letter_number: body.case?.letterNumber ?? previous.letter_number, updated_at: `v${writes.length + 1}` };
@@ -85,6 +90,29 @@ const visible = (d: any) => [...d.w.document.querySelectorAll("[data-case-sheet-
 const gridCell = (d: any, id: string, name: string) => d.w.document.querySelector(`[data-case-sheet-row="${id}"] [data-case-grid-field="${name}"]`);
 const caseViewport = (d: any) => d.w.document.querySelector('#cases-view [data-virtual-table="cases"]');
 const workflowResult = () => ({type:"record-result",requestId:"43047f51-f5a0-413c-9c86-47ef60302a43",number:"BA-INTEGRATION",date:"2026-11-01",outcome:"Additional tax / revision",text:"Agreed result",paymentTarget:"2026-11-05",revisionTarget:"2026-11-06",products:[{tax:"PPN",period:"2025",amount:1000,revise:true}]});
+
+test("External client creates a linked case and prevents duplicate submission while saving",async()=>{
+  const d=await dashboard("staff",{casesTab:"pemeriksaan"});
+  try {
+    d.w.document.querySelector("[data-external-case]").click();
+    const dialog = d.w.document.querySelector(".case-external-dialog");
+    const form = dialog.querySelector("form");
+    form.elements.taxpayer.value = "PT External Taxpayer";
+    d.delay();
+    form.requestSubmit(); await tick();
+    form.requestSubmit(); await tick();
+    assert.equal(d.writes.length,1);
+    assert.match(dialog.querySelector('[role="status"]').textContent,/Saving/);
+    assert.equal(d.writes[0].case.caseCategory,"Pemeriksaan");
+    assert.equal(d.writes[0].externalClient.name,"PT External Taxpayer");
+    d.release(); await tick();
+    assert.equal(d.w.document.querySelector(".case-external-dialog"),null);
+    const record = d.api.getRows().find((row:any)=>row.id===d.writes[0].externalClient.requestId);
+    assert.equal(record.databaseClientId,"external-client");
+    assert.equal(d.api.state.caseSearch,"PT External Taxpayer");
+    assert.deepEqual(d.warnings,[]);
+  } finally { d.dom.window.close(); }
+});
 
 test("Cases scopes remaining-height layout to its dashboard and retains table/footer structure across all categories", async () => {
   const d = await dashboard();

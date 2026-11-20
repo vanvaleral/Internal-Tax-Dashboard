@@ -38,6 +38,22 @@ page scrolling so every control remains reachable.
 
 ## Interaction
 
+- In Himbauan or Pemeriksaan, **External client** creates an open case and a
+  new **On Demand** Client Master record atomically. Enter the taxpayer's legal
+  name (including PT/CV if applicable), then fill in the rest in the sheet.
+  New registrations have no fee, contract dates, Master PICs, or recurring
+  obligations. The staff member who creates it is assigned on the case only.
+  Exact, authorized On Demand matches are reused unchanged. Existing contracted,
+  archived, ambiguous or out-of-scope matches are not reclassified or copied.
+  Closing or archiving a case keeps the client and history linked.
+  Deploy `20261120083201_external_case_on_demand_client.sql` before using this
+  feature. The service-role-only RPC serializes identity checks with imports
+  and Annual registration, records Client Master activity, and replays the
+  same request ID without creating a duplicate. A failed write saves neither
+  record. Existing case creation works without the new migration.
+  Hosted Supabase project `kedpcolyklquhfjzimvx` records this migration as
+  `20261120083726_external_case_on_demand_client`. Do not reapply it
+  because the local filename has a different timestamp.
 - Full Screen opens the active case category in a separate, account-bound tab
   using the same protected dashboard renderer and Cases APIs. The standalone
   layout hides the sidebar/topbar, fills the viewport, retains both category
