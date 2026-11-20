@@ -9314,9 +9314,7 @@
       client.accountingPicProfileId = row.accounting_pic_profile_id || "";
       client.reportingAssignments = {
         tax: [row.tax_pic_profile_id, row.tax_pic_name],
-        accounting: [row.accounting_pic_profile_id, row.accounting_pic_name],
-        partner: [row.partner_profile_id, row.partner_name],
-        supervisor: [row.supervisor_profile_id, row.supervisor_name]
+        accounting: [row.accounting_pic_profile_id, row.accounting_pic_name]
       };
       client.sourceSystem = row.source_system;
       client.proposalStatus = row.proposal_status || "";

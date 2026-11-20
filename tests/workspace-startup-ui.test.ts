@@ -120,14 +120,18 @@ test("an old Management Quick Access preference falls back to KPI Overview", asy
   } finally { d.dom.window.close(); }
 });
 
-test("Management opens Structure and reviews confirmed Client Master assignments without another request", async () => {
+test("Management opens Team Split with confirmed Client Master assignments without another request", async () => {
   const d = open({ view: "dashboard-view", clientRows: [{
     id:"client-a",client_code:"CL-00001",legal_name:"Client to review",status:"Active",
-    tax_pic_profile_id:"a",partner_profile_id:"other-partner"
+    tax_pic_profile_id:"a"
   }] });
   try {
     d.release(); await d.opening;
     const doc = d.w.document;
+    d.cache.set("tax-dashboard:structure:v1:user-a", JSON.stringify({active:"1",plans:[{id:"1",name:"Split plan",nodes:[
+      {id:"1",label:"Team one",kind:"Leader",parent:"",pic:"a",picName:"PIC A"},
+      {id:"2",label:"Team two",kind:"Leader",parent:"",pic:"",picName:""}
+    ]}]}));
     d.w.eval(read("public/workspace-assets.js"));
     assert.equal(doc.querySelector('[src$="/management-structure.js"]'), null);
     doc.querySelector('[data-management-tab="structure"]').click();
@@ -136,13 +140,11 @@ test("Management opens Structure and reviews confirmed Client Master assignments
     doc.querySelector('[src$="/management-structure.js"]').dispatchEvent(new d.w.Event("load"));
     doc.querySelector('[href$="/management-structure.css"]').dispatchEvent(new d.w.Event("load"));
     await tick();
-    assert.equal(doc.querySelector('[data-structure-host] select[name="pic"] option[value="a"]').textContent, "PIC A");
-    doc.querySelector('[data-structure-section="conflicts"]').click();
-    const filter = doc.querySelector("[data-structure-review-filter]");
-    filter.value = "review";
-    filter.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    assert.equal(doc.querySelector('[data-structure-edit="1"] strong').textContent, "PIC A");
+    assert.equal(doc.querySelector('[data-structure-section="conflicts"]'),null);
+    doc.querySelector('[data-structure-section="split"]').click();
     assert.match(doc.querySelector(".structure-review tbody").textContent,/Client to review/);
-    assert.match(doc.querySelector(".structure-review tbody").textContent,/Unlisted owner/);
+    assert.match(doc.querySelector(".structure-review tbody").textContent,/Suggested from Current PICs/);
     assert.equal(d.requests.length, 1);
   } finally { d.dom.window.close(); }
 });

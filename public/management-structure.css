@@ -21,7 +21,8 @@
 }
 .structure-review-table { margin:0; max-height:56vh; }
 .structure-review-table table { min-width:660px; }
-.structure-review-table th[scope="row"] { text-align:left; background:transparent; color:var(--ink); text-transform:none; letter-spacing:normal; }
+.structure-review-table tbody th[scope="row"] { position:static; text-align:left; background:transparent; color:var(--ink); text-transform:none; letter-spacing:normal; }
+.structure-review-table [data-structure-recommendation] { min-width:210px; }
 .structure-review-table small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
 .structure-split-controls, .structure-split-owner { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
 .structure-split-controls { margin-top:10px; }

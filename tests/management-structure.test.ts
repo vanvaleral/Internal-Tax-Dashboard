@@ -97,74 +97,58 @@ test("Team Split suggests ownership from Current PICs and checks confirmed owner
   } finally { x.dom.window.close(); }
 });
 
-test("client conflicts compare the selected chart by PIC ID and matching reporting level", () => {
+test("PIC recommendations keep existing in-team and blank roles, balance replacements, and never write drafts", () => {
   const staff = [
-    ...roster,
-    {id:"partner-2",display_name:"Ayu",role:"partner"},
-    {id:"supervisor-1",display_name:"Sam",role:"supervisor"},
-    {id:"supervisor-2",display_name:"Mira",role:"supervisor"},
-    {id:"leader-2",display_name:"Rina",role:"leader"},
-    {id:"tax",display_name:"Adi",role:"staff"},
-    {id:"acc",display_name:"Beni",role:"staff"},
-    {id:"dup-1",display_name:"Twin",role:"staff"},
-    {id:"dup-2",display_name:"Twin",role:"staff"}
+    {id:"a",display_name:"Lead A",role:"leader"},
+    {id:"b",display_name:"Lead B",role:"leader"},
+    {id:"a1",display_name:"A Tax One",role:"staff",team_division:"Tax Team"},
+    {id:"a2",display_name:"A Tax Two",role:"staff",team_division:"Tax Team"},
+    {id:"b1",display_name:"B Tax",role:"staff",team_division:"Tax Team"},
+    {id:"a3",display_name:"A Accounting",role:"staff",team_division:"Accounting Team"},
+    {id:"not-pic",display_name:"A Partner",role:"partner",team_division:"Tax Team"},
+    {id:"ambiguous-a",display_name:"Twin",role:"staff",team_division:"Tax Team"},
+    {id:"ambiguous-b",display_name:"Twin",role:"staff",team_division:"Tax Team"}
   ];
   const x = setup(staff);
   try {
-    const node = (id:string,kind:string,pic:string,parent="",label=pic) => ({id,kind,pic,parent,label,picName:label});
-    const nodes = [
-      node("1","Partner","","","Dewa"), // Legacy, manually named partner card.
-      node("2","Partner","partner-2"),
-      node("3","Role","supervisor-1","1"),
-      node("4","Role","supervisor-2","2"),
-      node("5","Role","b","3"),
-      node("6","Leader","leader-2","3"),
-      node("7","Role","tax","6"),
-      node("8","Role","acc","4")
-    ];
-    const moved = nodes.map(row => row.id === "7" ? {...row,parent:"5"} : row);
+    const nodes = staff.slice(0,-1).map(({id,role},index) => ({id:String(index+1),label:id,pic:id,parent:index<2 ? "" : id==="b1" ? "2" : "1",
+      kind:role==="leader" ? "Leader" : role==="partner" ? "Partner" : "Role"}));
+    const owners = {keep:"1",first:"1",second:"1",third:"1",noEligible:"2"};
     x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[
-      {id:"1",name:"Current plan",nodes},{id:"2",name:"Move to Future Lead",nodes:moved}
+      {id:"1",name:"Split",nodes,teamSplit:{a:"1",b:"2",owners}}
     ]}));
-    const make = (id:string,extra:any) => ({id,name:id,clientStatus:"Active",...extra});
+    const row = (id:string,name:string,taxPicProfileId:string,accountingPicProfileId="") =>
+      ({id,name,clientStatus:"Active",taxPicProfileId,accountingPicProfileId});
     const clients = [
-      make("Cross partner", {taxPicProfileId:"tax",taxPic:"Wrong stale name",partnerProfileId:"partner-2",supervisorProfileId:"supervisor-1",accountingPicProfileId:"acc"}),
-      make("Cross leader", {taxPic:" ADI ",partner:"dewa",supervisorProfileId:"b"}),
-      make("Shared supervisor", {taxPicProfileId:"tax",partnerProfileId:"a",supervisorProfileId:"supervisor-1"}),
-      make("Leader owns own work", {taxPicProfileId:"leader-2",supervisorProfileId:"leader-2"}),
-      make("Ambiguous PIC", {taxPic:"Twin",partnerProfileId:"a"}),
-      make("Missing ownership", {taxPicProfileId:"tax"}),
-      make("Archived client", {taxPicProfileId:"tax",partnerProfileId:"partner-2",clientStatus:"Inactive"}),
-      make("Unassigned", {partnerProfileId:"partner-2"})
+      row("keep","Existing","a1","a3"),
+      row("first","Move 1","b1"),
+      row("second","Move 2","b1"),
+      row("third","Move 3","b1"),
+      row("noEligible","No eligible","b1","a3"),
+      row("unconfirmed","Not decided","a1","a3"),
     ];
-    const editor = x.mount("manager",() => true,clients);
-    const open = (section:string) => x.host.querySelector(`[data-structure-section="${section}"]`).click();
-    const select = (selector:string,value:string) => {
-      const control = x.host.querySelector(selector);
-      control.value = value;
-      control.dispatchEvent(new x.w.Event("change",{bubbles:true}));
-    };
-    const names = () => [...x.host.querySelectorAll(".structure-review tbody th")].map(row => (row as HTMLElement).textContent?.trim());
-    const setFilter = (value:string) => select("[data-structure-review-filter]",value);
-    open("conflicts");
-    assert.deepEqual(names(),["Cross leader","Cross partner","Cross partner"]);
-    assert.match(x.host.querySelector(".structure-review-summary").textContent,/2 clients with conflicts/);
-    assert.match(x.host.querySelector(".structure-review tbody").textContent,/Adi/);
-    assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Wrong stale name/);
-    setFilter("partner");
-    assert.deepEqual(names(),["Cross partner"]);
-    setFilter("leadership");
-    assert.deepEqual(names(),["Cross leader","Cross partner"]);
-    select("[data-structure-plan]","2");
-    assert.deepEqual(names(),["Cross partner"]);
-    setFilter("review");
-    assert.deepEqual(names(),["Ambiguous PIC","Missing ownership"]);
-    setFilter("conflicts");
-    editor.refreshClients(clients.filter(row => row.id !== "Cross partner"));
-    assert.deepEqual(names(),[]);
-    open("chart");
-    assert.ok(x.host.querySelector(".structure-flow"));
-    assert.deepEqual(x.saved().plans[0].nodes,nodes);
+    const drafts = {first:{nextTaxPic:"A Tax Two"}};
+    x.mount("manager",() => true,clients,() => drafts);
+    x.host.querySelector('[data-structure-section="split"]').click();
+    assert.equal(x.host.querySelector('[data-structure-section="conflicts"]'),null);
+    x.host.querySelector(".structure-review-table").scrollTop = 180;
+    x.click("recommend-pics");
+    assert.equal(x.host.querySelector(".structure-review-table").scrollTop,180);
+    const recommendation = (id:string) => x.host.querySelector(`[data-structure-confirm-owner="${id}"]`).closest("tr").querySelector("[data-structure-recommendation]").textContent;
+    assert.match(recommendation("keep"),/Keep existing PICs/);
+    assert.match(recommendation("first"),/Tax PIC: B Tax . A Tax Two/);
+    // The existing and unconfirmed clients are both retained in A Tax One's workload.
+    assert.match(recommendation("second"),/Tax PIC: B Tax . A Tax Two/);
+    assert.match(recommendation("third"),/Tax PIC: B Tax . A Tax One/);
+    assert.doesNotMatch(recommendation("first"),/Accounting/);
+    assert.match(recommendation("noEligible"),/No eligible Accounting PIC/);
+    assert.match(recommendation("unconfirmed"),/Confirm an intended team/);
+    const mode = x.host.querySelector('[data-structure-split="mode"]');
+    mode.value = "next";
+    mode.dispatchEvent(new x.w.Event("change",{bubbles:true}));
+    assert.match(recommendation("first"),/Keep existing PICs/);
+    assert.deepEqual(drafts,{first:{nextTaxPic:"A Tax Two"}});
+    assert.deepEqual(x.saved().plans[0].teamSplit.owners,owners);
   } finally { x.dom.window.close(); }
 });
 
