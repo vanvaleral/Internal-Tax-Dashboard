@@ -7,7 +7,7 @@ const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const html = read("public/demo.html");
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-function open(options: { view?: string; managementTab?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean; coldAllocation?: boolean } = {}) {
+function open(options: { view?: string; managementTab?: string; annual?: string; mobile?: boolean; status?: number; saveData?: boolean; scoped?: boolean; coldAllocation?: boolean; clientRows?: Record<string,unknown>[] } = {}) {
   const warnings: string[] = [], requests: string[] = [], idle: Array<() => void> = [];
   const vc = new VirtualConsole();
   for (const kind of ["warn", "error"] as const) vc.on(kind, (...items: any[]) => warnings.push(items.join(" ")));
@@ -35,7 +35,7 @@ function open(options: { view?: string; managementTab?: string; annual?: string;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone;
   const staff = [{ id: "a", display_name: "PIC A", full_name: "PIC A", team_division: "Tax Team", role: "supervisor", directory_active: true }];
   const packets: Record<string, any> = {
-    "/api/clients": { data: [{ id: "client-a", client_code: "CL-00001", legal_name: "Confirmed database client", status: "Active", company_form: "PT" }] },
+    "/api/clients": { data: options.clientRows || [{ id: "client-a", client_code: "CL-00001", legal_name: "Confirmed database client", status: "Active", company_form: "PT" }] },
     "/api/cases": { data: [] }, "/api/my-work": { tasks: [] }, "/api/staff": { staff },
     "/api/operations?scope=monthly_compliance": { data: [] }, "/api/operations": { data: [] }
   };
@@ -120,8 +120,11 @@ test("an old Management Quick Access preference falls back to KPI Overview", asy
   } finally { d.dom.window.close(); }
 });
 
-test("Management opens Structure on demand with the confirmed staff directory", async () => {
-  const d = open({ view: "dashboard-view" });
+test("Management opens Structure and reviews confirmed Client Master assignments without another request", async () => {
+  const d = open({ view: "dashboard-view", clientRows: [{
+    id:"client-a",client_code:"CL-00001",legal_name:"Client to review",status:"Active",
+    tax_pic_profile_id:"a",partner_profile_id:"other-partner"
+  }] });
   try {
     d.release(); await d.opening;
     const doc = d.w.document;
@@ -134,6 +137,12 @@ test("Management opens Structure on demand with the confirmed staff directory", 
     doc.querySelector('[href$="/management-structure.css"]').dispatchEvent(new d.w.Event("load"));
     await tick();
     assert.equal(doc.querySelector('[data-structure-host] select[name="pic"] option[value="a"]').textContent, "PIC A");
+    doc.querySelector('[data-structure-section="conflicts"]').click();
+    const filter = doc.querySelector("[data-structure-review-filter]");
+    filter.value = "review";
+    filter.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    assert.match(doc.querySelector(".structure-review tbody").textContent,/Client to review/);
+    assert.match(doc.querySelector(".structure-review tbody").textContent,/Unlisted owner/);
     assert.equal(d.requests.length, 1);
   } finally { d.dom.window.close(); }
 });

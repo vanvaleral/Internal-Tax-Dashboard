@@ -6747,7 +6747,7 @@
           canManage: () => window.WorkspaceFeatures.manager() && window.WorkspaceFeatures.can("management"),
           safeHtml
         });
-        structureEditor.mount(host, staffDirectory);
+        structureEditor.mount(host, staffDirectory, clientsLoadedFromDatabase || IS_OFFLINE_DEMO ? clientMasterClients : null);
       } else if (!structureLoading && !structureError) {
         structureLoading = window.WorkspaceAssets.load("structure").catch(() => {
           structureError = "Structure tools could not be loaded.";
@@ -9311,6 +9311,12 @@
       client.createdAt = row.created_at || "";
       client.taxPicProfileId = row.tax_pic_profile_id || "";
       client.accountingPicProfileId = row.accounting_pic_profile_id || "";
+      client.reportingAssignments = {
+        tax: [row.tax_pic_profile_id, row.tax_pic_name],
+        accounting: [row.accounting_pic_profile_id, row.accounting_pic_name],
+        partner: [row.partner_profile_id, row.partner_name],
+        supervisor: [row.supervisor_profile_id, row.supervisor_name]
+      };
       client.sourceSystem = row.source_system;
       client.proposalStatus = row.proposal_status || "";
       client.responsiblePersonName = row.responsible_person_name || "";
@@ -9419,6 +9425,9 @@
           status: client.proposalStatus || (client.clientStatus === "Contract" ? "Contract Draft" : "Proposal")
         }));
         clientsLoadedFromDatabase = true;
+        if (!startupPending && state.currentView === "dashboard-view" && state.managementTab === "structure") {
+          structureEditor?.refreshClients?.(clientMasterClients);
+        }
         if (!clients.some((client) => client.id === state.selectedClientId)) state.selectedClientId = clients[0]?.id || "";
         if (!clients.some((client) => client.id === state.activeClientFormId)) state.activeClientFormId = clients[0]?.id || "";
         if (!proposals.some((proposal) => proposal.id === state.activeProposalId)) state.activeProposalId = proposals[0]?.id || "";

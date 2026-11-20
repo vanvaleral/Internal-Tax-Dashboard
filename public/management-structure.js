@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const kinds = ["Partner", "Team", "Role"];
+  const kinds = ["Partner", "Supervisor", "Leader", "Team", "Role"];
   const maxPlans = 20, maxNodes = 100, maxDepth = 6;
   const roleLabels = { partner:"Partner", supervisor:"Supervisor", leader:"Leader", staff:"Associate", admin:"Admin" };
   const cardWidth = 176, cardHeight = 84, columnGap = 28, rowGap = 50, padding = 24;
@@ -8,6 +8,88 @@
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const nextId = rows => String(1 + Math.max(0, ...rows.map(row => Number(row.id) || 0)));
   const option = (value, label, active) => `<option value="${esc(value)}" ${value === active ? "selected" : ""}>${esc(label)}</option>`;
+  const nameKey = value => String(value || "").trim().replace(/\s+/g," ").toLowerCase();
+  const ownerRoles = ["partner","supervisor","leader"];
+
+  function reviewReportingLines(nodes, people, clients) {
+    const aliases = new Map();
+    for (const [id,person] of people) {
+      for (const name of [person.name,person.fullName]) {
+        const key = nameKey(name);
+        if (!key) continue;
+        if (!aliases.has(key)) aliases.set(key,new Set());
+        aliases.get(key).add(id);
+      }
+    }
+    const resolve = ([id,name] = []) => {
+      if (id) return id;
+      const matches = aliases.get(nameKey(name));
+      return matches?.size === 1 ? matches.values().next().value : "";
+    };
+    const byId = new Map(nodes.map(node => [node.id,node]));
+    const positions = new Map(), chartRoles = new Map(), identities = new Map();
+    for (const node of nodes) {
+      const kind = nameKey(node.kind);
+      // Older charts can have a manually named partner. Only resolve an exact, unique directory match.
+      const id = node.pic || (ownerRoles.includes(kind) ? resolve(["",node.label]) : "");
+      const role = ownerRoles.includes(kind) ? kind : people.get(id)?.role;
+      identities.set(node.id,id);
+      chartRoles.set(node.id,role);
+      if (id) {
+        if (!positions.has(id)) positions.set(id,[]);
+        positions.get(id).push(node);
+      }
+    }
+    const branchFor = id => {
+      const assigned = positions.get(id);
+      if (assigned?.length !== 1) return [];
+      const branch = [];
+      for (let node = assigned[0]; node; node = byId.get(node.parent)) branch.push(node);
+      return branch;
+    };
+    const details = [];
+    for (const client of clients) {
+      if (nameKey(client.clientStatus) !== "active") continue;
+      const fields = client.reportingAssignments || {};
+      const owners = [
+        {area:"Partner", pair:fields.partner || [client.partnerProfileId,client.partner]},
+        {area:"Leader / Supervisor", pair:fields.supervisor || [client.supervisorProfileId,client.supervisor]}
+      ].filter(({pair:[id,name]}) => id || nameKey(name));
+      for (const [duty,pair] of [
+        ["Tax PIC",fields.tax || [client.taxPicProfileId,client.taxPic]],
+        ["Accounting PIC",fields.accounting || [client.accountingPicProfileId,client.accountingPic]]
+      ]) {
+        if (!pair[0] && !nameKey(pair[1])) continue;
+        const pic = resolve(pair), branch = branchFor(pic);
+        const entry = {client,duty,pic:people.get(pic)?.name || pair[1] || "Unlisted PIC"};
+        if (!owners.length) {
+          details.push({...entry,area:"Ownership",expected:"Not recorded",actual:"",issue:"Client has no Partner or Supervisor recorded."});
+          continue;
+        }
+        for (const {area,pair:owner} of owners) {
+          const expectedId = resolve(owner);
+          const expected = people.get(expectedId)?.name || owner[1] || "Unlisted owner";
+          const issue = value => details.push({...entry,area,expected,actual:"",issue:value});
+          if (!pic || !expectedId) { issue("Check the PIC or owner name in the directory."); continue; }
+          if (!branch.length) { issue(positions.has(pic) ? "PIC is linked to multiple chart positions." : "PIC is not linked in this scenario."); continue; }
+          const chartOwnerRoles = [...new Set((positions.get(expectedId) || []).map(node => chartRoles.get(node.id))
+            .filter(role => role === "leader" || role === "supervisor"))];
+          const directoryRole = people.get(expectedId)?.role;
+          const kind = area === "Partner" ? "partner" : chartOwnerRoles.length === 1 ? chartOwnerRoles[0] : directoryRole;
+          if (!ownerRoles.includes(kind) || (area !== "Partner" && kind === "partner")) {
+            issue("The saved Supervisor is not identified as a Leader or Supervisor.");
+            continue;
+          }
+          const head = branch.find(node => chartRoles.get(node.id) === kind);
+          if (!head || !identities.get(head.id)) { issue(`No linked ${kind} on the PIC's branch.`); continue; }
+          const actualId = identities.get(head.id);
+          if (actualId !== expectedId) details.push({...entry,area,expected,actual:people.get(actualId)?.name || head.picName || head.label});
+        }
+      }
+    }
+    return details.sort((a,b) => String(a.client.name || "").localeCompare(String(b.client.name || "")) ||
+      a.duty.localeCompare(b.duty) || a.area.localeCompare(b.area));
+  }
 
   function validate(nodes) {
     if (nodes.some(node => !node || typeof node.id !== "string" || !node.id || typeof node.parent !== "string")) return false;
@@ -51,6 +133,7 @@
     let baseline = null, storageError = "", host, editing = "", rosterKey, people = new Map();
     let pending = null, drag = null;
     let zoom = 1;
+    let clientRows = null, section = "chart", reviewFilter = "conflicts", chartScroll = [0,0];
     try {
       baseline = localStorage.getItem(key);
       if (baseline) {
@@ -151,11 +234,42 @@
       }
     }
 
+    function conflictView(plan) {
+      if (!clientRows) return '<section class="structure-review"><p role="status">Waiting for confirmed Client Master data.</p></section>';
+      const findings = reviewReportingLines(plan.nodes,people,clientRows);
+      const conflicts = findings.filter(row => !row.issue);
+      const review = findings.filter(row => row.issue);
+      const count = rows => new Set(rows.map(row => row.client.databaseId || row.client.id || row.client.clientCode || row.client.name)).size;
+      const filters = [
+        ["conflicts",`All conflicts (${conflicts.length})`],
+        ["partner",`Partner only (${conflicts.filter(row => row.area === "Partner").length})`],
+        ["leadership",`Leader / Supervisor only (${conflicts.filter(row => row.area !== "Partner").length})`],
+        ["review",`Needs review (${review.length})`]
+      ];
+      const rows = reviewFilter === "review" ? review : conflicts.filter(row =>
+        reviewFilter === "conflicts" || (reviewFilter === "partner" ? row.area === "Partner" : row.area !== "Partner"));
+      return `<section class="structure-review" aria-labelledby="structure-review-title">
+        <div class="structure-review-head"><div><h4 id="structure-review-title">Client reporting conflicts</h4>
+          <p>Compares active clients' saved owners with the Tax and Accounting PICs' reporting lines in <strong>${esc(plan.name)}</strong>. Review these before changing assignments.</p>
+          <p>Leader checks use Client Master's <strong>Supervisor</strong> field. If it names a Supervisor, we compare that level, not the team leader below it.</p></div>
+          <label>Show <select class="field" data-structure-review-filter>${filters.map(([value,label]) => option(value,label,reviewFilter)).join("")}</select></label>
+        </div>
+        <div class="structure-review-summary" role="status"><strong>${count(conflicts)} clients with conflicts</strong><span>${count(review)} need review</span><span>${rows.length} findings shown</span></div>
+        ${!plan.nodes.length ? "<p>Add reporting lines to this scenario to check for mismatches. Unmatched assignments appear under Needs review.</p>" : ""}
+        ${rows.length ? `<div class="table-wrap structure-review-table" tabindex="0" aria-label="Client reporting findings">
+          <table><thead><tr><th scope="col">Client</th><th scope="col">Assigned PIC</th><th scope="col">Check</th><th scope="col">Client owner</th><th scope="col">PIC reports to / Finding</th></tr></thead><tbody>
+          ${rows.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode || "Unnamed client")}<small>${esc(row.client.clientCode)}</small></th>
+            <td><strong>${esc(row.pic)}</strong><small>${esc(row.duty)}</small></td>
+            <td>${esc(row.area)}</td><td>${esc(row.expected)}</td><td>${esc(row.issue || row.actual)}</td></tr>`).join("")}</tbody></table></div>`
+          : "<p>No findings match this filter.</p>"}
+      </section>`;
+    }
+
     function render(message = storageError) {
       const plan = active(), node = plan.nodes.find(row => row.id === editing);
       const list = [...people].filter(([id]) => !usedByAnother(id));
       const oldCanvas = host.querySelector(".structure-viewport");
-      const scroll = oldCanvas ? [oldCanvas.scrollLeft, oldCanvas.scrollTop] : null;
+      if (oldCanvas) chartScroll = [oldCanvas.scrollLeft,oldCanvas.scrollTop];
       const parentOptions = plan.nodes.filter(row => !node || (row.id !== node.id &&
         validate(plan.nodes.map(entry => entry.id === node.id ? {...entry, parent: row.id} : entry))));
       const locked = storageError ? "disabled" : "";
@@ -170,8 +284,12 @@
           <button type="button" class="ghost-btn" data-structure-action="copy" ${locked}>Duplicate</button>
           <button type="button" class="ghost-btn" data-structure-action="delete-plan" ${locked || (model.plans.length < 2 ? "disabled" : "")}>Delete scenario</button>
         </div>
+        <div class="workspace-tabs structure-subtabs" role="group" aria-label="Structure Lab views">
+          <button type="button" class="${section === "chart" ? "solid-btn" : "ghost-btn"}" data-structure-section="chart" aria-pressed="${section === "chart"}">Flowchart</button>
+          <button type="button" class="${section === "conflicts" ? "solid-btn" : "ghost-btn"}" data-structure-section="conflicts" aria-pressed="${section === "conflicts"}">Conflicted Clients</button>
+        </div>
         <p class="subline" role="status" data-structure-status>${esc(message)}</p>
-        <div class="structure-layout">
+        ${section === "conflicts" ? conflictView(plan) : `<div class="structure-layout">
           <section class="structure-chart" aria-label="Reporting structure">
             <header class="structure-chart-head"><div><h4>${esc(plan.name)}</h4><p>Drop a PIC or drag a card by its grip onto a manager.</p></div><div class="structure-chart-tools"><span class="pill neutral">${plan.nodes.length} position${plan.nodes.length === 1 ? "" : "s"}</span>
               <div class="structure-zoom-tools" role="group" aria-label="Chart zoom">
@@ -202,11 +320,11 @@
             <div class="structure-actions"><button type="submit" class="solid-btn" ${locked}>${node ? "Save position" : "Add position"}</button>
               ${node ? `<button type="button" class="ghost-btn" data-structure-action="cancel">Cancel</button><button type="button" class="ghost-btn" data-structure-action="remove" ${locked}>Remove</button>` : ""}</div>
           </form></div>
-        </div>`);
-      updateZoom();
-      if (scroll) {
+        </div>`}`);
+      if (section === "chart") {
+        updateZoom();
         const canvas = host.querySelector(".structure-viewport");
-        [canvas.scrollLeft,canvas.scrollTop] = scroll;
+        [canvas.scrollLeft,canvas.scrollTop] = chartScroll;
       }
     }
 
@@ -358,6 +476,14 @@
       if (!canManage()) return;
       const button = event.target.closest("button");
       if (!button) return;
+      if (["chart","conflicts"].includes(button.dataset.structureSection)) {
+        section = button.dataset.structureSection;
+        clearDrag();
+        pending = null;
+        render();
+        host.querySelector(`[data-structure-section="${section}"]`).focus();
+        return;
+      }
       if (button.dataset.structureZoom) { changeZoom(button.dataset.structureZoom); return; }
       if (button.dataset.structurePic && people.has(button.dataset.structurePic)) { pick({pic:button.dataset.structurePic}); return; }
       if (button.dataset.structureMove && find(button.dataset.structureMove)) { pick({id:button.dataset.structureMove}); return; }
@@ -422,17 +548,19 @@
       }
     }
 
-    function mount(target, staff) {
+    function mount(target, staff, nextClients = null) {
       if (!canManage()) return;
       const roster = staff.filter(person => person.directory_active !== false && person.id && (person.display_name || person.full_name))
         .map(person => {
           const role = String(person.role || "staff").toLowerCase();
           const roleLabel = Object.hasOwn(roleLabels,role) ? roleLabels[role] : "PIC";
-          return [person.id,{name:person.display_name || person.full_name,roleLabel,
-            title:person.employment_title || roleLabel,kind:role === "partner" ? "Partner" : "Role"}];
+          return [person.id,{name:person.display_name || person.full_name,fullName:person.full_name,role,roleLabel,
+            title:person.employment_title || roleLabel,kind:ownerRoles.includes(role) ? roleLabel : "Role"}];
         }).sort((a,b) => a[1].name.localeCompare(b[1].name));
       const signature = JSON.stringify(roster);
-      if (target === host && signature === rosterKey) return;
+      const clientsChanged = nextClients !== clientRows;
+      clientRows = nextClients;
+      if (target === host && signature === rosterKey && (!clientsChanged || section === "chart")) return;
       if (drag) clearDrag();
       pending = null;
       if (target !== host) {
@@ -453,7 +581,14 @@
         });
         host.addEventListener("submit", onSubmit);
         host.addEventListener("change", event => {
-          if (!canManage() || !event.target.matches("[data-structure-plan]")) return;
+          if (!canManage()) return;
+          if (event.target.matches("[data-structure-review-filter]")) {
+            reviewFilter = event.target.value;
+            render();
+            host.querySelector("[data-structure-review-filter]").focus();
+            return;
+          }
+          if (!event.target.matches("[data-structure-plan]")) return;
           if (!model.plans.some(plan => plan.id === event.target.value) ||
               !save({...model, active: event.target.value}, "Scenario selected.", true)) event.target.value = model.active;
         });
@@ -462,7 +597,12 @@
       people = new Map(roster);
       render();
     }
-    return { mount };
+    function refreshClients(nextClients) {
+      if (!canManage()) return;
+      clientRows = nextClients;
+      if (section === "conflicts" && host?.isConnected) render();
+    }
+    return { mount,refreshClients };
   }
   window.ManagementStructure = { create };
 })();

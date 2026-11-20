@@ -10,16 +10,16 @@ const roster = [
   {id:"c", display_name:"Archived PIC", directory_active:false}
 ];
 
-function setup() {
+function setup(staff = roster) {
   const dom = new JSDOM("<section data-structure-host></section>",{url:"https://test.local/demo.html", runScripts:"outside-only"});
   const w = dom.window as any, host = w.document.querySelector("section");
   w.structuredClone = structuredClone;
   w.confirm = () => true;
   w.eval(read("vendor/purify.min.js"));
   w.eval(read("management-structure.js"));
-  const mount = (account = "manager", canManage = () => true) => {
+  const mount = (account = "manager", canManage = () => true, clients: any[] | null = null) => {
     const editor = w.ManagementStructure.create({account, canManage, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true,svg:true}})});
-    editor.mount(host, roster);
+    editor.mount(host, staff, clients);
     return editor;
   };
   const click = (action:string) => host.querySelector(`[data-structure-action="${action}"]`).click();
@@ -31,6 +31,77 @@ function setup() {
   const saved = () => JSON.parse(w.localStorage.getItem("tax-dashboard:structure:v1:manager"));
   return {dom, w, host, mount, click, submit, saved};
 }
+
+test("client conflicts compare the selected chart by PIC ID and matching reporting level", () => {
+  const staff = [
+    ...roster,
+    {id:"partner-2",display_name:"Ayu",role:"partner"},
+    {id:"supervisor-1",display_name:"Sam",role:"supervisor"},
+    {id:"supervisor-2",display_name:"Mira",role:"supervisor"},
+    {id:"leader-2",display_name:"Rina",role:"leader"},
+    {id:"tax",display_name:"Adi",role:"staff"},
+    {id:"acc",display_name:"Beni",role:"staff"},
+    {id:"dup-1",display_name:"Twin",role:"staff"},
+    {id:"dup-2",display_name:"Twin",role:"staff"}
+  ];
+  const x = setup(staff);
+  try {
+    const node = (id:string,kind:string,pic:string,parent="",label=pic) => ({id,kind,pic,parent,label,picName:label});
+    const nodes = [
+      node("1","Partner","","","Dewa"), // Legacy, manually named partner card.
+      node("2","Partner","partner-2"),
+      node("3","Role","supervisor-1","1"),
+      node("4","Role","supervisor-2","2"),
+      node("5","Role","b","3"),
+      node("6","Leader","leader-2","3"),
+      node("7","Role","tax","6"),
+      node("8","Role","acc","4")
+    ];
+    const moved = nodes.map(row => row.id === "7" ? {...row,parent:"5"} : row);
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[
+      {id:"1",name:"Current plan",nodes},{id:"2",name:"Move to Future Lead",nodes:moved}
+    ]}));
+    const make = (id:string,extra:any) => ({id,name:id,clientStatus:"Active",...extra});
+    const clients = [
+      make("Cross partner", {taxPicProfileId:"tax",taxPic:"Wrong stale name",partnerProfileId:"partner-2",supervisorProfileId:"supervisor-1",accountingPicProfileId:"acc"}),
+      make("Cross leader", {taxPic:" ADI ",partner:"dewa",supervisorProfileId:"b"}),
+      make("Shared supervisor", {taxPicProfileId:"tax",partnerProfileId:"a",supervisorProfileId:"supervisor-1"}),
+      make("Leader owns own work", {taxPicProfileId:"leader-2",supervisorProfileId:"leader-2"}),
+      make("Ambiguous PIC", {taxPic:"Twin",partnerProfileId:"a"}),
+      make("Missing ownership", {taxPicProfileId:"tax"}),
+      make("Archived client", {taxPicProfileId:"tax",partnerProfileId:"partner-2",clientStatus:"Inactive"}),
+      make("Unassigned", {partnerProfileId:"partner-2"})
+    ];
+    const editor = x.mount("manager",() => true,clients);
+    const open = (section:string) => x.host.querySelector(`[data-structure-section="${section}"]`).click();
+    const select = (selector:string,value:string) => {
+      const control = x.host.querySelector(selector);
+      control.value = value;
+      control.dispatchEvent(new x.w.Event("change",{bubbles:true}));
+    };
+    const names = () => [...x.host.querySelectorAll(".structure-review tbody th")].map(row => (row as HTMLElement).textContent?.trim());
+    const setFilter = (value:string) => select("[data-structure-review-filter]",value);
+    open("conflicts");
+    assert.deepEqual(names(),["Cross leader","Cross partner","Cross partner"]);
+    assert.match(x.host.querySelector(".structure-review-summary").textContent,/2 clients with conflicts/);
+    assert.match(x.host.querySelector(".structure-review tbody").textContent,/Adi/);
+    assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Wrong stale name/);
+    setFilter("partner");
+    assert.deepEqual(names(),["Cross partner"]);
+    setFilter("leadership");
+    assert.deepEqual(names(),["Cross leader","Cross partner"]);
+    select("[data-structure-plan]","2");
+    assert.deepEqual(names(),["Cross partner"]);
+    setFilter("review");
+    assert.deepEqual(names(),["Ambiguous PIC","Missing ownership"]);
+    setFilter("conflicts");
+    editor.refreshClients(clients.filter(row => row.id !== "Cross partner"));
+    assert.deepEqual(names(),[]);
+    open("chart");
+    assert.ok(x.host.querySelector(".structure-flow"));
+    assert.deepEqual(x.saved().plans[0].nodes,nodes);
+  } finally { x.dom.window.close(); }
+});
 
 test("a manager can chart new partners and teams, save PIC links and independently duplicate a scenario", () => {
   const x = setup();
