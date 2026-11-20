@@ -6745,6 +6745,7 @@
         structureEditor ||= window.ManagementStructure.create({
           account: bootstrapProfile.user.id,
           canManage: () => window.WorkspaceFeatures.manager() && window.WorkspaceFeatures.can("management"),
+          getAllocationDrafts: () => state.allocationDrafts,
           safeHtml
         });
         structureEditor.mount(host, staffDirectory, clientsLoadedFromDatabase || IS_OFFLINE_DEMO ? clientMasterClients : null);

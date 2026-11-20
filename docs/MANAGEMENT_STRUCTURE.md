@@ -31,6 +31,27 @@ branches appear under **Needs review**, not as confirmed conflicts. Inactive
 clients, proposals and unassigned PIC fields are not checked. The review uses
 already-loaded directory and Client Master data and never saves client changes.
 
+**Team Split** is a planning comparison for two separate branches in the
+selected chart. If the scenario has exactly two non-nested leader cards, they
+are preselected; management can select other branch roots. Active clients
+get a suggested team when their Current Tax and Accounting PICs are in the
+same branch, or when their only assigned PIC maps to one branch. Confirm
+suggestions or set individual intended teams. Cross-team, unmapped, and
+unassigned clients do not receive automatic suggestions.
+
+Compare **Current PICs** or **Next PICs** to show differences from the confirmed
+intended team. Next reads the current browser's unsaved Allocation drafts,
+retains the current PIC for a role without a draft, and honors explicit
+unassignment. The preview also shows split assignments and whole-team moves
+when an intended team has not been confirmed. Confirmations store only
+client IDs and chart branch IDs in the browser scenario. Changing branch
+roots requires confirmation if intended teams are already saved.
+
+This does not create a second workspace or update Client Master, permissions,
+or Allocation. A future shared Supabase plan should store proposed team
+memberships and confirmed client ownership separately from operational
+assignments, behind the existing Management permissions.
+
 Print scales the complete flowchart to the width and height available on one
 landscape sheet, using the paper size selected in the browser print dialog.
 Canvas zoom and scroll do not affect the result. With a large chart, choose a

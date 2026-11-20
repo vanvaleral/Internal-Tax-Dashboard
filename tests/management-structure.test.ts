@@ -17,8 +17,8 @@ function setup(staff = roster) {
   w.confirm = () => true;
   w.eval(read("vendor/purify.min.js"));
   w.eval(read("management-structure.js"));
-  const mount = (account = "manager", canManage = () => true, clients: any[] | null = null) => {
-    const editor = w.ManagementStructure.create({account, canManage, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true,svg:true}})});
+  const mount = (account = "manager", canManage = () => true, clients: any[] | null = null, getAllocationDrafts = () => ({})) => {
+    const editor = w.ManagementStructure.create({account, canManage, getAllocationDrafts, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true,svg:true}})});
     editor.mount(host, staff, clients);
     return editor;
   };
@@ -31,6 +31,71 @@ function setup(staff = roster) {
   const saved = () => JSON.parse(w.localStorage.getItem("tax-dashboard:structure:v1:manager"));
   return {dom, w, host, mount, click, submit, saved};
 }
+
+test("Team Split suggests ownership from Current PICs and checks confirmed ownership against Next PIC drafts", () => {
+  const x = setup([
+    {id:"lead-a",display_name:"Leader Alpha",role:"leader"},
+    {id:"lead-b",display_name:"Leader Beta",role:"leader"},
+    {id:"tax-a",display_name:"Tax Alpha",role:"staff"},
+    {id:"acc-a",display_name:"Accounting Alpha",role:"staff"},
+    {id:"tax-b",display_name:"Tax Beta",role:"staff"},
+    {id:"acc-b",display_name:"Accounting Beta",role:"staff"}
+  ]);
+  try {
+    const pair = (id:string,label:string) => [id,label];
+    const nodes = [
+      ["1","lead-a",""],["2","lead-b",""],["3","tax-a","1"],["4","acc-a","1"],["5","tax-b","2"],["6","acc-b","2"]
+    ].map(([id,pic,parent]) => ({id,pic,parent,label:pic,kind:id === "1" || id === "2" ? "Leader" : "Role",picName:pic}));
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[{id:"1",name:"Split proposal",nodes}]}));
+    const aligned = {id:"c1",databaseId:"db-c1",name:"Aligned",clientStatus:"Active",reportingAssignments:{tax:pair("tax-a","Tax Alpha"),accounting:pair("acc-a","Accounting Alpha")}};
+    const mixed = {id:"c2",name:"Mixed",clientStatus:"Active",taxPicProfileId:"tax-a",accountingPicProfileId:"acc-b"};
+    const solo = {id:"c3",name:"Single PIC",clientStatus:"Active",taxPicProfileId:"tax-b"};
+    const unknown = {id:"c4",name:"Unmapped",clientStatus:"Active",taxPic:"Other person",accountingPicProfileId:"acc-a"};
+    const archived = {id:"c5",name:"Archived",clientStatus:"Inactive",taxPicProfileId:"tax-a"};
+    const drafts = {c1:{nextTaxPic:"TAX BETA",nextAccPic:"Accounting Beta"},c2:{nextTaxPic:"Tax Beta"},c3:{nextTaxPic:""}};
+    const rows = [aligned,mixed,solo,unknown,archived];
+    const editor = x.mount("manager",() => true,rows,() => drafts);
+    const select = (selector:string,value:string) => {
+      const control = x.host.querySelector(selector);
+      control.value = value;
+      control.dispatchEvent(new x.w.Event("change",{bubbles:true}));
+    };
+    const row = (key:string) => x.host.querySelector(`[data-structure-confirm-owner="${key}"]`).closest("tr");
+    const findings = (key:string) => row(key).querySelector("[data-structure-split-result]").textContent;
+    x.host.querySelector('[data-structure-section="split"]').click();
+    assert.equal(x.host.querySelector('[data-structure-split="a"]').value,"1");
+    assert.equal(x.host.querySelector('[data-structure-split="b"]').value,"2");
+    assert.match(row("db-c1").textContent,/Suggested from Current PICs/);
+    assert.match(row("c3").textContent,/Suggested from Current PICs/);
+    assert.match(findings("c2"),/split/);
+    assert.match(row("c4").textContent,/Choose manually/);
+    assert.doesNotMatch(x.host.querySelector(".structure-review tbody").textContent,/Archived/);
+    assert.equal(x.saved().plans[0].teamSplit,undefined,"suggestions must not confirm themselves");
+    select('[data-structure-split="mode"]',"next");
+    assert.equal(findings("db-c1"),"Projected team change");
+    assert.equal(findings("c2"),"Within one team","the Accounting PIC has no draft and keeps its current assignment");
+    assert.match(row("c3").textContent,/Unassigned/);
+    x.click("confirm-suggestions");
+    assert.deepEqual(x.saved().plans[0].teamSplit.owners,{"db-c1":"1",c3:"2"});
+    assert.equal(findings("db-c1"),"Outside intended team");
+    assert.equal(findings("c3"),"Check PIC or chart");
+    select('[data-structure-split="mode"]',"current");
+    assert.equal(findings("db-c1"),"Within one team");
+    select('[data-structure-split="b"]',"3");
+    assert.match(x.host.querySelector("[data-structure-status]").textContent,/must be separate/);
+    assert.equal(x.saved().plans[0].teamSplit.b,"2");
+    editor.refreshClients([{...aligned,reportingAssignments:{tax:pair("tax-b","Tax Beta"),accounting:pair("acc-b","Accounting Beta")}},...rows.slice(1)]);
+    assert.equal(findings("db-c1"),"Outside intended team","confirmed ownership is independent of a saved Allocation change");
+    row("c2").querySelector("[data-structure-owner]").value = "2";
+    row("c2").querySelector("[data-structure-confirm-owner]").click();
+    assert.equal(findings("c2"),"Outside intended team");
+    assert.equal(x.saved().plans[0].teamSplit.owners.c2,"2");
+    x.host.querySelector('[data-structure-section="chart"]').click();
+    x.host.querySelector('[data-structure-edit="2"]').click();
+    x.click("remove");
+    assert.deepEqual(x.saved().plans[0].teamSplit,{a:"1",b:"",owners:{}});
+  } finally { x.dom.window.close(); }
+});
 
 test("client conflicts compare the selected chart by PIC ID and matching reporting level", () => {
   const staff = [

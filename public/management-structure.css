@@ -23,6 +23,12 @@
 .structure-review-table table { min-width:660px; }
 .structure-review-table th[scope="row"] { text-align:left; background:transparent; color:var(--ink); text-transform:none; letter-spacing:normal; }
 .structure-review-table small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
+.structure-split-controls, .structure-split-owner { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+.structure-split-controls { margin-top:10px; }
+.structure-split-controls label { display:grid; gap:4px; font-size:12px; }
+.structure-split-owner { align-items:center; }
+.structure-split-owner select { width:auto; max-width:100%; }
+.structure-split-owner + small { margin-top:4px; }
 .structure-toolbar label, .structure-editor label { display:grid; gap:4px; font-size:12px; }
 .structure-toolbar .field, .structure-editor .field { width:100%; }
 .structure-layout {

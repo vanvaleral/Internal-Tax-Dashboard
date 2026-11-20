@@ -11,7 +11,7 @@
   const nameKey = value => String(value || "").trim().replace(/\s+/g," ").toLowerCase();
   const ownerRoles = ["partner","supervisor","leader"];
 
-  function reviewReportingLines(nodes, people, clients) {
+  function resolveStaff(people) {
     const aliases = new Map();
     for (const [id,person] of people) {
       for (const name of [person.name,person.fullName]) {
@@ -21,11 +21,20 @@
         aliases.get(key).add(id);
       }
     }
-    const resolve = ([id,name] = []) => {
+    return ([id,name] = []) => {
       if (id) return id;
       const matches = aliases.get(nameKey(name));
       return matches?.size === 1 ? matches.values().next().value : "";
     };
+  }
+
+  function assignment(client, role) {
+    return client.reportingAssignments?.[role] || (role === "tax"
+      ? [client.taxPicProfileId,client.taxPic] : [client.accountingPicProfileId,client.accountingPic]);
+  }
+
+  function reviewReportingLines(nodes, people, clients) {
+    const resolve = resolveStaff(people);
     const byId = new Map(nodes.map(node => [node.id,node]));
     const positions = new Map(), chartRoles = new Map(), identities = new Map();
     for (const node of nodes) {
@@ -56,8 +65,8 @@
         {area:"Leader / Supervisor", pair:fields.supervisor || [client.supervisorProfileId,client.supervisor]}
       ].filter(({pair:[id,name]}) => id || nameKey(name));
       for (const [duty,pair] of [
-        ["Tax PIC",fields.tax || [client.taxPicProfileId,client.taxPic]],
-        ["Accounting PIC",fields.accounting || [client.accountingPicProfileId,client.accountingPic]]
+        ["Tax PIC",assignment(client,"tax")],
+        ["Accounting PIC",assignment(client,"accounting")]
       ]) {
         if (!pair[0] && !nameKey(pair[1])) continue;
         const pic = resolve(pair), branch = branchFor(pic);
@@ -89,6 +98,55 @@
     }
     return details.sort((a,b) => String(a.client.name || "").localeCompare(String(b.client.name || "")) ||
       a.duty.localeCompare(b.duty) || a.area.localeCompare(b.area));
+  }
+
+  const clientKey = client => String(client.databaseId || client.id || "");
+  function teamSplitRows(plan, people, clients, split, mode, drafts) {
+    const resolve = resolveStaff(people);
+    const byId = new Map(plan.nodes.map(node => [node.id,node]));
+    const memberships = new Map();
+    for (const position of plan.nodes) {
+      const kind = nameKey(position.kind);
+      const id = position.pic || (ownerRoles.includes(kind) ? resolve(["",position.label]) : "");
+      if (!id) continue;
+      let node = position;
+      while (node && node.id !== split.a && node.id !== split.b) node = byId.get(node.parent);
+      if (!memberships.has(id)) memberships.set(id,new Set());
+      memberships.get(id).add(node?.id || "");
+    }
+    const project = (client, next) => ["tax","accounting"].map(role => {
+      const current = assignment(client,role);
+      const proposed = next ? drafts[client.id]?.[role === "tax" ? "nextTaxPic" : "nextAccPic"] : null;
+      const before = resolve(current);
+      // Allocation initializes both draft fields. Preserve the current stable ID when a copied label is unchanged.
+      const label = proposed ?? (people.get(before)?.name || current[1] || "");
+      const assigned = proposed != null ? Boolean(nameKey(proposed)) : Boolean(current[0] || nameKey(current[1]));
+      const same = proposed == null || [current[1],people.get(before)?.name].some(name => nameKey(name) === nameKey(proposed));
+      const id = assigned ? (same ? before : resolve(["",proposed])) : "";
+      const branches = memberships.get(id);
+      return {assigned,label:assigned ? (people.get(id)?.name || label || "Unlisted PIC") : "Unassigned",
+        team:branches?.size === 1 ? branches.values().next().value : ""};
+    });
+    const ownerSuggestion = assignments => {
+      const assigned = assignments.filter(item => item.assigned);
+      return assigned.length && assigned[0].team && assigned.every(item => item.team === assigned[0].team) ? assigned[0].team : "";
+    };
+    return clients.filter(client => nameKey(client.clientStatus) === "active" && clientKey(client)).map(client => {
+      const current = project(client,false);
+      const shown = mode === "next" ? project(client,true) : current;
+      const key = clientKey(client);
+      const stored = Object.hasOwn(split.owners,key) ? split.owners[key] : "";
+      const owner = stored === split.a || stored === split.b ? stored : "";
+      const suggested = ownerSuggestion(current);
+      const assigned = shown.filter(item => item.assigned);
+      const teams = new Set(assigned.map(item => item.team).filter(Boolean));
+      const conflict = Boolean(owner && [...teams].some(team => team !== owner));
+      const cross = teams.size > 1;
+      const incomplete = !assigned.length || assigned.some(item => !item.team);
+      const projectedTeam = ownerSuggestion(shown);
+      const moved = !owner && mode === "next" && !!suggested && !!projectedTeam && suggested !== projectedTeam;
+      return {client,key,shown,owner,suggested,conflict,cross,incomplete,moved};
+    }).sort((a,b) => String(a.client.name || "").localeCompare(String(b.client.name || "")));
   }
 
   function validate(nodes) {
@@ -127,13 +185,14 @@
     return {points, width: Math.max(2*padding + cardWidth, leaves*(cardWidth + columnGap) - columnGap + 2*padding), height};
   }
 
-  function create({ account, canManage, safeHtml }) {
+  function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}) }) {
     const key = `tax-dashboard:structure:v1:${account}`;
     let model = { active: "1", plans: [{ id: "1", name: "Company structure", nodes: [] }] };
     let baseline = null, storageError = "", host, editing = "", rosterKey, people = new Map();
     let pending = null, drag = null;
     let zoom = 1;
     let clientRows = null, section = "chart", reviewFilter = "conflicts", chartScroll = [0,0];
+    let splitMode = "current", splitFilter = "all";
     try {
       baseline = localStorage.getItem(key);
       if (baseline) {
@@ -265,6 +324,128 @@
       </section>`;
     }
 
+    function branchesOverlap(nodes, a, b) {
+      if (!a || !b) return false;
+      const byId = new Map(nodes.map(node => [node.id,node]));
+      const contains = (ancestor, child) => {
+        for (let node = byId.get(child); node; node = byId.get(node.parent)) if (node.id === ancestor) return true;
+        return false;
+      };
+      return contains(a,b) || contains(b,a);
+    }
+
+    function splitFor(plan) {
+      if (plan.teamSplit) {
+        return {a:plan.teamSplit.a || "",b:plan.teamSplit.b || "",owners:plan.teamSplit.owners || {}};
+      }
+      const leaders = plan.nodes.filter(node => node.kind === "Leader" || (node.kind === "Role" && people.get(node.pic)?.role === "leader"));
+      if (leaders.length === 2 && !branchesOverlap(plan.nodes,leaders[0].id,leaders[1].id)) return {a:leaders[0].id,b:leaders[1].id,owners:{}};
+      return {a:"",b:"",owners:{}};
+    }
+
+    function splitResult(plan) {
+      const split = splitFor(plan);
+      const ready = Boolean(split.a && split.b && plan.nodes.some(node => node.id === split.a) &&
+        plan.nodes.some(node => node.id === split.b) && !branchesOverlap(plan.nodes,split.a,split.b));
+      return {split,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,splitMode,getAllocationDrafts()) : []};
+    }
+
+    function splitView(plan) {
+      const {split,ready,rows} = splitResult(plan);
+      const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
+      const teamName = id => id === split.a ? `Team A: ${names.get(id)}` : `Team B: ${names.get(id)}`;
+      const rootOptions = id => option("","Choose a branch",id) + plan.nodes.map(node => option(node.id,nodeName(node),id)).join("");
+      const result = row => row.conflict ? "Outside intended team" : row.cross ? "Tax and Accounting split" :
+        row.moved ? "Projected team change" : row.incomplete ? "Check PIC or chart" : "Within one team";
+      const counts = {
+        all:rows.length, conflicts:rows.filter(row => row.conflict || row.cross || row.moved).length,
+        owners:rows.filter(row => !row.owner).length, review:rows.filter(row => row.incomplete).length
+      };
+      const suggested = rows.filter(row => !row.owner && row.suggested).length;
+      const visible = rows.filter(row => splitFilter === "all" || (splitFilter === "conflicts" && (row.conflict || row.cross || row.moved)) ||
+        (splitFilter === "owners" && !row.owner) || (splitFilter === "review" && row.incomplete));
+      const picCell = item => `<td><strong>${esc(item.label)}</strong><small>${esc(item.team ? teamName(item.team) : item.assigned ? "Not mapped to either team" : "")}</small></td>`;
+      return `<section class="structure-review" aria-labelledby="structure-split-title">
+        <div class="structure-review-head"><div><h4 id="structure-split-title">Team Split</h4>
+          <p>Compare two branches in <strong>${esc(plan.name)}</strong>. Intended teams are planning labels only and are saved in this browser.</p>
+          <p>Suggestions use the Current PICs when they agree, or the only assigned PIC. Next PICs use unsaved Allocation drafts here; a role without a draft keeps its current PIC.</p>
+        </div></div>
+        <div class="structure-split-controls">
+          <label>Team A branch <select class="field" data-structure-split="a" ${storageError ? "disabled" : ""}>${rootOptions(split.a)}</select></label>
+          <label>Team B branch <select class="field" data-structure-split="b" ${storageError ? "disabled" : ""}>${rootOptions(split.b)}</select></label>
+          <label>Compare <select class="field" data-structure-split="mode">${option("current","Current PICs",splitMode)}${option("next","Next PICs (Allocation drafts)",splitMode)}</select></label>
+          <label>Show <select class="field" data-structure-split="filter">
+            ${[["all","All active clients"],["conflicts","Conflicts & team moves"],["owners","No confirmed team"],["review","Unmapped / unassigned PICs"]].map(([key,label]) =>
+              option(key,`${label} (${counts[key]})`,splitFilter)).join("")}</select></label>
+          <button type="button" class="ghost-btn" data-structure-action="confirm-suggestions" ${suggested && !storageError ? "" : "disabled"}>Confirm ${suggested} suggested teams</button>
+        </div>
+        ${!ready ? "<p>Choose two separate leader branches to see client assignments. The branches cannot be nested.</p>"
+        : !clientRows ? "<p>Waiting for confirmed Client Master data.</p>"
+        : `<div class="structure-review-summary" role="status"><strong>${counts.conflicts} flagged client${counts.conflicts === 1 ? "" : "s"}</strong><span>${counts.owners} without a confirmed team</span><span>${visible.length} shown</span></div>
+          ${visible.length ? `<div class="table-wrap structure-review-table" tabindex="0" aria-label="Planned team assignment findings">
+            <table><thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Finding</th></tr></thead>
+            <tbody>${visible.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
+              <td><div class="structure-split-owner"><select class="field" data-structure-owner aria-label="Intended team for ${esc(row.client.name)}" ${storageError ? "disabled" : ""}>
+                ${option("","No confirmed team",row.owner || row.suggested)}${[split.a,split.b].map(id => option(id,teamName(id),row.owner || row.suggested)).join("")}
+              </select><button type="button" class="ghost-btn" data-structure-confirm-owner="${esc(row.key)}" ${storageError ? "disabled" : ""}>Confirm</button></div>
+              <small>${row.owner ? "Confirmed" : row.suggested ? "Suggested from Current PICs" : "Choose manually"}</small></td>
+              ${row.shown.map(picCell).join("")}<td><span class="pill ${row.conflict || row.cross ? "warn" : "neutral"}" data-structure-split-result>${result(row)}</span></td></tr>`).join("")}</tbody></table></div>`
+            : "<p>No clients match this filter.</p>"}`}
+      </section>`;
+    }
+
+    function updateSplit(control) {
+      const field = control.dataset.structureSplit;
+      const value = control.value;
+      const focus = () => host.querySelector(`[data-structure-split="${field}"]`)?.focus();
+      if (field === "mode" || field === "filter") {
+        if (field === "mode") splitMode = value === "next" ? "next" : "current";
+        else splitFilter = ["all","conflicts","owners","review"].includes(value) ? value : "all";
+        render();
+        focus();
+        return;
+      }
+      if (field !== "a" && field !== "b") return;
+      const plan = active(), split = splitFor(plan);
+      if (value === split[field]) return;
+      if ((value && !plan.nodes.some(node => node.id === value)) ||
+          branchesOverlap(plan.nodes,field === "a" ? value : split.a,field === "b" ? value : split.b)) {
+        control.value = split[field];
+        tell("Team A and Team B must be separate branches.");
+        return;
+      }
+      if (Object.keys(split.owners).length && !window.confirm("Changing the team branches clears confirmed owners for this scenario. Continue?")) {
+        control.value = split[field];
+        return;
+      }
+      const draft = structuredClone(model);
+      draft.plans.find(row => row.id === plan.id).teamSplit = {...split,[field]:value,owners:{}};
+      if (save(draft,"Team branches saved in this browser.")) focus();
+      else control.value = split[field];
+    }
+
+    function confirmTeams(button) {
+      const plan = active(), {split,ready,rows} = splitResult(plan);
+      if (!ready || storageError) return;
+      const owners = new Map(Object.entries(split.owners));
+      const key = button.dataset.structureConfirmOwner;
+      if (key) {
+        const row = rows.find(item => item.key === key);
+        const value = button.closest("tr").querySelector("[data-structure-owner]").value;
+        if (!row || (value && value !== split.a && value !== split.b)) return;
+        if (value) owners.set(key,value);
+        else owners.delete(key);
+      } else {
+        for (const row of rows) if (!row.owner && row.suggested) owners.set(row.key,row.suggested);
+      }
+      const draft = structuredClone(model);
+      draft.plans.find(row => row.id === plan.id).teamSplit = {...split,owners:Object.fromEntries(owners)};
+      if (save(draft,"Intended teams saved in this browser; live ownership is unchanged.")) {
+        ([...host.querySelectorAll("[data-structure-confirm-owner]")].find(item => item.dataset.structureConfirmOwner === key) ||
+          host.querySelector('[data-structure-split="filter"]'))?.focus();
+      }
+    }
+
     function render(message = storageError) {
       const plan = active(), node = plan.nodes.find(row => row.id === editing);
       const list = [...people].filter(([id]) => !usedByAnother(id));
@@ -287,9 +468,10 @@
         <div class="workspace-tabs structure-subtabs" role="group" aria-label="Structure Lab views">
           <button type="button" class="${section === "chart" ? "solid-btn" : "ghost-btn"}" data-structure-section="chart" aria-pressed="${section === "chart"}">Flowchart</button>
           <button type="button" class="${section === "conflicts" ? "solid-btn" : "ghost-btn"}" data-structure-section="conflicts" aria-pressed="${section === "conflicts"}">Conflicted Clients</button>
+          <button type="button" class="${section === "split" ? "solid-btn" : "ghost-btn"}" data-structure-section="split" aria-pressed="${section === "split"}">Team Split</button>
         </div>
         <p class="subline" role="status" data-structure-status>${esc(message)}</p>
-        ${section === "conflicts" ? conflictView(plan) : `<div class="structure-layout">
+        ${section === "split" ? splitView(plan) : section === "conflicts" ? conflictView(plan) : `<div class="structure-layout">
           <section class="structure-chart" aria-label="Reporting structure">
             <header class="structure-chart-head"><div><h4>${esc(plan.name)}</h4><p>Drop a PIC or drag a card by its grip onto a manager.</p></div><div class="structure-chart-tools"><span class="pill neutral">${plan.nodes.length} position${plan.nodes.length === 1 ? "" : "s"}</span>
               <div class="structure-zoom-tools" role="group" aria-label="Chart zoom">
@@ -476,12 +658,16 @@
       if (!canManage()) return;
       const button = event.target.closest("button");
       if (!button) return;
-      if (["chart","conflicts"].includes(button.dataset.structureSection)) {
+      if (["chart","conflicts","split"].includes(button.dataset.structureSection)) {
         section = button.dataset.structureSection;
         clearDrag();
         pending = null;
         render();
         host.querySelector(`[data-structure-section="${section}"]`).focus();
+        return;
+      }
+      if (section === "split" && (button.dataset.structureConfirmOwner || button.dataset.structureAction === "confirm-suggestions")) {
+        confirmTeams(button);
         return;
       }
       if (button.dataset.structureZoom) { changeZoom(button.dataset.structureZoom); return; }
@@ -513,7 +699,10 @@
         draft.active = draft.plans[0].id;
       } else if (action === "remove") {
         const node = plan.nodes.find(item => item.id === editing);
-        if (!node || !window.confirm(`Remove "${node.label}"? Direct reports will move up one level.`)) return;
+        const split = plan.teamSplit;
+        const removesBranch = node && split && [split.a,split.b].includes(node.id);
+        if (!node || !window.confirm(`Remove "${node.label}"? Direct reports will move up one level.${removesBranch ? " This also clears the removed Team Split branch and its confirmed ownership plan." : ""}`)) return;
+        if (removesBranch) plan.teamSplit = {...split,a:split.a === node.id ? "" : split.a,b:split.b === node.id ? "" : split.b,owners:{}};
         plan.nodes = plan.nodes.filter(item => item.id !== node.id);
         for (const child of plan.nodes) if (child.parent === node.id) child.parent = node.parent;
       } else return;
@@ -560,7 +749,7 @@
       const signature = JSON.stringify(roster);
       const clientsChanged = nextClients !== clientRows;
       clientRows = nextClients;
-      if (target === host && signature === rosterKey && (!clientsChanged || section === "chart")) return;
+      if (target === host && signature === rosterKey && section !== "split" && (!clientsChanged || section === "chart")) return;
       if (drag) clearDrag();
       pending = null;
       if (target !== host) {
@@ -582,6 +771,10 @@
         host.addEventListener("submit", onSubmit);
         host.addEventListener("change", event => {
           if (!canManage()) return;
+          if (event.target.matches("[data-structure-split]")) {
+            updateSplit(event.target);
+            return;
+          }
           if (event.target.matches("[data-structure-review-filter]")) {
             reviewFilter = event.target.value;
             render();
@@ -600,7 +793,7 @@
     function refreshClients(nextClients) {
       if (!canManage()) return;
       clientRows = nextClients;
-      if (section === "conflicts" && host?.isConnected) render();
+      if (section !== "chart" && host?.isConnected) render();
     }
     return { mount,refreshClients };
   }
