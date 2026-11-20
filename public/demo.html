@@ -1731,6 +1731,18 @@
     .case-filter-result { margin-left:auto; white-space:nowrap; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
     .case-filter-result strong { color:var(--ink); }
     .workspace-cases .toolbar.case-sheet-tools { flex-wrap:wrap; }
+    .case-external-dialog { width:min(440px,calc(100% - 24px)); max-height:calc(100svh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); }
+    .case-external-dialog:modal { overscroll-behavior:contain; }
+    .case-external-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
+    .case-external-dialog form, .case-external-dialog label { display:grid; gap:9px; }
+    .case-external-dialog h3, .case-external-dialog p { margin:0; }
+    .case-external-dialog [role="status"][data-error="true"] { color:var(--danger); }
+    .case-external-dialog .inline-controls { justify-content:flex-end; }
+    .allocation-shared-dialog { width:min(740px,calc(100% - 24px)); max-height:calc(100svh - 24px); padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); overscroll-behavior:contain; }
+    .allocation-shared-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
+    .allocation-shared-dialog h3 { margin:0; }
+    .allocation-shared-dialog .table-wrap { max-height:45vh; }
+    .allocation-shared-dialog [aria-live] { min-height:1.4em; }
     .case-sheet-panel .table-wrap { border:0; border-radius:0; max-height:calc(100svh - 270px); min-height:180px; scrollbar-color:var(--line) transparent; container:case-sheet-viewport / inline-size; }
     .case-sheet { border-collapse:separate; border-spacing:0; min-width:1590px; table-layout:fixed; width:100%; }
     .case-sheet .case-col-number { width:44px; }
@@ -3599,6 +3611,7 @@
 
       .workspace-cases .case-mobile-actions [data-toggle-case-trash]::before { content: "\21BA"; font-size: 16px; line-height: 1; }
       .workspace-cases .case-mobile-actions [data-new-case]::before { content: "+"; font-size: 20px; line-height: 1; }
+      .workspace-cases .case-mobile-actions [data-external-case] .case-tool-icon { display:block; width:15px; height:15px; }
 
       .workspace-clients .client-fab {
         right: 18px;
@@ -6750,12 +6763,18 @@
     }
 
     let structureEditor, structureLoading, structureError = "";
+    setInterval(() => {
+      if (document.visibilityState !== "hidden" && state.currentView === "dashboard-view" && state.managementTab === "structure") {
+        structureEditor?.refreshSharedForecast();
+      }
+    },30000);
     function mountManagementStructure(host) {
       if (window.WorkspaceAssets.ready("structure")) {
         structureEditor ||= window.ManagementStructure.create({
           account: bootstrapProfile.user.id,
           canManage: () => window.WorkspaceFeatures.manager() && window.WorkspaceFeatures.can("management"),
           getAllocationDrafts: () => state.allocationDrafts,
+          loadSharedDraft: IS_OFFLINE_DEMO ? null : () => readAllocationDraft(state.allocationYear),
           safeHtml
         });
         structureEditor.mount(host, staffDirectory, clientsLoadedFromDatabase || IS_OFFLINE_DEMO ? clientMasterClients : null);
@@ -7084,6 +7103,7 @@
           hasLeadershipAccess, isActiveClientRecord, optionsMarkup, parseCaseSheetClipboard, persistDemoState,
           restoreVirtualTableScrollPositions, safeHtml, sortHeader, splitBusinessName, syncBrowserHistory,
           virtualSpacer, windowedRows,
+          get sharedDraftEnabled() { return !IS_OFFLINE_DEMO && hasLeadershipAccess(); },
           get allocationPreviewPreparing() { return allocationPreviewPreparing; },
           get ACC_PICS() { return ACC_PICS; },
           get TAX_PICS() { return TAX_PICS; },
@@ -7113,6 +7133,113 @@
       const root = document.getElementById("allocation-view");
       root.innerHTML = safeHtml(`<section class="panel" data-allocation-sheet-status><p role="status">${escapeHtml(allocationSheetError || "Loading Allocation tools...")}</p>${allocationSheetError ? '<button class="ghost-btn" data-retry-allocation-sheet>Retry Allocation tools</button>' : ""}</section>`);
       if (!allocationSheetError) void ensureAllocationSheet().catch(() => {});
+    }
+
+    async function readAllocationDraft(year) {
+      const response = await appFetch(`/api/clients/allocation/draft?year=${encodeURIComponent(year)}`,{cache:"no-store"});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not load the shared draft.");
+      return result;
+    }
+
+    function localAllocationProposals() {
+      const changes = [];
+      const picKey = name => String(name || "").trim().replace(/\s+/g," ").toLocaleLowerCase("id-ID");
+      for (const client of clientMasterClients) {
+        const draft = state.allocationDrafts[client.id];
+        if (!isActiveClientRecord(client) || !client.databaseId || !draft) continue;
+        const row = {clientId:client.databaseId};
+        if (Object.hasOwn(draft,"nextAccPic") && picKey(draft.nextAccPic) !== picKey(client.accountingPic)) row.nextAccPic = draft.nextAccPic || "";
+        if (Object.hasOwn(draft,"nextTaxPic") && picKey(draft.nextTaxPic) !== picKey(client.taxPic)) row.nextTaxPic = draft.nextTaxPic || "";
+        if (Object.hasOwn(row,"nextAccPic") || Object.hasOwn(row,"nextTaxPic")) changes.push(row);
+      }
+      return changes;
+    }
+
+    function openAllocationSharedDraft(trigger) {
+      if (IS_OFFLINE_DEMO || !hasLeadershipAccess() || document.querySelector(".allocation-shared-dialog")) return;
+      const year = state.allocationYear, canPublish = window.WorkspaceFeatures.manager();
+      const dialog = document.createElement("dialog");
+      dialog.className = "allocation-shared-dialog";
+      dialog.setAttribute("aria-labelledby","allocation-shared-title");
+      dialog.innerHTML = safeHtml(`<div class="section-title"><div><h3 id="allocation-shared-title">Shared Next PIC draft · ${year}</h3>
+        <p>Read-only forecast. Current PIC assignments are not changed.</p></div><button type="button" class="ghost-btn" data-close-shared>Close</button></div>
+        <p class="subline" aria-live="polite" data-shared-status></p><div data-shared-preview></div>
+        <div class="inline-controls"><button type="button" class="ghost-btn" data-refresh-shared>Refresh</button>
+        ${canPublish ? '<button type="button" class="ghost-btn" data-withdraw-shared disabled>Withdraw draft</button><button type="button" class="solid-btn" data-publish-shared disabled>Publish my draft</button>' : ""}</div>`);
+      const status = dialog.querySelector("[data-shared-status]"), preview = dialog.querySelector("[data-shared-preview]");
+      const publish = dialog.querySelector("[data-publish-shared]"), withdraw = dialog.querySelector("[data-withdraw-shared]");
+      const closeButton = dialog.querySelector("[data-close-shared]");
+      let snapshot, busy = false, reading = false;
+      function showDraft() {
+        const rows = snapshot?.changes || [];
+        const next = (row,field) => Object.hasOwn(row,field) ? escapeHtml(row[field] || "No PIC") : "Keep current";
+        const by = snapshot ? ` by ${escapeHtml(snapshot.published_by_name)} · ${escapeHtml(myWorkLocalDateTime(snapshot.published_at))}` : "";
+        preview.innerHTML = safeHtml(snapshot ? `<p class="subline">${rows.length ? "Published" : "Withdrawn"}${by}</p>` +
+          (rows.length ? `<div class="table-wrap" tabindex="0" aria-label="Published proposals"><table>
+          <thead><tr><th scope="col">Client</th><th scope="col">Next ACC PIC</th><th scope="col">Next Tax PIC</th></tr></thead>
+          <tbody>${rows.map(row=>`<tr><td>${escapeHtml(row.clientName)} <small>${escapeHtml(row.clientCode)}</small></td><td>${next(row,"nextAccPic")}</td><td>${next(row,"nextTaxPic")}</td></tr>`).join("")}</tbody></table></div>` : "") : '<p>No shared draft for this year.</p>');
+        if (publish) publish.disabled = busy || !localAllocationProposals().length;
+        if (withdraw) withdraw.disabled = busy || !rows.length;
+      }
+      async function refresh(manual = false) {
+        if (reading || busy) return;
+        reading = true;
+        if (manual) status.textContent = "Loading shared draft...";
+        try {
+          const result = await readAllocationDraft(year);
+          if (!dialog.isConnected) return;
+          if (snapshot === undefined || (snapshot?.version || 0) !== (result.draft?.version || 0)) {
+            snapshot = result.draft || null;
+            showDraft();
+          }
+          status.textContent = "";
+        } catch (error) {
+          if (!dialog.isConnected) return;
+          snapshot = undefined;
+          preview.textContent = "";
+          if (publish) publish.disabled = true;
+          if (withdraw) withdraw.disabled = true;
+          status.textContent = error.message;
+        } finally { reading = false; }
+      }
+      async function send(clear) {
+        if (busy || reading || snapshot === undefined) return;
+        const changes = clear ? [] : localAllocationProposals();
+        if (!clear && !changes.length) return;
+        if (!window.confirm(clear ? `Withdraw the shared ${year} draft? Current PICs will not change.` :
+          `Publish ${changes.length} client proposal(s) for ${year}? This replaces the shared draft for the year without changing Current PICs.`)) return;
+        busy = closeButton.disabled = true;
+        showDraft();
+        status.textContent = clear ? "Withdrawing draft..." : "Publishing draft...";
+        let retryRead = false;
+        try {
+          const response = await appFetch("/api/clients/allocation/draft",{
+            method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},
+            body:JSON.stringify({year,expectedVersion:snapshot?.version || 0,changes})
+          });
+          const result = await response.json().catch(() => ({}));
+          retryRead = response.status === 409;
+          if (!response.ok || !result.draft) throw new Error(result.error || "Shared draft could not be confirmed.");
+          snapshot = result.draft;
+          status.textContent = clear ? "Shared draft withdrawn." : "Shared draft published.";
+        } catch (error) { status.textContent = error.message; }
+        finally {
+          busy = closeButton.disabled = false;
+          showDraft();
+          if (retryRead) { publish.disabled = true; withdraw.disabled = true; }
+        }
+      }
+      const timer = setInterval(() => { if (document.visibilityState !== "hidden") void refresh(); },30000);
+      function close() { clearInterval(timer); dialog.close(); dialog.remove(); trigger.focus({preventScroll:true}); }
+      closeButton.addEventListener("click",close);
+      dialog.addEventListener("cancel",event => { event.preventDefault(); if (!busy) close(); });
+      dialog.querySelector("[data-refresh-shared]").addEventListener("click",() => void refresh(true));
+      publish?.addEventListener("click",() => void send(false));
+      withdraw?.addEventListener("click",() => void send(true));
+      document.body.append(dialog);
+      dialog.showModal();
+      void refresh(true);
     }
 
     function stageAllocationCells(plans) {
@@ -8701,6 +8828,7 @@
               <div class="toolbar-right case-mobile-actions">
                 ${IS_CASES_FULLSCREEN ? `<a class="case-fullscreen-link" href="${IS_OFFLINE_DEMO ? "./demo.html" : "/dashboard"}" aria-label="Back to Dashboard">${toolIcon('<path d="m10 5-7 7 7 7M3 12h18"/>')}Dashboard</a>` : `<a class="case-fullscreen-link" data-case-fullscreen="yes" href="${escapeAttr(caseFullScreenUrl())}" target="_blank" rel="noopener noreferrer" aria-label="Open Cases in full screen">${toolIcon('<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>')}Full Screen</a>`}
                 <button class="ghost-btn" data-toggle-case-trash="yes" aria-expanded="${state.caseTrashOpen}" aria-label="Archived Cases">${toolIcon('<path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/>')}Archived Cases${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
+                ${!assessmentTab && !IS_OFFLINE_DEMO ? `<button type="button" class="ghost-btn" data-external-case="yes" aria-label="Add external client case" title="Add external client case">${toolIcon('<path d="M15 3h6v6m0-6-9 9m8 1v7H4V4h8"/>')}External client</button>` : ""}
                 ${assessmentTab?'':`<button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>`}
               </div>
             </div>
@@ -9873,6 +10001,68 @@
       taxCases.unshift(restored);
       state.selectedCaseId = restored.id;
       renderCases();
+    }
+
+    function openExternalCaseDialog(trigger) {
+      if (IS_OFFLINE_DEMO || document.querySelector(".case-external-dialog")) return;
+      const category = state.casesTab === "pemeriksaan" ? "Pemeriksaan" : "Himbauan";
+      const requestId = crypto.randomUUID();
+      const dialog = document.createElement("dialog");
+      dialog.className = "case-external-dialog";
+      dialog.setAttribute("aria-labelledby","case-external-title");
+      dialog.innerHTML = safeHtml(`<form>
+        <h3 id="case-external-title">Add external client</h3>
+        <p class="subline">Create a ${category} case. A new taxpayer will be saved under On Demand Clients without a fee or contract.</p>
+        <label>Taxpayer name <input class="field" name="taxpayer" maxlength="160" required placeholder="Legal name, including PT or CV if applicable"></label>
+        <div class="subline" role="status"></div>
+        <div class="inline-controls"><button class="ghost-btn" type="button">Cancel</button><button type="submit" class="solid-btn">Create case</button></div>
+      </form>`);
+      const form = dialog.querySelector("form"), input = form.elements.namedItem("taxpayer");
+      const status = dialog.querySelector('[role="status"]'), cancel = dialog.querySelector('[type="button"]'), submit = dialog.querySelector('[type="submit"]');
+      function close() {
+        dialog.close();
+        dialog.remove();
+        if (trigger.isConnected) trigger.focus({preventScroll:true});
+      }
+      cancel.addEventListener("click",close);
+      dialog.addEventListener("cancel",event => { event.preventDefault(); if (!submit.disabled) close(); });
+      form.addEventListener("submit",async event => {
+        event.preventDefault();
+        if (submit.disabled || !input.value.trim()) return;
+        input.disabled = cancel.disabled = submit.disabled = true;
+        status.dataset.error = "false";
+        status.textContent = "Saving case...";
+        caseSheetWriteRevision++;
+        try {
+          const response = await appFetch("/api/cases",{
+            method:"POST", headers:{"Content-Type":"application/json",Accept:"application/json"},
+            body:JSON.stringify({externalClient:{name:input.value.trim(),requestId},case:{caseCategory:category}})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.data?.id) throw new Error(result.error || "External case could not be confirmed. Try again.");
+          const record = databaseCaseToDemo(result.data);
+          const existing = taxCases.find(item => item.id === record.id);
+          if (existing) Object.assign(existing,record); else taxCases.push(record);
+          caseSheetWriteRevision++;
+          state.caseSearch = record.clientName; state.caseAccFilter = "all"; state.caseTaxFilter = "all"; state.caseWorkflowFilter = "all";
+          state.selectedCaseId = record.id;
+          close();
+          commitUi("replace");
+          caseSheetMessage(result.announcementStatus === "failed" ? "Case saved, but the announcement could not be sent." : "External case saved.",result.announcementStatus === "failed");
+          document.querySelector(`[data-case-sheet-id="${record.id}"][data-case-sheet-field="letterNumber"]`)?.focus();
+          clientListReadRevision++;
+          loadSharedClients(true);
+          loadSharedAnnouncements(true);
+        } catch (error) {
+          status.dataset.error = "true";
+          status.textContent = error instanceof Error ? error.message : "External case could not be confirmed. Try again.";
+          input.disabled = cancel.disabled = submit.disabled = false;
+          input.focus();
+        }
+      });
+      document.body.append(dialog);
+      dialog.showModal();
+      input.focus();
     }
 
     async function saveCaseToDatabase(record, { showLoading = true, acceptServerDerivedFields = true } = {}) {
@@ -12613,6 +12803,8 @@
         return;
       }
 
+      const externalCaseTrigger = target.closest("[data-external-case]");
+      if (externalCaseTrigger) { openExternalCaseDialog(externalCaseTrigger); return; }
       if (newCaseTrigger) {
         state.caseSearch = ""; state.caseAccFilter = "all"; state.caseTaxFilter = "all"; state.caseWorkflowFilter = "all";
         const record = createCaseRecord();
@@ -13637,6 +13829,8 @@
         void previewAllocation();
         return;
       }
+      const sharedDraftTrigger = target.closest("[data-allocation-shared-draft]");
+      if (sharedDraftTrigger) { openAllocationSharedDraft(sharedDraftTrigger); return; }
 
       if (target.closest("[data-clear-allocation-selection]")) {
         if (!hasLeadershipAccess() || state.allocationApplying) return;

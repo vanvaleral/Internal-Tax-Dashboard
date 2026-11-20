@@ -77,13 +77,16 @@
     const teamOf = id => memberships.get(id)?.size === 1 ? memberships.get(id).values().next().value : "";
     const project = (client, next) => ["tax","accounting"].map(role => {
       const current = assignment(client,role);
-      const proposed = next ? drafts[client.id]?.[role === "tax" ? "nextTaxPic" : "nextAccPic"] : null;
+      const draft = next ? drafts[mode === "shared" ? clientKey(client) : client.id] : null;
+      const field = role === "tax" ? "nextTaxPic" : "nextAccPic";
+      const proposed = draft?.[field];
       const before = resolve(current);
       // Allocation initializes both draft fields. Preserve the current stable ID when a copied label is unchanged.
       const label = proposed ?? (people.get(before)?.name || current[1] || "");
       const assigned = proposed != null ? Boolean(nameKey(proposed)) : Boolean(current[0] || nameKey(current[1]));
       const same = proposed == null || [current[1],people.get(before)?.name].some(name => nameKey(name) === nameKey(proposed));
-      const id = assigned ? (same ? before : resolve(["",proposed])) : "";
+      const sharedId = mode === "shared" ? draft?.[`${field}Id`] : null;
+      const id = assigned ? (sharedId ? (people.has(sharedId) ? sharedId : "") : same ? before : resolve(["",proposed])) : "";
       return {id,assigned,label:assigned ? (people.get(id)?.name || label || "Unlisted PIC") : "Unassigned",team:teamOf(id)};
     });
     const ownerSuggestion = assignments => {
@@ -92,7 +95,7 @@
     };
     const rows = clients.filter(client => nameKey(client.clientStatus) === "active" && clientKey(client)).map(client => {
       const current = project(client,false);
-      const shown = mode === "next" ? project(client,true) : current;
+      const shown = mode === "current" ? current : project(client,true);
       const key = clientKey(client);
       const stored = Object.hasOwn(split.owners,key) ? split.owners[key] : "";
       const owner = teamIds.has(stored) ? stored : "";
@@ -103,7 +106,7 @@
       const cross = teams.size > 1;
       const incomplete = !assigned.length || assigned.some(item => !item.team);
       const projectedTeam = ownerSuggestion(shown);
-      const moved = !owner && mode === "next" && !!suggested && !!projectedTeam && suggested !== projectedTeam;
+      const moved = !owner && mode !== "current" && !!suggested && !!projectedTeam && suggested !== projectedTeam;
       return {client,key,shown,owner,suggested,conflict,cross,incomplete,moved};
     }).sort((a,b) => String(a.client.name || "").localeCompare(String(b.client.name || "")) || a.key.localeCompare(b.key));
     if (recommend) suggestTeamPics(rows,people,teamOf,plannedPartners,resolve);
@@ -196,7 +199,7 @@
     return {points, width: Math.max(2*padding + cardWidth, leaves*(cardWidth + columnGap) - columnGap + 2*padding), height};
   }
 
-  function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}) }) {
+  function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}), loadSharedDraft = null }) {
     const key = `tax-dashboard:structure:v1:${account}`;
     let model = { active: "1", plans: [{ id: "1", name: "Company structure", nodes: [] }] };
     let baseline = null, storageError = "", host, editing = "", rosterKey, people = new Map();
@@ -204,6 +207,7 @@
     let zoom = 1;
     let clientRows = null, section = "chart", chartScroll = [0,0];
     let splitMode = "current", splitFilter = "all", showRecommendations = false;
+    let sharedForecast = null, sharedForecastError = "", sharedForecastFlight = null;
     const columnFilters = new Map();
     let columnSource, columnMenu;
     try {
@@ -331,19 +335,45 @@
       const teams = selectedTeams(split);
       const ready = Boolean(split.a && split.b && new Set(teams.map(team => team.id)).size === teams.length &&
         teams.every(team => plan.nodes.some(node => node.id === team.id)) && !branchesOverlap(plan.nodes,split.a,split.b));
-      return {split,teams,mode,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,teams,mode,mode === "next" ? getAllocationDrafts() : {},recommend) : []};
+      const shared = mode === "shared" ? sharedForecast : null;
+      const available = Boolean(clientRows && (mode !== "shared" || shared?.draft?.changes?.length));
+      const drafts = shared?.draft?.changes ? Object.fromEntries(shared.draft.changes.map(row => [row.clientId,row]))
+        : mode === "next" ? getAllocationDrafts() : {};
+      return {split,teams,mode,ready,available,shared,rows:ready && available ? teamSplitRows(plan,people,clientRows,split,teams,mode,drafts,recommend) : []};
+    }
+
+    function sharedForecastHint() {
+      return sharedForecastError || (sharedForecast ? `No shared Next PIC draft for ${sharedForecast.year}.` : "Loading shared Next PIC draft...");
+    }
+
+    function refreshSharedForecast() {
+      if (!loadSharedDraft || splitMode !== "shared" || !host?.isConnected || sharedForecastFlight || !canManage()) return;
+      sharedForecastFlight = (async () => {
+        const previous = sharedForecast, previousError = sharedForecastError;
+        try { sharedForecast = await loadSharedDraft(); sharedForecastError = ""; }
+        catch (error) { sharedForecast = null; sharedForecastError = error.message || "Shared draft could not be loaded."; }
+        if (splitMode !== "shared" || !host?.isConnected || !canManage()) return;
+        if (previous?.year === sharedForecast?.year && previous?.draft?.version === sharedForecast?.draft?.version && previousError === sharedForecastError) return;
+        const refocus = document.activeElement?.matches('[data-structure-split="mode"]');
+        if (section === "chart") refreshLoadSummary();
+        else render();
+        if (refocus) host.querySelector('[data-structure-split="mode"]')?.focus({preventScroll:true});
+      })().finally(() => { sharedForecastFlight = null; });
     }
 
     function clientLoadSummary(plan, comparison, heading = "h4") {
       const next = comparison.mode === "next";
-      const title = next ? "Forecast team client load" : "Current team client load";
+      const sharedMode = comparison.mode === "shared";
+      const title = sharedMode ? "Shared forecast team client load" : next ? "Forecast team client load" : "Current team client load";
       const compare = heading === "h4" ? `<select class="field" data-structure-split="mode" aria-label="Compare team client load">
-        ${option("current","Current PICs",comparison.mode)}${option("next","Next PICs (Allocation drafts)",comparison.mode)}</select>` : "";
+        ${option("current","Current PICs",comparison.mode)}${option("next","Next PICs (my draft)",comparison.mode)}
+        ${loadSharedDraft ? option("shared","Next PICs (shared draft)",comparison.mode) : ""}</select>` : "";
       const headingHtml = `<${heading} id="structure-load-title">${title}</${heading}>`;
-      if (!comparison.ready || !clientRows) {
-        const hint = comparison.ready ? "Waiting for confirmed Client Master data." : "Choose Team A and B in Team Split to compare their client load. Team C is optional.";
+      if (!comparison.ready || !comparison.available) {
+        const hint = !comparison.ready ? "Choose Team A and B in Team Split to compare their client load. Team C is optional."
+          : !clientRows ? "Waiting for confirmed Client Master data." : sharedForecastHint();
         return `<section class="structure-load" aria-labelledby="structure-load-title">
-          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${hint}</p></section>`;
+          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${esc(hint)}</p></section>`;
       }
       const {teams,shared,unmapped,combined,uneven,leader} = teamClientLoad(comparison);
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
@@ -357,7 +387,8 @@
           <span><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
         <p><strong>${shared} shared</strong> (counted once per involved team) &middot; <strong>${unmapped} with no PIC mapped to any team.</strong>
           Uneven when team shares differ by more than ${loadGapLimit} percentage points. Client counts do not account for difficulty or staffing.
-          ${next ? "Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft." : ""}</p>
+          ${next ? "Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft." : ""}
+          ${sharedMode ? `Shared ${esc(comparison.shared.year)} draft · v${esc(comparison.shared.draft.version)} · Published by ${esc(comparison.shared.draft.published_by_name)}. Missing proposals keep the current PIC.` : ""}</p>
       </section>`;
     }
 
@@ -490,11 +521,11 @@
       window.addEventListener("resize",() => closeColumnMenu(),{signal});
     }
 
-    function splitView(plan, {split,teams,ready,rows}) {
+    function splitView(plan, {split,teams,ready,available,rows}) {
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
       const teamName = team => `${team.label}: ${names.get(team.id)}`;
       const teamNames = new Map(teams.map(team => [team.id,teamName(team)]));
-      columnSource = ready && clientRows ? {rows,teamNames} : null;
+      columnSource = ready && available ? {rows,teamNames} : null;
       const rootOptions = slot => option("",slot === "c" ? "No Team C" : "Choose a branch",split[slot]) +
         plan.nodes.map(node => option(node.id,nodeName(node),split[slot])).join("");
       const counts = {
@@ -524,11 +555,11 @@
             ${[["all","All active clients"],["conflicts","Conflicts & team moves"],["owners","No confirmed team"],["review","Unmapped / unassigned PICs"]].map(([key,label]) =>
               option(key,`${label} (${counts[key]})`,splitFilter)).join("")}</select></label>
           <button type="button" class="ghost-btn" data-structure-action="confirm-suggestions" ${suggested && !storageError ? "" : "disabled"}>Confirm ${suggested} suggested teams</button>
-          <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && clientRows ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
+          <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && available ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
         </div>
-        ${showRecommendations && ready && clientRows ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
+        ${showRecommendations && ready && available ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
         ${!ready ? "<p>Choose separate branches for Teams A and B. Team C is optional and must use a different position.</p>"
-        : !clientRows ? "<p>Waiting for confirmed Client Master data.</p>"
+        : !available ? `<p>${esc(!clientRows ? "Waiting for confirmed Client Master data." : sharedForecastHint())}</p>`
         : `<div class="structure-review-summary"><div role="status"><strong>${counts.conflicts} flagged client${counts.conflicts === 1 ? "" : "s"}</strong><span>${counts.owners} without a confirmed team</span><span>${visible.length} shown</span></div>
           ${activeColumns.length ? '<button type="button" class="ghost-btn" data-structure-action="clear-column-filters">Clear column filters</button>' : ""}</div>
           <div class="table-wrap structure-review-table" tabindex="0" aria-label="Planned team assignment findings">
@@ -549,7 +580,12 @@
       const focus = () => host.querySelector(`[data-structure-split="${field}"]`)?.focus();
       if (field === "mode" || field === "filter") {
         if (field === "mode") {
-          splitMode = value === "next" ? "next" : "current";
+          splitMode = value === "shared" && loadSharedDraft ? "shared" : value === "next" ? "next" : "current";
+          if (splitMode === "shared") {
+            sharedForecast = null;
+            sharedForecastError = "";
+            refreshSharedForecast();
+          }
           if (section === "chart") refreshLoadSummary();
           else render();
         } else {
@@ -696,13 +732,13 @@
       const unmapped = rows.filter(row => row.incomplete).length;
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
       const labels = new Map(teams.map(team => [team.id,team.label]));
-      const next = mode === "next";
+      const next = mode !== "current";
       const pic = item => `<td><strong>${esc(item.label)}</strong>${item.assigned ? `<small>${labels.get(item.team) || "Not mapped to a team"}</small>` : ""}</td>`;
       return `<section class="structure-print-findings" aria-labelledby="structure-print-findings-title">
         <header><small>LMATS CONSULTING / TEAM SPLIT REPORT</small>
-          <h2 id="structure-print-findings-title">Flagged clients: ${next ? "Next PICs (draft forecast)" : "Current PICs"}</h2>
+          <h2 id="structure-print-findings-title">Flagged clients: ${mode === "shared" ? "Shared Next PICs (draft forecast)" : next ? "Next PICs (draft forecast)" : "Current PICs"}</h2>
           <p><strong>${esc(plan.name)}</strong> &middot; ${teams.map(team => `${team.label}: ${esc(names.get(team.id))}`).join(" &middot; ")}</p>
-          <p>${flaggedRows.length} of ${rows.length} active clients flagged. ${next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only."}</p>
+          <p>${flaggedRows.length} of ${rows.length} active clients flagged. ${mode === "shared" ? "Published draft; roles without proposals keep their saved PIC." : next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only."}</p>
           ${unmapped ? `<p>Unassigned or unmapped PICs to review: ${unmapped} active client${unmapped === 1 ? "" : "s"}.</p>` : ""}
         </header>
         ${flaggedRows.length ? `<table aria-label="Flagged active clients">
@@ -719,7 +755,7 @@
       const plan = active();
       if (!plan.nodes.length) return;
       const split = clientRows ? splitResult(plan,splitMode,false) : null;
-      const report = split?.ready ? split : null;
+      const report = split?.ready && split.available ? split : null;
       const page = window.open("", "_blank", "width=960,height=760");
       if (!page) { tell("Allow popups to print this structure."); return; }
       page.opener = null;
@@ -993,7 +1029,7 @@
       if (section === "chart") refreshLoadSummary();
       else render();
     }
-    return { mount,refreshClients };
+    return { mount,refreshClients,refreshSharedForecast };
   }
   window.ManagementStructure = { create };
 })();

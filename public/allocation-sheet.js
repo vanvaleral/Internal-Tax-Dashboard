@@ -73,6 +73,7 @@
               <div class="toolbar-right">
                 <label class="pill neutral">Allocation year <input id="allocation-year" type="number" min="2000" max="2200" value="${state.allocationYear}" style="width:72px" ${state.allocationApplying ? "disabled" : ""} /></label>
                 <label class="pill neutral"><input id="allocation-changed-only" type="checkbox" ${state.allocationShowChangedOnly ? "checked" : ""} /> Changed only</label>
+                ${live.sharedDraftEnabled ? '<button type="button" class="ghost-btn" data-allocation-shared-draft>Shared draft</button>' : ""}
                 <button class="ghost-btn" data-preview-allocation title="Preview the filtered allocation on Legal paper, then print or download PDF" ${state.allocationApplying || live.allocationPreviewPreparing || !rows.length ? "disabled" : ""}>${live.allocationPreviewPreparing ? "Preparing PDF..." : "Preview PDF"}</button>
                 <button class="ghost-btn" data-print-allocation-report="yes">Print Latest Report</button>
                 <button class="ghost-btn" data-reset-allocation-drafts title="Discard all unsaved PIC drafts, including clients hidden by filters" ${!canEdit || !hasDrafts ? "disabled" : ""}>Reset unsaved</button>

@@ -10,7 +10,8 @@ const tick = async () => { await new Promise(resolve => setImmediate(resolve)); 
 async function allocation(mobile = false, role = "supervisor") {
   const policy = defaultFeaturePolicy();
   policy.associate.allocation.mode = "enabled";
-  const warnings: string[] = [], writes: any[] = [], alerts: string[] = [], confirmations: string[] = [];
+  policy.leader.allocation.mode = "enabled";
+  const warnings: string[] = [], writes: any[] = [], publications: any[] = [], alerts: string[] = [], confirmations: string[] = [];
   const vc = new VirtualConsole(); vc.on("jsdomError", error => warnings.push(error.message));
   vc.on("error", (...items: any[]) => warnings.push(items.map(String).join(" ")));
   const dom = new JSDOM(read("public/demo.html"), { url:"http://localhost/demo.html", runScripts:"outside-only", virtualConsole:vc });
@@ -20,6 +21,8 @@ async function allocation(mobile = false, role = "supervisor") {
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
   w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone; w.alert = (value: string) => alerts.push(value);
+  w.HTMLDialogElement.prototype.showModal = function() {this.setAttribute("open","");};
+  w.HTMLDialogElement.prototype.close = function() {this.removeAttribute("open");};
   w.open = () => ({closed:false,opener:{},document:{title:"",body:{textContent:""}}});
   let fail = false, allowReset = true, delay = false, releaseSave: (() => void) | undefined;
   w.confirm = (message: string) => { confirmations.push(message); return allowReset; };
@@ -33,7 +36,17 @@ async function allocation(mobile = false, role = "supervisor") {
     { id:"master-1", client_code:"CL-00001", legal_name:"Individual Alpha", company_form:"Individual", status:"Active", tax_pic_name:"Bagus", tax_pic_profile_id:"tax-1", accounting_pic_name:"Ivan", accounting_pic_profile_id:"acc-1", created_at:"2026-10-20T00:00:00Z" },
     { id:"master-2", client_code:"CL-00002", legal_name:"Beta", company_form:"PT", status:"Active", tax_pic_name:"Bagus", tax_pic_profile_id:"tax-1", accounting_pic_name:"", accounting_pic_profile_id:null, created_at:"2026-10-10T00:00:00Z" }
   ];
+  let sharedDraft: any = null;
   w.fetch = async (url: string, init: any = {}) => {
+    if (url.startsWith("/api/clients/allocation/draft")) {
+      if (init.method === "POST") {
+        const body = JSON.parse(init.body);
+        publications.push(body);
+        sharedDraft = {version:body.expectedVersion+1,published_by_name:"Ivan",published_at:"2026-11-20T00:00:00Z",
+          changes:body.changes.map((row:any)=>({...row,clientCode:"CL-00001",clientName:"Individual Alpha"}))};
+      }
+      return {ok:true,status:init.method === "POST" ? 201 : 200,json:async()=>({draft:sharedDraft})};
+    }
     if (url === "/api/clients/allocation") {
       const body = JSON.parse(init.body); writes.push(body);
       if (delay) await new Promise<void>(resolve => { releaseSave = resolve; });
@@ -65,11 +78,42 @@ async function allocation(mobile = false, role = "supervisor") {
   };
   const selectAll = (checked = true) => { const input = w.document.querySelector("[data-allocation-select-all]"); input.checked = checked; input.dispatchEvent(new w.Event("change", { bubbles:true })); };
   const bulk = (type: string, value: string) => { const input = w.document.querySelector(`[data-allocation-bulk="${type}"]`); assert.ok(input); input.value = value; input.dispatchEvent(new w.Event("change", { bubbles:true })); };
-  return { dom, w, api, rows, staff, writes, warnings, alerts, confirmations, choose, select, selectAll, bulk,
+  return { dom, w, api, rows, staff, writes, publications, warnings, alerts, confirmations, choose, select, selectAll, bulk,
     fail:() => { fail = true; }, cancelReset:() => { allowReset = false; }, allowReset:() => { allowReset = true; },
     delay:() => { delay = true; }, release:() => { delay = false; releaseSave?.(); }
   };
 }
+
+test("publishing a shared draft leaves private drafts and saved PICs intact; leaders cannot publish",async()=>{
+  const d = await allocation();
+  try {
+    d.choose("acc","");
+    const doc = d.w.document;
+    doc.querySelector("[data-allocation-shared-draft]").click();
+    await tick();
+    assert.match(doc.querySelector("[data-shared-preview]").textContent,/No shared draft/);
+    doc.querySelector("[data-publish-shared]").click();
+    await tick();
+    assert.deepEqual(d.publications,[{year:d.api.state.allocationYear,expectedVersion:0,changes:[{clientId:"master-1",nextAccPic:""}]}]);
+    assert.match(doc.querySelector("[data-shared-preview]").textContent,/No PIC.*Keep current/s);
+    assert.equal(d.writes.length,0);
+    assert.equal(d.rows[0].accounting_pic_name,"Ivan");
+    assert.equal(d.api.state.allocationDrafts["client-00001"].nextAccPic,"");
+    doc.querySelector("[data-withdraw-shared]").click();
+    await tick();
+    assert.deepEqual(d.publications[1].changes,[]);
+    assert.equal(d.publications[1].expectedVersion,1);
+    assert.deepEqual(d.warnings,[]);
+  } finally { d.dom.window.close(); }
+  const reader = await allocation(false,"leader");
+  try {
+    reader.w.document.querySelector("[data-allocation-shared-draft]").click();
+    await tick();
+    assert.ok(reader.w.document.querySelector(".allocation-shared-dialog"));
+    assert.equal(reader.w.document.querySelector("[data-publish-shared]"),null);
+    assert.equal(reader.w.document.querySelector("[data-withdraw-shared]"),null);
+  } finally { reader.dom.window.close(); }
+});
 
 const picCount=(d:any,team:string,pic:string)=>Number(d.w.document.querySelector(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic="${pic}"] strong`)?.textContent);
 const projection=(d:any,team:string,pic:string)=>{
@@ -207,7 +251,7 @@ test("Allocation sheet pastes two PIC columns over multiple visible rows as draf
     assert.equal(d.w.document.querySelector(".allocation-sheet"),table);assert.equal(table.parentElement,wrap);
     assert.equal(d.w.document.querySelector(`[data-allocation-acc="${ids[0]}"]`),input,"normal edits keep native editors mounted");
     assert.equal(wrap.scrollLeft,164);assert.equal(wrap.scrollTop,80);
-    assert.equal(d.w.document.querySelectorAll("[data-allocation-cell].is-pending").length,3);
+    assert.equal(d.w.document.querySelectorAll("[data-allocation-cell].is-pending").length,4);
     assert.deepEqual(projection(d,"tax",""),{current:0,proposed:1,delta:1});
     assert.match(d.w.document.querySelector("[data-allocation-sheet-message]").textContent,/4 cell\(s\) staged/);
     assert.deepEqual(d.warnings,[]);

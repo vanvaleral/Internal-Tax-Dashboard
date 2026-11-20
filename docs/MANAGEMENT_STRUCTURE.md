@@ -49,6 +49,12 @@ roots A or B requires confirmation if intended teams are already saved.
 Adding Team C preserves existing confirmations; replacing or clearing Team C
 only clears ownership confirmations for that branch, with a prompt.
 
+**Next PICs (shared draft)** is a separate forecast for the selected Allocation
+year. It uses the latest published snapshot instead of personal edits. The
+client-load summary, conflict list and printed report identify the shared
+version. When no draft has been published (or it was withdrawn), the shared
+forecast does not fall back to personal edits.
+
 Click a Team Split column header to search its values and choose which ones to
 show. Selections within one column are alternatives; filters across columns
 and the **Show** selector combine. **Select all shown** changes only the

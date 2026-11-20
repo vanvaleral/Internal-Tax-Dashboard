@@ -105,10 +105,34 @@ export async function POST(request: Request) {
   if ("error" in actor) return NextResponse.json({ error: actor.error }, { status: actor.status });
   try {
     const body = await request.json();
-    const payload = await payloadFor(actor, body.case || body);
-    if(payload.case_category==="Pemeriksaan"&&payload.stage==="Closed")return NextResponse.json({error:"Create Pemeriksaan as an open case, then record SPHP through its workflow to close it."},{status:400});
-    const { data, error } = await actor.admin.from("tax_cases").insert(payload).select("*").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    let data, payload, replayed = false;
+    if (body.externalClient !== undefined) {
+      const external = body.externalClient;
+      const name = typeof external?.name === "string" ? external.name.trim() : "";
+      const category = body.case?.caseCategory;
+      if (!name || name.length > 160 || !["Himbauan","Pemeriksaan"].includes(category) ||
+          typeof external?.requestId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(external.requestId) || body.case?.clientId) {
+        return NextResponse.json({error:"Enter a taxpayer name (up to 160 characters) for a new external case."},{status:400});
+      }
+      const result = await actor.admin.rpc("create_external_tax_case", {
+        p_actor_id:actor.profile.id,p_request_id:external.requestId,p_client_name:name,p_category:category
+      });
+      if (result.error) {
+        const statuses: Record<string,number> = { "22023":400, "42501":403, "40001":409 };
+        const status = statuses[result.error.code];
+        return NextResponse.json({error:status ? result.error.message : "External case could not be saved. Retry or ask leadership to check the database setup."},{status:status || 503});
+      }
+      data = result.data?.case;
+      if (!data?.id) return NextResponse.json({error:"External case confirmation was incomplete. Retry this same request."},{status:503});
+      replayed = result.data.replayed === true;
+      payload = data;
+    } else {
+      payload = await payloadFor(actor, body.case || body);
+      if(payload.case_category==="Pemeriksaan"&&payload.stage==="Closed")return NextResponse.json({error:"Create Pemeriksaan as an open case, then record SPHP through its workflow to close it."},{status:400});
+      const result = await actor.admin.from("tax_cases").insert(payload).select("*").single();
+      if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+      data = result.data;
+    }
     let announcementStatus = "delivered";
     try {
       const announcement = await createOperationalAnnouncement({ title: `New ${payload.case_category}: ${payload.client_name}`, message: `${actor.profile.display_name || actor.profile.full_name} created a new ${payload.case_category} case.`, senderProfileId: actor.profile.id, recipientProfileIds: await recipients(actor.admin, payload), eventKey: notificationEventKey("case", data.id), sourceType: "tax_case", sourceId: data.id });
@@ -118,7 +142,7 @@ export async function POST(request: Request) {
       announcementStatus = "failed";
       console.error("[cases] notification failed", notificationError);
     }
-    return NextResponse.json({ data, announcementStatus }, { status: 201 });
+    return NextResponse.json({ data, announcementStatus }, { status: replayed ? 200 : 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save case." }, { status: 403 }); }
 }
 

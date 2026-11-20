@@ -17,8 +17,8 @@ function setup(staff = roster) {
   w.confirm = () => true;
   w.eval(read("vendor/purify.min.js"));
   w.eval(read("management-structure.js"));
-  const mount = (account = "manager", canManage = () => true, clients: any[] | null = null, getAllocationDrafts = () => ({})) => {
-    const editor = w.ManagementStructure.create({account, canManage, getAllocationDrafts, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true,svg:true}})});
+  const mount = (account = "manager", canManage = () => true, clients: any[] | null = null, getAllocationDrafts = () => ({}), loadSharedDraft: (() => Promise<unknown>) | null = null) => {
+    const editor = w.ManagementStructure.create({account, canManage, getAllocationDrafts, loadSharedDraft, safeHtml: (html:string) => w.DOMPurify.sanitize(html,{USE_PROFILES:{html:true,svg:true}})});
     editor.mount(host, staff, clients);
     return editor;
   };
@@ -309,6 +309,36 @@ test("Team C can use the supervisor branch above A and B and forecast its confli
     assert.deepEqual(x.saved().plans[0].teamSplit,{a:"1",b:"2",c:"",owners:{branchOnly:"1"}});
     assert.equal(team("c"),null);
   } finally { x.dom.window.close(); print.window.close(); }
+});
+
+test("Team Split loads shared drafts separately from personal drafts and refreshes withdrawals",async()=>{
+  const x = setup();
+  try {
+    const nodes = [
+      {id:"1",kind:"Leader",label:"Branch A",parent:"",pic:"a"},
+      {id:"2",kind:"Leader",label:"Branch B",parent:"",pic:"b"}
+    ];
+    x.w.localStorage.setItem("tax-dashboard:structure:v1:manager",JSON.stringify({active:"1",plans:[{id:"1",name:"Split",nodes}]}));
+    const rows = [{id:"local",databaseId:"stable-db-id",name:"One client",clientStatus:"Active",taxPicProfileId:"a"}];
+    let calls = 0, version = 1, changes: any[] = [{clientId:"stable-db-id",nextTaxPic:"Previous display name",nextTaxPicId:"b"}];
+    const editor = x.mount("manager",()=>true,rows,()=>({local:{nextTaxPic:""}}),async()=>{
+      calls++;
+      return {year:2026,draft:{version,changes,published_by_name:"Supervisor"}};
+    });
+    const mode = (value:string) => {const select=x.host.querySelector('[data-structure-split="mode"]'); select.value=value; select.dispatchEvent(new x.w.Event("change",{bubbles:true}));};
+    const counts = () => [...x.host.querySelectorAll("[data-structure-load-count]")].map((node:any)=>node.textContent);
+    assert.deepEqual(counts(),["1","0"]); assert.equal(calls,0);
+    mode("next"); assert.deepEqual(counts(),["0","0"]); assert.equal(calls,0);
+    mode("shared"); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(counts(),["0","1"]);
+    assert.match(x.host.querySelector("[data-structure-load]").textContent,/Shared 2026 draft.*v1.*Supervisor/s);
+    version++; changes=[];
+    editor.refreshSharedForecast();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(counts(),[]);
+    assert.match(x.host.querySelector("[data-structure-load]").textContent,/No shared Next PIC draft for 2026/);
+    mode("current"); assert.deepEqual(counts(),["1","0"]);
+  } finally { x.dom.window.close(); }
 });
 
 test("Team Split column filters search, combine checklists, and remain available when no rows match", () => {
