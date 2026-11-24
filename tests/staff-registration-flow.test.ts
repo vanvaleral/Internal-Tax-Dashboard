@@ -6,6 +6,7 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import ts from "typescript";
+import * as authLanguage from "../lib/auth-language.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -22,11 +23,19 @@ test("staff registration shows progress, recovers from errors, then returns to s
   let authCalls = 0;
   let resolveRegistration!: (response: Response) => void;
   const registrationPending = new Promise<Response>((resolve) => { resolveRegistration = resolve; });
+  const authLanguageModule = { exports: {}, window, document, localStorage: window.localStorage, require(name: string) {
+    return name === "@/lib/auth-language" ? authLanguage : require(name);
+  }};
+  const languageComponent = readFileSync(new URL("../components/auth/auth-language.tsx", import.meta.url), "utf8");
+  vm.runInNewContext(ts.transpileModule(languageComponent, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX }
+  }).outputText, authLanguageModule);
   const context = {
     exports: {} as { LoginForm: React.ComponentType },
     window,
     require(name: string) {
       if (name === "@/lib/supabase/client") return { createClient() { authCalls++; } };
+      if (name === "@/components/auth/auth-language") return authLanguageModule.exports;
       return require(name);
     },
     async fetch(path: string, options: RequestInit) {
@@ -90,6 +99,12 @@ test("staff registration shows progress, recovers from errors, then returns to s
     assert.equal(password.value, "");
     assert.equal(document.activeElement, password);
     assert.equal(authCalls, 0, "registration does not attempt automatic sign-in");
+    await act(async () => document.querySelector<HTMLButtonElement>('.auth-language [lang="id"]')!.click());
+    assert.equal(document.documentElement.lang, "id");
+    assert.equal(document.querySelector("h1")!.textContent, "Masuk");
+    assert.match(document.querySelector('[role="status"]')!.textContent!, /Akun berhasil dibuat/);
+    assert.equal(document.querySelector<HTMLInputElement>('input[autocomplete="username"]')!.value, "new.staff");
+    assert.equal(window.localStorage.getItem("tax-dashboard:language"), "id");
   } finally {
     await act(async () => root.unmount());
   }

@@ -75,6 +75,25 @@ the current filtered view. Apply/reset/report/selection/history/authorization
 behavior is unchanged. The summary adds no API requests, database writes,
 migration or dependency, and uses wrapping grids instead of another scroller.
 
+## Shared Draft
+
+**Shared draft** lets a Supervisor, Partner or legacy Admin publish their local
+Next PIC proposals for the selected allocation year. Publish is explicit:
+the proposals already in the browser remain private until published. Other
+supervisors, partners and Leaders with Allocation access can see the same
+read-only snapshot. The dialog refreshes every 30 seconds while visible, and
+Refresh checks immediately. Publishing another snapshot replaces what viewers
+see; Withdraw removes the visible forecast without deleting its audit history.
+
+The shared draft is separate from the editable sheet. It never updates Current
+PICs, applies the forecast, or replaces someone's personal draft. Missing PIC
+fields retain the current assignment; explicit blanks forecast No PIC. A stale
+publisher must refresh and review the newer version before replacing it.
+
+Deploy `20261120084023_shared_allocation_drafts.sql` before enabling shared
+drafts. It adds an append-only, server-only table with a primary key on year
+and version. It does not write Client Master or migrate browser drafts.
+
 ## Entry Order
 
 The Allocation order dropdown offers Company form / name (the existing default),

@@ -1731,6 +1731,21 @@
     .case-filter-result { margin-left:auto; white-space:nowrap; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
     .case-filter-result strong { color:var(--ink); }
     .workspace-cases .toolbar.case-sheet-tools { flex-wrap:wrap; }
+    .case-external-dialog { width:min(440px,calc(100% - 24px)); max-height:calc(100svh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); }
+    .client-trash-dialog [role="status"] { min-height:1.4em; }
+    .staff-role-controls { display:flex; align-items:center; flex-wrap:nowrap; gap:6px; }
+    .staff-role-controls > button { flex:none; }
+    .case-external-dialog:modal { overscroll-behavior:contain; }
+    .case-external-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
+    .case-external-dialog form, .case-external-dialog label { display:grid; gap:9px; }
+    .case-external-dialog h3, .case-external-dialog p { margin:0; }
+    .case-external-dialog [role="status"][data-error="true"] { color:var(--danger); }
+    .case-external-dialog .inline-controls { justify-content:flex-end; }
+    .allocation-shared-dialog { width:min(740px,calc(100% - 24px)); max-height:calc(100svh - 24px); padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); overscroll-behavior:contain; }
+    .allocation-shared-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
+    .allocation-shared-dialog h3 { margin:0; }
+    .allocation-shared-dialog .table-wrap { max-height:45vh; }
+    .allocation-shared-dialog [aria-live] { min-height:1.4em; }
     .case-sheet-panel .table-wrap { border:0; border-radius:0; max-height:calc(100svh - 270px); min-height:180px; scrollbar-color:var(--line) transparent; container:case-sheet-viewport / inline-size; }
     .case-sheet { border-collapse:separate; border-spacing:0; min-width:1590px; table-layout:fixed; width:100%; }
     .case-sheet .case-col-number { width:44px; }
@@ -1851,16 +1866,6 @@
       color: var(--accent-contrast);
     }
 
-    .case-external-dialog { width:min(440px,calc(100% - 24px)); max-height:calc(100svh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); }
-    .client-trash-dialog [role="status"] { min-height:1.4em; }
-    .staff-role-controls { display:flex; align-items:center; flex-wrap:nowrap; gap:6px; }
-    .staff-role-controls > button { flex:none; }
-    .case-external-dialog:modal { overscroll-behavior:contain; }
-    .case-external-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
-    .case-external-dialog form, .case-external-dialog label { display:grid; gap:9px; }
-    .case-external-dialog h3, .case-external-dialog p { margin:0; }
-    .case-external-dialog [role="status"][data-error="true"] { color:var(--danger); }
-    .case-external-dialog .inline-controls { justify-content:flex-end; }
     .solid-btn.danger { background: #b42318; color:#fff; }
     .delete-icon { width:16px; height:16px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
     .solid-btn .delete-icon { margin-right:6px; vertical-align:-3px; }
@@ -4081,6 +4086,7 @@
   <script src="my-work-reorder.js"></script>
   <link rel="stylesheet" href="feature-access.css" />
   <script src="feature-access.js"></script>
+  <script src="workspace-language.js"></script>
   <link rel="stylesheet" href="client-engagement.css" />
   <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
@@ -4277,8 +4283,12 @@
       dialog.className = "case-external-dialog staff-permission-dialog";
       dialog.setAttribute("aria-labelledby", "staff-permission-title");
       dialog.innerHTML = safeHtml(`<form>
-        <h3 id="staff-permission-title">Client permissions</h3>
+        <h3 id="staff-permission-title">Individual access</h3>
         <p class="subline">${escapeHtml(staff.display_name || staff.full_name)}</p>
+        ${staff.role === "staff" ? `<fieldset><legend>Read-only oversight</legend>
+          <label><input type="checkbox" name="allClients" ${staff.client_overview_allowed ? "checked" : ""}> View all clients</label>
+          <label><input type="checkbox" name="allAllocation" ${staff.allocation_overview_allowed ? "checked" : ""}> View all Allocation</label>
+          <p class="subline">Shows client names and PIC assignments, without fees or editing rights. Maintenance blocks still apply.</p></fieldset>` : ""}
         <label>Import clients ${staffClientPermission(staff, "import")}</label>
         <label>Export clients ${staffClientPermission(staff, "export")}</label>
         <p class="subline" role="status"></p>
@@ -4297,8 +4307,14 @@
           return value === "allow" ? true : value === "block" ? false : null;
         };
         const payload = { clientImportAllowed: permission("import"), clientExportAllowed: permission("export") };
-        if (payload.clientImportAllowed === (staff.client_import_allowed ?? null) && payload.clientExportAllowed === (staff.client_export_allowed ?? null)) return dialog.close();
-        const controls = Array.from(form.querySelectorAll("button, select"));
+        if (staff.role === "staff") {
+          payload.clientOverviewAllowed = form.elements.allClients.checked;
+          payload.allocationOverviewAllowed = form.elements.allAllocation.checked;
+        }
+        if (payload.clientImportAllowed === (staff.client_import_allowed ?? null) && payload.clientExportAllowed === (staff.client_export_allowed ?? null)
+          && (staff.role !== "staff" || payload.clientOverviewAllowed === Boolean(staff.client_overview_allowed)
+            && payload.allocationOverviewAllowed === Boolean(staff.allocation_overview_allowed))) return dialog.close();
+        const controls = Array.from(form.querySelectorAll("button, select, input"));
         controls.forEach(control => { control.disabled = true; });
         status.dataset.error = "false";
         status.textContent = "Saving permissions...";
@@ -4625,7 +4641,7 @@
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
-    window.WorkspaceFeatures.init({ settings: bootstrapProfile.featureAccess, role: state.role, offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), roleChanged: role => { state.role = String(role || "staff").toLowerCase(); }, changed: () => rerender() });
+    window.WorkspaceFeatures.init({ settings: bootstrapProfile.featureAccess, role: state.role, profile: bootstrapProfile.profile, offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), roleChanged: role => { state.role = String(role || "staff").toLowerCase(); }, changed: () => rerender() });
     if (!IS_OFFLINE_DEMO && bootstrapProfile.view) state.currentView = bootstrapProfile.view;
     if (["announcement-view", "my-work-view"].includes(pageParams.get("view"))) {
       state.currentView = pageParams.get("view");
@@ -4763,6 +4779,8 @@
         operationalSaveQueues[scope] = nextSave;
       }, 150);
     }
+
+    const uiLabel = message => window.WorkspaceLanguage?.t(message) ?? message;
 
     function currency(amount) {
       return new Intl.NumberFormat("id-ID", {
@@ -6469,6 +6487,11 @@
         <div class="appearance-settings-backdrop" data-close-appearance-settings="yes"></div>
         <section class="appearance-settings" role="dialog" aria-modal="true" aria-label="Appearance settings">
           <div class="appearance-settings-head"><div><div class="eyebrow">Personal settings</div><strong>Appearance</strong></div><button class="ghost-btn" data-close-appearance-settings="yes">Close</button></div>
+          <div class="eyebrow" id="workspace-language-label" style="margin-bottom:8px;">Language</div>
+          <div class="appearance-theme-options" role="group" aria-labelledby="workspace-language-label">
+            ${[["en","EN"],["id","ID"]].map(([language,label]) => `<button type="button" class="appearance-choice ${(window.WorkspaceLanguage?.get() || "en") === language ? "active" : ""}" data-workspace-language="${language}" aria-pressed="${(window.WorkspaceLanguage?.get() || "en") === language}">${label}</button>`).join("")}
+          </div>
+          <div style="margin-top:16px;"></div>
           <div class="eyebrow" style="margin-bottom:8px;">Theme</div>
           <div class="appearance-theme-options"><button class="appearance-choice ${state.appearance.theme === "light" ? "active" : ""}" data-set-theme="light">Light</button><button class="appearance-choice ${state.appearance.theme === "dark" ? "active" : ""}" data-set-theme="dark">Dark</button></div>
           <div class="eyebrow" style="margin:16px 0 8px;">Accent color</div>
@@ -6702,7 +6725,7 @@
     }
 
     function announcementAudienceLabel(audience) {
-      return ({ all: "All employees", tax: "Tax team", accounting: "Accounting team" })[audience] || "Selected employees";
+      return ({ all: "All employees", tax: "Tax team", accounting: "Accounting team", leadership: "Leaders and above" })[audience] || "Selected employees";
     }
 
     function announcementRecipients(announcement) {
@@ -6747,8 +6770,8 @@
             ${items.map((item) => {
               const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
               return `<button class="announcement-item ${unreadItem ? "unread" : ""}" data-read-announcement="${item.id}">
-                <div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
-                <p>${escapeHtml(item.message)}</p>
+                <div class="announcement-item-head"><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
+                <p data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</p>
                 <div class="announcement-meta">${escapeHtml(item.sender)} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
               </button>`;
             }).join("") || `<div class="empty-state">No notifications for you yet.</div>`}
@@ -6770,8 +6793,8 @@
               ${items.map((item) => {
                 const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
                 return `<button class="announcement-item ${unreadItem ? "unread" : ""}" data-read-announcement="${item.id}">
-                  <div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : `<span class="pill neutral">Read</span>`}</div>
-                  <p>${escapeHtml(item.message)}</p>
+                  <div class="announcement-item-head"><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : `<span class="pill neutral">Read</span>`}</div>
+                  <p data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</p>
                   <div class="announcement-meta">${escapeHtml(item.sender)} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
                 </button>`;
               }).join("") || `<div class="empty-state">No notifications for you yet.</div>`}
@@ -6811,12 +6834,18 @@
     }
 
     let structureEditor, structureLoading, structureError = "";
+    setInterval(() => {
+      if (document.visibilityState !== "hidden" && state.currentView === "dashboard-view" && state.managementTab === "structure") {
+        structureEditor?.refreshSharedForecast();
+      }
+    },30000);
     function mountManagementStructure(host) {
       if (window.WorkspaceAssets.ready("structure")) {
         structureEditor ||= window.ManagementStructure.create({
           account: bootstrapProfile.user.id,
           canManage: () => window.WorkspaceFeatures.manager() && window.WorkspaceFeatures.can("management"),
           getAllocationDrafts: () => state.allocationDrafts,
+          loadSharedDraft: IS_OFFLINE_DEMO ? null : () => readAllocationDraft(state.allocationYear),
           safeHtml
         });
         structureEditor.mount(host, staffDirectory, clientsLoadedFromDatabase || IS_OFFLINE_DEMO ? clientMasterClients : null);
@@ -7117,7 +7146,7 @@
               <div class="panel">
                 <div class="section-title"><div><h3>Recent Broadcasts</h3><p>Employees receive notices in their inbox when they open the app.</p></div></div>
                 <div class="announcement-list">
-                  ${state.announcements.slice(0, 6).map((item) => `<div class="announcement-item"><div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong><span class="pill neutral">${announcementAudienceLabel(item.audience)}</span></div><p>${escapeHtml(item.message)}</p><div class="announcement-meta">${escapeHtml(item.sender)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div></div>`).join("") || `<div class="empty-state">No announcements sent yet.</div>`}
+                  ${state.announcements.slice(0, 6).map((item) => `<div class="announcement-item"><div class="announcement-item-head"><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><span class="pill neutral">${announcementAudienceLabel(item.audience)}</span></div><p data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</p><div class="announcement-meta">${escapeHtml(item.sender)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div></div>`).join("") || `<div class="empty-state">No announcements sent yet.</div>`}
                 </div>
               </div>
             </section>
@@ -7145,6 +7174,7 @@
           hasLeadershipAccess, isActiveClientRecord, optionsMarkup, parseCaseSheetClipboard, persistDemoState,
           restoreVirtualTableScrollPositions, safeHtml, sortHeader, splitBusinessName, syncBrowserHistory,
           virtualSpacer, windowedRows,
+          get sharedDraftEnabled() { return !IS_OFFLINE_DEMO && hasLeadershipAccess(); },
           get allocationPreviewPreparing() { return allocationPreviewPreparing; },
           get ACC_PICS() { return ACC_PICS; },
           get TAX_PICS() { return TAX_PICS; },
@@ -7174,6 +7204,113 @@
       const root = document.getElementById("allocation-view");
       root.innerHTML = safeHtml(`<section class="panel" data-allocation-sheet-status><p role="status">${escapeHtml(allocationSheetError || "Loading Allocation tools...")}</p>${allocationSheetError ? '<button class="ghost-btn" data-retry-allocation-sheet>Retry Allocation tools</button>' : ""}</section>`);
       if (!allocationSheetError) void ensureAllocationSheet().catch(() => {});
+    }
+
+    async function readAllocationDraft(year) {
+      const response = await appFetch(`/api/clients/allocation/draft?year=${encodeURIComponent(year)}`,{cache:"no-store"});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not load the shared draft.");
+      return result;
+    }
+
+    function localAllocationProposals() {
+      const changes = [];
+      const picKey = name => String(name || "").trim().replace(/\s+/g," ").toLocaleLowerCase("id-ID");
+      for (const client of clientMasterClients) {
+        const draft = state.allocationDrafts[client.id];
+        if (!isActiveClientRecord(client) || !client.databaseId || !draft) continue;
+        const row = {clientId:client.databaseId};
+        if (Object.hasOwn(draft,"nextAccPic") && picKey(draft.nextAccPic) !== picKey(client.accountingPic)) row.nextAccPic = draft.nextAccPic || "";
+        if (Object.hasOwn(draft,"nextTaxPic") && picKey(draft.nextTaxPic) !== picKey(client.taxPic)) row.nextTaxPic = draft.nextTaxPic || "";
+        if (Object.hasOwn(row,"nextAccPic") || Object.hasOwn(row,"nextTaxPic")) changes.push(row);
+      }
+      return changes;
+    }
+
+    function openAllocationSharedDraft(trigger) {
+      if (IS_OFFLINE_DEMO || !hasLeadershipAccess() || document.querySelector(".allocation-shared-dialog")) return;
+      const year = state.allocationYear, canPublish = window.WorkspaceFeatures.manager();
+      const dialog = document.createElement("dialog");
+      dialog.className = "allocation-shared-dialog";
+      dialog.setAttribute("aria-labelledby","allocation-shared-title");
+      dialog.innerHTML = safeHtml(`<div class="section-title"><div><h3 id="allocation-shared-title">Shared Next PIC draft · ${year}</h3>
+        <p>Read-only forecast. Current PIC assignments are not changed.</p></div><button type="button" class="ghost-btn" data-close-shared>Close</button></div>
+        <p class="subline" aria-live="polite" data-shared-status></p><div data-shared-preview></div>
+        <div class="inline-controls"><button type="button" class="ghost-btn" data-refresh-shared>Refresh</button>
+        ${canPublish ? '<button type="button" class="ghost-btn" data-withdraw-shared disabled>Withdraw draft</button><button type="button" class="solid-btn" data-publish-shared disabled>Publish my draft</button>' : ""}</div>`);
+      const status = dialog.querySelector("[data-shared-status]"), preview = dialog.querySelector("[data-shared-preview]");
+      const publish = dialog.querySelector("[data-publish-shared]"), withdraw = dialog.querySelector("[data-withdraw-shared]");
+      const closeButton = dialog.querySelector("[data-close-shared]");
+      let snapshot, busy = false, reading = false;
+      function showDraft() {
+        const rows = snapshot?.changes || [];
+        const next = (row,field) => Object.hasOwn(row,field) ? escapeHtml(row[field] || "No PIC") : "Keep current";
+        const by = snapshot ? ` by ${escapeHtml(snapshot.published_by_name)} · ${escapeHtml(myWorkLocalDateTime(snapshot.published_at))}` : "";
+        preview.innerHTML = safeHtml(snapshot ? `<p class="subline">${rows.length ? "Published" : "Withdrawn"}${by}</p>` +
+          (rows.length ? `<div class="table-wrap" tabindex="0" aria-label="Published proposals"><table>
+          <thead><tr><th scope="col">Client</th><th scope="col">Next ACC PIC</th><th scope="col">Next Tax PIC</th></tr></thead>
+          <tbody>${rows.map(row=>`<tr><td>${escapeHtml(row.clientName)} <small>${escapeHtml(row.clientCode)}</small></td><td>${next(row,"nextAccPic")}</td><td>${next(row,"nextTaxPic")}</td></tr>`).join("")}</tbody></table></div>` : "") : '<p>No shared draft for this year.</p>');
+        if (publish) publish.disabled = busy || !localAllocationProposals().length;
+        if (withdraw) withdraw.disabled = busy || !rows.length;
+      }
+      async function refresh(manual = false) {
+        if (reading || busy) return;
+        reading = true;
+        if (manual) status.textContent = "Loading shared draft...";
+        try {
+          const result = await readAllocationDraft(year);
+          if (!dialog.isConnected) return;
+          if (snapshot === undefined || (snapshot?.version || 0) !== (result.draft?.version || 0)) {
+            snapshot = result.draft || null;
+            showDraft();
+          }
+          status.textContent = "";
+        } catch (error) {
+          if (!dialog.isConnected) return;
+          snapshot = undefined;
+          preview.textContent = "";
+          if (publish) publish.disabled = true;
+          if (withdraw) withdraw.disabled = true;
+          status.textContent = error.message;
+        } finally { reading = false; }
+      }
+      async function send(clear) {
+        if (busy || reading || snapshot === undefined) return;
+        const changes = clear ? [] : localAllocationProposals();
+        if (!clear && !changes.length) return;
+        if (!window.confirm(clear ? `Withdraw the shared ${year} draft? Current PICs will not change.` :
+          `Publish ${changes.length} client proposal(s) for ${year}? This replaces the shared draft for the year without changing Current PICs.`)) return;
+        busy = closeButton.disabled = true;
+        showDraft();
+        status.textContent = clear ? "Withdrawing draft..." : "Publishing draft...";
+        let retryRead = false;
+        try {
+          const response = await appFetch("/api/clients/allocation/draft",{
+            method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},
+            body:JSON.stringify({year,expectedVersion:snapshot?.version || 0,changes})
+          });
+          const result = await response.json().catch(() => ({}));
+          retryRead = response.status === 409;
+          if (!response.ok || !result.draft) throw new Error(result.error || "Shared draft could not be confirmed.");
+          snapshot = result.draft;
+          status.textContent = clear ? "Shared draft withdrawn." : "Shared draft published.";
+        } catch (error) { status.textContent = error.message; }
+        finally {
+          busy = closeButton.disabled = false;
+          showDraft();
+          if (retryRead) { publish.disabled = true; withdraw.disabled = true; }
+        }
+      }
+      const timer = setInterval(() => { if (document.visibilityState !== "hidden") void refresh(); },30000);
+      function close() { clearInterval(timer); dialog.close(); dialog.remove(); trigger.focus({preventScroll:true}); }
+      closeButton.addEventListener("click",close);
+      dialog.addEventListener("cancel",event => { event.preventDefault(); if (!busy) close(); });
+      dialog.querySelector("[data-refresh-shared]").addEventListener("click",() => void refresh(true));
+      publish?.addEventListener("click",() => void send(false));
+      withdraw?.addEventListener("click",() => void send(true));
+      document.body.append(dialog);
+      dialog.showModal();
+      void refresh(true);
     }
 
     function stageAllocationCells(plans) {
@@ -7341,6 +7478,7 @@
     }
 
     function renderClientManagement(rootOverride = null, { resultsOnly = false, resetScroll = false } = {}) {
+      if (renderStaffOversight("client-management-view")) return;
       const root = rootOverride || document.getElementById("client-management-view");
       if (!IS_OFFLINE_DEMO && !clientsLoadedFromDatabase) {
         root.innerHTML = safeHtml('<section class="panel"><p role="status">Loading Client Master...</p><button class="ghost-btn" data-retry-client-list>Retry client list</button></section>');
@@ -7484,6 +7622,7 @@
                 ${canManageClientTrash() ? `<button class="${viewingDeletedClients ? "solid-btn" : "ghost-btn"}" data-client-tab="deleted">Deleted Clients</button>` : ""}
               </div>
               <div class="toolbar-right">
+                ${window.WorkspaceFeatures.oversight("clients") ? '<button type="button" class="ghost-btn" data-oversight-all>All Clients</button>' : ""}
                 ${!isMobileWorkspace && canReviewClientDuplicates() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button>` : ""}
                 ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
                 ${!isMobileWorkspace && canExportClientMaster() ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
@@ -9050,13 +9189,13 @@
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>No.</th><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
               ${assignedClients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}${client.engagementType==='free_of_charge'?' · Free of Charge':''}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
-            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
+            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><div class="subline" data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
         </div>`);
     }
 
     function exportMyWorkArchivePeriod(period) {
-      if (scopedWorkspaceReads && !myWorkFullHistory && !myWorkPeriodsLoaded.has(period)) { window.alert("Load this archive month before exporting it."); return; }
+      if (scopedWorkspaceReads && !myWorkFullHistory && !myWorkPeriodsLoaded.has(period)) { window.alert(uiLabel("Load this archive month before exporting it.")); return; }
       const tasks = state.myWork
         .filter((task) => {
           if (!task.done || !task.completedAt) return false;
@@ -9292,6 +9431,9 @@
       });
       window.WorkspaceFeatures.setRole(state.role);
       window.WorkspaceFeatures.chrome(state.currentView);
+      const allocationNav = document.querySelector('[data-view="allocation-view"]');
+      if (window.WorkspaceFeatures.oversight("allocation")) allocationNav?.removeAttribute("data-mobile-hidden");
+      else allocationNav?.setAttribute("data-mobile-hidden", "yes");
       const mobileUserName = document.getElementById("mobile-user-name");
       const mobileUserRole = document.getElementById("mobile-user-role");
       if (mobileUserName) mobileUserName.textContent = state.selectedPic;
@@ -11835,14 +11977,76 @@
 
     function normalizeMobileWorkspaceView() {
       normalizeWorkspaceNavigation();
-      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)) {
+      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)
+          && !(state.currentView === "allocation-view" && window.WorkspaceFeatures.oversight("allocation"))) {
         state.currentView = "my-work-view";
         state.clientManagementTab = "active";
       }
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
     }
 
+    let oversightOwnClients = false;
+    function renderStaffOversight(view) {
+      const scope = view === "allocation-view" ? "allocation" : view === "client-management-view" ? "clients" : null;
+      if (!scope || !window.WorkspaceFeatures.oversight(scope) || (scope === "clients" && oversightOwnClients && window.WorkspaceFeatures.can("clients"))) return false;
+      const root = document.getElementById(view);
+      if (root.querySelector("[data-oversight-panel]")) return true;
+      root.innerHTML = safeHtml(`<section class="panel" data-oversight-panel>
+        <div class="section-title"><div><h3>${scope === "allocation" ? "All Allocation" : "All Clients"}</h3><p>Read-only access. Fees and private client details are not shown.</p></div>
+          <div class="inline-controls">${scope === "clients" && window.WorkspaceFeatures.can("clients") ? '<button type="button" class="ghost-btn" data-oversight-own>My Clients</button>' : ""}
+          <button type="button" class="ghost-btn" data-oversight-refresh>Refresh</button></div></div>
+        <div class="toolbar"><input class="filter-input" type="search" aria-label="Search clients" placeholder="Search client, code, or PIC..." data-oversight-search></div>
+        <p role="status" class="subline" data-oversight-status></p>
+        <div class="table-wrap"><table><thead><tr><th scope="col">Code</th><th scope="col">Form</th><th scope="col">Client Name</th><th scope="col">Accounting PIC</th><th scope="col">Tax PIC</th><th scope="col">Status</th></tr></thead><tbody></tbody></table></div>
+        <div class="inline-controls"><button type="button" class="ghost-btn" data-oversight-prev>Previous</button><button type="button" class="ghost-btn" data-oversight-next>Next</button></div>
+      </section>`);
+      const panel = root.querySelector("[data-oversight-panel]");
+      const search = panel.querySelector("[data-oversight-search]"), status = panel.querySelector("[data-oversight-status]");
+      const tbody = panel.querySelector("tbody"), refresh = panel.querySelector("[data-oversight-refresh]");
+      const prev = panel.querySelector("[data-oversight-prev]"), next = panel.querySelector("[data-oversight-next]");
+      let rows = [], page = 0;
+      const draw = () => {
+        const keyword = search.value.trim().toLowerCase();
+        const matches = rows.filter(row => [row.code, row.name, row.form, row.accountingPic, row.taxPic, row.status].join(" ").toLowerCase().includes(keyword));
+        const from = page * 50;
+        const show = matches.slice(from, from + 50);
+        tbody.innerHTML = safeHtml(show.map(row => `<tr><td>${escapeHtml(row.code || "")}</td><td>${escapeHtml(row.form || "-")}</td><td>${escapeHtml(row.name || "")}</td><td>${escapeHtml(row.accountingPic || "-")}</td><td>${escapeHtml(row.taxPic || "-")}</td><td>${escapeHtml(row.status || "")}</td></tr>`).join(""));
+        status.textContent = matches.length ? `${from + 1}-${from + show.length} / ${matches.length}` : "No matching clients.";
+        prev.disabled = !page;
+        next.disabled = from + show.length >= matches.length;
+      };
+      async function load() {
+        refresh.disabled = search.disabled = true;
+        prev.disabled = next.disabled = true;
+        rows = [];
+        page = 0;
+        tbody.replaceChildren();
+        status.textContent = "Loading oversight...";
+        try {
+          const response = await appFetch(`/api/staff-oversight?scope=${scope}`, { cache: "no-store" });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !Array.isArray(result.rows)) throw new Error(result.error || "The read-only overview could not be loaded. Try again.");
+          rows = result.rows;
+          draw();
+        } catch (error) { status.textContent = error.message; }
+        finally { refresh.disabled = search.disabled = false; }
+      }
+      search.addEventListener("input", () => { page = 0; draw(); });
+      prev.addEventListener("click", () => { if (page > 0) page--; draw(); });
+      next.addEventListener("click", () => { page++; draw(); });
+      refresh.addEventListener("click", load);
+      panel.querySelector("[data-oversight-own]")?.addEventListener("click", () => {
+        oversightOwnClients = true;
+        renderActiveView();
+        if (!clientsLoadedFromDatabase) void loadSharedClients(true);
+        if (!staffDirectoryLoaded) void loadStaffDirectory(true);
+      });
+      void load();
+      return true;
+    }
+
     function renderActiveView() {
+      if (renderStaffOversight(state.currentView)) return;
       if (state.currentView === "allocation-view" && !allocationSheet && !allocationSheetError &&
           window.WorkspaceFeatures.can("allocation")) void ensureAllocationSheet().catch(() => {});
       if (scopedWorkspaceReads && state.currentView === "client-view" && window.WorkspaceFeatures.can("myWork") && !myWorkFullHistory) {
@@ -11879,7 +12083,8 @@
       // Keep supervisor-only views inaccessible even when a staff user follows
       // an old link or clicks an embedded management shortcut.
       viewId = window.WorkspaceFeatures.normalize(viewId);
-      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)) {
+      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)
+          && !(viewId === "allocation-view" && window.WorkspaceFeatures.oversight("allocation"))) {
         viewId = "my-work-view";
       }
       if (viewId === "client-management-view" && window.matchMedia("(max-width: 900px)").matches) {
@@ -11924,12 +12129,12 @@
 
     async function openMonthlyTaxClaim(client) {
       if (!state.activeMonthlyPeriod || !client?.databaseId) {
-        window.alert("Generate and open a monthly period before creating a tax claim.");
+        window.alert(uiLabel("Generate and open a monthly period before creating a tax claim."));
         return;
       }
       const claimWindow = window.open("", "_blank");
       if (!claimWindow) throw new Error("Allow popups to open the tax claim editor.");
-      claimWindow.document.write(`<!doctype html><title>Preparing Tax Claim</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#edf7fa;color:#17354b;font:600 15px Georgia,serif}.card{padding:24px 30px;border:1px solid #d5e7f0;border-radius:14px;background:white;box-shadow:0 16px 40px rgba(0,61,121,.12)}</style><div class="card">Preparing tax claim...</div>`);
+      claimWindow.document.write(`<!doctype html><html lang="${window.WorkspaceLanguage?.get() || "en"}"><title>${escapeHtml(uiLabel("Preparing Tax Claim"))}</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#edf7fa;color:#17354b;font:600 15px Georgia,serif}.card{padding:24px 30px;border:1px solid #d5e7f0;border-radius:14px;background:white;box-shadow:0 16px 40px rgba(0,61,121,.12)}</style><div class="card">${escapeHtml(uiLabel("Preparing tax claim..."))}</div></html>`);
       claimWindow.document.close();
       try {
         const response = await appFetch("/api/monthly-claims", {
@@ -12410,7 +12615,7 @@
         } catch (error) {
           console.error("[auth] sign out failed", error);
           logoutTrigger.removeAttribute("disabled");
-          window.alert("Unable to sign out. Please try again.");
+          window.alert(uiLabel("Unable to sign out. Please try again."));
         }
         return;
       }
@@ -12482,13 +12687,13 @@
         if (!task || task.deleting) return;
         if (deleteStep) {
           const index = Number(deleteStep.dataset.deleteMyWorkStep);
-          if (!task.steps?.[index] || !window.confirm("Delete this subtask? Completed case history will be kept.")) return;
+          if (!task.steps?.[index] || !window.confirm(uiLabel("Delete this subtask? Completed case history will be kept."))) return;
           task.steps.splice(index,1);
           commitMyWorkNavigation();
           if (!IS_OFFLINE_DEMO) saveMyWorkTaskToDatabase(task);
           return;
         }
-        if ((!task.canDelete && !IS_OFFLINE_DEMO) || task.pendingSync || !window.confirm("Delete this task? Completed case history will be kept.")) return;
+        if ((!task.canDelete && !IS_OFFLINE_DEMO) || task.pendingSync || !window.confirm(uiLabel("Delete this task? Completed case history will be kept."))) return;
         task.deleting = true;
         myWorkReadWriteRevision++;
         renderMyWorkUpdate();
@@ -12647,7 +12852,7 @@
         const value = document.getElementById("generate-monthly-period")?.value;
         const targetProfileId = document.getElementById("generate-monthly-tax-pic")?.value || "";
         if (!value) {
-          window.alert("Choose the tax month first.");
+          window.alert(uiLabel("Choose the tax month first."));
           return;
         }
         try {
@@ -12760,14 +12965,14 @@
       if (target.closest("[data-add-annual-tax]")) {
         const name = document.getElementById("annual-tax-subject-name")?.value.trim();
         const linkedClientId = document.getElementById("annual-tax-linked-client")?.value || "";
-        if (!name) { window.alert("Enter the SPT subject name first."); return; }
-        if (!bootstrapProfile.profile?.id) { window.alert("Sign in before creating annual tax work."); return; }
+        if (!name) { window.alert(uiLabel("Enter the SPT subject name first.")); return; }
+        if (!bootstrapProfile.profile?.id) { window.alert(uiLabel("Sign in before creating annual tax work.")); return; }
         const linked = activeClientMasterRecords().find(client => client.id === linkedClientId);
         const selectedPicId = document.getElementById("annual-tax-new-pic")?.value || "";
         const selectedPic = taxPicOptions.find(person => person.id === selectedPicId);
         const taxPic = selectedPic ? selectedPic.display_name || selectedPic.full_name : state.teamDivision === "Tax Team" ? state.selectedPic : "";
         const taxPicProfileId = selectedPic?.id || (state.teamDivision === "Tax Team" ? bootstrapProfile.profile.id : null);
-        if (!taxPicProfileId) { window.alert("Assign an active Tax PIC to this SPT subject first."); return; }
+        if (!taxPicProfileId) { window.alert(uiLabel("Assign an active Tax PIC to this SPT subject first.")); return; }
         const annualWorkId = crypto.randomUUID();
         annualTaxRows.unshift({ id: `annual-tax-${annualWorkId}`, annualWorkId, clientId: linkedClientId, clientName: name, groupName: linked?.name || "Independent", taxYear: state.annualPlanYear, reportPic: "", reportPicProfileId: null, taxPic, taxPicProfileId, status: "Pencatatan", previousSpt: false, lifestyleAnalysis: false, assetReview: false, clientMeeting: false, finish: false, meeting: false, spt: false, bayar: false, laporCount: "0", kurangBayar: "", ntpe: "", notes: "", reported: false, paymentAmount: "", paymentDate: "", paymentNtpn: "", changeLog: [] });
         state.annualTeam = "tax";
@@ -12815,7 +13020,7 @@
         const caseId = addHimbauanProgressTrigger.getAttribute("data-add-himbauan-progress");
         const entry = document.getElementById("himbauan-progress-entry")?.value.trim();
         if (!caseId || !entry) {
-          window.alert("Enter a completed progress update first.");
+          window.alert(uiLabel("Enter a completed progress update first."));
           return;
         }
         try {
@@ -12970,11 +13175,11 @@
         const password = document.getElementById("profile-new-password")?.value || "";
         const confirmation = document.getElementById("profile-confirm-password")?.value || "";
         if (password.length < 8) {
-          window.alert("Password must contain at least 8 characters.");
+          window.alert(uiLabel("Password must contain at least 8 characters."));
           return;
         }
         if (password !== confirmation) {
-          window.alert("Password confirmation does not match.");
+          window.alert(uiLabel("Password confirmation does not match."));
           return;
         }
         try {
@@ -12985,7 +13190,7 @@
           }, "Updating password...");
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || "Password update failed.");
-          window.alert("Password updated successfully.");
+          window.alert(uiLabel("Password updated successfully."));
           document.getElementById("profile-new-password").value = "";
           document.getElementById("profile-confirm-password").value = "";
         } catch (error) {
@@ -13145,6 +13350,11 @@
         return;
       }
 
+      if (target.closest("[data-oversight-all]") && window.WorkspaceFeatures.oversight("clients")) {
+        oversightOwnClients = false;
+        renderActiveView();
+        return;
+      }
       const editStaffPermissions = target.closest("[data-edit-staff-permissions]");
       if (editStaffPermissions) { openStaffClientPermissions(editStaffPermissions.dataset.editStaffPermissions); return; }
 
@@ -13237,7 +13447,7 @@
 
       if (importClientsTrigger) {
         if (!canImportClientMaster()) {
-          window.alert("Client import is not granted for your account.");
+          window.alert(uiLabel("Client import is not granted for your account."));
           return;
         }
         document.getElementById("client-csv-input").click();
@@ -13496,7 +13706,7 @@
         if (!proposal) return;
         const proposalName = clientEditorField("proposal-name").value.trim();
         if (!proposalName) {
-          window.alert("Proposal name is required.");
+          window.alert(uiLabel("Proposal name is required."));
           return;
         }
         proposal.businessForm = clientEditorField("proposal-business-form").value;
@@ -13505,7 +13715,7 @@
         proposal.address = clientEditorField("proposal-address").value.trim();
         proposal.responsiblePersonName = clientEditorField("proposal-responsible-person").value.trim();
         if (!proposal.responsiblePersonName) {
-          window.alert("Director / responsible person is required.");
+          window.alert(uiLabel("Director / responsible person is required."));
           return;
         }
         const optionalValue = (id) => clientEditorField(id)?.value?.trim() || "";
@@ -13711,7 +13921,7 @@
         client.clientCode = clientEditorField("client-form-code").value.trim() || client.clientCode;
         const clientName = clientEditorField("client-form-name").value.trim();
         if (!clientName) {
-          window.alert("Client name is required.");
+          window.alert(uiLabel("Client name is required."));
           return;
         }
         client.businessForm = clientEditorField("client-form-business-form").value;
@@ -13881,6 +14091,8 @@
         void previewAllocation();
         return;
       }
+      const sharedDraftTrigger = target.closest("[data-allocation-shared-draft]");
+      if (sharedDraftTrigger) { openAllocationSharedDraft(sharedDraftTrigger); return; }
 
       if (target.closest("[data-clear-allocation-selection]")) {
         if (!hasLeadershipAccess() || state.allocationApplying) return;

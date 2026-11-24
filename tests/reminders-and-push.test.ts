@@ -89,7 +89,7 @@ test("turning off one device cannot delete all devices or another user's subscri
 });
 
 test("the delivery worker rejects unauthenticated calls and uses atomic leases for retry-safe bounded delivery", async () => {
-  const db = mockDatabase({ staff_profiles: [{ id: "own", directory_active: true }], announcement_recipients: [], notification_delivery_log: [{ id: 1 }] });
+  const db = mockDatabase({ staff_profiles: [{ id: "own", directory_active: true }], announcements: [{ id: "announcement", source_type: "tax_case" }], announcement_recipients: [], notification_delivery_log: [{ id: 1 }] });
   const calls: string[] = [];
   const jobs = [{ id: 1, announcement_id: "announcement", staff_profile_id: "own", channel: "in_app", attempts: 2, max_attempts: 8 }];
   db.rpc = async (name, args) => { calls.push(name); return name === "authorize_notification_scheduler" ? { data: args.p_token === "synthetic-token", error: null } : { data: jobs, error: null }; };
@@ -103,6 +103,28 @@ test("the delivery worker rejects unauthenticated calls and uses atomic leases f
   const result = await route.GET(req("Bearer synthetic-token"));
   assert.equal(result.body.delivered, 1); assert.ok(calls.includes("claim_notification_deliveries"));
   assert.equal(db.tables.notification_delivery_log[0].status, "delivered");
+});
+
+test("queued PIC Access alerts are not delivered after a recipient loses their leadership role", async () => {
+  const jobs = ["in_app", "web_push"].map((channel, id) => ({
+    id, channel, announcement_id: "access", staff_profile_id: "own", attempts: 2, max_attempts: 8
+  }));
+  const db = mockDatabase({
+    staff_profiles: [{ id: "own", directory_active: true, role: "staff" }],
+    announcements: [{ id: "access", source_type: "staff_directory" }],
+    announcement_recipients: [],
+    notification_delivery_log: jobs.map(({ id }) => ({ id }))
+  });
+  db.rpc = async (name, args) => name === "authorize_notification_scheduler"
+    ? { data: args.p_token === "synthetic-token", error: null } : { data: jobs, error: null };
+  const route = loadRoute("app/api/maintenance/deliver-notifications/route.ts", {
+    "@/lib/supabase/admin": { createAdminClient: () => db }, "web-push": {}, "@/lib/web-push": {}
+  });
+  const result = await route.GET({ headers: new Headers({ authorization: "Bearer synthetic-token" }) });
+  assert.equal(result.body.delivered, 0);
+  assert.equal(result.body.failed, 2);
+  assert.deepEqual(db.tables.announcement_recipients, []);
+  assert.ok(db.tables.notification_delivery_log.every(row => row.status === "failed" && row.completed_at));
 });
 
 test("service-worker clicks are same-origin only and notification payloads use an existing icon", async () => {

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notificationEventKey, uniqueProfileIds } from "@/lib/operational-rules";
 import webpush from "web-push";
 import { notificationDestination, webPushConfiguration } from "@/lib/web-push";
+import { STAFF_ACCESS_NOTIFICATION_ROLES } from "@/lib/feature-access";
 
 export { notificationEventKey, uniqueProfileIds } from "@/lib/operational-rules";
 
@@ -20,8 +21,9 @@ export type OperationalAnnouncementInput = {
   sourceId?: string;
 };
 
-async function recipientsForAudience(admin: AdminClient, audience: Audience) {
+async function recipientsForAudience(admin: AdminClient, audience: Audience, staffAccess: boolean) {
   let query = admin.from("staff_profiles").select("id").eq("directory_active", true);
+  if (staffAccess) query = query.in("role", [...STAFF_ACCESS_NOTIFICATION_ROLES]);
   if (audience === "tax") query = query.eq("team_division", "Tax Team");
   if (audience === "accounting") query = query.eq("team_division", "Accounting Team");
   const { data, error } = await query;
@@ -40,12 +42,16 @@ export async function createOperationalAnnouncement(input: OperationalAnnounceme
   const audience: Audience = input.audience === "tax" || input.audience === "accounting" ? input.audience : "all";
   const eventKey = String(input.eventKey || "").trim() || null;
   const requestedIds = uniqueProfileIds(input.recipientProfileIds || []);
-  let resolvedRecipients = requestedIds.length ? requestedIds : await recipientsForAudience(admin, audience);
-  if (requestedIds.length) {
-    const { data, error } = await admin.from("staff_profiles").select("id").in("id", requestedIds).eq("directory_active", true);
+  const staffAccess = input.sourceType === "staff_directory";
+  let resolvedRecipients: string[];
+  if (input.recipientProfileIds !== undefined) {
+    if (!requestedIds.length) throw new Error("No notification recipients were specified.");
+    let query = admin.from("staff_profiles").select("id").in("id", requestedIds).eq("directory_active", true);
+    if (staffAccess) query = query.in("role", [...STAFF_ACCESS_NOTIFICATION_ROLES]);
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
     resolvedRecipients = uniqueProfileIds((data || []).map((profile) => profile.id));
-  }
+  } else resolvedRecipients = await recipientsForAudience(admin, audience, staffAccess);
   if (!resolvedRecipients.length) throw new Error("No active notification recipients were found.");
   const { data: queued, error: outboxError } = await admin.rpc("enqueue_operational_announcement", {
     p_title: input.title.trim(), p_message: input.message.trim(), p_audience: audience,

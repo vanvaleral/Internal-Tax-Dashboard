@@ -77,13 +77,16 @@
     const teamOf = id => memberships.get(id)?.size === 1 ? memberships.get(id).values().next().value : "";
     const project = (client, next) => ["tax","accounting"].map(role => {
       const current = assignment(client,role);
-      const proposed = next ? drafts[client.id]?.[role === "tax" ? "nextTaxPic" : "nextAccPic"] : null;
+      const draft = next ? drafts[mode === "shared" ? clientKey(client) : client.id] : null;
+      const field = role === "tax" ? "nextTaxPic" : "nextAccPic";
+      const proposed = draft?.[field];
       const before = resolve(current);
       // Allocation initializes both draft fields. Preserve the current stable ID when a copied label is unchanged.
       const label = proposed ?? (people.get(before)?.name || current[1] || "");
       const assigned = proposed != null ? Boolean(nameKey(proposed)) : Boolean(current[0] || nameKey(current[1]));
       const same = proposed == null || [current[1],people.get(before)?.name].some(name => nameKey(name) === nameKey(proposed));
-      const id = assigned ? (same ? before : resolve(["",proposed])) : "";
+      const sharedId = mode === "shared" ? draft?.[`${field}Id`] : null;
+      const id = assigned ? (sharedId ? (people.has(sharedId) ? sharedId : "") : same ? before : resolve(["",proposed])) : "";
       return {id,assigned,label:assigned ? (people.get(id)?.name || label || "Unlisted PIC") : "Unassigned",team:teamOf(id)};
     });
     const ownerSuggestion = assignments => {
@@ -92,7 +95,7 @@
     };
     const rows = clients.filter(client => nameKey(client.clientStatus) === "active" && clientKey(client)).map(client => {
       const current = project(client,false);
-      const shown = mode === "next" ? project(client,true) : current;
+      const shown = mode === "current" ? current : project(client,true);
       const key = clientKey(client);
       const stored = Object.hasOwn(split.owners,key) ? split.owners[key] : "";
       const owner = teamIds.has(stored) ? stored : "";
@@ -103,7 +106,7 @@
       const cross = teams.size > 1;
       const incomplete = !assigned.length || assigned.some(item => !item.team);
       const projectedTeam = ownerSuggestion(shown);
-      const moved = !owner && mode === "next" && !!suggested && !!projectedTeam && suggested !== projectedTeam;
+      const moved = !owner && mode !== "current" && !!suggested && !!projectedTeam && suggested !== projectedTeam;
       return {client,key,shown,owner,suggested,conflict,cross,incomplete,moved};
     }).sort((a,b) => String(a.client.name || "").localeCompare(String(b.client.name || "")) || a.key.localeCompare(b.key));
     if (recommend) suggestTeamPics(rows,people,teamOf,plannedPartners,resolve);
@@ -196,7 +199,7 @@
     return {points, width: Math.max(2*padding + cardWidth, leaves*(cardWidth + columnGap) - columnGap + 2*padding), height};
   }
 
-  function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}) }) {
+  function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}), loadSharedDraft = null }) {
     const key = `tax-dashboard:structure:v1:${account}`;
     const defaultChartName = "Team Dewa Structure";
     let model = { active: "1", plans: [{ id: "1", name: defaultChartName, nodes: [] }] };
@@ -205,6 +208,7 @@
     let zoom = 1;
     let clientRows = null, section = "chart", chartScroll = [0,0];
     let splitMode = "current", splitFilter = "all", showRecommendations = false, loadExpanded = true;
+    let sharedForecast = null, sharedForecastError = "", sharedForecastFlight = null;
     const columnFilters = new Map();
     let columnSource, columnMenu;
     try {
@@ -334,33 +338,62 @@
       const teams = selectedTeams(split);
       const ready = Boolean(split.a && split.b && new Set(teams.map(team => team.id)).size === teams.length &&
         teams.every(team => plan.nodes.some(node => node.id === team.id)) && !branchesOverlap(plan.nodes,split.a,split.b));
-      return {split,teams,mode,ready,rows:ready && clientRows ? teamSplitRows(plan,people,clientRows,split,teams,mode,mode === "next" ? getAllocationDrafts() : {},recommend) : []};
+      const shared = mode === "shared" ? sharedForecast : null;
+      const available = Boolean(clientRows && (mode !== "shared" || shared?.draft?.changes?.length));
+      const drafts = shared?.draft?.changes ? Object.fromEntries(shared.draft.changes.map(row => [row.clientId,row]))
+        : mode === "next" ? getAllocationDrafts() : {};
+      return {split,teams,mode,ready,available,shared,rows:ready && available ? teamSplitRows(plan,people,clientRows,split,teams,mode,drafts,recommend) : []};
+    }
+
+    function sharedForecastHint() {
+      return sharedForecastError || (sharedForecast ? `No shared Next PIC draft for ${sharedForecast.year}.` : "Loading shared Next PIC draft...");
+    }
+
+    function refreshSharedForecast() {
+      if (!loadSharedDraft || splitMode !== "shared" || !host?.isConnected || sharedForecastFlight || !canManage()) return;
+      sharedForecastFlight = (async () => {
+        const previous = sharedForecast, previousError = sharedForecastError;
+        try { sharedForecast = await loadSharedDraft(); sharedForecastError = ""; }
+        catch (error) { sharedForecast = null; sharedForecastError = error.message || "Shared draft could not be loaded."; }
+        if (splitMode !== "shared" || !host?.isConnected || !canManage()) return;
+        if (previous?.year === sharedForecast?.year && previous?.draft?.version === sharedForecast?.draft?.version && previousError === sharedForecastError) return;
+        const refocus = document.activeElement?.matches('[data-structure-split="mode"]');
+        if (section === "chart") refreshLoadSummary();
+        else render();
+        if (refocus) host.querySelector('[data-structure-split="mode"]')?.focus({preventScroll:true});
+      })().finally(() => { sharedForecastFlight = null; });
     }
 
     function clientLoadSummary(plan, comparison, heading = "h4") {
+      const printing = heading === "h2";
+      const t = value => printing ? (window.WorkspaceLanguage?.t(value) ?? value) : value;
       const next = comparison.mode === "next";
-      const title = next ? "Forecast team client load" : "Current team client load";
+      const sharedMode = comparison.mode === "shared";
+      const title = sharedMode ? "Shared forecast team client load" : next ? "Forecast team client load" : "Current team client load";
       const compare = heading === "h4" ? `<select class="field" data-structure-split="mode" aria-label="Compare team client load">
-        ${option("current","Current PICs",comparison.mode)}${option("next","Next PICs (Allocation drafts)",comparison.mode)}</select>` : "";
-      const headingHtml = `<${heading} id="structure-load-title">${title}</${heading}>`;
-      if (!comparison.ready || !clientRows) {
-        const hint = comparison.ready ? "Waiting for confirmed Client Master data." : "Choose Team A and B in Team Split to compare their client load. Team C is optional.";
+        ${option("current","Current PICs",comparison.mode)}${option("next","Next PICs (my draft)",comparison.mode)}
+        ${loadSharedDraft ? option("shared","Next PICs (shared draft)",comparison.mode) : ""}</select>` : "";
+      const headingHtml = `<${heading} id="structure-load-title">${esc(t(title))}</${heading}>`;
+      if (!comparison.ready || !comparison.available) {
+        const hint = !comparison.ready ? "Choose Team A and B in Team Split to compare their client load. Team C is optional."
+          : !clientRows ? "Waiting for confirmed Client Master data." : sharedForecastHint();
         return `<section class="structure-load" aria-labelledby="structure-load-title">
-          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${hint}</p></section>`;
+          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${esc(t(hint))}</p></section>`;
       }
       const {teams,shared,unmapped,combined,uneven,leader} = teamClientLoad(comparison);
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
       const status = !combined ? "No clients mapped" : !uneven ? "Balanced by client count"
-        : leader ? `Uneven: ${leader.label} has more clients` : "Uneven by client count";
+        : leader ? t("Uneven: {team} has more clients").replace("{team}", leader.label) : "Uneven by client count";
       return `<section class="structure-load" aria-labelledby="structure-load-title">
         <div class="structure-load-heading">${headingHtml}<div class="structure-load-controls">
-          <span class="pill ${uneven ? "warn" : "neutral"}" data-structure-load-status>${status}</span>${compare}</div></div>
+          <span class="pill ${uneven ? "warn" : "neutral"}" data-structure-load-status>${esc(t(status))}</span>${compare}</div></div>
         <div class="structure-load-teams">${teams.map(team => `<div class="structure-load-team" data-structure-load-team="${team.slot}">
-          <div><strong>${team.label}: ${esc(names.get(team.id))}</strong><small>Tax: ${team.tax} &middot; Accounting: ${team.accounting} &middot; <strong class="${team.flagged ? "structure-load-flagged" : ""}">${team.flagged} flagged</strong></small></div>
-          <span class="structure-load-total"><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
-        <p><strong>${shared} shared</strong> (counted once per involved team) &middot; <strong>${unmapped} with no PIC mapped to any team.</strong>
-          Uneven when team shares differ by more than ${loadGapLimit} percentage points. Client counts do not account for difficulty or staffing.
-          ${next ? "Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft." : ""}</p>
+          <div><strong>${esc(t(team.label))}: ${esc(names.get(team.id))}</strong><small>${esc(t("Tax"))}: ${team.tax} &middot; ${esc(t("Accounting"))}: ${team.accounting} &middot; <strong class="${team.flagged ? "structure-load-flagged" : ""}">${team.flagged} ${esc(t("flagged"))}</strong></small></div>
+          <span class="structure-load-total"><strong data-structure-load-count>${team.total}</strong> ${esc(t(team.total === 1 ? "client" : "clients"))}</span></div>`).join("")}</div>
+        <p><strong>${shared} ${esc(t("shared"))}</strong> ${esc(t("(counted once per involved team)"))} &middot; <strong>${unmapped} ${esc(t("with no PIC mapped to any team."))}</strong>
+          ${esc(t("Uneven when team shares differ by more than {limit} percentage points. Client counts do not account for difficulty or staffing.").replace("{limit}",loadGapLimit))}
+          ${next ? esc(t("Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft.")) : ""}
+          ${sharedMode ? `Shared ${esc(comparison.shared.year)} draft · v${esc(comparison.shared.draft.version)} · Published by ${esc(comparison.shared.draft.published_by_name)}. Missing proposals keep the current PIC.` : ""}</p>
       </section>`;
     }
 
@@ -493,11 +526,11 @@
       window.addEventListener("resize",() => closeColumnMenu(),{signal});
     }
 
-    function splitView(plan, {split,teams,ready,rows}) {
+    function splitView(plan, {split,teams,ready,available,rows}) {
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
       const teamName = team => `${team.label}: ${names.get(team.id)}`;
       const teamNames = new Map(teams.map(team => [team.id,teamName(team)]));
-      columnSource = ready && clientRows ? {rows,teamNames} : null;
+      columnSource = ready && available ? {rows,teamNames} : null;
       const rootOptions = slot => option("",slot === "c" ? "No Team C" : "Choose a branch",split[slot]) +
         plan.nodes.map(node => option(node.id,nodeName(node),split[slot])).join("");
       const counts = {
@@ -527,11 +560,11 @@
             ${[["all","All active clients"],["conflicts","Conflicts & team moves"],["owners","No confirmed team"],["review","Unmapped / unassigned PICs"]].map(([key,label]) =>
               option(key,`${label} (${counts[key]})`,splitFilter)).join("")}</select></label>
           <button type="button" class="ghost-btn" data-structure-action="confirm-suggestions" ${suggested && !storageError ? "" : "disabled"}>Confirm ${suggested} suggested teams</button>
-          <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && clientRows ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
+          <button type="button" class="ghost-btn" data-structure-action="recommend-pics" aria-pressed="${showRecommendations}" ${ready && available ? "" : "disabled"}>${showRecommendations ? "Hide PIC recommendations" : "Recommend PIC changes"}</button>
         </div>
-        ${showRecommendations && ready && clientRows ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
+        ${showRecommendations && ready && available ? `<p class="subline">${proposed} proposed PIC change${proposed === 1 ? "" : "s"} across all active clients. Replacements stay in the intended team and go to the eligible PIC with the fewest clients for that role. Preview only; Allocation is unchanged.</p>` : ""}
         ${!ready ? "<p>Choose separate branches for Teams A and B. Team C is optional and must use a different position.</p>"
-        : !clientRows ? "<p>Waiting for confirmed Client Master data.</p>"
+        : !available ? `<p>${esc(!clientRows ? "Waiting for confirmed Client Master data." : sharedForecastHint())}</p>`
         : `<div class="structure-review-summary"><div role="status"><strong>${counts.conflicts} flagged client${counts.conflicts === 1 ? "" : "s"}</strong><span>${counts.owners} without a confirmed team</span><span>${visible.length} shown</span></div>
           ${activeColumns.length ? '<button type="button" class="ghost-btn" data-structure-action="clear-column-filters">Clear column filters</button>' : ""}</div>
           <div class="table-wrap structure-review-table" tabindex="0" aria-label="Planned team assignment findings">
@@ -552,7 +585,12 @@
       const focus = () => host.querySelector(`[data-structure-split="${field}"]`)?.focus();
       if (field === "mode" || field === "filter") {
         if (field === "mode") {
-          splitMode = value === "next" ? "next" : "current";
+          splitMode = value === "shared" && loadSharedDraft ? "shared" : value === "next" ? "next" : "current";
+          if (splitMode === "shared") {
+            sharedForecast = null;
+            sharedForecastError = "";
+            refreshSharedForecast();
+          }
           if (section === "chart") refreshLoadSummary();
           else render();
         } else {
@@ -677,26 +715,28 @@
       }
     }
 
+    const printText = value => esc(window.WorkspaceLanguage?.t(value) ?? value);
+
     function printSheet(plan, report) {
       const {points,width,height} = layout(plan.nodes);
       const cards = plan.nodes.map(node => {
         const {x,y} = points.get(node.id);
-        const name = nodeName(node), detail = personName(node) ? node.label : "Unassigned / planned";
+        const name = nodeName(node), detail = personName(node) ? node.label : (window.WorkspaceLanguage?.t("Unassigned / planned") ?? "Unassigned / planned");
         return `<g class="structure-print-card" data-kind="${esc(node.kind)}" transform="translate(${x},${y})">
           <title>${esc(name)}: ${esc(detail)}</title>
           <rect class="structure-print-box" x=".5" y=".5" width="${cardWidth-1}" height="${cardHeight-1}" rx="9"></rect>
           <path class="structure-print-stripe" d="M 8 2 H ${cardWidth-8}"></path>
           <svg x="10" y="10" width="${cardWidth-20}" height="${cardHeight-20}">
-            <text class="structure-print-kind" y="11">${esc(node.kind.toUpperCase())}</text>
+            <text class="structure-print-kind" y="11">${printText(node.kind.toUpperCase())}</text>
             <text class="structure-print-name" y="33">${esc(name)}</text>
             <text class="structure-print-detail" y="51">${esc(detail)}</text>
           </svg></g>`;
       }).join("");
       return `<main class="structure-print-page">
-        <header><small>LMATS CONSULTING / ORGANIZATION PLANNING</small><h1>${esc(plan.name)}</h1>
-          <p>Planning only. Does not change system access.</p>
+        <header><small>LMATS CONSULTING / ${printText("ORGANIZATION PLANNING")}</small><h1>${esc(plan.name)}</h1>
+          <p>${printText("Planning only. Does not change system access.")}</p>
           ${report ? clientLoadSummary(plan,report,"h2") : ""}</header>
-        <div class="structure-print-frame"><svg class="structure-print-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Organization flowchart">
+        <div class="structure-print-frame"><svg class="structure-print-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${printText("Organization flowchart")}">
           <g class="structure-wires">${connections(plan.nodes,points)}</g>${cards}
         </svg></div></main>`;
     }
@@ -705,23 +745,23 @@
       const flaggedRows = rows.filter(flagged);
       const unmapped = rows.filter(row => row.incomplete).length;
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
-      const labels = new Map(teams.map(team => [team.id,team.label]));
-      const next = mode === "next";
-      const pic = item => `<td><strong>${esc(item.label)}</strong>${item.assigned ? `<small>${labels.get(item.team) || "Not mapped to a team"}</small>` : ""}</td>`;
+      const labels = new Map(teams.map(team => [team.id,printText(team.label)]));
+      const next = mode !== "current";
+      const pic = item => `<td><strong>${item.assigned ? esc(item.label) : printText(item.label)}</strong>${item.assigned ? `<small>${labels.get(item.team) || printText("Not mapped to a team")}</small>` : ""}</td>`;
       return `<section class="structure-print-findings" aria-labelledby="structure-print-findings-title">
-        <header><small>LMATS CONSULTING / TEAM SPLIT REPORT</small>
-          <h2 id="structure-print-findings-title">Flagged clients: ${next ? "Next PICs (draft forecast)" : "Current PICs"}</h2>
-          <p><strong>${esc(plan.name)}</strong> &middot; ${teams.map(team => `${team.label}: ${esc(names.get(team.id))}`).join(" &middot; ")}</p>
-          <p>${flaggedRows.length} of ${rows.length} active clients flagged. ${next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only."}</p>
-          ${unmapped ? `<p>Unassigned or unmapped PICs to review: ${unmapped} active client${unmapped === 1 ? "" : "s"}.</p>` : ""}
+        <header><small>LMATS CONSULTING / ${printText("TEAM SPLIT REPORT")}</small>
+          <h2 id="structure-print-findings-title">${printText("Flagged clients")}: ${printText(mode === "shared" ? "Shared Next PICs (draft forecast)" : next ? "Next PICs (draft forecast)" : "Current PICs")}</h2>
+          <p><strong>${esc(plan.name)}</strong> &middot; ${teams.map(team => `${printText(team.label)}: ${esc(names.get(team.id))}`).join(" &middot; ")}</p>
+          <p>${flaggedRows.length} ${printText("of")} ${rows.length} ${printText("active clients flagged.")} ${printText(mode === "shared" ? "Published draft; roles without proposals keep their saved PIC." : next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only.")}</p>
+          ${unmapped ? `<p>${printText("Unassigned or unmapped PICs to review")}: ${unmapped} ${printText(unmapped === 1 ? "active client" : "active clients")}.</p>` : ""}
         </header>
-        ${flaggedRows.length ? `<table aria-label="Flagged active clients">
+        ${flaggedRows.length ? `<table aria-label="${printText("Flagged active clients")}">
           <colgroup><col style="width:26%"><col style="width:17%"><col style="width:18%"><col style="width:18%"><col style="width:21%"></colgroup>
-          <thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Reason flagged</th></tr></thead>
+          <thead><tr>${["Client","Intended team","Tax PIC","Accounting PIC","Reason flagged"].map(value => `<th scope="col">${printText(value)}</th>`).join("")}</tr></thead>
           <tbody>${flaggedRows.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
-            <td>${labels.get(row.owner) || "Not confirmed"}</td>${row.shown.map(pic).join("")}
-            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : "",row.moved ? "Projected team change" : ""].filter(Boolean).join("; ")}</td></tr>`).join("")}</tbody></table>`
-          : `<p>No ${next ? "forecast" : "current"} client conflicts were found for these branches.</p>`}
+            <td>${labels.get(row.owner) || printText("Not confirmed")}</td>${row.shown.map(pic).join("")}
+            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : "",row.moved ? "Projected team change" : ""].filter(Boolean).map(printText).join("; ")}</td></tr>`).join("")}</tbody></table>`
+          : `<p>${printText(next ? "No forecast client conflicts were found for these branches." : "No current client conflicts were found for these branches.")}</p>`}
       </section>`;
     }
 
@@ -729,13 +769,13 @@
       const plan = active();
       if (!plan.nodes.length) return;
       const split = clientRows ? splitResult(plan,splitMode,false) : null;
-      const report = split?.ready ? split : null;
+      const report = split?.ready && split.available ? split : null;
       const page = window.open("", "_blank", "width=960,height=760");
       if (!page) { tell("Allow popups to print this structure."); return; }
       page.opener = null;
       const doc = page.document;
-      doc.documentElement.lang = "en";
-      doc.title = `Tax Dashboard | ${plan.name}${report ? " | Team Split Report" : ""}`;
+      doc.documentElement.lang = window.WorkspaceLanguage?.get() || "en";
+      doc.title = `Tax Dashboard | ${plan.name}${report ? " | " + (window.WorkspaceLanguage?.t("Team Split Report") ?? "Team Split Report") : ""}`;
       if (report) doc.body.classList.add("structure-print-report");
       const style = doc.createElement("style");
       style.textContent = `@page{size:landscape;margin:12mm}
@@ -1003,7 +1043,7 @@
       if (section === "chart") refreshLoadSummary();
       else render();
     }
-    return { mount,refreshClients };
+    return { mount,refreshClients,refreshSharedForecast };
   }
   window.ManagementStructure = { create };
 })();

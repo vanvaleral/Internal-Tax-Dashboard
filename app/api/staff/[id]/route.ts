@@ -3,12 +3,12 @@ import { currentActor, type CurrentActor, type StaffRole } from "@/lib/access";
 import { STAFF_DIRECTORY_TEAMS, isStaffDirectoryRole, canManageDirectoryRole } from "@/lib/staff-directory";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { canManageAccess } from "@/lib/feature-access";
+import { canManageAccess, STAFF_ACCESS_NOTIFICATION_ROLES } from "@/lib/feature-access";
 
 type Context = { params: Promise<{ id: string }> };
 
 async function notifyLeadership(actor: CurrentActor, action: string, subject: string) {
-  const { data: recipients, error } = await actor.admin.from("staff_profiles").select("id").eq("directory_active", true).in("role", ["supervisor", "partner", "admin"]);
+  const { data: recipients, error } = await actor.admin.from("staff_profiles").select("id").eq("directory_active", true).in("role", [...STAFF_ACCESS_NOTIFICATION_ROLES]);
   if (error || !(recipients || []).length) return;
   await createOperationalAnnouncement({
     title: `PIC Access: ${action}`,
@@ -67,9 +67,10 @@ export async function PATCH(request: Request, context: Context) {
   if (id === actor.profile.id && !nextActive) return NextResponse.json({ error: "You cannot archive your own profile." }, { status: 400 });
 
   const permissions: Record<string, boolean | null | string> = {};
-  for (const [field,column] of [["clientImportAllowed","client_import_allowed"],["clientExportAllowed","client_export_allowed"]]) {
+  for (const [field, column] of [["clientImportAllowed","client_import_allowed"],["clientExportAllowed","client_export_allowed"],["clientOverviewAllowed","client_overview_allowed"],["allocationOverviewAllowed","allocation_overview_allowed"]]) {
     if (!(field in body)) continue;
-    if (body[field] !== null && typeof body[field] !== "boolean") return NextResponse.json({ error: "Choose a valid client permission." }, { status: 400 });
+    if (field.endsWith("OverviewAllowed") && nextRole !== "staff") return NextResponse.json({ error: "Individual oversight is available for Associates only." }, { status: 400 });
+    if (typeof body[field] !== "boolean" && (field.endsWith("OverviewAllowed") || body[field] !== null)) return NextResponse.json({ error: "Choose a valid client permission." }, { status: 400 });
     permissions[column] = body[field];
     permissions.client_permissions_updated_by = actor.profile.id;
   }
@@ -81,7 +82,7 @@ export async function PATCH(request: Request, context: Context) {
   } else {
     update = update.eq("directory_active", true);
   }
-  const { data, error } = await update.select("id, full_name, display_name, employment_title, team_division, role, auth_user_id, claimed_at, directory_active, archived_at, client_import_allowed, client_export_allowed").maybeSingle();
+  const { data, error } = await update.select("id, full_name, display_name, employment_title, team_division, role, auth_user_id, claimed_at, directory_active, archived_at, client_import_allowed, client_export_allowed, client_overview_allowed, allocation_overview_allowed").maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "This profile changed while it was being restored. Refresh PIC Access." }, { status: 409 });
   try { await notifyLeadership(actor, nextActive ? "Updated staff access" : "Archived staff profile", nextDisplayName); } catch (notificationError) { console.error("[staff] directory notification failed", notificationError); }

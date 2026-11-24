@@ -11,11 +11,22 @@ export type FeatureRule = { mode: FeatureMode; message: string };
 export type FeaturePolicy = Record<AccessTier, Record<Feature, FeatureRule>>;
 export type FeatureSettings = { policy: FeaturePolicy; version: number; ready: boolean };
 
+export const STAFF_ACCESS_NOTIFICATION_ROLES = ["leader", "supervisor", "partner", "admin"] as const;
+export function canReceiveStaffAccessNotifications(role: unknown) {
+  return STAFF_ACCESS_NOTIFICATION_ROLES.some(allowed => allowed === String(role || "").toLowerCase());
+}
+
 export function canManageAccess(role: string | null | undefined) {
   return ["supervisor", "partner", "admin"].includes(String(role || "").toLowerCase());
 }
 export function accessTier(role: string | null | undefined): AccessTier {
   return role === "leader" ? "leader" : "associate";
+}
+export type OversightFeature = "clients" | "allocation";
+type OversightProfile = { role: string; client_overview_allowed?: boolean; allocation_overview_allowed?: boolean };
+export function hasDelegatedOversight(profile: OversightProfile, policy: FeaturePolicy, feature: OversightFeature) {
+  return profile.role === "staff" && policy.associate[feature].mode !== "maintenance" &&
+    (feature === "clients" ? profile.client_overview_allowed === true : profile.allocation_overview_allowed === true);
 }
 export function defaultFeaturePolicy(): FeaturePolicy {
   const defaults = () => Object.fromEntries(FEATURES.map(([id]) => [id, {
