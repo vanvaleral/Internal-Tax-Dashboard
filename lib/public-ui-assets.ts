@@ -35,6 +35,7 @@ const PUBLIC_UI_ASSETS = new Set([
   "/my-work-reorder.css",
   "/workspace-startup.js",
   "/feature-access.js",
+  "/workspace-language.js",
   "/feature-access.css",
   "/client-engagement.js",
   "/client-engagement.css",

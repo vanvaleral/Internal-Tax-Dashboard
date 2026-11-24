@@ -216,6 +216,12 @@ Use a server-owned notification model:
 5. Keep the in-app inbox as the durable record, even when push delivery fails or is disabled.
 6. Log creation, delivery attempts, reads, and deletes in the activity trail.
 
+Notification Center resolves sender names only after checking inbox membership.
+PIC Access notifications are labeled Leaders and above and restricted to active
+Leaders, Supervisors, Partners and legacy Admins at enqueue and retry. The inbox
+and history also hide those notifications after a recipient loses that role.
+Case notifications keep their existing PIC and leadership recipients.
+
 ## Important Constraints
 
 - A browser notification cannot reach a closed phone browser without a service worker and push subscription.

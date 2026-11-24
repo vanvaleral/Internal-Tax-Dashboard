@@ -23,6 +23,8 @@ export type CurrentActor = {
     role: StaffRole;
     client_import_allowed?: boolean | null;
     client_export_allowed?: boolean | null;
+    client_overview_allowed?: boolean;
+    allocation_overview_allowed?: boolean;
   };
   admin: NonNullable<ReturnType<typeof createAdminClient>>;
 };
@@ -43,7 +45,7 @@ export async function currentActor(request?: Request): Promise<CurrentActor | { 
   if (!admin) return { error: "Server database access is not configured.", status: 503 };
   const { data: profile, error } = await admin
     .from("staff_profiles")
-    .select("id, full_name, display_name, username, team_division, role, directory_active, client_import_allowed, client_export_allowed")
+    .select("id, full_name, display_name, username, team_division, role, directory_active, client_import_allowed, client_export_allowed, client_overview_allowed, allocation_overview_allowed")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (error || !profile) return { error: error?.message || "Staff profile was not found.", status: 403 };

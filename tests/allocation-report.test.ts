@@ -80,7 +80,7 @@ test("Allocation PDF resources load only on Preview, reuse once, and open withou
   let reads=0,scripts=0,printed=0,opened=0,blob:any,timer:()=>void=()=>{};
   const locations:string[]=[],revoked:string[]=[],events=new Map();
   const status:any={style:{}};
-  const popup:any={closed:false,opener:{},document:{title:"",body:{append(){}},createElement:()=>status},location:{replace:(url:string)=>locations.push(url)},focus(){},print(){printed++;}};
+  const popup:any={closed:false,opener:{},document:{title:"",documentElement:{},body:{append(){}},createElement:()=>status},location:{replace:(url:string)=>locations.push(url)},focus(){},print(){printed++;}};
   const window:any={open:()=>{opened++;return popup;},setInterval:(fn:()=>void)=>{timer=fn;return 1;},clearInterval(){},addEventListener:(name:string,fn:any)=>events.set(name,fn),removeEventListener:(name:string)=>events.delete(name)};
   const document:any={baseURI:"https://dashboard.test/demo.html",createElement:()=>({remove(){}}),head:{append:(script:any)=>{scripts++;assert.equal(script.src,"https://dashboard.test/vendor/jspdf.umd.min.js");window.jspdf={jsPDF};script.onload();}}};
   class PreviewUrl extends URL {static createObjectURL(value:any){blob=value;return "blob:test-preview";} static revokeObjectURL(value:string){revoked.push(value);}}
@@ -96,9 +96,28 @@ test("Allocation PDF resources load only on Preview, reuse once, and open withou
 test("blocked popups never load PDF resources, and failed resource reads can be retried",async()=>{
   const blocked=report({window:{open:()=>null}});await assert.rejects(blocked.preview(snapshot()),/Allow pop-ups/);
   let attempt=0;const status:any={style:{}};
-  const popup:any={closed:false,document:{body:{append(){}},createElement:()=>status},location:{replace(){}},focus(){}};
+  const popup:any={closed:false,document:{documentElement:{},body:{append(){}},createElement:()=>status},location:{replace(){}},focus(){}};
   const window:any={jspdf:{jsPDF},open:()=>popup,setInterval:()=>1,clearInterval(){},addEventListener(){},removeEventListener(){}};
   const api=report({window,document:{baseURI:"https://dashboard.test/demo.html"},btoa:(value:string)=>Buffer.from(value,"binary").toString("base64"),URL:class extends URL {static createObjectURL(){return "blob:ready";}},fetch:async()=>({ok:++attempt>1,arrayBuffer:async()=>Uint8Array.from(Buffer.from(font,"base64")).buffer})});
   await assert.rejects(api.preview(snapshot()),/font could not be loaded/);assert.match(status.textContent,/font/);
   await api.preview(snapshot());assert.equal(attempt,2);
+});
+
+test("Indonesian Allocation PDF translates headings and keeps client names and Legal margins",()=>{
+  const dom=new JSDOM("<!doctype html><html><body></body></html>",{url:"https://dashboard.test/demo.html",runScripts:"outside-only"});
+  try {
+    const w=dom.window as any;
+    w.localStorage.setItem("tax-dashboard:language","id");
+    w.eval(readFileSync(new URL("../public/workspace-language.js",import.meta.url),"utf8"));
+    const data=snapshot(180), before=JSON.stringify(data);
+    const pdf=report({window:w}).createPdf(data,TrackedPdf,font) as TrackedPdf;
+    assert.ok(pdf.marks.some(mark=>mark.value==="Alokasi PIC Klien"));
+    assert.ok(pdf.marks.some(mark=>mark.value==="Nama Klien"));
+    assert.ok(pdf.marks.some(mark=>mark.value?.includes("Élan")));
+    for (const mark of pdf.marks) {
+      assert.ok(mark.x>=9.95 && mark.x+mark.width<=205.95);
+      assert.ok(mark.y>=9.95 && mark.y+mark.height<=315.65);
+    }
+    assert.equal(JSON.stringify(data),before);
+  } finally {dom.window.close();}
 });

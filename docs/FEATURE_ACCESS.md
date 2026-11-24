@@ -53,6 +53,24 @@ moderators; automatic events must be corrected at their source.
 
 ## Enforcement And Refresh
 
+### Individual read-only oversight
+
+In **Management > PIC Access**, open the pencil beside an Associate's role and
+enable **View all clients** and/or **View all Allocation**. These switches apply
+only to that person and do not change their role or PIC assignments. The Clients
+overview lists active and inactive clients across engagement categories. Allocation
+shows current Tax/Accounting assignments for active clients, not unsaved drafts.
+Both views exclude fees, NPWP, notes, contact details and edit/export actions.
+Clients retains the person's regular scoped workspace under **My Clients** when
+the role already has Clients access. Menu maintenance still blocks both views.
+Existing import/export overrides remain independent. Refresh the recipient's
+dashboard after granting or changing access.
+
+Apply `20261124032551_delegated_client_oversight.sql` after the personal-task and
+client-permissions migration, before deploying this code. Both grants default to
+false, and changes are recorded in the existing staff permission audit table.
+Existing client, case, and assignment records are not modified.
+
 Next middleware checks feature APIs against the current active staff role and
 saved policy. Bootstrap normalizes unavailable remembered views and omits locked
 feature packets. The middleware-exempt annual endpoint checks access itself on

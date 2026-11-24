@@ -163,6 +163,7 @@ test("Structure edits the last active chart without exposing scenario controls o
       older,{id:"2",name:"Company structure",nodes:[]}
     ]}));
     x.mount();
+    assert.equal(x.host.querySelector(".structure-chart-head h4").textContent,"Team Dewa Structure");
     assert.equal(x.host.querySelector('[data-structure-plan], [data-structure-form="name"], [data-structure-action="new"], [data-structure-action="copy"], [data-structure-action="delete-plan"]'),null);
     assert.doesNotMatch(x.host.textContent,/Archived PIC/);
     x.submit({label:"Managing Partner", pic:"a"});
@@ -465,7 +466,12 @@ test("the Current split report prints the chart followed by all saved PIC confli
     ];
     const drafts = {wrong:{nextTaxPic:"Dewa",nextAccPic:"Dewa"},aligned:{nextTaxPic:"Future Lead"}};
     const editor = x.mount("manager",() => true,clients,() => drafts);
+    const disclosure = x.host.querySelector(".structure-load-disclosure");
+    assert.equal(disclosure.open,true);
+    disclosure.querySelector("summary").click();
+    assert.equal(disclosure.open,false);
     x.host.querySelector('[data-structure-section="split"]').click();
+    assert.equal(x.host.querySelector(".structure-load-disclosure").open,false);
     const select = (field:string,value:string) => {
       const control = x.host.querySelector(`[data-structure-split="${field}"]`);
       control.value = value;

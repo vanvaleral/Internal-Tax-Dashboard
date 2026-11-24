@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createOperationalAnnouncement } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { canReceiveStaffAccessNotifications } from "@/lib/feature-access";
 
 async function currentProfile() {
   const supabase = await createClient();
@@ -13,14 +15,15 @@ async function currentProfile() {
   return { user, profile, supabase };
 }
 
-function mapAnnouncement(row: any) {
+function mapAnnouncement(row: any, sender: string) {
   return {
     id: row.announcements?.id,
     title: row.announcements?.title,
     message: row.announcements?.message,
-    audience: row.announcements?.audience,
+    sourceType: row.announcements?.source_type || null,
+    audience: row.announcements?.source_type === "staff_directory" ? "leadership" : row.announcements?.audience,
     createdAt: row.announcements?.created_at,
-    sender: row.announcements?.staff_profiles?.display_name || row.announcements?.staff_profiles?.full_name || "Management",
+    sender,
     readAt: row.read_at,
     deletedAt: row.deleted_at
   };
@@ -38,13 +41,28 @@ export async function GET(request: NextRequest) {
   const deletedById = new Map((deletedRows || []).map((row: any) => [row.announcement_id, row.deleted_at]));
   const { data, error } = await current.supabase
     .from("announcement_recipients")
-    .select("read_at, announcements(id, title, message, audience, created_at, staff_profiles!announcements_sender_profile_id_fkey(display_name, full_name))")
+    .select("read_at, announcements(id, title, message, audience, created_at, sender_profile_id, source_type)")
     .eq("staff_profile_id", current.profile.id)
     .order("announcement_id", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const announcements = (data || []).map((row: any) => ({ ...mapAnnouncement(row), deletedAt: deletedById.get(row.announcements?.id) || null }))
-    .filter((item) => item.id && (includeDeleted ? item.deletedAt : !item.deletedAt));
-  return NextResponse.json({ announcements });
+  const rows = (data || []).filter((row: any) => row.announcements?.id &&
+    deletedById.has(row.announcements.id) === includeDeleted &&
+    (row.announcements.source_type !== "staff_directory" || canReceiveStaffAccessNotifications(current.profile.role)));
+  // Staff profile RLS is intentionally private. Resolve only the senders of
+  // notifications the authenticated recipient was allowed to read.
+  const senderNames = new Map([[current.profile.id,current.profile.display_name || current.profile.full_name]]);
+  const senderIds = [...new Set(rows.map((row: any) => row.announcements.sender_profile_id)
+    .filter(id => id && id !== current.profile.id))];
+  const admin = senderIds.length ? createAdminClient() : null;
+  if (admin) for (let offset = 0; offset < senderIds.length; offset += 100) {
+    const result = await admin.from("staff_profiles").select("id, display_name, full_name").in("id",senderIds.slice(offset,offset+100));
+    if (!result.error) for (const profile of result.data || []) senderNames.set(profile.id,profile.display_name || profile.full_name);
+  }
+  const announcements = rows.map((row: any) => ({
+    ...mapAnnouncement(row, senderNames.get(row.announcements.sender_profile_id) || (row.announcements.sender_profile_id ? "Unknown sender" : "System")),
+    deletedAt: deletedById.get(row.announcements.id) || null
+  }));
+  return NextResponse.json({ announcements },{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request: Request) {

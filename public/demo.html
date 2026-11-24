@@ -1732,6 +1732,9 @@
     .case-filter-result strong { color:var(--ink); }
     .workspace-cases .toolbar.case-sheet-tools { flex-wrap:wrap; }
     .case-external-dialog { width:min(440px,calc(100% - 24px)); max-height:calc(100svh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); }
+    .client-trash-dialog [role="status"] { min-height:1.4em; }
+    .staff-role-controls { display:flex; align-items:center; flex-wrap:nowrap; gap:6px; }
+    .staff-role-controls > button { flex:none; }
     .case-external-dialog:modal { overscroll-behavior:contain; }
     .case-external-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
     .case-external-dialog form, .case-external-dialog label { display:grid; gap:9px; }
@@ -4083,6 +4086,7 @@
   <script src="my-work-reorder.js"></script>
   <link rel="stylesheet" href="feature-access.css" />
   <script src="feature-access.js"></script>
+  <script src="workspace-language.js"></script>
   <link rel="stylesheet" href="client-engagement.css" />
   <script src="client-engagement.js"></script>
   <script src="annual-sheet-dashboard.js"></script>
@@ -4264,12 +4268,71 @@
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
     const canReassignCasePic = () => ["leader", "supervisor", "partner"].includes(String(state.role || "").toLowerCase());
     const canReviewClientDuplicates = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
+    const canManageClientTrash = () => !IS_OFFLINE_DEMO && ["supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
+    const clientTrash = { status: "idle", rows: [], message: "" };
     const canImportClientMaster = () => bootstrapProfile.profile.client_import_allowed ?? canReviewClientDuplicates();
     const canExportClientMaster = () => bootstrapProfile.profile.client_export_allowed ?? hasLeadershipAccess();
     const staffClientPermission = (staff, action) => {
       const allowed = staff[`client_${action}_allowed`];
       return `<select class="field" data-staff-client-${action}="${escapeAttr(staff.id)}" aria-label="Client ${action} permission for ${escapeAttr(staff.display_name || staff.full_name)}">${[["default","Role default"],["allow","Allow"],["block","Block"]].map(([value,label]) => `<option value="${value}" ${value === (allowed == null ? "default" : allowed ? "allow" : "block") ? "selected" : ""}>${label}</option>`).join("")}</select>`;
     };
+    function openStaffClientPermissions(id) {
+      const staff = staffDirectory.find(person => person.id === id);
+      if (!staff || !window.WorkspaceFeatures.manager() || document.querySelector(".staff-permission-dialog")) return;
+      const dialog = document.createElement("dialog");
+      dialog.className = "case-external-dialog staff-permission-dialog";
+      dialog.setAttribute("aria-labelledby", "staff-permission-title");
+      dialog.innerHTML = safeHtml(`<form>
+        <h3 id="staff-permission-title">Individual access</h3>
+        <p class="subline">${escapeHtml(staff.display_name || staff.full_name)}</p>
+        ${staff.role === "staff" ? `<fieldset><legend>Read-only oversight</legend>
+          <label><input type="checkbox" name="allClients" ${staff.client_overview_allowed ? "checked" : ""}> View all clients</label>
+          <label><input type="checkbox" name="allAllocation" ${staff.allocation_overview_allowed ? "checked" : ""}> View all Allocation</label>
+          <p class="subline">Shows client names and PIC assignments, without fees or editing rights. Maintenance blocks still apply.</p></fieldset>` : ""}
+        <label>Import clients ${staffClientPermission(staff, "import")}</label>
+        <label>Export clients ${staffClientPermission(staff, "export")}</label>
+        <p class="subline" role="status"></p>
+        <div class="inline-controls"><button class="ghost-btn" type="button" autofocus>Cancel</button><button class="solid-btn" type="submit">Save permissions</button></div>
+      </form>`);
+      const form = dialog.querySelector("form"), cancel = form.querySelector('[type="button"]');
+      const save = form.querySelector('[type="submit"]'), status = form.querySelector('[role="status"]');
+      cancel.addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close", () => dialog.remove(), { once: true });
+      dialog.addEventListener("cancel", event => { if (save.disabled) event.preventDefault(); });
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (save.disabled) return;
+        const permission = action => {
+          const value = form.querySelector(`[data-staff-client-${action}]`).value;
+          return value === "allow" ? true : value === "block" ? false : null;
+        };
+        const payload = { clientImportAllowed: permission("import"), clientExportAllowed: permission("export") };
+        if (staff.role === "staff") {
+          payload.clientOverviewAllowed = form.elements.allClients.checked;
+          payload.allocationOverviewAllowed = form.elements.allAllocation.checked;
+        }
+        if (payload.clientImportAllowed === (staff.client_import_allowed ?? null) && payload.clientExportAllowed === (staff.client_export_allowed ?? null)
+          && (staff.role !== "staff" || payload.clientOverviewAllowed === Boolean(staff.client_overview_allowed)
+            && payload.allocationOverviewAllowed === Boolean(staff.allocation_overview_allowed))) return dialog.close();
+        const controls = Array.from(form.querySelectorAll("button, select, input"));
+        controls.forEach(control => { control.disabled = true; });
+        status.dataset.error = "false";
+        status.textContent = "Saving permissions...";
+        try {
+          const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.staff?.id !== id) throw new Error(result.error || "Permissions could not be saved.");
+          dialog.close();
+          acceptStaffAccessChange(result.staff);
+        } catch (error) {
+          status.dataset.error = "true";
+          status.textContent = error.message;
+          controls.forEach(control => { control.disabled = false; });
+        }
+      });
+      document.body.append(dialog);
+      dialog.showModal();
+    }
     const CLIENT_TEAMS = ["Tax Team", "Accounting Team", "Tax + Accounting"];
     const CLIENT_STATUSES = ["Active", "Onboarding", "Paused", "Inactive"];
     const SERVICE_PACKAGES = ["Monthly Compliance", "Monthly + Annual", "Annual Only", "Case Support"];
@@ -4574,11 +4637,11 @@
       }
     };
 
-    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"].includes(state.clientManagementTab)) {
+    if (!["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts", "deleted"].includes(state.clientManagementTab)) {
       state.clientManagementTab = "active";
     }
     state.role = String(bootstrapProfile.profile.role || "staff").toLowerCase();
-    window.WorkspaceFeatures.init({ settings: bootstrapProfile.featureAccess, role: state.role, offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), roleChanged: role => { state.role = String(role || "staff").toLowerCase(); }, changed: () => rerender() });
+    window.WorkspaceFeatures.init({ settings: bootstrapProfile.featureAccess, role: state.role, profile: bootstrapProfile.profile, offline: IS_OFFLINE_DEMO, fetch: (...args) => appFetch(...args), roleChanged: role => { state.role = String(role || "staff").toLowerCase(); }, changed: () => rerender() });
     if (!IS_OFFLINE_DEMO && bootstrapProfile.view) state.currentView = bootstrapProfile.view;
     if (["announcement-view", "my-work-view"].includes(pageParams.get("view"))) {
       state.currentView = pageParams.get("view");
@@ -4717,6 +4780,8 @@
       }, 150);
     }
 
+    const uiLabel = message => window.WorkspaceLanguage?.t(message) ?? message;
+
     function currency(amount) {
       return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -4763,6 +4828,7 @@
           "on-demand": ["Clients / On Demand Clients", "Clients Workspace", "Annual and occasional work without a recurring contract."],
           "free-of-charge": ["Clients / Free of Charge", "Clients Workspace", "Recurring monthly work without a fee; separate from the paid client portfolio."],
           inactive: ["Clients / Inactive Clients", "Clients Workspace", "Inactive clients are retained for history but excluded from the active operating list."],
+          deleted: ["Clients / Deleted Clients", "Clients Workspace", "Restore deleted Client Master records without losing linked work."],
           proposal: ["Clients / Proposal Clients", "Clients Workspace", "Proposal and quotation records stay separate from active operational clients until conversion."],
           contracts: ["Clients / Contract Monitoring", "Clients Workspace", "Compact contract visibility for renewals, fee terms, and client-commercial control."]
         },
@@ -6421,6 +6487,11 @@
         <div class="appearance-settings-backdrop" data-close-appearance-settings="yes"></div>
         <section class="appearance-settings" role="dialog" aria-modal="true" aria-label="Appearance settings">
           <div class="appearance-settings-head"><div><div class="eyebrow">Personal settings</div><strong>Appearance</strong></div><button class="ghost-btn" data-close-appearance-settings="yes">Close</button></div>
+          <div class="eyebrow" id="workspace-language-label" style="margin-bottom:8px;">Language</div>
+          <div class="appearance-theme-options" role="group" aria-labelledby="workspace-language-label">
+            ${[["en","EN"],["id","ID"]].map(([language,label]) => `<button type="button" class="appearance-choice ${(window.WorkspaceLanguage?.get() || "en") === language ? "active" : ""}" data-workspace-language="${language}" aria-pressed="${(window.WorkspaceLanguage?.get() || "en") === language}">${label}</button>`).join("")}
+          </div>
+          <div style="margin-top:16px;"></div>
           <div class="eyebrow" style="margin-bottom:8px;">Theme</div>
           <div class="appearance-theme-options"><button class="appearance-choice ${state.appearance.theme === "light" ? "active" : ""}" data-set-theme="light">Light</button><button class="appearance-choice ${state.appearance.theme === "dark" ? "active" : ""}" data-set-theme="dark">Dark</button></div>
           <div class="eyebrow" style="margin:16px 0 8px;">Accent color</div>
@@ -6654,7 +6725,7 @@
     }
 
     function announcementAudienceLabel(audience) {
-      return ({ all: "All employees", tax: "Tax team", accounting: "Accounting team" })[audience] || "Selected employees";
+      return ({ all: "All employees", tax: "Tax team", accounting: "Accounting team", leadership: "Leaders and above" })[audience] || "Selected employees";
     }
 
     function announcementRecipients(announcement) {
@@ -6699,8 +6770,8 @@
             ${items.map((item) => {
               const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
               return `<button class="announcement-item ${unreadItem ? "unread" : ""}" data-read-announcement="${item.id}">
-                <div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
-                <p>${escapeHtml(item.message)}</p>
+                <div class="announcement-item-head"><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : ``}</div>
+                <p data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</p>
                 <div class="announcement-meta">${escapeHtml(item.sender)} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
               </button>`;
             }).join("") || `<div class="empty-state">No notifications for you yet.</div>`}
@@ -6722,8 +6793,8 @@
               ${items.map((item) => {
                 const unreadItem = item.readAt ? false : !(item.readBy || []).includes(state.selectedPic);
                 return `<button class="announcement-item ${unreadItem ? "unread" : ""}" data-read-announcement="${item.id}">
-                  <div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : `<span class="pill neutral">Read</span>`}</div>
-                  <p>${escapeHtml(item.message)}</p>
+                  <div class="announcement-item-head"><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong>${unreadItem ? `<span class="pill accent">New</span>` : `<span class="pill neutral">Read</span>`}</div>
+                  <p data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</p>
                   <div class="announcement-meta">${escapeHtml(item.sender)} · ${announcementAudienceLabel(item.audience)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div>
                 </button>`;
               }).join("") || `<div class="empty-state">No notifications for you yet.</div>`}
@@ -6986,7 +7057,7 @@
                         <td><input class="field" data-staff-display-name="${staff.id}" value="${escapeAttr(staff.display_name || staff.full_name || "")}" /></td>
                         <td><input class="field" data-staff-title="${staff.id}" value="${escapeAttr(staff.employment_title || "")}" placeholder="Position" /></td>
                         <td><select class="field" data-staff-team="${staff.id}"><option value="Tax Team" ${staff.team_division === "Tax Team" ? "selected" : ""}>Tax Team</option><option value="Accounting Team" ${staff.team_division === "Accounting Team" ? "selected" : ""}>Accounting Team</option></select></td>
-                        <td><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner", ...(staff.role === "admin" ? ["admin"] : [])].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role === "staff" ? "Associate" : role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select><details><summary>Client permissions</summary><label>Import ${staffClientPermission(staff,"import")}</label><label>Export ${staffClientPermission(staff,"export")}</label></details></td>
+                        <td><div class="staff-role-controls"><select class="field" data-staff-role="${staff.id}">${["staff", "leader", "supervisor", "partner", ...(staff.role === "admin" ? ["admin"] : [])].map((role) => `<option value="${role}" ${staff.role === role ? "selected" : ""}>${role === "staff" ? "Associate" : role[0].toUpperCase() + role.slice(1)}</option>`).join("")}</select><button class="client-action-icon" type="button" data-edit-staff-permissions="${escapeAttr(staff.id)}" title="Edit client permissions" aria-label="Edit client permissions for ${escapeAttr(staff.display_name || staff.full_name)}">&#9998;</button></div></td>
                         <td><span class="pill ${staff.auth_user_id ? "accent" : "neutral"}">${staff.auth_user_id ? "Registered" : "Pending"}</span></td>
                         <td><div class="inline-controls"><button class="tiny-btn" data-save-staff="${staff.id}">Save</button>${!staff.auth_user_id && (!["partner", "admin"].includes(staff.role) || ["partner", "admin"].includes(state.role)) ? `<button class="ghost-btn" data-regenerate-staff-claim="${staff.id}" aria-label="Regenerate claim code for ${escapeAttr(staff.display_name || staff.full_name)}">Regenerate code</button>` : ""}<button class="danger-icon-btn" data-archive-staff="${staff.id}" aria-label="Archive ${escapeAttr(staff.display_name || staff.full_name)}" title="Archive staff profile">${deleteIcon()}</button></div></td>
                       </tr>
@@ -7075,7 +7146,7 @@
               <div class="panel">
                 <div class="section-title"><div><h3>Recent Broadcasts</h3><p>Employees receive notices in their inbox when they open the app.</p></div></div>
                 <div class="announcement-list">
-                  ${state.announcements.slice(0, 6).map((item) => `<div class="announcement-item"><div class="announcement-item-head"><strong>${escapeHtml(item.title)}</strong><span class="pill neutral">${announcementAudienceLabel(item.audience)}</span></div><p>${escapeHtml(item.message)}</p><div class="announcement-meta">${escapeHtml(item.sender)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div></div>`).join("") || `<div class="empty-state">No announcements sent yet.</div>`}
+                  ${state.announcements.slice(0, 6).map((item) => `<div class="announcement-item"><div class="announcement-item-head"><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><span class="pill neutral">${announcementAudienceLabel(item.audience)}</span></div><p data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</p><div class="announcement-meta">${escapeHtml(item.sender)} · ${new Date(item.createdAt).toLocaleString("id-ID")}</div></div>`).join("") || `<div class="empty-state">No announcements sent yet.</div>`}
                 </div>
               </div>
             </section>
@@ -7317,7 +7388,97 @@
       });
     }
 
+    function renderDeletedClientList() {
+      const busy = clientTrash.status === "loading" || clientTrash.status === "idle";
+      return `<section class="panel client-register-panel">
+        <div class="section-title"><div><h3>Deleted Clients</h3><p>Separate from Inactive Clients. Restoring returns the client to its previous status and keeps its linked work.</p></div>
+          <button type="button" class="ghost-btn" data-refresh-client-trash ${busy ? "disabled" : ""}>Refresh</button></div>
+        <div class="subline" role="status">${busy ? "Loading Deleted Clients..." : escapeHtml(clientTrash.message)}</div>
+        ${clientTrash.rows.length ? `<div class="table-wrap" tabindex="0" aria-label="Deleted client list"><table>
+          <thead><tr><th scope="col">Code</th><th scope="col">Client</th><th scope="col">Deleted</th><th scope="col">Action</th></tr></thead>
+          <tbody>${clientTrash.rows.map(row => `<tr><td>${escapeHtml(row.client_code)}</td><td>${escapeHtml(row.legal_name)}</td>
+            <td>${escapeHtml(new Date(row.updated_at).toLocaleDateString("id-ID"))}</td>
+            <td><button type="button" class="ghost-btn" aria-label="Restore ${escapeAttr(row.legal_name)}" data-restore-client-master="${escapeAttr(row.id)}" ${busy ? "disabled" : ""}>Restore</button></td></tr>`).join("")}</tbody>
+        </table></div>` : !busy && clientTrash.status === "ready" ? '<div class="empty-state">No deleted clients.</div>' : ""}
+      </section>`;
+    }
+
+    async function loadDeletedClients() {
+      if (!canManageClientTrash() || clientTrash.status === "loading") return;
+      clientTrash.status = "loading";
+      try {
+        const response = await appFetch("/api/clients/trash", { cache: "no-store" });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(result.data)) throw new Error(result.error || "Deleted Clients could not be loaded.");
+        clientTrash.rows = result.data;
+        clientTrash.status = "ready";
+        clientTrash.message = "";
+      } catch (error) {
+        clientTrash.status = "error";
+        clientTrash.message = error.message;
+      }
+      if (state.currentView === "client-management-view" && state.clientManagementTab === "deleted") renderClientManagement();
+    }
+
+    function openClientTrashDialog(action, id, name, updatedAt) {
+      if (!canManageClientTrash() || document.querySelector(".client-trash-dialog")) return;
+      const deleting = action === "delete", verb = deleting ? "Delete" : "Restore";
+      const dialog = document.createElement("dialog");
+      dialog.className = "case-external-dialog client-trash-dialog";
+      dialog.setAttribute("aria-labelledby", "client-trash-title");
+      dialog.setAttribute("aria-describedby", "client-trash-description");
+      dialog.innerHTML = safeHtml(`<form>
+        <h3 id="client-trash-title">${verb} client?</h3>
+        <p id="client-trash-description"><strong>${escapeHtml(name)}</strong> ${deleting ? "will move to Deleted Clients, not Inactive Clients. Linked cases, compliance work, and PIC history are kept. Unsaved edits in Client Setup will be discarded." : "will return to its previous status and engagement category."}</p>
+        <div class="subline" role="status"></div>
+        <div class="inline-controls">
+          <button type="button" class="ghost-btn" autofocus>Cancel</button>
+          <button type="submit" class="solid-btn ${deleting ? "danger" : ""}">${verb} Client</button>
+        </div></form>`);
+      const form = dialog.querySelector("form");
+      const cancel = form.querySelector('[type="button"]'), submit = form.querySelector('[type="submit"]'), status = form.querySelector('[role="status"]');
+      cancel.addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close", () => dialog.remove(), { once: true });
+      dialog.addEventListener("cancel", event => { if (submit.disabled) event.preventDefault(); });
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (submit.disabled) return;
+        submit.disabled = cancel.disabled = true;
+        status.textContent = deleting ? "Deleting client..." : "Restoring client...";
+        status.dataset.error = "false";
+        try {
+          const response = await appFetch("/api/clients/trash", {
+            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, id, updatedAt })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.data?.id !== id) throw new Error(result.error || "The change could not be confirmed.");
+        } catch (error) {
+          status.textContent = error.message;
+          status.dataset.error = "true";
+          submit.disabled = cancel.disabled = false;
+          return;
+        }
+        dialog.close();
+        if (deleting) {
+          clientMasterClients = clientMasterClients.filter(client => client.databaseId !== id);
+          if (!state.activeMonthlyPeriod || !state.monthlyProgress[state.activeMonthlyPeriod]) clients = clients.filter(client => client.databaseId !== id);
+          state.clientEditor = null;
+          clientTrash.status = "idle";
+          commitUi("replace");
+        } else {
+          clientTrash.rows = clientTrash.rows.filter(client => client.id !== id);
+          clientTrash.message = `${name} was restored.`;
+          renderClientManagement();
+        }
+        document.querySelector(`[data-client-tab="${state.clientManagementTab}"]`)?.focus({ preventScroll: true });
+        void loadSharedClients(true);
+      });
+      document.body.append(dialog);
+      dialog.showModal();
+    }
+
     function renderClientManagement(rootOverride = null, { resultsOnly = false, resetScroll = false } = {}) {
+      if (renderStaffOversight("client-management-view")) return;
       const root = rootOverride || document.getElementById("client-management-view");
       if (!IS_OFFLINE_DEMO && !clientsLoadedFromDatabase) {
         root.innerHTML = safeHtml('<section class="panel"><p role="status">Loading Client Master...</p><button class="ghost-btn" data-retry-client-list>Retry client list</button></section>');
@@ -7341,6 +7502,10 @@
       const viewingInactiveClients = state.clientManagementTab === "inactive";
       const viewingOnDemandClients = state.clientManagementTab === "on-demand";
       const viewingFreeClients = state.clientManagementTab === "free-of-charge";
+      const viewingDeletedClients = state.clientManagementTab === "deleted" && canManageClientTrash();
+      if (viewingDeletedClients && clientTrash.status === "idle") queueMicrotask(() => {
+        if (state.clientManagementTab === "deleted" && clientTrash.status === "idle") void loadDeletedClients();
+      });
       const clientTabRecords = managedClients.filter(client => viewingInactiveClients ? !isActiveClientRecord(client) : isActiveClientRecord(client) && (viewingOnDemandClients ? client.engagementType === "on_demand" : viewingFreeClients ? client.engagementType === "free_of_charge" : !["on_demand","free_of_charge"].includes(client.engagementType)));
       const picFilterOptions = [...new Set(clientTabRecords.flatMap((client) => [client.taxPic, client.accountingPic]).filter(Boolean))].sort(compareText);
       if (state.clientPicFilter !== "all" && !picFilterOptions.includes(state.clientPicFilter)) state.clientPicFilter = "all";
@@ -7454,8 +7619,10 @@
                 ${!isMobileWorkspace ? `<button class="${state.clientManagementTab === "inactive" ? "solid-btn" : "ghost-btn"}" data-client-tab="inactive">Inactive Clients</button>
                 <button class="${state.clientManagementTab === "proposal" ? "solid-btn" : "ghost-btn"}" data-client-tab="proposal">Proposal / Quotation</button>
                 <button class="${state.clientManagementTab === "contracts" ? "solid-btn" : "ghost-btn"}" data-client-tab="contracts">Contract Monitoring</button>` : ""}
+                ${canManageClientTrash() ? `<button class="${viewingDeletedClients ? "solid-btn" : "ghost-btn"}" data-client-tab="deleted">Deleted Clients</button>` : ""}
               </div>
               <div class="toolbar-right">
+                ${window.WorkspaceFeatures.oversight("clients") ? '<button type="button" class="ghost-btn" data-oversight-all>All Clients</button>' : ""}
                 ${!isMobileWorkspace && canReviewClientDuplicates() ? `<button class="ghost-btn" data-review-client-duplicates="yes">Review Duplicates</button>` : ""}
                 ${!isMobileWorkspace && canImportClientMaster() ? `<button class="ghost-btn" data-import-clients="yes">Import</button>` : ""}
                 ${!isMobileWorkspace && canExportClientMaster() ? `<button class="ghost-btn" data-export-clients="yes">Export Excel</button>` : ""}
@@ -7463,6 +7630,7 @@
             </div>
           </section>
 
+          ${viewingDeletedClients ? renderDeletedClientList() : ""}
           ${["active", "on-demand", "free-of-charge", "inactive"].includes(state.clientManagementTab) ? `
             <section class="client-master-layout">
             <div class="panel client-register-panel">
@@ -7803,7 +7971,7 @@
               </div>
             </section>
           ` : ``}
-          <button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>
+          ${viewingDeletedClients ? "" : `<button class="client-fab" aria-label="${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}" ${state.clientManagementTab === "proposal" ? "data-new-proposal=\"yes\"" : "data-new-client=\"yes\""}><span class="client-fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="client-fab-label" aria-hidden="true">${state.clientManagementTab === "proposal" ? "New Proposal" : "New Client"}</span></button>`}
         </div>
       `);
       enhanceEngagement();
@@ -9021,13 +9189,13 @@
             <div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>No.</th><th>Client</th><th>Role</th><th>Status</th></tr></thead><tbody>
               ${assignedClients.map((client, index) => `<tr><td>${index + 1}</td><td><strong>${displayClientName(client)}</strong><div class="subline">${client.clientCode}${client.engagementType==='free_of_charge'?' · Free of Charge':''}</div></td><td>${assignmentRole(client)}</td><td>${client.clientStatus}</td></tr>`).join("") || `<tr><td colspan="4"><div class="empty-state">No clients are currently assigned to this profile.</div></td></tr>`}
             </tbody></table></div></div>
-            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong>${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
+            <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><div class="subline" data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
         </div>`);
     }
 
     function exportMyWorkArchivePeriod(period) {
-      if (scopedWorkspaceReads && !myWorkFullHistory && !myWorkPeriodsLoaded.has(period)) { window.alert("Load this archive month before exporting it."); return; }
+      if (scopedWorkspaceReads && !myWorkFullHistory && !myWorkPeriodsLoaded.has(period)) { window.alert(uiLabel("Load this archive month before exporting it.")); return; }
       const tasks = state.myWork
         .filter((task) => {
           if (!task.done || !task.completedAt) return false;
@@ -9263,6 +9431,9 @@
       });
       window.WorkspaceFeatures.setRole(state.role);
       window.WorkspaceFeatures.chrome(state.currentView);
+      const allocationNav = document.querySelector('[data-view="allocation-view"]');
+      if (window.WorkspaceFeatures.oversight("allocation")) allocationNav?.removeAttribute("data-mobile-hidden");
+      else allocationNav?.setAttribute("data-mobile-hidden", "yes");
       const mobileUserName = document.getElementById("mobile-user-name");
       const mobileUserRole = document.getElementById("mobile-user-role");
       if (mobileUserName) mobileUserName.textContent = state.selectedPic;
@@ -9453,6 +9624,7 @@
       }, { useDefaults: false });
       client.id = /^CL-\d+$/i.test(code) ? `client-${code.slice(3)}` : `client-db-${row.id}`;
       client.databaseId = row.id;
+      client.updatedAt = row.updated_at || "";
       client.engagementType = ["on_demand","free_of_charge"].includes(row.engagement_type) ? row.engagement_type : "contract";
       client.createdAt = row.created_at || "";
       client.taxPicProfileId = row.tax_pic_profile_id || "";
@@ -9631,6 +9803,8 @@
       }
       const saved = result.data?.[0];
       if (saved?.id) client.databaseId = saved.id;
+      if (saved?.updated_at) client.updatedAt = saved.updated_at;
+      if (saved?.updated_at && state.clientEditor?.id === client.id) state.clientEditor.trashVersion = saved.updated_at;
       clearSyncFailure(`Client ${client.name || client.clientCode}`);
       return saved;
     }
@@ -11380,6 +11554,7 @@
       const selectedObligations = isProposal ? record.obligations : OBLIGATIONS.filter((key) => record.obligations[key].status !== "na");
       const title = isProposal ? "Proposal / Quotation" : "Client Setup";
       const saveAttribute = isProposal ? `data-save-proposal="${record.id}"` : "data-save-client=\"yes\"";
+      editor.trashVersion = record.updatedAt;
       root.innerHTML = safeHtml(`
         <div class="client-editor-backdrop" role="presentation">
           <section class="client-editor-modal" role="dialog" aria-modal="true" aria-label="${title}" data-client-editor-id="${escapeAttr(record.id)}" aria-busy="false">
@@ -11401,7 +11576,7 @@
               </section>
               <section class="client-form-section"><div class="client-form-section-title"><strong>Fee & Note</strong><span>Optional commercial context</span></div><div class="detail-grid-2"><div class="client-field"><label for="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}">Monthly Fee</label><input id="${isProposal ? "proposal-monthly-fee" : "client-form-monthly-fee"}" class="field" type="number" value="${isProposal ? record.monthlyFee || 0 : record.serviceFee || 0}" /></div><div class="client-field"><label for="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}">Annual Fee</label><input id="${isProposal ? "proposal-annual-fee" : "client-form-annual-fee"}" class="field" type="number" value="${record.annualFee || 0}" /></div></div><div class="client-field"><label for="${isProposal ? "proposal-notes" : "client-form-notes"}">Note</label><textarea id="${isProposal ? "proposal-notes" : "client-form-notes"}" class="inline-textarea">${record.notes || ""}</textarea></div></section>
             </div>
-            <div class="client-editor-actions"><span class="client-editor-save-status" data-client-editor-save-status role="status" aria-live="polite" aria-atomic="true"></span><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
+            <div class="client-editor-actions">${!isProposal && canManageClientTrash() && record.databaseId && editor.trashVersion ? '<button type="button" class="ghost-btn danger" data-delete-client-master>Delete Client</button>' : ""}<span class="client-editor-save-status" data-client-editor-save-status role="status" aria-live="polite" aria-atomic="true"></span><button class="ghost-btn" data-close-client-editor="yes">Cancel</button><button class="solid-btn" ${saveAttribute}>Save ${isProposal ? "Proposal" : "Client"}</button></div>
           </section>
         </div>`);
     }
@@ -11789,7 +11964,7 @@
         operationsTab: ["active", "history", "claim", "archive"],
         annualTeam: ["accounting", "tax"],
         casesTab: ["himbauan", "pemeriksaan", "register", "psa"],
-        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts"],
+        clientManagementTab: ["active", "on-demand", "free-of-charge", "inactive", "proposal", "contracts", ...(canManageClientTrash() ? ["deleted"] : [])],
         managementTab: ["overview", "trends", "portfolio", "workload", "features", "structure", "recognition", "report", "announcements"]
       };
       // Repair navigation only, never discard preferences, drafts or confirmed business data.
@@ -11802,14 +11977,76 @@
 
     function normalizeMobileWorkspaceView() {
       normalizeWorkspaceNavigation();
-      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)) {
+      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)
+          && !(state.currentView === "allocation-view" && window.WorkspaceFeatures.oversight("allocation"))) {
         state.currentView = "my-work-view";
         state.clientManagementTab = "active";
       }
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
     }
 
+    let oversightOwnClients = false;
+    function renderStaffOversight(view) {
+      const scope = view === "allocation-view" ? "allocation" : view === "client-management-view" ? "clients" : null;
+      if (!scope || !window.WorkspaceFeatures.oversight(scope) || (scope === "clients" && oversightOwnClients && window.WorkspaceFeatures.can("clients"))) return false;
+      const root = document.getElementById(view);
+      if (root.querySelector("[data-oversight-panel]")) return true;
+      root.innerHTML = safeHtml(`<section class="panel" data-oversight-panel>
+        <div class="section-title"><div><h3>${scope === "allocation" ? "All Allocation" : "All Clients"}</h3><p>Read-only access. Fees and private client details are not shown.</p></div>
+          <div class="inline-controls">${scope === "clients" && window.WorkspaceFeatures.can("clients") ? '<button type="button" class="ghost-btn" data-oversight-own>My Clients</button>' : ""}
+          <button type="button" class="ghost-btn" data-oversight-refresh>Refresh</button></div></div>
+        <div class="toolbar"><input class="filter-input" type="search" aria-label="Search clients" placeholder="Search client, code, or PIC..." data-oversight-search></div>
+        <p role="status" class="subline" data-oversight-status></p>
+        <div class="table-wrap"><table><thead><tr><th scope="col">Code</th><th scope="col">Form</th><th scope="col">Client Name</th><th scope="col">Accounting PIC</th><th scope="col">Tax PIC</th><th scope="col">Status</th></tr></thead><tbody></tbody></table></div>
+        <div class="inline-controls"><button type="button" class="ghost-btn" data-oversight-prev>Previous</button><button type="button" class="ghost-btn" data-oversight-next>Next</button></div>
+      </section>`);
+      const panel = root.querySelector("[data-oversight-panel]");
+      const search = panel.querySelector("[data-oversight-search]"), status = panel.querySelector("[data-oversight-status]");
+      const tbody = panel.querySelector("tbody"), refresh = panel.querySelector("[data-oversight-refresh]");
+      const prev = panel.querySelector("[data-oversight-prev]"), next = panel.querySelector("[data-oversight-next]");
+      let rows = [], page = 0;
+      const draw = () => {
+        const keyword = search.value.trim().toLowerCase();
+        const matches = rows.filter(row => [row.code, row.name, row.form, row.accountingPic, row.taxPic, row.status].join(" ").toLowerCase().includes(keyword));
+        const from = page * 50;
+        const show = matches.slice(from, from + 50);
+        tbody.innerHTML = safeHtml(show.map(row => `<tr><td>${escapeHtml(row.code || "")}</td><td>${escapeHtml(row.form || "-")}</td><td>${escapeHtml(row.name || "")}</td><td>${escapeHtml(row.accountingPic || "-")}</td><td>${escapeHtml(row.taxPic || "-")}</td><td>${escapeHtml(row.status || "")}</td></tr>`).join(""));
+        status.textContent = matches.length ? `${from + 1}-${from + show.length} / ${matches.length}` : "No matching clients.";
+        prev.disabled = !page;
+        next.disabled = from + show.length >= matches.length;
+      };
+      async function load() {
+        refresh.disabled = search.disabled = true;
+        prev.disabled = next.disabled = true;
+        rows = [];
+        page = 0;
+        tbody.replaceChildren();
+        status.textContent = "Loading oversight...";
+        try {
+          const response = await appFetch(`/api/staff-oversight?scope=${scope}`, { cache: "no-store" });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !Array.isArray(result.rows)) throw new Error(result.error || "The read-only overview could not be loaded. Try again.");
+          rows = result.rows;
+          draw();
+        } catch (error) { status.textContent = error.message; }
+        finally { refresh.disabled = search.disabled = false; }
+      }
+      search.addEventListener("input", () => { page = 0; draw(); });
+      prev.addEventListener("click", () => { if (page > 0) page--; draw(); });
+      next.addEventListener("click", () => { page++; draw(); });
+      refresh.addEventListener("click", load);
+      panel.querySelector("[data-oversight-own]")?.addEventListener("click", () => {
+        oversightOwnClients = true;
+        renderActiveView();
+        if (!clientsLoadedFromDatabase) void loadSharedClients(true);
+        if (!staffDirectoryLoaded) void loadStaffDirectory(true);
+      });
+      void load();
+      return true;
+    }
+
     function renderActiveView() {
+      if (renderStaffOversight(state.currentView)) return;
       if (state.currentView === "allocation-view" && !allocationSheet && !allocationSheetError &&
           window.WorkspaceFeatures.can("allocation")) void ensureAllocationSheet().catch(() => {});
       if (scopedWorkspaceReads && state.currentView === "client-view" && window.WorkspaceFeatures.can("myWork") && !myWorkFullHistory) {
@@ -11846,7 +12083,8 @@
       // Keep supervisor-only views inaccessible even when a staff user follows
       // an old link or clicks an embedded management shortcut.
       viewId = window.WorkspaceFeatures.normalize(viewId);
-      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)) {
+      if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)
+          && !(viewId === "allocation-view" && window.WorkspaceFeatures.oversight("allocation"))) {
         viewId = "my-work-view";
       }
       if (viewId === "client-management-view" && window.matchMedia("(max-width: 900px)").matches) {
@@ -11891,12 +12129,12 @@
 
     async function openMonthlyTaxClaim(client) {
       if (!state.activeMonthlyPeriod || !client?.databaseId) {
-        window.alert("Generate and open a monthly period before creating a tax claim.");
+        window.alert(uiLabel("Generate and open a monthly period before creating a tax claim."));
         return;
       }
       const claimWindow = window.open("", "_blank");
       if (!claimWindow) throw new Error("Allow popups to open the tax claim editor.");
-      claimWindow.document.write(`<!doctype html><title>Preparing Tax Claim</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#edf7fa;color:#17354b;font:600 15px Georgia,serif}.card{padding:24px 30px;border:1px solid #d5e7f0;border-radius:14px;background:white;box-shadow:0 16px 40px rgba(0,61,121,.12)}</style><div class="card">Preparing tax claim...</div>`);
+      claimWindow.document.write(`<!doctype html><html lang="${window.WorkspaceLanguage?.get() || "en"}"><title>${escapeHtml(uiLabel("Preparing Tax Claim"))}</title><style>body{margin:0;display:grid;min-height:100vh;place-items:center;background:#edf7fa;color:#17354b;font:600 15px Georgia,serif}.card{padding:24px 30px;border:1px solid #d5e7f0;border-radius:14px;background:white;box-shadow:0 16px 40px rgba(0,61,121,.12)}</style><div class="card">${escapeHtml(uiLabel("Preparing tax claim..."))}</div></html>`);
       claimWindow.document.close();
       try {
         const response = await appFetch("/api/monthly-claims", {
@@ -12377,7 +12615,7 @@
         } catch (error) {
           console.error("[auth] sign out failed", error);
           logoutTrigger.removeAttribute("disabled");
-          window.alert("Unable to sign out. Please try again.");
+          window.alert(uiLabel("Unable to sign out. Please try again."));
         }
         return;
       }
@@ -12449,13 +12687,13 @@
         if (!task || task.deleting) return;
         if (deleteStep) {
           const index = Number(deleteStep.dataset.deleteMyWorkStep);
-          if (!task.steps?.[index] || !window.confirm("Delete this subtask? Completed case history will be kept.")) return;
+          if (!task.steps?.[index] || !window.confirm(uiLabel("Delete this subtask? Completed case history will be kept."))) return;
           task.steps.splice(index,1);
           commitMyWorkNavigation();
           if (!IS_OFFLINE_DEMO) saveMyWorkTaskToDatabase(task);
           return;
         }
-        if ((!task.canDelete && !IS_OFFLINE_DEMO) || task.pendingSync || !window.confirm("Delete this task? Completed case history will be kept.")) return;
+        if ((!task.canDelete && !IS_OFFLINE_DEMO) || task.pendingSync || !window.confirm(uiLabel("Delete this task? Completed case history will be kept."))) return;
         task.deleting = true;
         myWorkReadWriteRevision++;
         renderMyWorkUpdate();
@@ -12614,7 +12852,7 @@
         const value = document.getElementById("generate-monthly-period")?.value;
         const targetProfileId = document.getElementById("generate-monthly-tax-pic")?.value || "";
         if (!value) {
-          window.alert("Choose the tax month first.");
+          window.alert(uiLabel("Choose the tax month first."));
           return;
         }
         try {
@@ -12727,14 +12965,14 @@
       if (target.closest("[data-add-annual-tax]")) {
         const name = document.getElementById("annual-tax-subject-name")?.value.trim();
         const linkedClientId = document.getElementById("annual-tax-linked-client")?.value || "";
-        if (!name) { window.alert("Enter the SPT subject name first."); return; }
-        if (!bootstrapProfile.profile?.id) { window.alert("Sign in before creating annual tax work."); return; }
+        if (!name) { window.alert(uiLabel("Enter the SPT subject name first.")); return; }
+        if (!bootstrapProfile.profile?.id) { window.alert(uiLabel("Sign in before creating annual tax work.")); return; }
         const linked = activeClientMasterRecords().find(client => client.id === linkedClientId);
         const selectedPicId = document.getElementById("annual-tax-new-pic")?.value || "";
         const selectedPic = taxPicOptions.find(person => person.id === selectedPicId);
         const taxPic = selectedPic ? selectedPic.display_name || selectedPic.full_name : state.teamDivision === "Tax Team" ? state.selectedPic : "";
         const taxPicProfileId = selectedPic?.id || (state.teamDivision === "Tax Team" ? bootstrapProfile.profile.id : null);
-        if (!taxPicProfileId) { window.alert("Assign an active Tax PIC to this SPT subject first."); return; }
+        if (!taxPicProfileId) { window.alert(uiLabel("Assign an active Tax PIC to this SPT subject first.")); return; }
         const annualWorkId = crypto.randomUUID();
         annualTaxRows.unshift({ id: `annual-tax-${annualWorkId}`, annualWorkId, clientId: linkedClientId, clientName: name, groupName: linked?.name || "Independent", taxYear: state.annualPlanYear, reportPic: "", reportPicProfileId: null, taxPic, taxPicProfileId, status: "Pencatatan", previousSpt: false, lifestyleAnalysis: false, assetReview: false, clientMeeting: false, finish: false, meeting: false, spt: false, bayar: false, laporCount: "0", kurangBayar: "", ntpe: "", notes: "", reported: false, paymentAmount: "", paymentDate: "", paymentNtpn: "", changeLog: [] });
         state.annualTeam = "tax";
@@ -12782,7 +13020,7 @@
         const caseId = addHimbauanProgressTrigger.getAttribute("data-add-himbauan-progress");
         const entry = document.getElementById("himbauan-progress-entry")?.value.trim();
         if (!caseId || !entry) {
-          window.alert("Enter a completed progress update first.");
+          window.alert(uiLabel("Enter a completed progress update first."));
           return;
         }
         try {
@@ -12937,11 +13175,11 @@
         const password = document.getElementById("profile-new-password")?.value || "";
         const confirmation = document.getElementById("profile-confirm-password")?.value || "";
         if (password.length < 8) {
-          window.alert("Password must contain at least 8 characters.");
+          window.alert(uiLabel("Password must contain at least 8 characters."));
           return;
         }
         if (password !== confirmation) {
-          window.alert("Password confirmation does not match.");
+          window.alert(uiLabel("Password confirmation does not match."));
           return;
         }
         try {
@@ -12952,7 +13190,7 @@
           }, "Updating password...");
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || "Password update failed.");
-          window.alert("Password updated successfully.");
+          window.alert(uiLabel("Password updated successfully."));
           document.getElementById("profile-new-password").value = "";
           document.getElementById("profile-confirm-password").value = "";
         } catch (error) {
@@ -13112,19 +13350,24 @@
         return;
       }
 
+      if (target.closest("[data-oversight-all]") && window.WorkspaceFeatures.oversight("clients")) {
+        oversightOwnClients = false;
+        renderActiveView();
+        return;
+      }
+      const editStaffPermissions = target.closest("[data-edit-staff-permissions]");
+      if (editStaffPermissions) { openStaffClientPermissions(editStaffPermissions.dataset.editStaffPermissions); return; }
+
       if (saveStaffTrigger || restoreStaffTrigger) {
         const id = (saveStaffTrigger || restoreStaffTrigger).getAttribute(saveStaffTrigger ? "data-save-staff" : "data-restore-staff");
         if (!id) return;
         const readStaffField = (name) => document.querySelector(`[data-staff-${name}="${id}"]`)?.value || "";
-        const readClientPermission = (name) => { const value = readStaffField(`client-${name}`); return value === "allow" ? true : value === "block" ? false : null; };
         const payload = restoreStaffTrigger ? { directoryActive: true } : {
           fullName: readStaffField("full-name"),
           displayName: readStaffField("display-name"),
           employmentTitle: readStaffField("title"),
           teamDivision: readStaffField("team"),
-          role: readStaffField("role"),
-          clientImportAllowed: readClientPermission("import"),
-          clientExportAllowed: readClientPermission("export")
+          role: readStaffField("role")
         };
         try {
           const response = await appFetch(`/api/staff/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) });
@@ -13178,6 +13421,23 @@
         return;
       }
 
+      if (target.closest("[data-delete-client-master]")) {
+        const editor = state.clientEditor;
+        const client = clientMasterClients.find(item => item.id === editor?.id);
+        if (editor?.kind === "client" && !editor.saving && client?.databaseId && editor.trashVersion) {
+          openClientTrashDialog("delete", client.databaseId, displayClientName(client), editor.trashVersion);
+        }
+        return;
+      }
+
+      if (target.closest("[data-refresh-client-trash]")) { void loadDeletedClients(); return; }
+      const restoreClient = target.closest("[data-restore-client-master]");
+      if (restoreClient) {
+        const client = clientTrash.rows.find(item => item.id === restoreClient.dataset.restoreClientMaster);
+        if (client) openClientTrashDialog("restore", client.id, client.legal_name, client.updated_at);
+        return;
+      }
+
       if (closeClientEditorTrigger) {
         if (state.clientEditor?.saving) return;
         state.clientEditor = null;
@@ -13187,7 +13447,7 @@
 
       if (importClientsTrigger) {
         if (!canImportClientMaster()) {
-          window.alert("Client import is not granted for your account.");
+          window.alert(uiLabel("Client import is not granted for your account."));
           return;
         }
         document.getElementById("client-csv-input").click();
@@ -13446,7 +13706,7 @@
         if (!proposal) return;
         const proposalName = clientEditorField("proposal-name").value.trim();
         if (!proposalName) {
-          window.alert("Proposal name is required.");
+          window.alert(uiLabel("Proposal name is required."));
           return;
         }
         proposal.businessForm = clientEditorField("proposal-business-form").value;
@@ -13455,7 +13715,7 @@
         proposal.address = clientEditorField("proposal-address").value.trim();
         proposal.responsiblePersonName = clientEditorField("proposal-responsible-person").value.trim();
         if (!proposal.responsiblePersonName) {
-          window.alert("Director / responsible person is required.");
+          window.alert(uiLabel("Director / responsible person is required."));
           return;
         }
         const optionalValue = (id) => clientEditorField(id)?.value?.trim() || "";
@@ -13552,6 +13812,8 @@
 
       if (target.matches("[data-client-tab]")) {
         const requestedTab = target.getAttribute("data-client-tab");
+        if (requestedTab === "deleted" && !canManageClientTrash()) return;
+        if (requestedTab === "deleted" && clientTrash.status !== "loading") clientTrash.status = "idle";
         state.clientManagementTab = requestedTab === "analytics" && !hasLeadershipAccess() ? "active" : requestedTab;
         commitWorkspaceNavigation("push");
         return;
@@ -13659,7 +13921,7 @@
         client.clientCode = clientEditorField("client-form-code").value.trim() || client.clientCode;
         const clientName = clientEditorField("client-form-name").value.trim();
         if (!clientName) {
-          window.alert("Client name is required.");
+          window.alert(uiLabel("Client name is required."));
           return;
         }
         client.businessForm = clientEditorField("client-form-business-form").value;

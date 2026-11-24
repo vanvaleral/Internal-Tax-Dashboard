@@ -13,8 +13,9 @@ function canAccess(actor: any, client: any) {
 async function payloadFor(actor: any, input: Record<string, unknown>, fallbackClientId = "", editingAssignedCase = false) {
   const clientId = String(input.clientId || fallbackClientId || "");
   if (!clientId) throw new Error("Choose a client before saving a case.");
-  const { data: client, error } = await actor.admin.from("client_master").select("id, legal_name, tax_pic_name, accounting_pic_name, tax_pic_profile_id, accounting_pic_profile_id").eq("id", clientId).maybeSingle();
+  const { data: client, error } = await actor.admin.from("client_master").select("id, legal_name, status, tax_pic_name, accounting_pic_name, tax_pic_profile_id, accounting_pic_profile_id").eq("id", clientId).maybeSingle();
   if (error || !client) throw new Error(error?.message || "Client was not found.");
+  if (client.status === "Deleted" && (!fallbackClientId || clientId !== fallbackClientId)) throw new Error("Restore this client before linking new cases.");
   if (!editingAssignedCase && !canAccess(actor, client)) throw new Error("You are not assigned to this client.");
   const category = input.caseCategory === "Pemeriksaan" ? "Pemeriksaan" : "Himbauan";
   const receivedDate = String(input.receivedDate || "");

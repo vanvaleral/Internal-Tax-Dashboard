@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import webpush from "web-push";
 import { notificationDestination, webPushConfiguration } from "@/lib/web-push";
+import { canReceiveStaffAccessNotifications } from "@/lib/feature-access";
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
@@ -21,17 +22,23 @@ export async function GET(request: NextRequest) {
   let delivered = 0;
   let failed = 0;
   const deliverJob = async (job: { id: number; announcement_id: string; staff_profile_id: string; channel: string; attempts: number; max_attempts: number }) => {
-    const { data: active } = await admin.from("staff_profiles").select("id").eq("id", job.staff_profile_id).eq("directory_active", true).maybeSingle();
-    let deliveryError: { message: string } | null = active ? null : { message: "Recipient profile is inactive." };
+    const [{data:active,error:profileError},{data:announcement,error:announcementError}] = await Promise.all([
+      admin.from("staff_profiles").select("id, role").eq("id",job.staff_profile_id).eq("directory_active",true).maybeSingle(),
+      admin.from("announcements").select("title, source_type, source_id").eq("id",job.announcement_id).maybeSingle()
+    ]);
+    if (active && announcement?.source_type === "staff_directory" && !canReceiveStaffAccessNotifications(active.role)) {
+      failed += 1;
+      await admin.from("notification_delivery_log").update({status:"failed",completed_at:now,last_error:"Recipient is no longer eligible for PIC Access notifications."}).eq("id",job.id);
+      return;
+    }
+    let deliveryError: { message: string } | null = profileError || announcementError ||
+      (!active ? {message:"Recipient profile is inactive."} : !announcement ? {message:"Notification no longer exists."} : null);
     if (!deliveryError && job.channel === "web_push") {
       const configuration = webPushConfiguration();
       if (!configuration.configured) deliveryError = { message: configuration.message };
       else {
-        const [{ data: announcement, error: announcementError }, { data: subscriptions, error: subscriptionError }] = await Promise.all([
-          admin.from("announcements").select("title, message, source_type, source_id").eq("id", job.announcement_id).maybeSingle(),
-          admin.from("web_push_subscriptions").select("id, endpoint, p256dh, auth").eq("staff_profile_id", job.staff_profile_id)
-        ]);
-        deliveryError = announcementError || subscriptionError;
+        const {data:subscriptions,error:subscriptionError} = await admin.from("web_push_subscriptions").select("id, endpoint, p256dh, auth").eq("staff_profile_id",job.staff_profile_id);
+        deliveryError = subscriptionError;
         if (!deliveryError && (!announcement || !subscriptions?.length)) deliveryError = { message: "No active browser subscription was found." };
         if (!deliveryError) {
           const pushAnnouncement = announcement!;

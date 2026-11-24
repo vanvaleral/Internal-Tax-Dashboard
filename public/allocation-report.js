@@ -3,6 +3,8 @@
   const PAGE = Object.freeze({ width:215.9, height:355.6, top:10, left:10, right:10, bottom:40 });
   const ink = [32,50,59], muted = [93,111,119], green = [8,111,121];
   let resources;
+  const t=value=>window.WorkspaceLanguage?.t(value) ?? value;
+  const language=()=>window.WorkspaceLanguage?.get() || "en";
 
   function loadResources() {
     if (!resources) resources = (async () => {
@@ -30,7 +32,7 @@
     const pdf = new jsPDF({orientation:"portrait",unit:"mm",format:"legal",compress:true,putOnlyUsedFonts:true});
     pdf.addFileToVFS("NotoSans-Regular.ttf",font);
     pdf.addFont("NotoSans-Regular.ttf","NotoSans","normal"); pdf.setFont("NotoSans","normal");
-    pdf.setProperties({title:`Allocation ${snapshot.year}${snapshot.pending ? " - Draft preview" : ""}`,author:"Tax Dashboard",subject:"Filtered PIC allocation snapshot"});
+    pdf.setProperties({title:`${t("Allocation")} ${snapshot.year}${snapshot.pending ? " - " + t("Draft preview") : ""}`,author:"Tax Dashboard",subject:t("Filtered PIC allocation snapshot")});
     const width = PAGE.width-PAGE.left-PAGE.right, bottom = PAGE.height-PAGE.bottom-7;
     let y = PAGE.top;
     const text = (value,x,top,size=8,color=ink,align="left") => {
@@ -42,19 +44,19 @@
     const fill = (x,top,w,h,color) => { pdf.setFillColor(...color); pdf.rect(x,top,w,h,"F"); };
     const nextPage = () => {
       pdf.addPage("legal","portrait"); y = PAGE.top;
-      text(`Allocation / ${snapshot.year}`,PAGE.left,y,11,green);
-      text(snapshot.pending ? "DRAFT - not applied" : "Saved assignments",PAGE.width-PAGE.right,y,8,muted,"right"); y += 9;
+      text(`${t("Allocation")} / ${snapshot.year}`,PAGE.left,y,11,green);
+      text(t(snapshot.pending ? "DRAFT - not applied" : "Saved assignments"),PAGE.width-PAGE.right,y,8,muted,"right"); y += 9;
     };
     text("LMATS CONSULTING / TAX DASHBOARD",PAGE.left,y,8,green); y += 6;
-    text("Client PIC Allocation",PAGE.left,y,17); y += 10;
-    text(`Allocation year ${snapshot.year}  |  ${snapshot.rows.length} clients  |  ${snapshot.pending} pending changes`,PAGE.left,y,9); y += 6;
-    const created = new Date(snapshot.generatedAt).toLocaleString("en-GB",{timeZone:"Asia/Makassar",dateStyle:"medium",timeStyle:"short"});
-    const meta = wrap(`Prepared by ${snapshot.preparedBy || "-"} / ${created} WITA`,width,8);
+    text(t("Client PIC Allocation"),PAGE.left,y,17); y += 10;
+    text(`${t("Allocation year")} ${snapshot.year}  |  ${snapshot.rows.length} ${t("clients")}  |  ${snapshot.pending} ${t("pending changes")}`,PAGE.left,y,9); y += 6;
+    const created = new Date(snapshot.generatedAt).toLocaleString(language()==="id"?"id-ID":"en-GB",{timeZone:"Asia/Makassar",dateStyle:"medium",timeStyle:"short"});
+    const meta = wrap(`${t("Prepared by")} ${snapshot.preparedBy || "-"} / ${created} WITA`,width,8);
     lines(meta,PAGE.left,y,8,muted); y += meta.length*3.5+3;
-    const scope = wrap(`Scope: ${snapshot.filters.join(" / ") || "All visible clients"}`,width,8);
+    const scope = wrap(`${t("Scope")}: ${snapshot.filters.join(" / ") || t("All visible clients")}`,width,8);
     for (const line of scope) { if (y+4>bottom) nextPage(); text(line,PAGE.left,y,8,muted); y += 3.5; }
     y += 3;
-    const notice = wrap(snapshot.pending ? "DRAFT PREVIEW: proposed PICs are unsaved. Printing does not apply these changes." : "Saved assignments at preview generation. Printing does not change Client Master.",width-6,8);
+    const notice = wrap(t(snapshot.pending ? "DRAFT PREVIEW: proposed PICs are unsaved. Printing does not apply these changes." : "Saved assignments at preview generation. Printing does not change Client Master."),width-6,8);
     if (y+notice.length*3.5+6>bottom) nextPage();
     fill(PAGE.left,y,width,notice.length*3.5+6,snapshot.pending ? [253,241,218] : [231,244,243]);
     lines(notice,PAGE.left+3,y+3,8); y += notice.length*3.5+11;
@@ -63,13 +65,13 @@
     const summaryHeaders = () => {
       groups.forEach((group,index) => {
         const x = PAGE.left+index*(groupWidth+gap);
-        text(group.title,x,y,10,green); text("Saved / Proposed",x+groupWidth,y+1,7,muted,"right");
+        text(t(group.title),x,y,10,green); text(t("Saved / Proposed"),x+groupWidth,y+1,7,muted,"right");
       }); y += 7;
     };
     if (groups.length) {
       if (y+17>bottom) nextPage(); summaryHeaders();
       for (let i=0;i<Math.max(...groups.map(group=>group.items.length));i++) {
-        const names = groups.map(group=>wrap(group.items[i]?.pic || "No PIC",groupWidth-32,8));
+        const names = groups.map(group=>wrap(group.items[i]?.pic || t("No PIC"),groupWidth-32,8));
         const height = Math.max(...names.map(name=>name.length))*3.5+3;
         if (y+height>bottom) { nextPage(); summaryHeaders(); }
         groups.forEach((group,index) => {
@@ -92,7 +94,7 @@
     // Row heights and pagination use the same wrapped lines that are drawn.
     const tableHeader = () => {
       let x = PAGE.left;
-      columns.forEach(column => { fill(x,y,column.width,10,[232,240,237]); lines(wrap(column.title,column.width-3,7),x+1.5,y+2,7,green,3); x += column.width; });
+      columns.forEach(column => { fill(x,y,column.width,10,[232,240,237]); lines(wrap(t(column.title),column.width-3,7),x+1.5,y+2,7,green,3); x += column.width; });
       y += 10;
     };
     if (y+20>bottom) nextPage(); tableHeader();
@@ -118,8 +120,8 @@
     const total = pdf.getNumberOfPages();
     for (let page=1;page<=total;page++) {
       pdf.setPage(page);
-      text(`Allocation ${snapshot.year} / ${snapshot.pending ? "Draft preview" : "Saved snapshot"}`,PAGE.left,PAGE.height-PAGE.bottom-3.5,7,muted);
-      text(`Page ${page} / ${total}`,PAGE.width-PAGE.right,PAGE.height-PAGE.bottom-3.5,7,muted,"right");
+      text(`${t("Allocation")} ${snapshot.year} / ${t(snapshot.pending ? "Draft preview" : "Saved snapshot")}`,PAGE.left,PAGE.height-PAGE.bottom-3.5,7,muted);
+      text(`${t("Page")} ${page} / ${total}`,PAGE.width-PAGE.right,PAGE.height-PAGE.bottom-3.5,7,muted,"right");
     }
     return pdf;
   }
@@ -130,9 +132,10 @@
     if (popup.closed) return;
     if (reservedPopup) popup.document.body.textContent = "";
     popup.opener = null;
-    popup.document.title = "Preparing Allocation PDF";
+    popup.document.documentElement.lang = language();
+    popup.document.title = t("Preparing Allocation PDF");
     const status = popup.document.createElement("p");
-    status.textContent = "Preparing Legal PDF preview. You can print or download from the PDF viewer when ready.";
+    status.textContent = t("Preparing Legal PDF preview. You can print or download from the PDF viewer when ready.");
     status.style.cssText = "font:14px Segoe UI,sans-serif;padding:24px;color:#20323b";
     popup.document.body.append(status);
     try {
@@ -147,7 +150,7 @@
       window.addEventListener("pagehide",release,{once:true});
       popup.focus();
     } catch (error) {
-      if (!popup.closed) { popup.document.title = "Allocation PDF unavailable"; status.textContent = error.message; }
+      if (!popup.closed) { popup.document.title = t("Allocation PDF unavailable"); status.textContent = t(error.message); }
       throw error;
     }
   }

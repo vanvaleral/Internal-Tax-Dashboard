@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AuthLanguageSwitch, useAuthLanguage } from "@/components/auth/auth-language";
 
 export function OnboardingForm() {
+  const { language, choose, t } = useAuthLanguage();
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
@@ -62,17 +64,18 @@ export function OnboardingForm() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="eyebrow">Tax Firm Operating System</div>
-        <h1>Complete your profile</h1>
-        <p className="auth-copy">Your invitation is accepted. Add your name, username, and team before entering the workspace.</p>
+        <div className="eyebrow">{t("Tax Firm Operating System")}</div>
+        <AuthLanguageSwitch language={language} choose={choose} />
+        <h1>{t("Complete your profile")}</h1>
+        <p className="auth-copy">{t("Your invitation is accepted. Add your name, username, and team before entering the workspace.")}</p>
         <form onSubmit={submit} className="auth-form">
-          <label>Email address<input value={email} readOnly /></label>
-          <label>Full name<input value={fullName} onChange={(event) => setFullName(event.target.value)} required minLength={2} placeholder="Your full name" /></label>
-          <label>Username<input value={username} onChange={(event) => setUsername(event.target.value.toLowerCase())} required minLength={3} placeholder="e.g. ivan" pattern="[a-z0-9._-]{3,40}" /></label>
-          <label>Team<select value={teamDivision} onChange={(event) => setTeamDivision(event.target.value)}><option>Tax Team</option><option>Accounting Team</option></select></label>
-          <p className="auth-hint">Your initial role is Staff. A Supervisor can update your access later.</p>
-          <button className="solid-btn auth-submit" disabled={saving}>{saving ? "Saving..." : "Enter workspace"}</button>
-          <div className="auth-message">{message}</div>
+          <label>{t("Email address")}<input value={email} readOnly /></label>
+          <label>{t("Full name")}<input value={fullName} onChange={(event) => setFullName(event.target.value)} required minLength={2} placeholder={t("Your full name")} /></label>
+          <label>{t("Username")}<input value={username} onChange={(event) => setUsername(event.target.value.toLowerCase())} required minLength={3} placeholder={t("e.g. ivan")} pattern="[a-z0-9._-]{3,40}" /></label>
+          <label>{t("Team")}<select value={teamDivision} onChange={(event) => setTeamDivision(event.target.value)}><option value="Tax Team">{t("Tax Team")}</option><option value="Accounting Team">{t("Accounting Team")}</option></select></label>
+          <p className="auth-hint">{t("Your initial role is Staff. A Supervisor can update your access later.")}</p>
+          <button className="solid-btn auth-submit" disabled={saving}>{t(saving ? "Saving..." : "Enter workspace")}</button>
+          <div className="auth-message" role="status">{t(message, "Profile could not be saved.")}</div>
         </form>
       </section>
     </main>

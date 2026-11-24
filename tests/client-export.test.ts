@@ -42,6 +42,7 @@ test("Excel export distinguishes all engagement categories independently of life
     { client_code: "CL-002", legal_name: "Free Client", status: "Active", engagement_type: "free_of_charge", monthly_fee: 1000000, npwp: "0012345678901234" },
     { client_code: "CL-003", legal_name: "Annual Client", status: "Active", engagement_type: "on_demand" },
     { client_code: "CL-004", legal_name: "Archived Free Client", status: "Inactive", engagement_type: "free_of_charge" },
+    { client_code: "CL-999", legal_name: "Deleted client", status: "Deleted" },
     { client_code: "CL-005", legal_name: "Legacy Client", status: "Active" }
   ];
   const d = fixture(rows), sheet = await workbook(d.route);
@@ -76,7 +77,7 @@ test("export access checks remain enforced and database failures never return a 
   assert.equal((await fixture([], "staff").route.GET()).status, 403);
   assert.equal((await fixture([], "supervisor", true).route.GET()).status, 401);
   const d = fixture([]);
-  d.db.from = (() => ({ select() { return this; }, order() { return this; }, range: async () => ({ data: null, error: { message: "Read failed" } }) })) as any;
+  d.db.from = (() => ({ select() { return this; }, not() { return this; }, order() { return this; }, range: async () => ({ data: null, error: { message: "Read failed" } }) })) as any;
   const response = await d.route.GET();
   assert.equal(response.status, 500); assert.match((await response.json()).error, /Read failed/);
 });

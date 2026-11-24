@@ -78,6 +78,23 @@ export still contains the complete authorized master list, including archives.
 
 The exported category is reference-only on reimport: imports cannot reclassify
 clients. Use the confirmed Move selected action to change engagement category.
+
+## Deleted Clients
+
+Supervisors, Partners and Admins can choose **Delete Client** in Client Setup
+for a saved client. This is separate from marking an ended engagement Inactive.
+Deleted records leave the ordinary client lists, export, allocation and work
+generation, but the original client ID and existing case, compliance, claim and
+PIC history are preserved. Restore from **Clients > Deleted Clients** to return
+to the prior status and engagement category. There is no automatic purge.
+
+Apply `20261120085536_client_master_trash.sql` before enabling this feature in
+production. It extends the existing status constraint and adds a server-only
+transaction that changes status and writes to Client Master activity together.
+It does not rewrite any existing client records. Normal saves and imports cannot
+overwrite a deleted identity; restore it first. A stale confirmation must be
+retried against a fresh client list. To roll back the migration, restore all
+deleted clients before reinstating the prior status constraint.
 Stored fees/dates, PICs, IDs and history are unchanged; FOC fee values in the export
 remain historical/master references, not current monthly charges. No migration
 or client-data update is needed.

@@ -4,14 +4,14 @@ import { currentActor, type CurrentActor } from "@/lib/access";
 import { STAFF_DIRECTORY_TEAMS, isStaffDirectoryRole, canManageDirectoryRole } from "@/lib/staff-directory";
 import { createOperationalAnnouncement, notificationEventKey } from "@/lib/notifications";
 import { readStaff } from "@/lib/workspace-reads";
-import { canManageAccess } from "@/lib/feature-access";
+import { canManageAccess, STAFF_ACCESS_NOTIFICATION_ROLES } from "@/lib/feature-access";
 
 async function notifyLeadershipOfDirectoryChange(actor: CurrentActor, action: string, subject: string) {
   const { data: recipients, error } = await actor.admin
     .from("staff_profiles")
     .select("id")
     .eq("directory_active", true)
-    .in("role", ["supervisor", "partner", "admin"]);
+    .in("role", [...STAFF_ACCESS_NOTIFICATION_ROLES]);
   if (error || !(recipients || []).length) return;
   await createOperationalAnnouncement({
     title: `PIC Access: ${action}`,

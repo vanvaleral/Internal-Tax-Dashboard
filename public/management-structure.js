@@ -201,12 +201,13 @@
 
   function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}), loadSharedDraft = null }) {
     const key = `tax-dashboard:structure:v1:${account}`;
-    let model = { active: "1", plans: [{ id: "1", name: "Company structure", nodes: [] }] };
+    const defaultChartName = "Team Dewa Structure";
+    let model = { active: "1", plans: [{ id: "1", name: defaultChartName, nodes: [] }] };
     let baseline = null, storageError = "", host, editing = "", rosterKey, people = new Map();
     let pending = null, drag = null;
     let zoom = 1;
     let clientRows = null, section = "chart", chartScroll = [0,0];
-    let splitMode = "current", splitFilter = "all", showRecommendations = false;
+    let splitMode = "current", splitFilter = "all", showRecommendations = false, loadExpanded = true;
     let sharedForecast = null, sharedForecastError = "", sharedForecastFlight = null;
     const columnFilters = new Map();
     let columnSource, columnMenu;
@@ -221,6 +222,8 @@
           throw new Error("Invalid structure");
         }
         model = stored;
+        const legacy = model.plans.find(plan => plan.name === "Company structure");
+        if (legacy) legacy.name = defaultChartName;
       }
     } catch {
       storageError = "The saved structure could not be read. Reload before editing.";
@@ -362,32 +365,34 @@
     }
 
     function clientLoadSummary(plan, comparison, heading = "h4") {
+      const printing = heading === "h2";
+      const t = value => printing ? (window.WorkspaceLanguage?.t(value) ?? value) : value;
       const next = comparison.mode === "next";
       const sharedMode = comparison.mode === "shared";
       const title = sharedMode ? "Shared forecast team client load" : next ? "Forecast team client load" : "Current team client load";
       const compare = heading === "h4" ? `<select class="field" data-structure-split="mode" aria-label="Compare team client load">
         ${option("current","Current PICs",comparison.mode)}${option("next","Next PICs (my draft)",comparison.mode)}
         ${loadSharedDraft ? option("shared","Next PICs (shared draft)",comparison.mode) : ""}</select>` : "";
-      const headingHtml = `<${heading} id="structure-load-title">${title}</${heading}>`;
+      const headingHtml = `<${heading} id="structure-load-title">${esc(t(title))}</${heading}>`;
       if (!comparison.ready || !comparison.available) {
         const hint = !comparison.ready ? "Choose Team A and B in Team Split to compare their client load. Team C is optional."
           : !clientRows ? "Waiting for confirmed Client Master data." : sharedForecastHint();
         return `<section class="structure-load" aria-labelledby="structure-load-title">
-          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${esc(hint)}</p></section>`;
+          <div class="structure-load-heading">${headingHtml}${compare}</div><p>${esc(t(hint))}</p></section>`;
       }
       const {teams,shared,unmapped,combined,uneven,leader} = teamClientLoad(comparison);
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
       const status = !combined ? "No clients mapped" : !uneven ? "Balanced by client count"
-        : leader ? `Uneven: ${leader.label} has more clients` : "Uneven by client count";
+        : leader ? t("Uneven: {team} has more clients").replace("{team}", leader.label) : "Uneven by client count";
       return `<section class="structure-load" aria-labelledby="structure-load-title">
         <div class="structure-load-heading">${headingHtml}<div class="structure-load-controls">
-          <span class="pill ${uneven ? "warn" : "neutral"}" data-structure-load-status>${status}</span>${compare}</div></div>
+          <span class="pill ${uneven ? "warn" : "neutral"}" data-structure-load-status>${esc(t(status))}</span>${compare}</div></div>
         <div class="structure-load-teams">${teams.map(team => `<div class="structure-load-team" data-structure-load-team="${team.slot}">
-          <div><strong>${team.label}: ${esc(names.get(team.id))}</strong><small>Tax: ${team.tax} &middot; Accounting: ${team.accounting} &middot; <strong class="${team.flagged ? "structure-load-flagged" : ""}">${team.flagged} flagged</strong></small></div>
-          <span><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
-        <p><strong>${shared} shared</strong> (counted once per involved team) &middot; <strong>${unmapped} with no PIC mapped to any team.</strong>
-          Uneven when team shares differ by more than ${loadGapLimit} percentage points. Client counts do not account for difficulty or staffing.
-          ${next ? "Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft." : ""}
+          <div><strong>${esc(t(team.label))}: ${esc(names.get(team.id))}</strong><small>${esc(t("Tax"))}: ${team.tax} &middot; ${esc(t("Accounting"))}: ${team.accounting} &middot; <strong class="${team.flagged ? "structure-load-flagged" : ""}">${team.flagged} ${esc(t("flagged"))}</strong></small></div>
+          <span class="structure-load-total"><strong data-structure-load-count>${team.total}</strong> ${esc(t(team.total === 1 ? "client" : "clients"))}</span></div>`).join("")}</div>
+        <p><strong>${shared} ${esc(t("shared"))}</strong> ${esc(t("(counted once per involved team)"))} &middot; <strong>${unmapped} ${esc(t("with no PIC mapped to any team."))}</strong>
+          ${esc(t("Uneven when team shares differ by more than {limit} percentage points. Client counts do not account for difficulty or staffing.").replace("{limit}",loadGapLimit))}
+          ${next ? esc(t("Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft.")) : ""}
           ${sharedMode ? `Shared ${esc(comparison.shared.year)} draft · v${esc(comparison.shared.draft.version)} · Published by ${esc(comparison.shared.draft.published_by_name)}. Missing proposals keep the current PIC.` : ""}</p>
       </section>`;
     }
@@ -652,10 +657,15 @@
         validate(plan.nodes.map(entry => entry.id === node.id ? {...entry, parent: row.id} : entry))));
       const locked = storageError ? "disabled" : "";
       const comparison = splitResult(plan,splitMode,section === "split" && showRecommendations);
+      const priorLoad = host.querySelector(".structure-load-disclosure");
+      if (priorLoad) loadExpanded = priorLoad.open;
       host.innerHTML = safeHtml(`
         <div class="section-title"><div><div class="eyebrow">Organization planning</div><h3>Structure Lab</h3><p>Plan reporting lines without changing live assignments or access. This chart stays in this browser.</p></div>
           <button type="button" class="ghost-btn" data-structure-action="print" title="Print the flowchart, client load and flagged clients when Team Split is ready" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
-        <div data-structure-load>${clientLoadSummary(plan,comparison)}</div>
+        <details class="structure-load-disclosure" ${loadExpanded ? "open" : ""}>
+          <summary><strong>Team client load</strong><span class="structure-load-show">Show summary</span><span class="structure-load-hide">Hide summary</span></summary>
+          <div data-structure-load>${clientLoadSummary(plan,comparison)}</div>
+        </details>
         <div class="workspace-tabs structure-subtabs" role="group" aria-label="Structure Lab views">
           <button type="button" class="${section === "chart" ? "solid-btn" : "ghost-btn"}" data-structure-section="chart" aria-pressed="${section === "chart"}">Flowchart</button>
           <button type="button" class="${section === "split" ? "solid-btn" : "ghost-btn"}" data-structure-section="split" aria-pressed="${section === "split"}">Team Split</button>
@@ -693,6 +703,8 @@
               ${node ? `<button type="button" class="ghost-btn" data-structure-action="cancel">Cancel</button><button type="button" class="ghost-btn" data-structure-action="remove" ${locked}>Remove</button>` : ""}</div>
           </form></div>
         </div>`}`);
+      const loadDisclosure = host.querySelector(".structure-load-disclosure");
+      loadDisclosure.addEventListener("toggle", () => { if (loadDisclosure.isConnected) loadExpanded = loadDisclosure.open; });
       if (section === "chart") {
         updateZoom();
         const canvas = host.querySelector(".structure-viewport");
@@ -703,26 +715,28 @@
       }
     }
 
+    const printText = value => esc(window.WorkspaceLanguage?.t(value) ?? value);
+
     function printSheet(plan, report) {
       const {points,width,height} = layout(plan.nodes);
       const cards = plan.nodes.map(node => {
         const {x,y} = points.get(node.id);
-        const name = nodeName(node), detail = personName(node) ? node.label : "Unassigned / planned";
+        const name = nodeName(node), detail = personName(node) ? node.label : (window.WorkspaceLanguage?.t("Unassigned / planned") ?? "Unassigned / planned");
         return `<g class="structure-print-card" data-kind="${esc(node.kind)}" transform="translate(${x},${y})">
           <title>${esc(name)}: ${esc(detail)}</title>
           <rect class="structure-print-box" x=".5" y=".5" width="${cardWidth-1}" height="${cardHeight-1}" rx="9"></rect>
           <path class="structure-print-stripe" d="M 8 2 H ${cardWidth-8}"></path>
           <svg x="10" y="10" width="${cardWidth-20}" height="${cardHeight-20}">
-            <text class="structure-print-kind" y="11">${esc(node.kind.toUpperCase())}</text>
+            <text class="structure-print-kind" y="11">${printText(node.kind.toUpperCase())}</text>
             <text class="structure-print-name" y="33">${esc(name)}</text>
             <text class="structure-print-detail" y="51">${esc(detail)}</text>
           </svg></g>`;
       }).join("");
       return `<main class="structure-print-page">
-        <header><small>LMATS CONSULTING / ORGANIZATION PLANNING</small><h1>${esc(plan.name)}</h1>
-          <p>Planning only. Does not change system access.</p>
+        <header><small>LMATS CONSULTING / ${printText("ORGANIZATION PLANNING")}</small><h1>${esc(plan.name)}</h1>
+          <p>${printText("Planning only. Does not change system access.")}</p>
           ${report ? clientLoadSummary(plan,report,"h2") : ""}</header>
-        <div class="structure-print-frame"><svg class="structure-print-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Organization flowchart">
+        <div class="structure-print-frame"><svg class="structure-print-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${printText("Organization flowchart")}">
           <g class="structure-wires">${connections(plan.nodes,points)}</g>${cards}
         </svg></div></main>`;
     }
@@ -731,23 +745,23 @@
       const flaggedRows = rows.filter(flagged);
       const unmapped = rows.filter(row => row.incomplete).length;
       const names = new Map(plan.nodes.map(node => [node.id,nodeName(node)]));
-      const labels = new Map(teams.map(team => [team.id,team.label]));
+      const labels = new Map(teams.map(team => [team.id,printText(team.label)]));
       const next = mode !== "current";
-      const pic = item => `<td><strong>${esc(item.label)}</strong>${item.assigned ? `<small>${labels.get(item.team) || "Not mapped to a team"}</small>` : ""}</td>`;
+      const pic = item => `<td><strong>${item.assigned ? esc(item.label) : printText(item.label)}</strong>${item.assigned ? `<small>${labels.get(item.team) || printText("Not mapped to a team")}</small>` : ""}</td>`;
       return `<section class="structure-print-findings" aria-labelledby="structure-print-findings-title">
-        <header><small>LMATS CONSULTING / TEAM SPLIT REPORT</small>
-          <h2 id="structure-print-findings-title">Flagged clients: ${mode === "shared" ? "Shared Next PICs (draft forecast)" : next ? "Next PICs (draft forecast)" : "Current PICs"}</h2>
-          <p><strong>${esc(plan.name)}</strong> &middot; ${teams.map(team => `${team.label}: ${esc(names.get(team.id))}`).join(" &middot; ")}</p>
-          <p>${flaggedRows.length} of ${rows.length} active clients flagged. ${mode === "shared" ? "Published draft; roles without proposals keep their saved PIC." : next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only."}</p>
-          ${unmapped ? `<p>Unassigned or unmapped PICs to review: ${unmapped} active client${unmapped === 1 ? "" : "s"}.</p>` : ""}
+        <header><small>LMATS CONSULTING / ${printText("TEAM SPLIT REPORT")}</small>
+          <h2 id="structure-print-findings-title">${printText("Flagged clients")}: ${printText(mode === "shared" ? "Shared Next PICs (draft forecast)" : next ? "Next PICs (draft forecast)" : "Current PICs")}</h2>
+          <p><strong>${esc(plan.name)}</strong> &middot; ${teams.map(team => `${printText(team.label)}: ${esc(names.get(team.id))}`).join(" &middot; ")}</p>
+          <p>${flaggedRows.length} ${printText("of")} ${rows.length} ${printText("active clients flagged.")} ${printText(mode === "shared" ? "Published draft; roles without proposals keep their saved PIC." : next ? "Unsaved Allocation drafts; roles without drafts use saved Current PICs." : "This comparison uses saved Current PICs only.")}</p>
+          ${unmapped ? `<p>${printText("Unassigned or unmapped PICs to review")}: ${unmapped} ${printText(unmapped === 1 ? "active client" : "active clients")}.</p>` : ""}
         </header>
-        ${flaggedRows.length ? `<table aria-label="Flagged active clients">
+        ${flaggedRows.length ? `<table aria-label="${printText("Flagged active clients")}">
           <colgroup><col style="width:26%"><col style="width:17%"><col style="width:18%"><col style="width:18%"><col style="width:21%"></colgroup>
-          <thead><tr><th scope="col">Client</th><th scope="col">Intended team</th><th scope="col">Tax PIC</th><th scope="col">Accounting PIC</th><th scope="col">Reason flagged</th></tr></thead>
+          <thead><tr>${["Client","Intended team","Tax PIC","Accounting PIC","Reason flagged"].map(value => `<th scope="col">${printText(value)}</th>`).join("")}</tr></thead>
           <tbody>${flaggedRows.map(row => `<tr><th scope="row">${esc(row.client.name || row.client.clientCode)}<small>${esc(row.client.clientCode)}</small></th>
-            <td>${labels.get(row.owner) || "Not confirmed"}</td>${row.shown.map(pic).join("")}
-            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : "",row.moved ? "Projected team change" : ""].filter(Boolean).join("; ")}</td></tr>`).join("")}</tbody></table>`
-          : `<p>No ${next ? "forecast" : "current"} client conflicts were found for these branches.</p>`}
+            <td>${labels.get(row.owner) || printText("Not confirmed")}</td>${row.shown.map(pic).join("")}
+            <td>${[row.conflict ? "PIC outside intended team" : "",row.cross ? "Tax and Accounting split" : "",row.moved ? "Projected team change" : ""].filter(Boolean).map(printText).join("; ")}</td></tr>`).join("")}</tbody></table>`
+          : `<p>${printText(next ? "No forecast client conflicts were found for these branches." : "No current client conflicts were found for these branches.")}</p>`}
       </section>`;
     }
 
@@ -760,8 +774,8 @@
       if (!page) { tell("Allow popups to print this structure."); return; }
       page.opener = null;
       const doc = page.document;
-      doc.documentElement.lang = "en";
-      doc.title = `Tax Dashboard | ${plan.name}${report ? " | Team Split Report" : ""}`;
+      doc.documentElement.lang = window.WorkspaceLanguage?.get() || "en";
+      doc.title = `Tax Dashboard | ${plan.name}${report ? " | " + (window.WorkspaceLanguage?.t("Team Split Report") ?? "Team Split Report") : ""}`;
       if (report) doc.body.classList.add("structure-print-report");
       const style = doc.createElement("style");
       style.textContent = `@page{size:landscape;margin:12mm}
