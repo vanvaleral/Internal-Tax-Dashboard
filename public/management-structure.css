@@ -5,9 +5,19 @@
 .structure-actions {
   display:flex; flex-wrap:wrap; align-items:end; gap:8px;
 }
+.structure-load-disclosure {
+  margin-top:10px; border:1px solid var(--structure-line); border-radius:12px;
+  background:var(--panel-solid, white);
+}
+.structure-load-disclosure > summary {
+  cursor:pointer; padding:10px 12px; color:var(--accent-strong, #066b77);
+}
+.structure-load-disclosure > summary span { float:right; font-size:12px; color:var(--muted); }
+.structure-load-disclosure:not([open]) .structure-load-hide,
+.structure-load-disclosure[open] .structure-load-show { display:none; }
 .structure-load {
-  margin-top:10px; padding:10px 12px; border:1px solid var(--structure-line);
-  border-radius:12px; background:var(--structure-soft);
+  padding:10px 12px; border-top:1px solid var(--structure-line);
+  border-radius:0 0 12px 12px; background:var(--structure-soft);
 }
 .structure-load-heading, .structure-load-team {
   display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px;
@@ -20,13 +30,13 @@
   display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); gap:8px; margin-top:7px;
 }
 .structure-load-team {
-  padding:6px 9px; border:1px solid var(--structure-line); border-radius:8px;
+  align-items:center; padding:8px 10px; border:1px solid var(--structure-line); border-radius:8px;
   background:var(--panel-solid); overflow-wrap:anywhere;
 }
 .structure-load-team small { display:block; color:var(--muted); font-size:11px; }
 .structure-load-flagged { color:var(--warning); }
-.structure-load-team span { font-size:12px; }
-.structure-load-team [data-structure-load-count] { font-size:17px; font-variant-numeric:tabular-nums; }
+.structure-load-total { white-space:nowrap; font-size:11px; color:var(--muted); }
+.structure-load-team [data-structure-load-count] { font-size:22px; font-variant-numeric:tabular-nums; color:var(--accent-strong, #066b77); }
 .structure-subtabs { margin-top:10px; }
 .structure-review {
   border:1px solid var(--structure-line); border-radius:12px; background:var(--panel-solid); padding:14px;

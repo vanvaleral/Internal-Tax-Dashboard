@@ -1,7 +1,7 @@
 # Management Structure
 
 Structure is a planning-only Management tab for Supervisors, Partners and legacy
-Admins. Structure Lab displays one editable flowchart.
+Admins. Structure Lab displays one editable flowchart, **Team Dewa Structure**.
 Drag an active PIC from the existing directory onto a manager or the top-level
 drop zone. The card starts with the directory name and employment title (or the
 access role when the title is absent). You can also click the name and then its
@@ -30,7 +30,9 @@ suggestions or set individual intended teams. Cross-team, unmapped, and
 unassigned clients do not receive automatic suggestions.
 
 The **team client load** at the top of Structure follows the Current/Next
-selector, as does the Team Split table. Each active client counts once per
+selector, as does the Team Split table. Use **Show summary** / **Hide summary**
+to collapse the panel without changing what is included when printing.
+Each active client counts once per
 team, even if both roles are assigned to that team. A shared client counts
 once in each involved team. Clients without a PIC mapped to any selected
 team are shown separately. Each team also shows how many flagged clients

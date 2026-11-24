@@ -198,12 +198,13 @@
 
   function create({ account, canManage, safeHtml, getAllocationDrafts = () => ({}) }) {
     const key = `tax-dashboard:structure:v1:${account}`;
-    let model = { active: "1", plans: [{ id: "1", name: "Company structure", nodes: [] }] };
+    const defaultChartName = "Team Dewa Structure";
+    let model = { active: "1", plans: [{ id: "1", name: defaultChartName, nodes: [] }] };
     let baseline = null, storageError = "", host, editing = "", rosterKey, people = new Map();
     let pending = null, drag = null;
     let zoom = 1;
     let clientRows = null, section = "chart", chartScroll = [0,0];
-    let splitMode = "current", splitFilter = "all", showRecommendations = false;
+    let splitMode = "current", splitFilter = "all", showRecommendations = false, loadExpanded = true;
     const columnFilters = new Map();
     let columnSource, columnMenu;
     try {
@@ -217,6 +218,8 @@
           throw new Error("Invalid structure");
         }
         model = stored;
+        const legacy = model.plans.find(plan => plan.name === "Company structure");
+        if (legacy) legacy.name = defaultChartName;
       }
     } catch {
       storageError = "The saved structure could not be read. Reload before editing.";
@@ -354,7 +357,7 @@
           <span class="pill ${uneven ? "warn" : "neutral"}" data-structure-load-status>${status}</span>${compare}</div></div>
         <div class="structure-load-teams">${teams.map(team => `<div class="structure-load-team" data-structure-load-team="${team.slot}">
           <div><strong>${team.label}: ${esc(names.get(team.id))}</strong><small>Tax: ${team.tax} &middot; Accounting: ${team.accounting} &middot; <strong class="${team.flagged ? "structure-load-flagged" : ""}">${team.flagged} flagged</strong></small></div>
-          <span><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
+          <span class="structure-load-total"><strong data-structure-load-count>${team.total}</strong> client${team.total === 1 ? "" : "s"}</span></div>`).join("")}</div>
         <p><strong>${shared} shared</strong> (counted once per involved team) &middot; <strong>${unmapped} with no PIC mapped to any team.</strong>
           Uneven when team shares differ by more than ${loadGapLimit} percentage points. Client counts do not account for difficulty or staffing.
           ${next ? "Forecast uses unsaved Allocation drafts and keeps saved PICs where there is no draft." : ""}</p>
@@ -616,10 +619,15 @@
         validate(plan.nodes.map(entry => entry.id === node.id ? {...entry, parent: row.id} : entry))));
       const locked = storageError ? "disabled" : "";
       const comparison = splitResult(plan,splitMode,section === "split" && showRecommendations);
+      const priorLoad = host.querySelector(".structure-load-disclosure");
+      if (priorLoad) loadExpanded = priorLoad.open;
       host.innerHTML = safeHtml(`
         <div class="section-title"><div><div class="eyebrow">Organization planning</div><h3>Structure Lab</h3><p>Plan reporting lines without changing live assignments or access. This chart stays in this browser.</p></div>
           <button type="button" class="ghost-btn" data-structure-action="print" title="Print the flowchart, client load and flagged clients when Team Split is ready" ${plan.nodes.length ? "" : "disabled"}>Print</button></div>
-        <div data-structure-load>${clientLoadSummary(plan,comparison)}</div>
+        <details class="structure-load-disclosure" ${loadExpanded ? "open" : ""}>
+          <summary><strong>Team client load</strong><span class="structure-load-show">Show summary</span><span class="structure-load-hide">Hide summary</span></summary>
+          <div data-structure-load>${clientLoadSummary(plan,comparison)}</div>
+        </details>
         <div class="workspace-tabs structure-subtabs" role="group" aria-label="Structure Lab views">
           <button type="button" class="${section === "chart" ? "solid-btn" : "ghost-btn"}" data-structure-section="chart" aria-pressed="${section === "chart"}">Flowchart</button>
           <button type="button" class="${section === "split" ? "solid-btn" : "ghost-btn"}" data-structure-section="split" aria-pressed="${section === "split"}">Team Split</button>
@@ -657,6 +665,8 @@
               ${node ? `<button type="button" class="ghost-btn" data-structure-action="cancel">Cancel</button><button type="button" class="ghost-btn" data-structure-action="remove" ${locked}>Remove</button>` : ""}</div>
           </form></div>
         </div>`}`);
+      const loadDisclosure = host.querySelector(".structure-load-disclosure");
+      loadDisclosure.addEventListener("toggle", () => { if (loadDisclosure.isConnected) loadExpanded = loadDisclosure.open; });
       if (section === "chart") {
         updateZoom();
         const canvas = host.querySelector(".structure-viewport");
