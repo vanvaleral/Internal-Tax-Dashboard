@@ -215,8 +215,12 @@ checks. Their existing record/PIC authorization remains mandatory. Other routes
 retain middleware protection. No schema migration is needed for these performance
 changes. Timeline reads/follow-up writes include Server-Timing headers for auth
 and data time; production latency still depends on network and database response.
-Due dates continue to be calculated server-side. Only leader, supervisor and
-partner roles can reassign Tax/ACC PICs; the API enforces this independently.
+Due dates continue to be calculated server-side. Senior Associates (a managed
+PIC Access job title), Leaders, Supervisors, Partners and Admins can see all
+non-archived cases and reassign their Tax/ACC PICs. Seniors retain normal
+assigned-case permissions for other writes. Reassignment is version-checked,
+records the previous and new PIC in the case timeline, and leaves Client
+Master and Allocation unchanged. Cases feature restrictions still apply.
 
 Spreadsheet changes save on leaving an input or choosing a dropdown value.
 Writes are serialized per case using the last confirmed `updated_at` version.
@@ -227,7 +231,7 @@ business-data fallback. A version conflict requires refreshing before retrying;
 it never overwrites another user's update.
 
 Bulk paste uses the same save queues, combining ordinary fields into one request
-per row and using the existing leadership-only PIC endpoint for assignments.
+per row and using the authorized PIC endpoint for assignments.
 Only two rows save concurrently; new-case creation is serialized to retain input
 order. The grid is temporarily non-editable and background case reads pause during
 a batch, preventing intervening edits from being overwritten by queued paste.

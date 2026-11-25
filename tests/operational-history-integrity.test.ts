@@ -89,7 +89,7 @@ test("case edit rejects stale versions without replacing its assigned PIC", asyn
   assert.equal(db.tables.tax_cases[0].accounting_pic_profile_id, "acc-old");
 });
 
-test("only leadership can reassign an existing case to active staff", async () => {
+test("senior staff can reassign another PIC's case but cannot otherwise edit it", async () => {
   const db = mockDatabase({
     tax_cases: [{ id: "case-uuid", client_id: "client-uuid", tax_pic_profile_id: "tax-old", accounting_pic_profile_id: "acc-old", updated_at: "v1", deleted_at: null }],
     staff_profiles: [
@@ -97,16 +97,27 @@ test("only leadership can reassign an existing case to active staff", async () =
       { id: "acc-new", full_name: "New Acc", team_division: "Accounting Team", directory_active: true }
     ]
   });
-  const bindings = (role: string, id: string) => ({
-    "@/lib/access": { currentActor: async () => ({ profile: { id, role }, userId: "user", admin: db }), isLeadership: (value: string) => value === "supervisor" },
+  const bindings = (role: string, id: string, employment_title = "") => ({
+    "@/lib/access": { currentActor: async () => ({ profile: { id, role, employment_title, full_name: "Reviewer" }, userId: "user", admin: db }), isLeadership: (value: string) => ["leader","supervisor","partner","admin"].includes(value) },
     "@/lib/notifications": {},
     "@/lib/operational-rules": { calculateHimbauanDueDate: () => null }
   });
   const body = { id: "case-uuid", version: "v1", action: "assign-pic", picType: "tax", profileId: "tax-new" };
   const staffRoute = loadRoute("app/api/cases/route.ts", bindings("staff", "tax-old"));
   assert.equal((await staffRoute.PATCH(request(body))).status, 403);
-  const adminRoute = loadRoute("app/api/cases/route.ts", bindings("admin", "admin"));
-  assert.equal((await adminRoute.PATCH(request(body))).status, 403);
+  const seniorRoute = loadRoute("app/api/cases/route.ts", bindings("staff", "senior", "Senior Accounting Associate"));
+  const listRequest = {nextUrl:new URL("https://test.local/api/cases")};
+  assert.equal((await seniorRoute.GET(listRequest)).body.data.length, 1);
+  assert.equal((await loadRoute("app/api/cases/route.ts", bindings("staff", "other", "Junior Tax Associate")).GET(listRequest)).body.data.length, 0);
+  assert.equal((await seniorRoute.PATCH(request({id:body.id,version:body.version,case:{notes:"not mine"}}))).status,403);
+  assert.equal((await seniorRoute.PATCH(request({...body,profileId:"acc-new"}))).status,400);
+  assert.equal((await seniorRoute.PATCH(request({...body,version:"stale"}))).status,409);
+  assert.equal((await seniorRoute.PATCH(request(body))).status,200);
+  assert.equal(db.tables.tax_cases[0].case_workflow.events[0].actorId,"senior");
+  assert.match(db.tables.tax_cases[0].case_workflow.events[0].text,/New Tax/);
+  assert.equal((await staffRoute.GET(listRequest)).body.data.length,0);
+  const newPicRoute = loadRoute("app/api/cases/route.ts", bindings("staff", "tax-new"));
+  assert.equal((await newPicRoute.GET(listRequest)).body.data.length,1);
   const leaderRoute = loadRoute("app/api/cases/route.ts", bindings("supervisor", "supervisor"));
   assert.equal((await leaderRoute.PATCH(request(body))).status, 200);
   assert.equal(db.tables.tax_cases[0].tax_pic_profile_id, "tax-new");

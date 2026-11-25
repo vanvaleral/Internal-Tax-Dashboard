@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isLeadership } from "@/lib/access";
-import { currentCaseActor } from "@/lib/case-access";
+import { canOverseeCases, currentCaseActor } from "@/lib/case-access";
 import { latestCaseReportProgress, lastCaseReportUpdates, readReportHistory } from "@/lib/case-report-progress";
 
 export async function POST(request: NextRequest) {
@@ -14,7 +13,7 @@ export async function POST(request: NextRequest) {
     const ids=[...new Set<string>(body.caseIds.map((id: string)=>id.toLowerCase()))];
     const {data:cases,error}=await actor.admin.from("tax_cases").select("id, updated_at, tax_pic_profile_id, accounting_pic_profile_id, case_workflow, updater:staff_profiles!tax_cases_updated_by_profile_id_fkey(display_name, full_name)").in("id",ids).is("deleted_at",null);
     if (error) throw new Error(error.message);
-    if (cases?.length!==ids.length || cases.some((row: any)=>!isLeadership(actor.profile.role)&&![row.tax_pic_profile_id,row.accounting_pic_profile_id].includes(actor.profile.id))) return NextResponse.json({error:"One or more cases are no longer available in your access scope. Refresh the case list."},{status:403});
+    if (cases?.length!==ids.length || cases.some((row: any)=>!canOverseeCases(actor.profile)&&![row.tax_pic_profile_id,row.accounting_pic_profile_id].includes(actor.profile.id))) return NextResponse.json({error:"One or more cases are no longer available in your access scope. Refresh the case list."},{status:403});
     const [snapshots,entries,tasks]=await Promise.all([
       readReportHistory(actor.admin,"tax_case_task_timeline","id, case_id, task_id, title, step_id, step_title, actor_name, event_type, occurred_at",ids,"occurred_at"),
       readReportHistory(actor.admin,"tax_case_progress_entries","id, case_id, entry, created_at, staff_profiles!tax_case_progress_entries_created_by_profile_id_fkey(display_name, full_name)",ids,"created_at"),

@@ -23,7 +23,12 @@ export function accessTier(role: string | null | undefined): AccessTier {
   return role === "leader" ? "leader" : "associate";
 }
 export type OversightFeature = "clients" | "allocation";
-type OversightProfile = { role: string; client_overview_allowed?: boolean; allocation_overview_allowed?: boolean };
+type OversightProfile = { role: string; client_overview_allowed?: boolean; allocation_overview_allowed?: boolean; allocation_draft_allowed?: boolean };
+export function canEditSharedAllocation(profile: OversightProfile, policy: FeaturePolicy) {
+  return canManageAccess(profile.role) ||
+    (profile.role === "leader" && canUseFeature(profile.role, policy, "allocation")) ||
+    (profile.role === "staff" && profile.allocation_draft_allowed === true && policy.associate.allocation.mode !== "maintenance");
+}
 export function hasDelegatedOversight(profile: OversightProfile, policy: FeaturePolicy, feature: OversightFeature) {
   return profile.role === "staff" && policy.associate[feature].mode !== "maintenance" &&
     (feature === "clients" ? profile.client_overview_allowed === true : profile.allocation_overview_allowed === true);

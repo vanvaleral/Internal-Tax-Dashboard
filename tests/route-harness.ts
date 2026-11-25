@@ -26,14 +26,16 @@ export const request = (body: any = {}, search = "") => ({ url: `http://test.loc
 export function mockDatabase(tables: Record<string, any[]>) {
   const db = { tables, rpc: async (_name: string, _args: any): Promise<any> => ({data:null,error:{code:"PGRST202",message:"Synthetic missing function"}}), beforeWrite: null as (() => void) | null, from(table: string) {
     let filters: Array<(row: any) => boolean> = [], action = "read", input: any, single = false, bounds: number[] | null = null;
+    let draftDescending = false;
     const query: any = {
-      select() { return query; }, order() { return query; }, limit() { return query; },
+      select() { return query; }, order(key: string, options?: {ascending?: boolean}) { if (table === "allocation_draft_revisions" && key === "version") draftDescending = options?.ascending === false; return query; }, limit() { return query; },
       range(from: number, to: number) { bounds = [from, to]; return query; },
       not(key: string, _op: string, value: any) { filters.push(row => (row[key] ?? null) !== value); return query; },
       eq(key: string, value: any) { if (/^(latest_completion|my_completion|my_followup|my_task)\./.test(key)) return query; filters.push(row => (table === "client_master" && key === "engagement_type" && row[key] === undefined ? "contract" : row[key]) === value); return query; },
       is(key: string, value: any) { filters.push(row => (row[key] ?? null) === value); return query; },
       in(key: string, values: any[]) { filters.push(row => values.includes(table === "client_master" && key === "engagement_type" && row[key] === undefined ? "contract" : row[key])); return query; },
       gte(key: string, value: any) { filters.push(row => row[key] != null && Date.parse(row[key]) >= Date.parse(value)); return query; },
+      gt(key: string, value: number) { filters.push(row => row[key] > value); return query; },
       lt(key: string, value: any) { filters.push(row => row[key] != null && Date.parse(row[key]) < Date.parse(value)); return query; },
       or(expression: string) {
         const parts = expression.split(",").map(item => /^(.*?)\.(eq|gte|is)\.(.*)$/.exec(item));
@@ -56,9 +58,12 @@ export function mockDatabase(tables: Record<string, any[]>) {
       if (action !== "read" && db.beforeWrite) { const callback = db.beforeWrite; db.beforeWrite = null; callback(); }
       const rows = tables[table] ||= [];
       let result = rows.filter(row => filters.every(filter => filter(row)));
+      if (draftDescending) result.sort((a,b) => b.version - a.version);
       if (action === "insert") {
         const added = (Array.isArray(input) ? input : [input]).map(item => ({ id: `test-${rows.length + 1}`, created_at: "2026-09-16T00:00:00Z", updated_at: "2026-09-16T00:00:00Z", ...structuredClone(item) }));
-        if (added.some(item => rows.some(row => table === "operational_workspace_state" ? row.scope === item.scope : row.id === item.id || item.client_request_id && row.client_request_id === item.client_request_id && row.created_by_profile_id === item.created_by_profile_id))) return { data: null, error: { code: "23505", message: "duplicate" } };
+        if (added.some(item => rows.some(row => table === "operational_workspace_state" ? row.scope === item.scope :
+          table === "allocation_draft_revisions" ? row.allocation_year === item.allocation_year && row.version === item.version :
+          row.id === item.id || item.client_request_id && row.client_request_id === item.client_request_id && row.created_by_profile_id === item.created_by_profile_id))) return { data: null, error: { code: "23505", message: "duplicate" } };
         rows.push(...added); result = added;
       }
       if (action === "update") result.forEach(row => Object.assign(row, structuredClone(input), table === "my_work_tasks" ? { updated_at: `${row.updated_at}+1` } : {}));

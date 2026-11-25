@@ -3,7 +3,7 @@ import { currentActor } from "@/lib/access";
 import { readClients, readCases, readOperations, readStaff } from "@/lib/workspace-reads";
 import { readMyWork } from "@/lib/my-work-read";
 import { readAnnualSheet } from "@/lib/annual-sheet-read";
-import { allowedView, canUseFeature, hasDelegatedOversight, readFeatureSettings } from "@/lib/feature-access";
+import { allowedView, canEditSharedAllocation, canUseFeature, hasDelegatedOversight, readFeatureSettings } from "@/lib/feature-access";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,9 @@ export async function GET(request: Request) {
     const featureAccess = await readFeatureSettings(actor.admin);
     const allowed = (feature: Parameters<typeof canUseFeature>[2]) => canUseFeature(actor.profile.role, featureAccess.policy, feature);
     const oversight = requestedView === "allocation-view" ? "allocation" : requestedView === "client-management-view" ? "clients" : null;
-    const view = oversight && hasDelegatedOversight(actor.profile, featureAccess.policy, oversight) ? requestedView
+    const delegated = oversight && (hasDelegatedOversight(actor.profile, featureAccess.policy, oversight) ||
+      (oversight === "allocation" && actor.profile.role === "staff" && canEditSharedAllocation(actor.profile, featureAccess.policy)));
+    const view = delegated ? requestedView
       : allowedView(actor.profile.role, featureAccess.policy, views.has(requestedView) ? requestedView : "matrix-view");
     const annualTeam = params.get("team") === "tax" ? "tax" : "accounting";
     const annual = view === "matrix-view" && params.get("mode") === "annual";
@@ -37,7 +39,7 @@ export async function GET(request: Request) {
     }
     // One verified actor, independent reads in parallel, no process-wide user cache.
     const broad = !annual && !["my-work-view", "announcement-view"].includes(view) &&
-      !(oversight && view === requestedView && hasDelegatedOversight(actor.profile, featureAccess.policy, oversight));
+      !delegated;
     const readPlan = { version: 1, clients: broad, staff: broad };
     const loads: Promise<void>[] = [];
     if (broad) loads.push(collect("/api/staff", "staff", () => readStaff(actor)), collect("/api/clients", "clients", () => readClients(actor)));

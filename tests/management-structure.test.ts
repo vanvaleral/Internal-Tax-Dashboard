@@ -332,7 +332,7 @@ test("Team Split loads shared drafts separately from personal drafts and refresh
     mode("next"); assert.deepEqual(counts(),["0","0"]); assert.equal(calls,0);
     mode("shared"); await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(counts(),["0","1"]);
-    assert.match(x.host.querySelector("[data-structure-load]").textContent,/Shared 2026 draft.*v1.*Supervisor/s);
+    assert.match(x.host.querySelector("[data-structure-load]").textContent,/Shared 2026 draft[\s\S]*v1[\s\S]*Supervisor/);
     version++; changes=[];
     editor.refreshSharedForecast();
     await new Promise(resolve => setImmediate(resolve));

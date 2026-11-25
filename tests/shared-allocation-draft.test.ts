@@ -6,12 +6,12 @@ import { loadRoute, mockDatabase, request } from "./route-harness.ts";
 const clientId = "10000000-0000-0000-0000-000000000001";
 const year = 2026;
 function setup() {
-  const profile = {id:"supervisor",role:"supervisor",display_name:"Lead",full_name:"Lead"};
+  const profile = {id:"supervisor",role:"supervisor",display_name:"Lead",full_name:"Lead",allocation_draft_allowed:false};
   const policy = defaultFeaturePolicy();
   const db = mockDatabase({
     allocation_draft_revisions:[],
     feature_access_settings:[{id:true,version:1,policy}],
-    client_master:[{id:clientId,client_code:"CL-001",legal_name:"Client one",status:"Active",tax_pic_name:"Saved Tax"}],
+    client_master:[{id:clientId,client_code:"CL-001",legal_name:"Client one",status:"Active",tax_pic_name:"Saved Tax",monthly_fee:711}],
     staff_profiles:[{id:"tax-pic",display_name:"Tax PIC",full_name:"Tax PIC",team_division:"Tax Team",directory_active:true}]
   });
   const route = loadRoute("app/api/clients/allocation/draft/route.ts",{"@/lib/access":{
@@ -19,7 +19,8 @@ function setup() {
     isLeadership:(role:string)=>["supervisor","partner","admin","leader"].includes(role)
   }});
   return {profile,policy,db,route,read:(selectedYear=year)=>route.GET(request({},`?year=${selectedYear}`)),
-    publish:(changes:unknown[],expectedVersion=0)=>route.POST(request({year,expectedVersion,changes}))};
+    publish:(changes:unknown[],expectedVersion=0)=>route.POST(request({year,expectedVersion,changes})),
+    edit:(field:string,value:string|null,expected:string|null=null)=>route.PATCH(request({year,clientId,field,value,expected}))};
 }
 
 test("shared drafts are year-scoped and retain partial proposals and No PIC without changing assignments",async()=>{
@@ -35,6 +36,59 @@ test("shared drafts are year-scoped and retain partial proposals and No PIC with
   assert.equal((await d.publish([],1)).status,201);
   assert.equal(d.db.tables.allocation_draft_revisions.length,2,"withdrawing retains the first version for audit");
   assert.deepEqual(d.db.tables.client_master,before);
+});
+
+test("appointed Associates get minimal grid data and draft editing without official allocation or replacement",async()=>{
+  const d = setup();
+  d.profile.role = "staff";
+  assert.equal((await d.edit("nextTaxPic","")).status,403);
+  d.profile.allocation_draft_allowed = true;
+  const grid = await d.route.GET(request({},`?year=${year}&grid=1`));
+  assert.equal(grid.status,200);
+  assert.equal(grid.body.clients[0].monthly_fee,undefined);
+  assert.equal(grid.body.clients[0].tax_pic_name,"Saved Tax");
+  assert.equal((await d.edit("nextTaxPic","Tax PIC")).status,201);
+  assert.equal((await d.publish([],1)).status,403);
+  const official = loadRoute("app/api/clients/allocation/route.ts",{
+    "@/lib/access":{currentActor:async()=>({profile:d.profile,admin:d.db}),isLeadership:()=>false},
+    "@/lib/client-import":{}
+  });
+  assert.equal((await official.POST(request())).status,403);
+  assert.equal(d.db.tables.client_master[0].tax_pic_name,"Saved Tax");
+  d.policy.associate.allocation = {mode:"maintenance",message:"Paused"};
+  assert.equal((await d.read()).status,403);
+  assert.equal((await d.edit("nextTaxPic","")).status,403);
+});
+
+test("leadership edits merge across fields but stale edits to the same cell are rejected",async()=>{
+  const d = setup();
+  d.profile.role = "leader";
+  assert.equal((await d.edit("nextAccPic","")).status,403);
+  d.policy.leader.allocation.mode = "enabled";
+  assert.equal((await d.edit("nextAccPic","")).status,201);
+  assert.equal((await d.edit("nextTaxPic","Tax PIC")).status,201);
+  assert.equal((await d.edit("nextAccPic",null)).status,409);
+  assert.equal((await d.edit("nextAccPic",null,"")).status,201);
+  const current = await d.route.GET(request({},`?year=${year}&since=2`));
+  assert.equal(current.body.draft.version,3);
+  assert.equal(current.body.draft.changes[0].nextAccPic,undefined);
+  assert.equal(current.body.draft.changes[0].nextTaxPic,"Tax PIC");
+  assert.equal((await d.route.GET(request({},`?year=${year}&since=3`))).body.unchanged,true);
+  assert.equal((await d.edit("nextTaxPic",null,"Tax PIC")).body.draft.changes.length,0);
+});
+
+test("a racing insert retries only when the targeted cell is unchanged",async()=>{
+  const d = setup();
+  d.db.beforeWrite = () => d.db.tables.allocation_draft_revisions.push({
+    allocation_year:year,version:1,changes:[{clientId,nextTaxPic:"Tax PIC"}]
+  });
+  assert.equal((await d.edit("nextAccPic","")).body.draft.version,2);
+  assert.equal((await d.read()).body.draft.changes[0].nextTaxPic,"Tax PIC");
+  d.db.beforeWrite = () => d.db.tables.allocation_draft_revisions.push({
+    allocation_year:year,version:3,changes:[{clientId,nextTaxPic:"",nextAccPic:""}]
+  });
+  assert.equal((await d.edit("nextTaxPic",null,"Tax PIC")).status,409);
+  assert.equal(d.db.tables.allocation_draft_revisions.length,3);
 });
 
 test("leaders with Allocation can read, Associates and restricted leaders cannot, and only managers publish",async()=>{

@@ -338,8 +338,20 @@
     "Send to": "Kirim ke", "All employees": "Semua Staf", "Tax team": "Tim Pajak", "Accounting team": "Tim Akuntansi",
     "Send Notification": "Kirim Notifikasi", "Subject": "Subjek", "Message": "Pesan",
     "Retry Allocation tools": "Muat Ulang Fitur Alokasi",
+    "Open a generated monthly period first.": "Buka masa pajak yang sudah dibuat terlebih dahulu.",
+    "No eligible clients in this period.": "Tidak ada klien yang dapat dipilih pada masa pajak ini.",
+    "Create or open claim": "Buat atau Buka Klaim",
+    "The period changed. Close and reopen the claim picker.": "Masa pajak berubah. Tutup lalu buka kembali pemilih klaim.",
     "Read-only forecast. Current PIC assignments are not changed.": "Pratinjau ini hanya untuk dilihat. Penugasan PIC saat ini tidak berubah.",
     "Withdraw draft": "Tarik Draf", "Publish my draft": "Bagikan Draf Saya",
+    "Edit shared Next PIC drafts": "Edit Draf PIC Baru Bersama", "Allocation planning": "Rencana Alokasi",
+    "Can view and edit shared drafts, but cannot apply PIC changes.": "Dapat melihat dan mengedit draf bersama, tetapi tidak dapat menetapkan perubahan PIC.",
+    "Edit Next PIC proposals together without changing Current PIC assignments.": "Edit usulan PIC baru bersama tanpa mengubah penugasan PIC saat ini.",
+    "Next PIC edits save to the shared plan. Current PIC assignments are not changed.": "Usulan PIC baru tersimpan dalam draf bersama. Penugasan PIC saat ini tidak berubah.",
+    "Search client, code, or current PIC...": "Cari klien, kode, atau PIC saat ini...", "Proposed only": "Hanya yang Diusulkan",
+    "Keep current": "Pertahankan PIC Saat Ini", "No shared proposals for this year.": "Belum ada usulan bersama untuk tahun ini.",
+    "Saving shared edit...": "Menyimpan perubahan draf bersama...", "Shared edit saved.": "Perubahan draf bersama tersimpan.",
+    "Someone changed this cell. Review the latest value before editing it again.": "Orang lain telah mengubah sel ini. Periksa nilai terbaru sebelum mengedit lagi.",
     "No shared draft for this year.": "Belum ada draf bersama untuk tahun ini.",
     "Loading Client Master...": "Memuat data induk klien...", "Retry client list": "Muat Ulang Daftar Klien",
     "Clear sections for identity, PIC ownership, tax profile, and fees.": "Atur identitas, penugasan PIC, profil pajak, dan biaya jasa klien.",
@@ -613,7 +625,16 @@
     "Task could not be created.": "Tugas tidak dapat dibuat.",
     "Subject and message are required.": "Subjek dan pesan wajib diisi.",
     "Only leadership can publish announcements.": "Hanya pimpinan yang dapat mengirim pengumuman.",
-    "Only leadership can change the client master directly.": "Hanya pimpinan yang dapat mengubah data induk klien secara langsung."
+    "Only leadership can change the client master directly.": "Hanya pimpinan yang dapat mengubah data induk klien secara langsung.",
+    "Monthly Report & PIC Follow-up": "Laporan Bulanan & Tindak Lanjut PIC", "Report month": "Bulan Laporan",
+    "Review recorded activity, print a draft, or freeze a completed month.": "Tinjau aktivitas yang tercatat, cetak draf, atau simpan laporan final untuk bulan yang sudah berakhir.",
+    "Load report": "Buka Laporan", "Finalize month": "Finalisasi Bulan", "Monthly report details": "Rincian Laporan Bulanan",
+    "PIC Follow-up Watch": "Pemantauan Tindak Lanjut PIC", "Refresh watch": "Muat Ulang Pemantauan", "Load follow-up watch": "Buka Pemantauan Tindak Lanjut",
+    "Case follow-ups": "Tindak Lanjut Kasus", "My Work completions": "Tugas Selesai", "Case-linked steps": "Langkah Terkait Kasus",
+    "Last recorded activity": "Aktivitas Terakhir Tercatat", "Category": "Kategori", "Status at cutoff": "Status pada Akhir Periode",
+    "Updates": "Pembaruan", "Latest progress in period": "Progres Terakhir pada Periode Ini",
+    "Cases without a recent update": "Kasus Tanpa Pembaruan Terbaru", "Latest recorded update in 30 days": "Pembaruan Terakhir dalam 30 Hari",
+    "Examples": "Contoh", "Open cases": "Kasus Terbuka"
   }));
   let current = "en";
   try { current = localStorage.getItem(key) === "id" ? "id" : "en"; } catch {}
@@ -664,7 +685,8 @@
     "[data-my-work-save-status]", "[data-retry-task]", "#case-sheet-status",
     "[data-ui-surface=annual] :is(#control-description, #coverage-label, #candidate-summary, #candidate-list, #new-rows-status, #new-rows-error, #toast, #save-status, #visible-count, #selection-count)",
     ".staff-permission-dialog select option", ".staff-permission-dialog label", ".staff-permission-dialog [role=status]",
-    ".client-trash-dialog [role=status]", "[data-client-editor-save-status]", "[data-inbox-copy]"
+    ".client-trash-dialog [role=status]", "[data-client-editor-save-status]", "[data-inbox-copy]",
+    "[data-monthly-leadership-report] :is(label, summary, h4, button, p[role=status])"
   ].join(",");
   const interior = ".section-title h3,.section-title p,thead th,thead button,thead button > span,.toolbar button,.toolbar button > span,input[placeholder],textarea[placeholder],.empty-state,.empty-state > p,.workspace-tabs button";
   const views = "#client-management-view,#client-view,#dashboard-view,#cases-view,#matrix-view,#allocation-view,#profile-view,#announcement-view,#my-work-view";

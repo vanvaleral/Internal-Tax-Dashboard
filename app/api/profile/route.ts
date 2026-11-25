@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readFeatureSettings } from "@/lib/feature-access";
 
-const profileFields = "id, full_name, display_name, username, team_division, role, auth_user_id, client_import_allowed, client_export_allowed, client_overview_allowed, allocation_overview_allowed";
+const profileFields = "id, full_name, display_name, username, team_division, role, employment_title, auth_user_id, client_import_allowed, client_export_allowed, client_overview_allowed, allocation_overview_allowed, allocation_draft_allowed";
 
 async function authenticatedUser() {
   const session = await createClient();

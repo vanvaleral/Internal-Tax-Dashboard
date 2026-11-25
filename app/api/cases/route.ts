@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isLeadership } from "@/lib/access";
-import { currentCaseActor } from "@/lib/case-access";
+import { canOverseeCases, currentCaseActor } from "@/lib/case-access";
 import { applyCaseProgressPage, caseProgressPage, parseCaseProgressPage } from "@/lib/case-progress-page";
 import { createOperationalAnnouncement, notificationEventKey, uniqueProfileIds } from "@/lib/notifications";
 import { calculateHimbauanDueDate } from "@/lib/operational-rules";
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       .eq("id", progressFor)
       .is("deleted_at", null)
       .maybeSingle();
-    if (caseError || !taxCase || !canAccess(actor, taxCase)) {
+    if (caseError || !taxCase || !(canOverseeCases(actor.profile) || canAccess(actor, taxCase))) {
       return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
     }
     const page = (query: any, field: string, key: "completedTasks" | "progressEntries" | "taskTimeline") => paging ? applyCaseProgressPage(query, field, paging.cursor[key], paging.limit) : query.order(field, { ascending: false });
@@ -207,10 +207,10 @@ export async function PATCH(request: Request) {
     }
     const { data: existing, error: lookupError } = await actor.admin.from("tax_cases").select("*").eq("id", id).is("deleted_at", null).maybeSingle();
     if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
-    if (!existing || !canAccess(actor, existing)) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
+    if (!existing || !(canAccess(actor, existing) || body.action === "assign-pic" && canOverseeCases(actor.profile))) return NextResponse.json({ error: "You are not assigned to this case." }, { status: 403 });
     if (body.version !== existing.updated_at) return NextResponse.json({ error: "This case changed in another session. Reload before saving.", code: "VERSION_CONFLICT" }, { status: 409 });
     if (body.action === "assign-pic") {
-      if (!["leader", "supervisor", "partner"].includes(String(actor.profile.role).toLowerCase())) return NextResponse.json({ error: "Only a leader, supervisor or partner can reassign a case PIC." }, { status: 403 });
+      if (!canOverseeCases(actor.profile)) return NextResponse.json({ error: "Only Senior Associates or leadership can reassign a case PIC." }, { status: 403 });
       const picType = String(body.picType || "");
       if (!["tax", "accounting"].includes(picType)) return NextResponse.json({ error: "Choose the Tax or Accounting PIC field." }, { status: 400 });
       const profileId = String(body.profileId || "");
@@ -221,10 +221,17 @@ export async function PATCH(request: Request) {
       if (staffError) return NextResponse.json({ error: staffError.message }, { status: 500 });
       const selectedPic = profileId ? (staff || []).find((person: any) => person.id === profileId && person.directory_active !== false && person.team_division === (picType === "tax" ? "Tax Team" : "Accounting Team")) : null;
       if (profileId && !selectedPic) return NextResponse.json({ error: "Choose an active PIC from the correct team." }, { status: 400 });
+      const workflow = existing.case_workflow || {result:null,products:[],schedule:[],payments:[],revisionTarget:"",response:null,final:null,events:[]};
+      const previousPic = picType === "tax" ? existing.tax_pic_name : existing.accounting_pic_name;
+      const nextPic = selectedPic?.display_name || selectedPic?.full_name || null;
+      const event = {id:crypto.randomUUID(),action:"assign-pic",fingerprint:JSON.stringify({picType,profileId}),
+        text:`${picType === "tax" ? "Tax" : "Accounting"} PIC: ${previousPic || "Unassigned"} → ${nextPic || "Unassigned"}`,
+        actorId:actor.profile.id,actor:actor.profile.display_name || actor.profile.full_name,at:new Date().toISOString()};
       const { data, error } = await actor.admin.from("tax_cases").update({
         ...(picType === "tax" ? { tax_pic_profile_id: profileId || null, tax_pic_name: selectedPic?.display_name || selectedPic?.full_name || null } : { accounting_pic_profile_id: profileId || null, accounting_pic_name: selectedPic?.display_name || selectedPic?.full_name || null }),
-        updated_by_profile_id: actor.profile.id
-      }).eq("id", id).eq("updated_at", body.version).select("*").maybeSingle();
+        updated_by_profile_id: actor.profile.id,
+        case_workflow:{...workflow,events:[...(workflow.events || []),event]}
+      }).eq("id", id).is("deleted_at", null).eq("updated_at", body.version).select("*").maybeSingle();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       if (!data) return NextResponse.json({ error: "This case changed in another session.", code: "VERSION_CONFLICT" }, { status: 409 });
       return NextResponse.json({ data });

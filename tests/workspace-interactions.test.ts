@@ -35,6 +35,9 @@ test("operations row expansion is navigation-only and does not save the workspac
 test("Monthly Compliance uses an accessible custom collapse icon with matched action height", () => {
   assert.match(demo, /\.monthly-detail-action \{ height:28px; \}/);
   assert.match(demo, /class="tiny-btn monthly-detail-action" data-generate-claim/);
+  assert.match(demo, /data-open-monthly-claim>Create Tax Claim/);
+  assert.match(demo, /monthlyClaimTrigger\) \{ chooseMonthlyTaxClaim\(monthlyClaimTrigger\)/);
+  assert.match(demo, /await openMonthlyTaxClaim\(client\); dialog.close\(\)/);
   assert.match(demo, /class="tiny-btn monthly-detail-action monthly-collapse-btn"[\s\S]*?aria-label="Collapse client details"/);
   assert.match(demo, /class="monthly-collapse-icon"/);
   assert.doesNotMatch(demo, /data-row-toggle="\$\{row\.id\}">Collapse<\/button>/);

@@ -77,22 +77,24 @@ migration or dependency, and uses wrapping grids instead of another scroller.
 
 ## Shared Draft
 
-**Shared draft** lets a Supervisor, Partner or legacy Admin publish their local
-Next PIC proposals for the selected allocation year. Publish is explicit:
-the proposals already in the browser remain private until published. Other
-supervisors, partners and Leaders with Allocation access can see the same
-read-only snapshot. The dialog refreshes every 30 seconds while visible, and
-Refresh checks immediately. Publishing another snapshot replaces what viewers
-see; Withdraw removes the visible forecast without deleting its audit history.
+**Allocation > Shared draft** opens a shared editing grid for the selected year.
+Supervisors, Partners, Admins, enabled/preview Leaders, and individually appointed
+Associates can edit it. Appoint an Associate in **Management > PIC Access > pencil
+icon > Edit shared Next PIC drafts**. The grant does not provide access to fees,
+the normal Allocation sheet, or official Apply. Maintenance still blocks
+Associate access.
 
-The shared draft is separate from the editable sheet. It never updates Current
-PICs, applies the forecast, or replaces someone's personal draft. Missing PIC
-fields retain the current assignment; explicit blanks forecast No PIC. A stale
-publisher must refresh and review the newer version before replacing it.
+Edits commit one Next PIC cell at a time and record the editor and revision.
+Open editors check for changes every three seconds while visible. Concurrent edits
+to different cells merge; a stale edit to the same cell is rejected and the latest
+value shown. Choose Keep current to remove a proposal or No PIC to propose
+unassigning the client. The shared forecast never changes Current PICs. Existing
+private edits stay private unless a manager explicitly replaces the shared draft
+with them; managers can still withdraw a year without losing revision history.
 
-Deploy `20261120084023_shared_allocation_drafts.sql` before enabling shared
-drafts. It adds an append-only, server-only table with a primary key on year
-and version. It does not write Client Master or migrate browser drafts.
+Deploy `20261124080527_shared_allocation_draft_editors.sql` before the app release.
+It adds a default-off staff flag and extends the existing permissions audit trigger;
+existing shared revisions and Client Master assignments are unchanged.
 
 ## Entry Order
 

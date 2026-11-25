@@ -1,5 +1,10 @@
-import { currentActor } from "@/lib/access";
+import { currentActor, isLeadership } from "@/lib/access";
 import { canManageAccess, canUseFeature, readFeatureSettings } from "@/lib/feature-access";
+
+export function canOverseeCases(profile: {role: string; employment_title?: string | null}) {
+  return isLeadership(profile.role) || (profile.role === "staff" &&
+    /^senior (?:tax |accounting )?associate$/i.test((profile.employment_title || "").trim().replace(/\s+/g," ")));
+}
 
 // Cases handlers own all identity checks; middleware delegates only these exact APIs.
 export async function currentCaseActor(request: Request) {

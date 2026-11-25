@@ -1741,7 +1741,7 @@
     .case-external-dialog h3, .case-external-dialog p { margin:0; }
     .case-external-dialog [role="status"][data-error="true"] { color:var(--danger); }
     .case-external-dialog .inline-controls { justify-content:flex-end; }
-    .allocation-shared-dialog { width:min(740px,calc(100% - 24px)); max-height:calc(100svh - 24px); padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); overscroll-behavior:contain; }
+    .allocation-shared-dialog { width:min(1040px,calc(100% - 24px)); max-height:calc(100svh - 24px); padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--panel-solid); color:var(--ink); overscroll-behavior:contain; }
     .allocation-shared-dialog::backdrop { background:#18363860; overflow:hidden; overscroll-behavior:contain; }
     .allocation-shared-dialog h3 { margin:0; }
     .allocation-shared-dialog .table-wrap { max-height:45vh; }
@@ -4266,7 +4266,10 @@
     let latestStaffClaimCode = "";
     let latestStaffClaimFor = "";
     const hasLeadershipAccess = () => ["leader", "supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
-    const canReassignCasePic = () => ["leader", "supervisor", "partner"].includes(String(state.role || "").toLowerCase());
+    const canReassignCasePic = () => hasLeadershipAccess() || (state.role === "staff" &&
+      /^senior (?:tax |accounting )?associate$/i.test(String(bootstrapProfile.profile.employment_title || "").trim().replace(/\s+/g, " ")));
+    const canEditCaseRecord = item => IS_OFFLINE_DEMO || hasLeadershipAccess() ||
+      item.id.startsWith("case-") || [item.taxPicProfileId,item.accountingPicProfileId].includes(bootstrapProfile.profile.id);
     const canReviewClientDuplicates = () => ["leader", "supervisor"].includes(String(state.role || "").toLowerCase());
     const canManageClientTrash = () => !IS_OFFLINE_DEMO && ["supervisor", "partner", "admin"].includes(String(state.role || "").toLowerCase());
     const clientTrash = { status: "idle", rows: [], message: "" };
@@ -4289,6 +4292,9 @@
           <label><input type="checkbox" name="allClients" ${staff.client_overview_allowed ? "checked" : ""}> View all clients</label>
           <label><input type="checkbox" name="allAllocation" ${staff.allocation_overview_allowed ? "checked" : ""}> View all Allocation</label>
           <p class="subline">Shows client names and PIC assignments, without fees or editing rights. Maintenance blocks still apply.</p></fieldset>` : ""}
+        ${staff.role === "staff" ? `<fieldset><legend>Allocation planning</legend>
+          <label><input type="checkbox" name="sharedAllocation" ${staff.allocation_draft_allowed ? "checked" : ""}> Edit shared Next PIC drafts</label>
+          <p class="subline">Can view and edit shared drafts, but cannot apply PIC changes.</p></fieldset>` : ""}
         <label>Import clients ${staffClientPermission(staff, "import")}</label>
         <label>Export clients ${staffClientPermission(staff, "export")}</label>
         <p class="subline" role="status"></p>
@@ -4310,10 +4316,12 @@
         if (staff.role === "staff") {
           payload.clientOverviewAllowed = form.elements.allClients.checked;
           payload.allocationOverviewAllowed = form.elements.allAllocation.checked;
+          payload.allocationDraftAllowed = form.elements.sharedAllocation.checked;
         }
         if (payload.clientImportAllowed === (staff.client_import_allowed ?? null) && payload.clientExportAllowed === (staff.client_export_allowed ?? null)
           && (staff.role !== "staff" || payload.clientOverviewAllowed === Boolean(staff.client_overview_allowed)
-            && payload.allocationOverviewAllowed === Boolean(staff.allocation_overview_allowed))) return dialog.close();
+            && payload.allocationOverviewAllowed === Boolean(staff.allocation_overview_allowed)
+            && payload.allocationDraftAllowed === Boolean(staff.allocation_draft_allowed))) return dialog.close();
         const controls = Array.from(form.querySelectorAll("button, select, input"));
         controls.forEach(control => { control.disabled = true; });
         status.dataset.error = "false";
@@ -5026,7 +5034,7 @@
     }
 
     function selectedCase() {
-      const scoped = hasLeadershipAccess()
+      const scoped = canReassignCasePic()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
       return scoped.find((item) => item.id === state.selectedCaseId) || scoped[0] || null;
@@ -6936,7 +6944,6 @@
                 ${window.WorkspaceFeatures.manager() ? `<button class="${state.managementTab === "workload" ? "solid-btn" : "ghost-btn"}" data-management-tab="workload">PIC Access</button><button class="${state.managementTab === "features" ? "solid-btn" : "ghost-btn"}" data-management-tab="features">PIC Features</button>` : ""}
                 ${window.WorkspaceFeatures.manager() ? `<button class="${showStructure ? "solid-btn" : "ghost-btn"}" data-management-tab="structure">Structure</button>` : ""}
                 <button class="${state.managementTab === "recognition" ? "solid-btn" : "ghost-btn"}" data-management-tab="recognition">Recognition</button>
-                <button class="${state.managementTab === "report" ? "solid-btn" : "ghost-btn"}" data-management-tab="report">Monthly Report</button>
                 <button class="${state.managementTab === "announcements" ? "solid-btn" : "ghost-btn"}" data-management-tab="announcements">Notifications</button>
               </div>
             </div>
@@ -6953,6 +6960,7 @@
               <div class="section-title"><div><h3>Team Performance Board</h3><p>Cross-workspace view of workload, completion signals, cases, and current points.</p></div></div>
               <div class="table-wrap"><table><thead><tr><th>PIC</th><th>Team</th><th>Clients</th><th>Monthly Done</th><th>Annual Done</th><th>Open / Closed Cases</th><th>Attention</th><th>Points</th></tr></thead><tbody>${teamPerformance.map((row) => `<tr><td><strong>${escapeHtml(row.pic)}</strong></td><td>${row.team}</td><td>${row.clientCount}</td><td>${row.monthlyCompleted}</td><td>${row.annualDone}</td><td>${row.openCases} / ${row.closedCases}</td><td><span class="pill ${row.attention ? "warning" : "neutral"}">${row.attention}</span></td><td><strong>${row.points}</strong></td></tr>`).join("") || `<tr><td colspan="8"><div class="empty-state">No team performance data is available yet.</div></td></tr>`}</tbody></table></div>
             </section>
+            <section class="panel" data-monthly-leadership-report></section>
             <section class="dashboard-grid">
               <div class="panel">
                 <div class="section-title">
@@ -6992,16 +7000,6 @@
                     </div>
                   `).join("") || `<div class="empty-state">No visible bottlenecks in the current scope.</div>`}
                 </div>
-              </div>
-            </section>
-          ` : ``}
-
-          ${state.managementTab === "report" ? `
-            <section class="panel">
-              <div class="section-title"><div><div class="eyebrow">Partner briefing</div><h3>Monthly Leadership Report</h3><p>Two-page A4 preview covering PIC activity, open work, pending points, and carry-over cases.</p></div></div>
-              <div class="detail-grid-2">
-                <div class="detail-card"><strong>Preview September & October</strong><p class="subline">Compare the same case across two reporting periods. September remains outstanding; the October follow-up appears only in October.</p><a class="solid-btn" href="./monthly-partner-report.html" target="_blank" rel="noopener noreferrer">Open Printable Report</a></div>
-                <div class="detail-card"><strong>Finalization</strong><p class="subline">Leader, Supervisor, and Partner will be able to finalize a versioned month-end snapshot after the reporting backend is implemented. This design preview uses clearly labeled illustrative data.</p><button class="ghost-btn" disabled title="Requires server-side historical snapshot and audit trail">Finalize · backend pending</button></div>
               </div>
             </section>
           ` : ``}
@@ -7174,7 +7172,7 @@
           hasLeadershipAccess, isActiveClientRecord, optionsMarkup, parseCaseSheetClipboard, persistDemoState,
           restoreVirtualTableScrollPositions, safeHtml, sortHeader, splitBusinessName, syncBrowserHistory,
           virtualSpacer, windowedRows,
-          get sharedDraftEnabled() { return !IS_OFFLINE_DEMO && hasLeadershipAccess(); },
+          get sharedDraftEnabled() { return window.WorkspaceFeatures.sharedAllocation(); },
           get allocationPreviewPreparing() { return allocationPreviewPreparing; },
           get ACC_PICS() { return ACC_PICS; },
           get TAX_PICS() { return TAX_PICS; },
@@ -7206,10 +7204,10 @@
       if (!allocationSheetError) void ensureAllocationSheet().catch(() => {});
     }
 
-    async function readAllocationDraft(year) {
-      const response = await appFetch(`/api/clients/allocation/draft?year=${encodeURIComponent(year)}`,{cache:"no-store"});
+    async function readAllocationDraft(year, query = "") {
+      const response = await appFetch(`/api/clients/allocation/draft?year=${encodeURIComponent(year)}${query}`,{cache:"no-store"});
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Could not load the shared draft.");
+      if (!response.ok) throw Object.assign(new Error(result.error || "Could not load the shared draft."), {status:response.status});
       return result;
     }
 
@@ -7228,58 +7226,127 @@
     }
 
     function openAllocationSharedDraft(trigger) {
-      if (IS_OFFLINE_DEMO || !hasLeadershipAccess() || document.querySelector(".allocation-shared-dialog")) return;
-      const year = state.allocationYear, canPublish = window.WorkspaceFeatures.manager();
+      if (!window.WorkspaceFeatures.sharedAllocation() || document.querySelector(".allocation-shared-dialog")) return;
+      const year = Number(trigger.closest("section")?.querySelector("[data-delegated-allocation-year]")?.value || state.allocationYear);
+      const canPublish = window.WorkspaceFeatures.manager();
       const dialog = document.createElement("dialog");
       dialog.className = "allocation-shared-dialog";
       dialog.setAttribute("aria-labelledby","allocation-shared-title");
       dialog.innerHTML = safeHtml(`<div class="section-title"><div><h3 id="allocation-shared-title">Shared Next PIC draft · ${year}</h3>
-        <p>Read-only forecast. Current PIC assignments are not changed.</p></div><button type="button" class="ghost-btn" data-close-shared>Close</button></div>
-        <p class="subline" aria-live="polite" data-shared-status></p><div data-shared-preview></div>
+        <p>Next PIC edits save to the shared plan. Current PIC assignments are not changed.</p></div><button type="button" class="ghost-btn" data-close-shared>Close</button></div>
+        <div class="inline-controls"><input type="search" class="filter-input" aria-label="Search draft clients" placeholder="Search client, code, or current PIC..." data-shared-search disabled>
+        <label><input type="checkbox" data-shared-only disabled> Proposed only</label></div>
+        <p class="subline" aria-live="polite" data-shared-status></p><p class="subline" data-shared-version></p>
+        <div class="table-wrap" tabindex="0" aria-label="Shared PIC proposals" data-shared-preview><table>
+        <thead><tr><th scope="col">Client</th><th scope="col">Current ACC PIC</th><th scope="col">Current Tax PIC</th><th scope="col">Next ACC PIC</th><th scope="col">Next Tax PIC</th></tr></thead>
+        <tbody></tbody></table></div>
+        <div class="inline-controls"><button type="button" class="ghost-btn" data-shared-prev disabled>Previous</button><span data-shared-page></span><button type="button" class="ghost-btn" data-shared-next disabled>Next</button></div>
         <div class="inline-controls"><button type="button" class="ghost-btn" data-refresh-shared>Refresh</button>
         ${canPublish ? '<button type="button" class="ghost-btn" data-withdraw-shared disabled>Withdraw draft</button><button type="button" class="solid-btn" data-publish-shared disabled>Publish my draft</button>' : ""}</div>`);
       const status = dialog.querySelector("[data-shared-status]"), preview = dialog.querySelector("[data-shared-preview]");
       const publish = dialog.querySelector("[data-publish-shared]"), withdraw = dialog.querySelector("[data-withdraw-shared]");
       const closeButton = dialog.querySelector("[data-close-shared]");
-      let snapshot, busy = false, reading = false;
+      const search = dialog.querySelector("[data-shared-search]"), only = dialog.querySelector("[data-shared-only]");
+      const tbody = preview.querySelector("tbody"), pageLabel = dialog.querySelector("[data-shared-page]");
+      const prev = dialog.querySelector("[data-shared-prev]"), next = dialog.querySelector("[data-shared-next]");
+      const fields = ["nextAccPic","nextTaxPic"];
+      let snapshot, clients = [], options = {}, page = 0, busy = false, reading = false, ready = false;
+      let proposals = new Map(), drawn = "", writeSequence = 0;
+      function syncCell(select, force = false) {
+        if (!force && document.activeElement === select) return;
+        const value = proposals.get(select.dataset.client)?.[select.dataset.field] ?? null;
+        const selected = JSON.stringify(value);
+        for (const extra of select.querySelectorAll("[data-legacy]")) extra.remove();
+        if (![...select.options].some(option => option.value === selected)) {
+          const extra = new Option(value, selected);
+          extra.dataset.legacy = "";
+          extra.disabled = true;
+          select.add(extra);
+        }
+        select.value = select.dataset.expected = selected;
+      }
       function showDraft() {
         const rows = snapshot?.changes || [];
-        const next = (row,field) => Object.hasOwn(row,field) ? escapeHtml(row[field] || "No PIC") : "Keep current";
-        const by = snapshot ? ` by ${escapeHtml(snapshot.published_by_name)} · ${escapeHtml(myWorkLocalDateTime(snapshot.published_at))}` : "";
-        preview.innerHTML = safeHtml(snapshot ? `<p class="subline">${rows.length ? "Published" : "Withdrawn"}${by}</p>` +
-          (rows.length ? `<div class="table-wrap" tabindex="0" aria-label="Published proposals"><table>
-          <thead><tr><th scope="col">Client</th><th scope="col">Next ACC PIC</th><th scope="col">Next Tax PIC</th></tr></thead>
-          <tbody>${rows.map(row=>`<tr><td>${escapeHtml(row.clientName)} <small>${escapeHtml(row.clientCode)}</small></td><td>${next(row,"nextAccPic")}</td><td>${next(row,"nextTaxPic")}</td></tr>`).join("")}</tbody></table></div>` : "") : '<p>No shared draft for this year.</p>');
-        if (publish) publish.disabled = busy || !localAllocationProposals().length;
+        proposals = new Map(rows.map(row => [row.clientId,row]));
+        const keyword = search.value.trim().toLowerCase();
+        const matches = clients.filter(row => (!only.checked || proposals.has(row.id)) &&
+          [row.client_code,row.legal_name,row.accounting_pic_name,row.tax_pic_name].join(" ").toLowerCase().includes(keyword));
+        page = Math.min(page, Math.max(0,Math.ceil(matches.length / 25) - 1));
+        const from = page * 25, shown = matches.slice(from,from + 25);
+        const signature = shown.map(row => row.id).join(",") || "empty";
+        if (signature !== drawn && !tbody.contains(document.activeElement)) {
+          drawn = signature;
+          tbody.innerHTML = safeHtml(shown.map(row => `<tr><td>${escapeHtml(row.legal_name)} <small>${escapeHtml(row.client_code)}</small></td>
+            <td>${escapeHtml(row.accounting_pic_name || "No PIC")}</td><td>${escapeHtml(row.tax_pic_name || "No PIC")}</td>
+            ${fields.map((field,i) => `<td><select class="field" data-client="${escapeAttr(row.id)}" data-field="${field}" aria-label="${i ? "Next Tax PIC" : "Next ACC PIC"}: ${escapeAttr(row.legal_name)}">
+              ${[[null,"Keep current"],["","No PIC"],...(options[field] || []).map(name => [name,name])].map(([value,label]) => `<option value="${escapeAttr(JSON.stringify(value))}">${escapeHtml(label)}</option>`).join("")}
+            </select></td>`).join("")}</tr>`).join(""));
+        }
+        tbody.querySelectorAll("select").forEach(select => syncCell(select));
+        pageLabel.textContent = matches.length ? `${from + 1}-${from + shown.length} / ${matches.length}` : "No matching clients";
+        prev.disabled = !page; next.disabled = from + shown.length >= matches.length;
+        search.disabled = only.disabled = !ready;
+        dialog.querySelector("[data-shared-version]").textContent = snapshot
+          ? `Last edit: ${snapshot.published_by_name} · ${myWorkLocalDateTime(snapshot.published_at)} · ${rows.length} proposed client(s)`
+          : "No shared proposals for this year.";
+        if (publish) publish.disabled = busy || !ready || !localAllocationProposals().length;
         if (withdraw) withdraw.disabled = busy || !rows.length;
       }
       async function refresh(manual = false) {
         if (reading || busy) return;
         reading = true;
+        const started = writeSequence;
         if (manual) status.textContent = "Loading shared draft...";
         try {
-          const result = await readAllocationDraft(year);
-          if (!dialog.isConnected) return;
-          if (snapshot === undefined || (snapshot?.version || 0) !== (result.draft?.version || 0)) {
+          const reloadGrid = !ready || manual;
+          const result = await readAllocationDraft(year,reloadGrid ? "&grid=1" : `&since=${snapshot?.version || 0}`);
+          if (!dialog.isConnected || started !== writeSequence) return;
+          if (reloadGrid) { clients = result.clients; options = result.options; ready = true; drawn = ""; }
+          if (!result.unchanged && (reloadGrid || (snapshot?.version || 0) !== (result.draft?.version || 0))) {
             snapshot = result.draft || null;
             showDraft();
           }
-          status.textContent = "";
+          if (manual || status.dataset.syncError === "true") { status.textContent = ""; status.dataset.syncError = "false"; }
         } catch (error) {
-          if (!dialog.isConnected) return;
-          snapshot = undefined;
-          preview.textContent = "";
-          if (publish) publish.disabled = true;
-          if (withdraw) withdraw.disabled = true;
+          if (!dialog.isConnected || started !== writeSequence) return;
+          if ([401,403].includes(error.status)) {
+            snapshot = undefined; ready = false; clients = []; options = {}; drawn = "";
+            tbody.replaceChildren();
+            showDraft();
+          }
+          status.dataset.syncError = "true";
           status.textContent = error.message;
         } finally { reading = false; }
       }
+      tbody.addEventListener("focusout", () => queueMicrotask(() => { if (!busy) showDraft(); }));
+      tbody.addEventListener("change", async event => {
+        const select = event.target.closest("select[data-client]");
+        if (!select) return;
+        if (busy || !ready) { select.value = select.dataset.expected; return; }
+        writeSequence++;
+        busy = closeButton.disabled = true;
+        status.dataset.syncError = "false";
+        status.textContent = "Saving shared edit...";
+        try {
+          const response = await appFetch("/api/clients/allocation/draft",{
+            method:"PATCH",headers:{"Content-Type":"application/json",Accept:"application/json"},
+            body:JSON.stringify({year,clientId:select.dataset.client,field:select.dataset.field,
+              value:JSON.parse(select.value),expected:JSON.parse(select.dataset.expected)})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (Object.hasOwn(result,"draft")) snapshot = result.draft;
+          if (!response.ok) throw new Error(result.error || "Shared edit could not be confirmed.");
+          status.textContent = "Shared edit saved.";
+        } catch (error) { status.textContent = error.message; }
+        finally { busy = closeButton.disabled = false; showDraft(); syncCell(select,true); }
+      });
       async function send(clear) {
-        if (busy || reading || snapshot === undefined) return;
+        if (busy || !ready) return;
         const changes = clear ? [] : localAllocationProposals();
         if (!clear && !changes.length) return;
         if (!window.confirm(clear ? `Withdraw the shared ${year} draft? Current PICs will not change.` :
           `Publish ${changes.length} client proposal(s) for ${year}? This replaces the shared draft for the year without changing Current PICs.`)) return;
+        writeSequence++;
         busy = closeButton.disabled = true;
         showDraft();
         status.textContent = clear ? "Withdrawing draft..." : "Publishing draft...";
@@ -7301,11 +7368,16 @@
           if (retryRead) { publish.disabled = true; withdraw.disabled = true; }
         }
       }
-      const timer = setInterval(() => { if (document.visibilityState !== "hidden") void refresh(); },30000);
+      const timer = setInterval(() => { if (document.visibilityState !== "hidden") void refresh(); },3000);
       function close() { clearInterval(timer); dialog.close(); dialog.remove(); trigger.focus({preventScroll:true}); }
       closeButton.addEventListener("click",close);
       dialog.addEventListener("cancel",event => { event.preventDefault(); if (!busy) close(); });
       dialog.querySelector("[data-refresh-shared]").addEventListener("click",() => void refresh(true));
+      const filter = () => { page = 0; showDraft(); };
+      search.addEventListener("input",filter);
+      only.addEventListener("change",filter);
+      prev.addEventListener("click",() => { page--; showDraft(); });
+      next.addEventListener("click",() => { page++; showDraft(); });
       publish?.addEventListener("click",() => void send(false));
       withdraw?.addEventListener("click",() => void send(true));
       document.body.append(dialog);
@@ -8051,6 +8123,7 @@
                 <button class="${state.operationsMode === "annual" ? "solid-btn" : "ghost-btn"}" data-operations-mode="annual">Annual Compliance</button>
               </div>
               <div class="toolbar-right">
+                ${state.operationsMode === "monthly" && !IS_OFFLINE_DEMO ? '<button type="button" class="ghost-btn" data-open-monthly-claim>Create Tax Claim</button>' : ""}
                 <span class="pill neutral">${state.operationsMode === "monthly" ? `${list.length} active rows` : `${annualSource.length} annual rows`}</span>
                 <span class="pill ${state.operationsMode === "monthly" ? (completedHiddenCount ? "warning" : "accent") : (annualPendingCount ? "warning" : "accent")}">${state.operationsMode === "monthly" ? `${completedHiddenCount} completed hidden` : `${annualPendingCount} still open`}</span>
               </div>
@@ -8795,7 +8868,7 @@
       const completed = progress?.completedTasks || [];
       const timeline = caseTimeline(item, progress);
       const visibleTimeline = timeline.slice(0, progress?.visibleCount || 10);
-      const ready = !draft && !progress?.accessDenied;
+      const ready = !draft && !progress?.accessDenied && canEditCaseRecord(item);
       const saving = caseFollowUpPending.has(item.id);
       const timestamp = value => value ? escapeHtml(new Date(value).toLocaleString("id-ID", { dateStyle:"medium", timeStyle:"short" })) : "Time unavailable";
       const removal = (entry, restore = false) => {
@@ -8896,7 +8969,7 @@
       const assessmentEditor=activeEditorSnapshot();
       if (!rootOverride) caseListViewDirty = false;
       const profileId = bootstrapProfile.profile.id;
-      const scopedCases = hasLeadershipAccess()
+      const scopedCases = canReassignCasePic()
         ? taxCases
         : taxCases.filter((item) => (profileId && [item.taxPicProfileId, item.accountingPicProfileId].includes(profileId)) || (!item.taxPicProfileId && String(item.taxPic || "").toLowerCase() === state.selectedPic.toLowerCase()) || (!item.accountingPicProfileId && String(item.accountingPic || "").toLowerCase() === state.selectedPic.toLowerCase()) || (item.id === state.selectedCaseId && item.id.startsWith("case-")));
       const caseQuery = state.caseSearch.trim().toLowerCase();
@@ -8961,6 +9034,7 @@
       const groupStart = (index) => index > 0 && columnGroup(columns[index][0]) !== columnGroup(columns[index - 1][0]);
       const categoryCount = (name) => scopedCases.filter(item => (item.caseCategory || "Himbauan") === name).length;
       const inlineCaseInput = (item, field, type = "text") => {
+        if (!canEditCaseRecord(item)) return `<span class="case-inline-readonly">${escapeHtml(caseSheetDisplayValue(item, field) || "-")}</span>`;
         const date = type === "date", saving = caseSheetPending.get(item)?.values.has(field);
         const label = `${columns.find(([key]) => key === field)?.[1] || field}: ${item.clientName || "New case"}`;
         const input = `<input class="case-inline-field ${field === "clientName" ? "case-client-field" : ""}" data-case-sheet-id="${item.id}" data-case-sheet-field="${field}" aria-label="${escapeAttr(label)}" type="text" value="${escapeAttr(caseSheetDisplayValue(item, field))}" ${date ? 'data-case-sheet-date placeholder="dd/mm/yyyy" title="DD/MM/YYYY"' : ""} ${field === "clientName" ? (item.id.startsWith("case-") ? 'list="case-client-options" placeholder="Choose a client to save"' : 'readonly title="Client linkage is retained for case history"') : ""} ${saving ? 'disabled data-saving="true"' : ""} />`;
@@ -8968,7 +9042,7 @@
       };
       const deleteCaseButton = (item) => `<button class="danger-icon-btn" data-delete-case="${item.id}" ${caseSheetPending.get(item)?.count ? "disabled" : ""} aria-label="Archive case ${escapeAttr(item.clientName)}" title="Archive case">${deleteIcon()}</button>`;
       const progressRow = (item) => item.id === state.expandedHimbauanId ? `<tr class="case-progress-inline" data-case-progress-id="${escapeAttr(item.id)}"><td colspan="13">${renderCaseProgressPanel(item, expandedProgress)}</td></tr>` : "";
-      const caseActionButtons = (item) => `<div class="inline-controls">${deleteCaseButton(item)}</div>`;
+      const caseActionButtons = (item) => canEditCaseRecord(item) ? `<div class="inline-controls">${deleteCaseButton(item)}</div>` : "";
       const casePicCell = (item, type) => {
         const isTax = type === "tax";
         const currentName = isTax ? item.taxPic : item.accountingPic;
@@ -9432,7 +9506,7 @@
       window.WorkspaceFeatures.setRole(state.role);
       window.WorkspaceFeatures.chrome(state.currentView);
       const allocationNav = document.querySelector('[data-view="allocation-view"]');
-      if (window.WorkspaceFeatures.oversight("allocation")) allocationNav?.removeAttribute("data-mobile-hidden");
+      if (window.WorkspaceFeatures.oversight("allocation") || window.WorkspaceFeatures.sharedAllocation()) allocationNav?.removeAttribute("data-mobile-hidden");
       else allocationNav?.setAttribute("data-mobile-hidden", "yes");
       const mobileUserName = document.getElementById("mobile-user-name");
       const mobileUserRole = document.getElementById("mobile-user-role");
@@ -10498,12 +10572,13 @@
       // Serialize each case, not the whole sheet. Every request uses the last confirmed version.
       pending.queue = pending.queue.then(async () => {
         const previousId = record.id;
+        const couldEdit = canEditCaseRecord(record);
         try {
           const draft = structuredClone(record);
           Object.assign(draft, changes);
           let saved;
           if (field.endsWith("PicProfileId")) {
-            if (!canReassignCasePic()) throw new Error("Only leadership can reassign a case PIC.");
+            if (!canReassignCasePic()) throw new Error("Only Senior Associates or leadership can reassign a case PIC.");
             const response = await appFetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: record.id, version: record.version, action: "assign-pic", picType: field === "taxPicProfileId" ? "tax" : "accounting", profileId: value || null }) }, "");
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || "PIC could not be saved.");
@@ -10530,6 +10605,7 @@
         } finally {
           fields.forEach(key => pending.values.delete(key)); pending.count--;
           refreshCaseSheetRecord(record, previousId, fields);
+          if (!previousId.startsWith("case-") && couldEdit !== canEditCaseRecord(record) && !caseSheetBulkSaving) renderCases();
           if (previousId.startsWith("case-") && !record.id.startsWith("case-")) {
             const editor = activeEditorSnapshot();
             const rawValue = editor?.sheet ? document.activeElement.value : null;
@@ -10721,7 +10797,7 @@
               changes.clientName = client.name;
             } else if (field.endsWith("PicProfileId")) {
               if (cells && editor?.value === current && raw === caseGridDisplay(cell).trim()) continue;
-              if (!canReassignCasePic() || record.id.startsWith("case-")) throw new Error("Only leadership can change saved case PICs.");
+              if (!canReassignCasePic() || record.id.startsWith("case-")) throw new Error("Only Senior Associates or leadership can change saved case PICs.");
               const division = field === "taxPicProfileId" ? "Tax Team" : "Accounting Team";
               const matches = staffDirectory.filter(person => person.directory_active !== false && person.team_division === division && [person.id, person.display_name, person.full_name].some(value => value && String(value).toLowerCase() === raw.toLowerCase()));
               const value = !raw || raw.toLowerCase() === "unassigned" ? "" : matches.length === 1 ? matches[0].id : null;
@@ -11972,13 +12048,13 @@
       if (IS_CASES_FULLSCREEN) state.currentView = "cases-view";
       window.WorkspaceFeatures.setRole(state.role);
       state.currentView = window.WorkspaceFeatures.normalize(state.currentView);
-      if (["workload", "features", "structure"].includes(state.managementTab) && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
+      if (state.managementTab === "report" || ["workload", "features", "structure"].includes(state.managementTab) && !window.WorkspaceFeatures.manager()) state.managementTab = "overview";
     }
 
     function normalizeMobileWorkspaceView() {
       normalizeWorkspaceNavigation();
       if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(state.currentView)
-          && !(state.currentView === "allocation-view" && window.WorkspaceFeatures.oversight("allocation"))) {
+          && !(state.currentView === "allocation-view" && (window.WorkspaceFeatures.oversight("allocation") || window.WorkspaceFeatures.sharedAllocation()))) {
         state.currentView = "my-work-view";
         state.clientManagementTab = "active";
       }
@@ -11988,13 +12064,24 @@
     let oversightOwnClients = false;
     function renderStaffOversight(view) {
       const scope = view === "allocation-view" ? "allocation" : view === "client-management-view" ? "clients" : null;
+      const delegatedDraft = scope === "allocation" && !hasLeadershipAccess() && window.WorkspaceFeatures.sharedAllocation();
+      const draftControls = delegatedDraft ? `<div class="inline-controls">
+        <label>Allocation year <input class="field" type="number" min="2000" max="2200" value="${state.allocationYear}" data-delegated-allocation-year></label>
+        <button type="button" class="solid-btn" data-allocation-shared-draft>Shared draft</button></div>` : "";
+      if (delegatedDraft && !window.WorkspaceFeatures.oversight("allocation")) {
+        const root = document.getElementById(view);
+        if (!root.querySelector("[data-delegated-draft-panel]")) root.innerHTML = safeHtml(`<section class="panel" data-delegated-draft-panel>
+          <div class="section-title"><div><h3>Allocation planning</h3><p>Edit Next PIC proposals together without changing Current PIC assignments.</p></div></div>
+          ${draftControls}</section>`);
+        return true;
+      }
       if (!scope || !window.WorkspaceFeatures.oversight(scope) || (scope === "clients" && oversightOwnClients && window.WorkspaceFeatures.can("clients"))) return false;
       const root = document.getElementById(view);
       if (root.querySelector("[data-oversight-panel]")) return true;
       root.innerHTML = safeHtml(`<section class="panel" data-oversight-panel>
         <div class="section-title"><div><h3>${scope === "allocation" ? "All Allocation" : "All Clients"}</h3><p>Read-only access. Fees and private client details are not shown.</p></div>
           <div class="inline-controls">${scope === "clients" && window.WorkspaceFeatures.can("clients") ? '<button type="button" class="ghost-btn" data-oversight-own>My Clients</button>' : ""}
-          <button type="button" class="ghost-btn" data-oversight-refresh>Refresh</button></div></div>
+          <button type="button" class="ghost-btn" data-oversight-refresh>Refresh</button></div></div>${draftControls}
         <div class="toolbar"><input class="filter-input" type="search" aria-label="Search clients" placeholder="Search client, code, or PIC..." data-oversight-search></div>
         <p role="status" class="subline" data-oversight-status></p>
         <div class="table-wrap"><table><thead><tr><th scope="col">Code</th><th scope="col">Form</th><th scope="col">Client Name</th><th scope="col">Accounting PIC</th><th scope="col">Tax PIC</th><th scope="col">Status</th></tr></thead><tbody></tbody></table></div>
@@ -12045,6 +12132,97 @@
       return true;
     }
 
+    const monthlyLeadership = { period: "", report: null, watch: null, busy: false, watching: false, message: "", watchMessage: "" };
+
+    function monthlyReportTable(headers, rows) {
+      return `<div class="table-wrap"><table><thead><tr>${headers.map(cell => `<th scope="col">${escapeHtml(cell)}</th>`).join("")}</tr></thead>
+        <tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(String(cell ?? ""))}</td>`).join("")}</tr>`).join("") ||
+          `<tr><td colspan="${headers.length}">No records.</td></tr>`}</tbody></table></div>`;
+    }
+
+    function monthlyLeadershipBody(result) {
+      const { report, finalizedBy, finalizedAt } = result;
+      const date = value => value ? new Date(value).toLocaleString("id-ID", { timeZone: "Asia/Makassar", dateStyle: "short", timeStyle: "short" }) : "-";
+      return `<h3>Monthly Leadership Report · ${escapeHtml(report.period)}</h3>
+        <p>${finalizedAt ? `Finalized by ${escapeHtml(finalizedBy || "")} · ${escapeHtml(date(finalizedAt))} WITA` : "Draft based on available records"}</p>
+        <p>Based on dated case follow-ups and My Work completion records in WITA. Case status uses recorded closure and archive dates. Undated history, compliance totals, and points are not included.</p>
+        <h4>Recorded activity by PIC</h4>${monthlyReportTable(["PIC", "Case follow-ups", "My Work completions", "Case-linked steps", "Last recorded activity"],
+          report.staff.map(row => [row.name, row.followUps, row.tasks, row.steps, date(row.lastUpdate)]))}
+        ${report.unattributed ? `<p>${Number(report.unattributed)} event(s) without a recorded PIC.</p>` : ""}
+        <h4>Cases and latest progress this month</h4>${monthlyReportTable(["Client", "Category", "Status at cutoff", "Updates", "Latest progress in period"],
+          report.cases.map(row => [row.client, row.category, row.state, row.updates, row.latest ? [date(row.latest.at), row.latest.name, row.latest.text].join(" / ") : "No update this month"]))}`;
+    }
+
+    function renderMonthlyLeadership() {
+      const root = document.querySelector("[data-monthly-leadership-report]");
+      if (!root) return;
+      const state = monthlyLeadership;
+      const month = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 7);
+      state.period ||= month;
+      root.innerHTML = safeHtml(`<div class="section-title"><div><h3>Monthly Report & PIC Follow-up</h3><p>Review recorded activity, print a draft, or freeze a completed month.</p></div></div>
+        <div class="toolbar"><label>Report month <input type="month" class="field" data-leadership-period value="${escapeAttr(state.period)}" max="${month}" ${state.busy ? "disabled" : ""}></label>
+          <div class="inline-controls"><button class="ghost-btn" data-leadership-load ${state.busy || IS_OFFLINE_DEMO ? "disabled" : ""}>Load report</button>
+          <button class="ghost-btn" data-leadership-print ${!state.report || state.busy ? "disabled" : ""}>Print Report</button>
+          <button class="solid-btn" data-leadership-finalize ${!state.report?.canFinalize || state.busy ? "disabled" : ""}>Finalize month</button></div></div>
+        <p class="subline" role="status">${escapeHtml(IS_OFFLINE_DEMO ? "Connect to the workspace to load real report data." : state.message)}</p>
+        ${state.report ? `<details open><summary>Monthly report details</summary>${monthlyLeadershipBody(state.report)}</details>` : ""}
+        <div class="section-title" style="margin-top:16px"><div><h4>PIC Follow-up Watch</h4><p>Flags open cases at least 30 days old with no follow-up or linked completion by that assigned PIC in the last 30 days. It does not measure work done outside the dashboard.</p></div>
+          <button class="ghost-btn" data-leadership-watch ${state.watching || IS_OFFLINE_DEMO ? "disabled" : ""}>${state.watch ? "Refresh watch" : "Load follow-up watch"}</button></div>
+        <p class="subline" role="status">${escapeHtml(state.watchMessage)}</p>
+        ${state.watch ? monthlyReportTable(["PIC", "Open cases", "Cases without a recent update", "Latest recorded update in 30 days", "Examples"],
+          state.watch.map(row => [row.name, row.open, row.stale, row.recent ? new Date(row.recent).toLocaleDateString("id-ID", { timeZone: "Asia/Makassar" }) : "None recorded", row.staleClients.join(", ")])) : ""}`);
+      root.querySelector("[data-leadership-period]").addEventListener("change", event => {
+        state.period = event.target.value || month;
+        state.report = null;
+        state.message = "";
+        renderMonthlyLeadership();
+      });
+      async function load(finalize) {
+        if (state.busy || finalize && !window.confirm("Finalize this month? The saved snapshot cannot be overwritten.")) return;
+        state.busy = true;
+        state.message = finalize ? "Finalizing report..." : "Loading monthly report...";
+        renderMonthlyLeadership();
+        try {
+          const url = "/api/management/monthly-report";
+          const response = finalize
+            ? await appFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ period: state.period }) })
+            : await appFetch(`${url}?period=${encodeURIComponent(state.period)}`, { cache: "no-store" });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.report) throw new Error(result.error || "Report could not be loaded.");
+          state.report = result;
+          state.message = result.finalizedAt ? "Showing the saved final snapshot." : result.canFinalize ? "Draft loaded. Review it before finalizing." : "Draft loaded. The current month cannot be finalized yet.";
+        } catch (error) { state.message = error.message; }
+        finally { state.busy = false; renderMonthlyLeadership(); }
+      }
+      root.querySelector("[data-leadership-load]").addEventListener("click", () => load(false));
+      root.querySelector("[data-leadership-finalize]").addEventListener("click", () => load(true));
+      root.querySelector("[data-leadership-watch]").addEventListener("click", async () => {
+        state.watching = true;
+        state.watchMessage = "Loading follow-up watch...";
+        renderMonthlyLeadership();
+        try {
+          const response = await appFetch("/api/management/monthly-report?watch=1", { cache: "no-store" });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !Array.isArray(result.watch)) throw new Error(result.error || "Could not load the follow-up watch.");
+          state.watch = result.watch;
+          state.watchMessage = result.watch.length ? "" : "No PICs meet the follow-up rule.";
+        } catch (error) { state.watch = null; state.watchMessage = error.message; }
+        finally { state.watching = false; renderMonthlyLeadership(); }
+      });
+      root.querySelector("[data-leadership-print]").addEventListener("click", () => {
+        const page = window.open("", "_blank", "width=1050,height=800");
+        if (!page) { state.message = "Allow pop-ups to print the report."; renderMonthlyLeadership(); return; }
+        page.opener = null;
+        page.document.title = "Monthly Leadership Report";
+        page.document.body.innerHTML = safeHtml(monthlyLeadershipBody(state.report));
+        const style = page.document.createElement("style");
+        style.textContent = "@page{size:A4 landscape;margin:12mm}body{font:12px Arial;color:#213339}table{width:100%;border-collapse:collapse;margin-bottom:10px}td,th{border:1px solid #bbc9c8;padding:6px;text-align:left;overflow-wrap:anywhere}thead{display:table-header-group}tr{break-inside:avoid}";
+        page.document.head.append(style);
+        page.focus();
+        page.print();
+      });
+    }
+
     function renderActiveView() {
       if (renderStaffOversight(state.currentView)) return;
       if (state.currentView === "allocation-view" && !allocationSheet && !allocationSheetError &&
@@ -12068,7 +12246,11 @@
       if (state.currentView === "my-work-view") return renderMyWork();
       if (state.currentView === "announcement-view") return renderAnnouncementView();
       if (state.currentView === "client-management-view") return renderClientManagement();
-      if (state.currentView === "dashboard-view") return renderDashboard();
+      if (state.currentView === "dashboard-view") {
+        renderDashboard();
+        renderMonthlyLeadership();
+        return;
+      }
       if (state.currentView === "allocation-view") return renderAllocation();
       if (state.currentView === "profile-view") return renderProfile();
       return renderClientView();
@@ -12084,7 +12266,7 @@
       // an old link or clicks an embedded management shortcut.
       viewId = window.WorkspaceFeatures.normalize(viewId);
       if (window.matchMedia("(max-width: 900px)").matches && !MOBILE_WORKSPACE_VIEWS.has(viewId)
-          && !(viewId === "allocation-view" && window.WorkspaceFeatures.oversight("allocation"))) {
+          && !(viewId === "allocation-view" && (window.WorkspaceFeatures.oversight("allocation") || window.WorkspaceFeatures.sharedAllocation()))) {
         viewId = "my-work-view";
       }
       if (viewId === "client-management-view" && window.matchMedia("(max-width: 900px)").matches) {
@@ -12125,6 +12307,45 @@
       client.claimStatus = "Claim Generated";
       client.paymentStatus = "Claim Ready to Send";
       client.lastUpdated = "2026-05-20 12:10";
+    }
+
+    function chooseMonthlyTaxClaim(trigger) {
+      if (document.querySelector("[data-monthly-claim-dialog]")) return;
+      const period = state.activeMonthlyPeriod;
+      const eligible = state.monthlyProgress[period] ? clients.filter(row => row.databaseId && (hasLeadershipAccess() ||
+        (row.taxPicSnapshotProfileId || row.taxPicProfileId) === bootstrapProfile.profile.id)) : [];
+      const dialog = document.createElement("dialog");
+      dialog.className = "case-external-dialog";
+      dialog.dataset.monthlyClaimDialog = "";
+      dialog.setAttribute("aria-labelledby","monthly-claim-picker-title");
+      dialog.innerHTML = safeHtml(`<form><h3 id="monthly-claim-picker-title">Create Tax Claim</h3>
+        <p class="subline">${period ? `Period: ${escapeHtml(period)}` : "Open a generated monthly period first."}</p>
+        ${eligible.length ? `<label>Client <select class="field" name="client" required>
+          <option value="">Choose a client</option>${eligible.map((row,index) => `<option value="${index}">${escapeHtml(displayClientName(row))} ${escapeHtml(row.clientCode || "")}</option>`).join("")}
+        </select></label>` : period ? '<p>No eligible clients in this period.</p>' : ""}
+        <p role="status" class="subline"></p>
+        <div class="inline-controls"><button type="button" class="ghost-btn" data-close-claim-picker>Cancel</button>
+        ${eligible.length ? '<button type="submit" class="solid-btn">Create or open claim</button>' : ""}</div></form>`);
+      const form = dialog.querySelector("form"), cancel = dialog.querySelector("[data-close-claim-picker]");
+      const status = dialog.querySelector("[role=status]");
+      const submit = dialog.querySelector("[type=submit]");
+      cancel.addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close",() => { dialog.remove(); trigger.focus({preventScroll:true}); },{once:true});
+      dialog.addEventListener("cancel",event => { if (submit?.disabled) event.preventDefault(); });
+      form.addEventListener("submit",async event => {
+        event.preventDefault();
+        const choice = form.elements.client?.value;
+        const client = choice ? eligible[Number(choice)] : null;
+        if (!submit || submit.disabled || !client) return;
+        if (state.activeMonthlyPeriod !== period) { status.textContent = "The period changed. Close and reopen the claim picker."; return; }
+        submit.disabled = cancel.disabled = true;
+        status.textContent = "Preparing tax claim...";
+        try { await openMonthlyTaxClaim(client); dialog.close(); }
+        catch (error) { status.textContent = error.message || "Tax claim could not be created."; }
+        finally { submit.disabled = cancel.disabled = false; }
+      });
+      document.body.append(dialog);
+      dialog.showModal();
     }
 
     async function openMonthlyTaxClaim(client) {
@@ -12984,7 +13205,7 @@
       if (casesTabTrigger) {
         state.casesTab = casesTabTrigger.getAttribute("data-cases-tab");
         state.caseWorkflowFilter="all";
-        const visible = hasLeadershipAccess()
+        const visible = canReassignCasePic()
           ? taxCases
           : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
         const matching = visible.find((item) => state.casesTab === "closed" ? item.stage === "Closed" : item.stage !== "Closed");
@@ -13979,6 +14200,9 @@
         }
         return;
       }
+
+      const monthlyClaimTrigger = target.closest("[data-open-monthly-claim]");
+      if (monthlyClaimTrigger) { chooseMonthlyTaxClaim(monthlyClaimTrigger); return; }
 
       if (target.matches("[data-generate-claim]")) {
         const client = clients.find((item) => item.id === target.getAttribute("data-client-id")) || selectedClient();

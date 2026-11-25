@@ -14,7 +14,7 @@ const dbCase = (id: string, name: string, tax: string, acc: string, category = "
   created_at: `2026-10-${id === "saved-a" ? "01" : id === "saved-b" ? "02" : "03"}T00:00:00Z`
 });
 
-async function dashboard(role = "supervisor", savedUi = {}, offline = false, query = "", expectBlocked = false) {
+async function dashboard(role = "supervisor", savedUi = {}, offline = false, query = "", expectBlocked = false, employmentTitle = "") {
   const warnings: string[] = [], writes: any[] = [], reads: string[] = [];
   const vc = new VirtualConsole();
   vc.on("jsdomError", error => warnings.push(error.message));
@@ -66,7 +66,7 @@ async function dashboard(role = "supervisor", savedUi = {}, offline = false, que
       return { ok: true, status: 200, json: async () => ({ data, ...(init.method === "POST" ? { announcementStatus } : {}) }) };
     }
     reads.push(url);
-    const body = url === "/api/profile" ? { user: { id: "auth-user-1" }, profile: { id: "tax-a", role, display_name: "tax-a", team_division: "Tax Team", directory_active: true } }
+    const body = url === "/api/profile" ? { user: { id: "auth-user-1" }, profile: { id: "tax-a", role, display_name: "tax-a", team_division: "Tax Team", directory_active: true, employment_title: employmentTitle } }
       : url === "/api/clients" ? { data: [{ id: "master-1", client_code: "CL-00001", legal_name: "Alpha", status: "Active", tax_pic_profile_id: "tax-a", accounting_pic_profile_id: "acc-a", tax_pic_name: "tax-a", accounting_pic_name: "acc-a" }] }
       : url === "/api/cases" ? { data: rows }
       : url === "/api/announcements" ? { announcements }
@@ -1401,6 +1401,22 @@ test("sheet edits publish only confirmed values, serialize versions, preserve pe
     assert.equal(record.subject, "First edit"); assert.equal(currentSubject.value, "First edit");
     assert.match(d.w.document.getElementById("case-sheet-status").textContent, /Not saved.*another user/);
     assert.equal(d.api.state.syncIssues.length, 0, "rolled-back edits must not appear as local pending changes");
+  } finally { d.dom.window.close(); }
+});
+
+test("a Senior Associate can reassign another PIC's case from the grid", async () => {
+  const d = await dashboard("staff", {}, false, "", false, "Senior Tax Associate");
+  try {
+    const row = () => d.w.document.querySelector('[data-case-sheet-row="saved-b"]');
+    assert.ok(row());
+    assert.equal(row().querySelector('[data-case-sheet-field="subject"]'), null);
+    const select = row().querySelector('[data-case-sheet-field="taxPicProfileId"]');
+    assert.ok(select);
+    select.value = "tax-a";
+    await d.api.saveCaseSheetCell(select);
+    assert.equal(d.writes[0].action,"assign-pic");
+    assert.equal(d.writes[0].profileId,"tax-a");
+    assert.ok(row().querySelector('[data-case-sheet-field="subject"]'));
   } finally { d.dom.window.close(); }
 });
 

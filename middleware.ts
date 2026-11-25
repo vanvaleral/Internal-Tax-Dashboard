@@ -25,6 +25,8 @@ export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname === "/api/workspace/bootstrap" && request.method === "GET") return response;
   // This exact handler verifies the user, active staff, account binding and PIC on every request.
   if (request.nextUrl.pathname === "/api/annual-sheet") return response;
+  // Draft sync checks identity, active staff, account binding and draft-specific access itself.
+  if (request.nextUrl.pathname === "/api/clients/allocation/draft" && ["GET", "PATCH", "POST"].includes(request.method)) return response;
   // These exact handlers verify identity, account binding, active role, feature
   // availability and case ownership themselves on every request.
   if (["/api/cases", "/api/cases/workflow", "/api/cases/report"].includes(request.nextUrl.pathname)) return response;

@@ -7,11 +7,11 @@ import { defaultFeaturePolicy } from "../lib/feature-access.ts";
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve)); };
 
-async function allocation(mobile = false, role = "supervisor") {
+async function allocation(mobile = false, role = "supervisor", appointed = false) {
   const policy = defaultFeaturePolicy();
-  policy.associate.allocation.mode = "enabled";
+  policy.associate.allocation.mode = appointed ? "hidden" : "enabled";
   policy.leader.allocation.mode = "enabled";
-  const warnings: string[] = [], writes: any[] = [], publications: any[] = [], alerts: string[] = [], confirmations: string[] = [];
+  const warnings: string[] = [], writes: any[] = [], publications: any[] = [], edits: any[] = [], alerts: string[] = [], confirmations: string[] = [];
   const vc = new VirtualConsole(); vc.on("jsdomError", error => warnings.push(error.message));
   vc.on("error", (...items: any[]) => warnings.push(items.map(String).join(" ")));
   const dom = new JSDOM(read("public/demo.html"), { url:"http://localhost/demo.html", runScripts:"outside-only", virtualConsole:vc });
@@ -19,7 +19,10 @@ async function allocation(mobile = false, role = "supervisor") {
   w.localStorage.setItem("tax-practice-v2:user-1", JSON.stringify({ ui:{ currentView:"allocation-view" } }));
   w.matchMedia = (query: string) => ({ matches:mobile && query === "(max-width: 760px)", addEventListener() {}, removeEventListener() {} });
   w.scrollTo = () => {}; w.HTMLElement.prototype.scrollIntoView = () => {};
-  w.requestIdleCallback = () => 0; w.setInterval = () => 0; w.setTimeout = () => 0;
+  let pollDraft = () => {};
+  w.requestIdleCallback = () => 0;
+  w.setInterval = (callback: () => void, delay: number) => { if (delay === 3000) pollDraft = callback; return 0; };
+  w.setTimeout = () => 0;
   w.Headers = Headers; w.Response = Response; w.structuredClone = structuredClone; w.alert = (value: string) => alerts.push(value);
   w.HTMLDialogElement.prototype.showModal = function() {this.setAttribute("open","");};
   w.HTMLDialogElement.prototype.close = function() {this.removeAttribute("open");};
@@ -45,7 +48,15 @@ async function allocation(mobile = false, role = "supervisor") {
         sharedDraft = {version:body.expectedVersion+1,published_by_name:"Ivan",published_at:"2026-11-20T00:00:00Z",
           changes:body.changes.map((row:any)=>({...row,clientCode:"CL-00001",clientName:"Individual Alpha"}))};
       }
-      return {ok:true,status:init.method === "POST" ? 201 : 200,json:async()=>({draft:sharedDraft})};
+      if (init.method === "PATCH") {
+        const body = JSON.parse(init.body);
+        edits.push(body);
+        const version = (sharedDraft?.version || 0) + 1;
+        sharedDraft = {version,published_by_name:"Ivan",published_at:"2026-11-20T00:00:00Z",
+          changes:[{clientId:body.clientId,clientCode:"CL-00001",clientName:"Individual Alpha",[body.field]:body.value}]};
+      }
+      return {ok:true,status:200,json:async()=>({draft:sharedDraft,clients:rows.filter(row => row.status === "Active"),
+        options:{nextAccPic:["Ivan","Dina"],nextTaxPic:["Bagus","Denny"]}})};
     }
     if (url === "/api/clients/allocation") {
       const body = JSON.parse(init.body); writes.push(body);
@@ -58,16 +69,16 @@ async function allocation(mobile = false, role = "supervisor") {
       }
       return { ok:true, json:async () => ({ updated:body.changes.length }) };
     }
-    const body = url === "/api/profile" ? { user:{ id:"user-1" }, profile:{ id:"acc-1", role, display_name:"Ivan", directory_active:true, team_division:"Accounting Team" }, featureAccess:{policy,version:1,ready:true} }
+    const body = url === "/api/profile" ? { user:{ id:"user-1" }, profile:{ id:"acc-1", role, display_name:"Ivan", directory_active:true, team_division:"Accounting Team",allocation_draft_allowed:appointed }, featureAccess:{policy,version:1,ready:true} }
       : url === "/api/clients" ? { data:rows }
       : url === "/api/staff" ? { staff }
       : { data:[], staff:[], tasks:[], announcements:[] };
     return { ok:true, json:async () => structuredClone(body) };
   };
   for (const file of ["public/vendor/purify.min.js", "public/workspace-sync.js", "public/feature-access.js", "public/annual-sheet-dashboard.js", "public/allocation-report.js", "public/allocation-sheet.js"]) w.eval(read(file));
-  const script = read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__allocationTest = { state, renderAllocation, allocationRows, loadSharedClients, loadStaffDirectory, getClients:() => clientMasterClients };\n    })().catch(error =>");
+  const script = read("public/demo.html").match(/<script>([\s\S]*?)<\/script>/)![1].replace("    })().catch(error =>", "    window.__allocationTest = { state, renderAllocation, renderActiveView, allocationRows, loadSharedClients, loadStaffDirectory, getClients:() => clientMasterClients };\n    })().catch(error =>");
   await w.eval(script); await tick();
-  const api = w.__allocationTest; assert.ok(api, warnings.join("\n")); api.state.currentView = "allocation-view"; api.renderAllocation(); await tick();
+  const api = w.__allocationTest; assert.ok(api, warnings.join("\n")); api.state.currentView = "allocation-view"; appointed ? api.renderActiveView() : api.renderAllocation(); await tick();
   const choose = (field: string, value: string, id = "client-00001") => {
     const select = w.document.querySelector(`#allocation-view [data-allocation-${field}="${id}"]`);
     assert.ok(select); select.value = value; select.dispatchEvent(new w.Event("change", { bubbles:true }));
@@ -78,7 +89,8 @@ async function allocation(mobile = false, role = "supervisor") {
   };
   const selectAll = (checked = true) => { const input = w.document.querySelector("[data-allocation-select-all]"); input.checked = checked; input.dispatchEvent(new w.Event("change", { bubbles:true })); };
   const bulk = (type: string, value: string) => { const input = w.document.querySelector(`[data-allocation-bulk="${type}"]`); assert.ok(input); input.value = value; input.dispatchEvent(new w.Event("change", { bubbles:true })); };
-  return { dom, w, api, rows, staff, writes, publications, warnings, alerts, confirmations, choose, select, selectAll, bulk,
+  return { dom, w, api, rows, staff, writes, publications, edits, warnings, alerts, confirmations, choose, select, selectAll, bulk,
+    remoteEdit: (draft: any) => { sharedDraft = draft; pollDraft(); },
     fail:() => { fail = true; }, cancelReset:() => { allowReset = false; }, allowReset:() => { allowReset = true; },
     delay:() => { delay = true; }, release:() => { delay = false; releaseSave?.(); }
   };
@@ -91,11 +103,11 @@ test("publishing a shared draft leaves private drafts and saved PICs intact; lea
     const doc = d.w.document;
     doc.querySelector("[data-allocation-shared-draft]").click();
     await tick();
-    assert.match(doc.querySelector("[data-shared-preview]").textContent,/No shared draft/);
+    assert.match(doc.querySelector("[data-shared-version]").textContent,/No shared proposals/);
     doc.querySelector("[data-publish-shared]").click();
     await tick();
     assert.deepEqual(d.publications,[{year:d.api.state.allocationYear,expectedVersion:0,changes:[{clientId:"master-1",nextAccPic:""}]}]);
-    assert.match(doc.querySelector("[data-shared-preview]").textContent,/No PIC.*Keep current/s);
+    assert.equal(doc.querySelector('[data-client="master-1"][data-field="nextAccPic"]').value,JSON.stringify(""));
     assert.equal(d.writes.length,0);
     assert.equal(d.rows[0].accounting_pic_name,"Ivan");
     assert.equal(d.api.state.allocationDrafts["client-00001"].nextAccPic,"");
@@ -113,6 +125,32 @@ test("publishing a shared draft leaves private drafts and saved PICs intact; lea
     assert.equal(reader.w.document.querySelector("[data-publish-shared]"),null);
     assert.equal(reader.w.document.querySelector("[data-withdraw-shared]"),null);
   } finally { reader.dom.window.close(); }
+});
+
+test("appointed Associate sees shared updates and edits without Apply or access to the private sheet",async()=>{
+  const d = await allocation(false,"staff",true);
+  try {
+    Object.defineProperty(d.w.document,"visibilityState",{value:"visible"});
+    const doc = d.w.document;
+    assert.ok(doc.querySelector("[data-delegated-draft-panel]"));
+    assert.equal(doc.querySelector("[data-apply-allocation]"),null);
+    doc.querySelector("[data-allocation-shared-draft]").click();
+    await tick();
+    const cell = doc.querySelector('[data-client="master-1"][data-field="nextTaxPic"]');
+    assert.equal(cell.value,"null");
+    d.remoteEdit({version:1,published_by_name:"Supervisor",published_at:"2026-11-20T00:00:00Z",
+      changes:[{clientId:"master-1",nextTaxPic:"Denny"}]});
+    await tick();
+    assert.equal(cell.value,JSON.stringify("Denny"));
+    assert.equal(cell,doc.querySelector('[data-client="master-1"][data-field="nextTaxPic"]'),"polling keeps the cell mounted");
+    cell.value = JSON.stringify("");
+    cell.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    await tick();
+    assert.deepEqual(d.edits,[{year:d.api.state.allocationYear,clientId:"master-1",field:"nextTaxPic",value:"",expected:"Denny"}]);
+    assert.equal(d.writes.length,0);
+    assert.equal(d.rows[0].tax_pic_name,"Bagus");
+    assert.deepEqual(d.warnings,[]);
+  } finally { d.dom.window.close(); }
 });
 
 const picCount=(d:any,team:string,pic:string)=>Number(d.w.document.querySelector(`[data-allocation-pic-team="${team}"] [data-allocation-summary-pic="${pic}"] strong`)?.textContent);

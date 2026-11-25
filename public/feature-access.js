@@ -18,7 +18,9 @@
   const oversight = feature => !offline && role === "staff" && rule(feature).mode !== "maintenance" &&
     (feature === "clients" && context?.profile?.client_overview_allowed === true ||
      feature === "allocation" && context?.profile?.allocation_overview_allowed === true);
-  const visible = feature => oversight(feature) || rule(feature).mode !== "hidden";
+  const sharedAllocation = () => !offline && (manager() || role === "leader" && can("allocation") ||
+    role === "staff" && context?.profile?.allocation_draft_allowed === true && rule("allocation").mode !== "maintenance");
+  const visible = feature => oversight(feature) || feature === "allocation" && sharedAllocation() || rule(feature).mode !== "hidden";
   function normalize(view){return visible(views[view]||"profile") ? view : ["my-work-view","cases-view","client-management-view","profile-view"].find(id=>can(views[id]));}
   function editor(){
     if (!manager()) return "";
@@ -65,7 +67,7 @@
   });
   window.WorkspaceFeatures={
     init(options){context=options;offline=options.offline;accept(options.settings,options.role);if(!offline&&typeof BroadcastChannel!=="undefined"){const channel=new BroadcastChannel('tax-dashboard:feature-access');channel.onmessage=()=>refresh().catch(e=>console.warn('[feature access]',e.message));}},
-    accept, can, visible, oversight, manager, normalize, editor, chrome, blocked, refresh,
+    accept, can, visible, oversight, sharedAllocation, manager, normalize, editor, chrome, blocked, refresh,
     featureForView:view=>views[view],
     mode:feature=>rule(feature).mode,
     setRole(next){role=String(next||'staff').toLowerCase();}
