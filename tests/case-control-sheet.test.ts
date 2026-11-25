@@ -1404,6 +1404,62 @@ test("sheet edits publish only confirmed values, serialize versions, preserve pe
   } finally { d.dom.window.close(); }
 });
 
+test("the compact Cases toolbar switches sections and dismisses secondary actions", async () => {
+  const d = await dashboard();
+  try {
+    const doc = d.w.document;
+    const picker = doc.querySelector(".case-section-picker");
+    assert.deepEqual(Array.from(picker.options, (o:any) => o.value), ["himbauan","pemeriksaan","register","psa"]);
+    assert.equal(picker.value, "himbauan");
+    picker.value = "pemeriksaan";
+    picker.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+    await tick();
+    assert.equal(d.api.state.casesTab, "pemeriksaan");
+    const more = doc.querySelector(".case-more");
+    more.click();
+    assert.equal(more.getAttribute("aria-expanded"), "true");
+    more.dispatchEvent(new d.w.KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+    assert.equal(more.getAttribute("aria-expanded"), "false");
+    more.click();
+    doc.body.click();
+    assert.equal(more.getAttribute("aria-expanded"), "false");
+  } finally { d.dom.window.close(); }
+});
+
+test("mobile Cases cards reuse the sheet fields and leave detailed fields behind the row toggle", async () => {
+  const d = await dashboard();
+  try {
+    const row = d.w.document.querySelector('[data-case-sheet-row="saved-a"]');
+    assert.equal(row.querySelector(".case-card-title").textContent, "Alpha");
+    assert.equal(row.querySelector('[data-case-grid-field="taxPicProfileId"] .case-card-value').textContent, "tax-a");
+    assert.ok(row.querySelector('[data-case-grid-field="taxPicProfileId"][data-case-card-label]:not([data-case-card-detail]) select'));
+    assert.ok(row.querySelector('[data-case-grid-field="subject"][data-case-card-label][data-case-card-detail] input'));
+    row.querySelector("[data-toggle-himbauan-progress]").click();
+    await tick();
+    assert.equal(d.w.document.querySelector('[data-toggle-himbauan-progress="saved-a"]').getAttribute("aria-expanded"), "true");
+    assert.ok(d.w.document.querySelector('[data-case-progress-id="saved-a"]'));
+  } finally { d.dom.window.close(); }
+});
+
+test("phone section pickers mirror available Clients and Profile tabs and route selection through the existing controls", async () => {
+  const d = await dashboard();
+  try {
+    const doc = d.w.document;
+    d.w.matchMedia = (q:string) => ({matches:/max-width/.test(q),addEventListener(){},removeEventListener(){}});
+    for (const [view,attr,next] of [["client-management-view","data-client-tab","on-demand"],["profile-view","data-profile-tab","clients"]]) {
+      doc.querySelector(`.nav-btn[data-view="${view}"]`).click();
+      await tick();
+      const root = doc.getElementById(view), picker = root.querySelector(".phone-section-picker");
+      assert.deepEqual([...picker.options].map((o:any)=>o.value), [...root.querySelectorAll(".phone-picker-tabs > button")].map((b:any)=>b.getAttribute(attr)));
+      picker.value = next;
+      picker.dispatchEvent(new d.w.Event("change",{bubbles:true}));
+      await tick();
+      assert.equal(root.querySelector(".phone-picker-tabs .solid-btn").getAttribute(attr), next);
+      assert.equal(root.querySelector(".phone-section-picker").value, next);
+    }
+  } finally { d.dom.window.close(); }
+});
+
 test("a Senior Associate can reassign another PIC's case from the grid", async () => {
   const d = await dashboard("staff", {}, false, "", false, "Senior Tax Associate");
   try {

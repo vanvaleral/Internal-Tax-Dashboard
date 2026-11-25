@@ -338,6 +338,7 @@
     "Send to": "Kirim ke", "All employees": "Semua Staf", "Tax team": "Tim Pajak", "Accounting team": "Tim Akuntansi",
     "Send Notification": "Kirim Notifikasi", "Subject": "Subjek", "Message": "Pesan",
     "Retry Allocation tools": "Muat Ulang Fitur Alokasi",
+    "Case section": "Bagian Kasus", "More case actions": "Tindakan kasus lainnya",
     "Open a generated monthly period first.": "Buka masa pajak yang sudah dibuat terlebih dahulu.",
     "No eligible clients in this period.": "Tidak ada klien yang dapat dipilih pada masa pajak ini.",
     "Create or open claim": "Buat atau Buka Klaim",
@@ -692,7 +693,7 @@
   const views = "#client-management-view,#client-view,#dashboard-view,#cases-view,#matrix-view,#allocation-view,#profile-view,#announcement-view,#my-work-view";
   const candidates = selectors + "," + interior;
   const eligible = element => element.matches(selectors) || (element.matches(interior) && element.closest(views));
-  const attrs = ["title", "aria-label", "placeholder"];
+  const attrs = ["title", "aria-label", "placeholder", "data-case-card-label"];
 
   function translate(value) {
     return current === "id" ? (labels.get(value) ?? value) : value;

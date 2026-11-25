@@ -3972,6 +3972,93 @@
       body.cases-viewport .case-sheet-panel > .table-wrap, html.cases-fullscreen .case-sheet-panel > .table-wrap { flex:none; max-height:none; }
       body.cases-viewport .case-archive-panel, html.cases-fullscreen .case-archive-panel { max-height:none; overflow:visible; }
     }
+    .workspace-cases .case-section-picker, .workspace-cases .case-mobile-actions .case-more { display:none; }
+    .case-secondary-actions { display:contents; }
+    .case-mobile-actions > [data-new-case] { order:1; }
+    @media (max-width: 600px) {
+      .workspace-cases .case-sheet-nav { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; padding:4px 8px; }
+      .workspace-cases .case-sheet-nav .case-mobile-tabs { display:none; }
+      .workspace-cases .case-section-picker { display:block; width:100%; min-width:0; height:44px; margin:0; padding:0 6px; border:0; background:transparent; color:var(--ink); font:inherit; font-size:16px; font-weight:650; text-overflow:ellipsis; }
+      .workspace-cases .case-mobile-actions { width:auto; position:relative; justify-content:flex-end; gap:3px; }
+      .workspace-cases .case-mobile-actions .case-more { display:inline-grid; order:2; place-items:center; padding:0; border:0; background:transparent; color:var(--muted); font-size:22px; line-height:1; }
+      .workspace-cases .case-secondary-actions { display:none; }
+      .workspace-cases .case-more[aria-expanded="true"] + .case-secondary-actions {
+        display:grid; position:absolute; top:100%; right:0; z-index:12; min-width:172px; max-width:85vw; padding:4px;
+        background:var(--panel-solid); border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 18px #132f3224;
+      }
+      .workspace-cases .case-mobile-actions .case-secondary-actions > :is(button,a) { display:flex; align-items:center; justify-content:flex-start; gap:8px; width:100%; height:auto; min-height:44px; padding:6px 10px; font-size:14px; line-height:1.2; }
+      .workspace-cases .case-secondary-actions .case-tool-icon { display:block; }
+      .workspace-cases .case-mobile-actions .case-secondary-actions [data-toggle-case-trash]::before { content:none; }
+      .workspace-cases .case-mobile-actions > :is(button,a.case-fullscreen-link) { min-width:44px; min-height:44px; }
+      .workspace-cases .case-mobile-actions [data-new-case] { display:inline-flex; width:auto; padding:0 12px; font-size:13px; line-height:1.2; }
+      .workspace-cases .case-mobile-actions [data-new-case]::before { font-size:17px; }
+      .workspace-cases .case-sheet-tools { display:grid; grid-template-columns:minmax(0,1fr) auto; }
+      .workspace-cases .case-search-wrap, .workspace-cases .case-filter-pair { grid-column:1/-1; width:100%; }
+      .workspace-cases .case-search-wrap { height:44px; }
+      .workspace-cases .case-search-wrap input.filter-input, .workspace-cases .case-sheet-tools select { font-size:16px; }
+      .workspace-cases .case-sheet-tools select, .workspace-cases .case-sheet-tools .case-reset { width:100%; min-width:0; min-height:44px; }
+      html.cases-fullscreen .case-sheet-panel { height:auto; }
+      .case-sheet-panel > .table-wrap, html.cases-fullscreen .case-sheet-panel > .table-wrap {
+        max-height:none; min-height:0; overflow:visible; padding:0 9px 9px;
+      }
+      .workspace-cases .case-sheet { display:block; width:100% !important; min-width:0; }
+      .case-sheet > colgroup { display:none; }
+      .case-sheet > thead, .case-sheet > tbody { display:block; }
+      .case-sheet > thead > tr { display:flex; gap:4px; overflow-x:auto; padding:6px 0; }
+      .case-sheet > thead > tr > th {
+        position:static; flex:0 0 auto; box-shadow:none; border:1px solid var(--line); border-radius:8px;
+      }
+      .case-sheet > thead > tr > th:last-child:has(.sr-only), .case-sheet-column-resize { display:none; }
+      .case-sheet > thead .case-sheet-sort { min-height:44px; }
+      .case-sheet > tbody > .case-main-row {
+        display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:8px;
+        border:1px solid var(--line); border-radius:10px; overflow:hidden;
+      }
+      .case-sheet > tbody > .case-main-row > td {
+        position:static; min-width:0; height:auto; min-height:44px; padding:4px 8px;
+        border:0; box-shadow:none; white-space:normal; overflow-wrap:anywhere; font-size:13px;
+      }
+      .case-sheet > tbody > .case-main-row > td:nth-child(2) { grid-column:1/-1; grid-row:1; font-weight:700; }
+      .case-sheet > tbody > .case-main-row > td:first-child { grid-column:1/-1; grid-row:2; padding:0; }
+      .case-sheet .case-sheet-row-toggle { min-height:44px; justify-content:flex-start; gap:8px; padding:0 10px; text-align:left; }
+      .case-sheet .case-sheet-row-toggle > span:first-child { width:auto; }
+      .case-sheet .case-sheet-row-toggle::before { content:"#"; margin-right:-6px; }
+      .case-sheet > tbody > .case-main-row > td[data-case-card-label]::before {
+        content:attr(data-case-card-label); display:block; color:var(--muted); font-size:11px; font-weight:650; margin:3px 0;
+      }
+      .case-sheet > tbody > .case-main-row:not([data-case-draft="true"]):has(.case-sheet-row-toggle[aria-expanded="false"]) > td[data-case-card-detail] { display:none; }
+      .case-sheet > tbody > .case-main-row :is(.case-inline-field,.inline-select) { min-height:44px; font-size:16px; padding:4px; text-overflow:ellipsis; }
+      .case-sheet > tbody > .case-main-row .case-inline-readonly { padding:4px; }
+      .case-sheet > tbody > .case-progress-inline, .case-sheet > tbody > .case-progress-inline > td,
+      .case-sheet > tbody > tr:has(> td > .empty-state), .case-sheet > tbody > tr > td:has(> .empty-state) { display:block; width:100%; height:auto; }
+      .case-sheet .case-progress-viewport { position:static; width:100%; }
+    }
+    .phone-section-picker, .case-card-title, .case-card-value { display:none; }
+    @media (max-width:600px) {
+      .workspace-frame .workspace-tabs.phone-picker-tabs { display:none; }
+      .workspace-frame .phone-section-picker {
+        display:block; width:100%; min-width:0; height:44px; padding:0 8px;
+        font:inherit; font-size:16px; font-weight:650; color:var(--ink);
+        background:var(--panel-solid); border:0; border-bottom:1px solid var(--line); border-radius:0;
+      }
+      .workspace-frame .toolbar:has(> .phone-section-picker) { display:flex; flex-flow:row nowrap; align-items:center; gap:6px; }
+      .phone-picker-tabs + .toolbar-right { width:auto; flex:0 0 auto; }
+      .phone-picker-tabs + .toolbar-right:not(:has(button,a)) { display:none; }
+      .toolbar > .phone-section-picker { flex:1 1 auto; }
+      .case-sheet > tbody > .case-main-row:has(.case-card-title) > td:first-child { grid-row:1; }
+      .case-sheet > tbody > .case-main-row:has(.case-card-title) > td:nth-child(2) { display:none; }
+      .case-sheet > tbody > .case-main-row:has(.case-sheet-row-toggle[aria-expanded="true"]) > td:nth-child(2):has(input:not([readonly])) { display:block; grid-row:auto; }
+      .case-sheet .case-sheet-row-toggle:has(.case-card-title) {
+        display:flex; width:100%; height:auto; min-height:44px; padding:8px 10px;
+        background:var(--neutral-soft); color:var(--ink); border-bottom:1px solid var(--line);
+      }
+      .case-sheet .case-sheet-row-toggle .case-card-title {
+        display:block; flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; font-size:15px; text-align:start;
+      }
+      .case-sheet-row-toggle:has(.case-card-title) > span[aria-hidden] { position:static; }
+      .case-sheet .case-main-row:not([data-case-draft="true"]):has([aria-expanded="false"]) td:has(> .case-card-value) > :not(.case-card-value) { display:none; }
+      .case-sheet .case-main-row:not([data-case-draft="true"]):has([aria-expanded="false"]) .case-card-value { display:block; }
+    }
   </style>
   <link rel="stylesheet" href="submenu-tabs.css" />
 </head>
@@ -8047,6 +8134,7 @@
         </div>
       `);
       enhanceEngagement();
+      installPhoneSectionPicker(root, "data-client-tab", "Clients");
     }
 
     function renderMatrix() {
@@ -8845,6 +8933,52 @@
       return [...new Map(events.map(event => [event.key,event])).values()].sort((a,b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
     }
 
+    function installPhoneSectionPicker(root, attribute, label) {
+      const buttons = [...root.querySelectorAll(".workspace-tabs > button[" + attribute + "]")];
+      if (!buttons.length) return;
+      const tray = buttons[0].parentElement;
+      const picker = document.createElement("select");
+      picker.className = "phone-section-picker";
+      picker.dataset.sectionAttribute = attribute;
+      picker.setAttribute("aria-label", uiLabel(label));
+      for (const button of buttons) picker.add(new Option(uiLabel(button.textContent.trim()), button.getAttribute(attribute), false, button.classList.contains("solid-btn")));
+      tray.classList.add("phone-picker-tabs");
+      tray.before(picker);
+    }
+
+    function decorateCaseMobileCards(root) {
+      const table = root.querySelector(".case-sheet");
+      if (!table) return;
+      const headers = [...table.tHead.rows[0].cells].map(cell => cell.querySelector("button")?.firstChild?.textContent.trim() || "");
+      const assessment = table.classList.contains("case-assessment-register");
+      const overviewFields = new Set(["letterNumber", "dueDate", "taxYear", "taxPicProfileId", "accountingPicProfileId"]);
+      for (const row of table.querySelectorAll("tbody > tr.case-main-row")) {
+        const cells = [...row.cells];
+        cells.slice(2).forEach((cell, index) => {
+          const column = index + 2;
+          if (headers[column]) cell.dataset.caseCardLabel = headers[column];
+          if (assessment ? ![2, 7, 8].includes(column) : !overviewFields.has(cell.dataset.caseGridField)) cell.dataset.caseCardDetail = "";
+          if (!cell.hasAttribute("data-case-card-detail")) {
+            const editor = cell.querySelector(".case-inline-field,.inline-select");
+            if (editor) {
+              const preview = document.createElement("span");
+              preview.className = "case-card-value";
+              preview.textContent = editor.selectedOptions?.[0]?.textContent || editor.value || "-";
+              cell.append(preview);
+            }
+          }
+        });
+        const toggle = cells[0]?.querySelector(".case-sheet-row-toggle");
+        if (toggle && row.dataset.caseDraft !== "true") {
+          const title = document.createElement("strong");
+          title.className = "case-card-title";
+          title.textContent = cells[1].querySelector("input")?.value || cells[1].textContent.trim();
+          toggle.insertBefore(title, toggle.lastElementChild);
+          if (!toggle.hasAttribute("aria-label")) toggle.setAttribute("aria-label", title.textContent);
+        }
+      }
+    }
+
     function renderCaseProgressPanel(item, progress) {
       const original = renderCaseProgressContent(item, progress);
       return window.CaseWorkflowUI ? window.CaseWorkflowUI.render(item, original, caseWorkflowHost(item)) : original;
@@ -9053,7 +9187,7 @@
         const field = isTax ? "taxPicProfileId" : "accountingPicProfileId";
         return `<select class="inline-select" data-case-sheet-id="${escapeAttr(item.id)}" data-case-sheet-field="${field}" aria-label="${division} case PIC" ${caseSheetPending.get(item)?.values.has(field) ? 'disabled data-saving="true"' : ""}><option value="">Unassigned</option>${currentId && !people.some(person => person.id === currentId) ? `<option value="${escapeAttr(currentId)}" selected>${escapeHtml(currentName || "Historical PIC")}</option>` : ""}${!currentId && currentName ? `<option value="legacy" selected disabled>${escapeHtml(currentName)}</option>` : ""}${people.map((person) => `<option value="${escapeAttr(person.id)}" ${person.id === caseSheetValue(item, field) ? "selected" : ""}>${escapeHtml(person.display_name || person.full_name)}</option>`).join("")}</select>`;
       };
-      const sheetRows = assessmentTab ? "" : caseWindow.rows.map((item) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-")}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${caseNumbers.get(item.id)}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td data-case-grid-field="${type === "pic" ? `${field}ProfileId` : field}" role="gridcell" tabindex="-1" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
+      const sheetRows = assessmentTab ? "" : caseWindow.rows.map((item) => `<tr class="case-main-row" data-case-sheet-row="${item.id}" data-case-draft="${item.id.startsWith("case-") && (!IS_OFFLINE_DEMO || !item.clientName)}"><td><button class="case-sheet-row-toggle" data-toggle-himbauan-progress="${item.id}" aria-expanded="${item.id === state.expandedHimbauanId}" aria-label="Show progress for ${escapeAttr(item.clientName || "new case")}"><span>${caseNumbers.get(item.id)}</span><span aria-hidden="true">${item.id === state.expandedHimbauanId ? "&#9662;" : "&#9656;"}</span></button></td>${columns.map(([field, , type], colIndex) => `<td data-case-grid-field="${type === "pic" ? `${field}ProfileId` : field}" role="gridcell" tabindex="-1" ${groupStart(colIndex) ? 'data-case-group-start="true"' : ""}>${type === "pic" ? casePicCell(item, field === "taxPic" ? "tax" : "accounting") : type === "derived" ? `<span class="case-inline-readonly" data-case-derived="${field}">${field === "dueDate" ? escapeHtml(formatIsoToDisplayDate(item.dueDate) || "-") : item.dueDate ? `${Math.ceil((new Date(`${item.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000)} days` : "-"}</span>` : inlineCaseInput(item, field, type || "text")}</td>`).join("")}<td>${caseActionButtons(item)}</td></tr>${progressRow(item)}`).join("") || `<tr><td colspan="13"><div class="empty-state">No ${category} records match your filters.</div></td></tr>`;
       const workflowFilters=assessmentTab?[["all","All controls"],["overdue","Payment overdue"],["psa-ongoing","PSA ongoing"],["psa-successful","PSA successful"],["psa-rejected","PSA rejected"]]:[["all","All workflow"],["overdue","Payment overdue"],["supervisor","Supervisor attention"],["closure","Awaiting SP3P2DK"]];
       const assessmentCounts=assessmentTab?window.CaseAssessmentUI.count(caseList.map(item=>({workflow:{products:assessmentProducts(item)}}))):null;
 
@@ -9061,6 +9195,7 @@
         <div class="workspace-frame workspace-cases">
           <section class="panel case-sheet-panel">
             <div class="toolbar case-sheet-nav">
+              <select class="case-section-picker" aria-label="Case section"></select>
               <div class="workspace-tabs case-mobile-tabs">
                 <button class="${state.casesTab === "himbauan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="himbauan" aria-pressed="${state.casesTab === "himbauan"}">Himbauan <span class="case-tab-count">${categoryCount("Himbauan")}</span></button>
                 <button class="${state.casesTab === "pemeriksaan" ? "solid-btn" : "ghost-btn"}" data-cases-tab="pemeriksaan" aria-pressed="${state.casesTab === "pemeriksaan"}">Pemeriksaan <span class="case-tab-count">${categoryCount("Pemeriksaan")}</span></button>
@@ -9068,10 +9203,13 @@
                 <button class="${state.casesTab === "psa" ? "solid-btn" : "ghost-btn"}" data-cases-tab="psa" aria-pressed="${state.casesTab === "psa"}">Penalty Removal <span class="case-tab-count">${window.CaseAssessmentUI?.count(scopedCases).psa||0}</span></button>
               </div>
               <div class="toolbar-right case-mobile-actions">
+                ${assessmentTab?'':`<button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>`}
+                <button type="button" class="case-more" aria-label="More case actions" aria-expanded="false" aria-controls="case-secondary-actions">⋯</button>
+                <div class="case-secondary-actions" id="case-secondary-actions">
                 ${IS_CASES_FULLSCREEN ? `<a class="case-fullscreen-link" href="${IS_OFFLINE_DEMO ? "./demo.html" : "/dashboard"}" aria-label="Back to Dashboard">${toolIcon('<path d="m10 5-7 7 7 7M3 12h18"/>')}Dashboard</a>` : `<a class="case-fullscreen-link" data-case-fullscreen="yes" href="${escapeAttr(caseFullScreenUrl())}" target="_blank" rel="noopener noreferrer" aria-label="Open Cases in full screen">${toolIcon('<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>')}Full Screen</a>`}
                 <button class="ghost-btn" data-toggle-case-trash="yes" aria-expanded="${state.caseTrashOpen}" aria-label="Archived Cases">${toolIcon('<path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/>')}Archived Cases${state.deletedCases.length ? ` (${state.deletedCases.length})` : ""}</button>
                 ${!assessmentTab && !IS_OFFLINE_DEMO ? `<button type="button" class="ghost-btn" data-external-case="yes" aria-label="Add external client case" title="Add external client case">${toolIcon('<path d="M15 3h6v6m0-6-9 9m8 1v7H4V4h8"/>')}External client</button>` : ""}
-                ${assessmentTab?'':`<button class="solid-btn" data-new-case="yes" aria-label="Add Case">${toolIcon('<path d="M12 5v14M5 12h14"/>')}Add Case</button>`}
+                </div>
               </div>
             </div>
             ${assessmentTab?`<div class="case-assessment-summary"><strong>${state.casesTab==='psa'?'Penalty Removal':'SKP & STP register'}</strong><span>${assessmentCounts.documents} assessments</span><span>${assessmentCounts.ongoing} PSA ongoing</span><span>${assessmentCounts.successful} successful</span><span>${assessmentCounts.rejected} rejected</span><p class="subline">Linked from Pemeriksaan. Expand a client to edit its source documents; no duplicated payment balances.</p></div>`:`<div data-case-report-slot>${caseReportSnapshot ? window.CaseReports.renderSummary(caseReportSnapshot,caseReportPrinting || caseSheetBulkSaving || caseFollowUpPending.size > 0 || taxCases.some(row=>caseSheetPending.get(row)?.count)) : ""}</div>`}
@@ -9085,6 +9223,14 @@
           <datalist id="case-client-options">${clientMasterClients.filter(isActiveClientRecord).map((client) => `<option value="${escapeAttr(client.name)}"></option>`).join("")}</datalist>
         </div>
       `);
+      const picker = root.querySelector(".case-section-picker");
+      const tabs = [...root.querySelectorAll(".case-mobile-tabs [data-cases-tab]")];
+      for (const tab of tabs) {
+        const label = uiLabel(tab.firstChild.textContent.trim());
+        picker.add(new Option(`${label} (${tab.querySelector(".case-tab-count").textContent})`,tab.dataset.casesTab));
+      }
+      picker.value = state.casesTab;
+      decorateCaseMobileCards(root);
       applyCaseColumnWidths(root);
       refreshCaseActivityAppearance();
       clearCaseSheetRange();
@@ -9266,6 +9412,7 @@
             <div class="detail-card" style="margin-top:16px;" ${state.profileTab === "history" ? "" : "hidden"}><div class="section-title"><div><div class="eyebrow">Notification History</div><p>Delete hides an item only from your own history. It can be restored for three days.</p></div><button class="ghost-btn" data-load-deleted-announcements="yes">Recently Deleted${state.deletedAnnouncements.length ? ` (${state.deletedAnnouncements.length})` : ""}</button></div><div class="detail-list">${visibleAnnouncements().filter((item) => item.readAt).map((item) => `<div class="list-item"><div><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><div class="subline" data-inbox-copy="message" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.message)}</div></div><div class="inline-controls"><span class="pill neutral">Read</span><button class="danger-icon-btn" data-delete-announcement="${item.id}" aria-label="Delete notification" title="Delete from my history">${deleteIcon()}</button></div></div>`).join("") || `<div class="subline">No read notifications yet.</div>`}</div>${state.deletedAnnouncements.length ? `<div class="eyebrow" style="margin-top:20px;">Recently Deleted</div><div class="detail-list" style="margin-top:8px;">${state.deletedAnnouncements.map((item) => `<div class="list-item"><div><strong data-inbox-copy="title" data-inbox-source="${escapeAttr(item.sourceType || "")}">${escapeHtml(item.title)}</strong><div class="subline">Deleted ${item.deletedAt ? new Date(item.deletedAt).toLocaleString("id-ID") : "recently"}</div></div><button class="ghost-btn restore-icon-btn" data-restore-announcement="${item.id}">Restore</button></div>`).join("")}</div>` : ""}</div>
           </section>
         </div>`);
+      installPhoneSectionPicker(root, "data-profile-tab", "Profile");
     }
 
     function exportMyWorkArchivePeriod(period) {
@@ -9335,6 +9482,8 @@
 
     function renderMyWork() {
       const root = document.getElementById("my-work-view");
+      const previousComposer = root.querySelector("#my-work-title");
+      const composerDraft = previousComposer?.value || "";
       const previousStepInput = root.querySelector("#my-work-step");
       rememberMyWorkStepDraft(previousStepInput);
       const stepDraftFocus = previousStepInput?.dataset.myWorkStepTask && document.activeElement === previousStepInput
@@ -9379,9 +9528,10 @@
       const availableCases = hasLeadershipAccess()
         ? taxCases
         : taxCases.filter((item) => item.taxPic === state.selectedPic || item.accountingPic === state.selectedPic);
-      const taskRow = (task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" data-my-work-reorder-row role="group" tabindex="-1" aria-label="${escapeAttr(task.title)}" aria-roledescription="sortable task" title="Hold for 1 second to move. Alt + Up or Down also moves this task."><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" aria-label="Complete task: ${escapeAttr(task.title)}" ${task.done ? "checked" : ""} /><div><button type="button" class="my-work-open-task"><strong>${escapeHtml(task.title)}</strong></button><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps${task.done && task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}</div></div><button class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`;
+      const taskRow = (task) => `<div class="my-work-row ${task.done ? "is-complete" : ""} ${task.id === state.newMyWorkTaskId ? "is-new" : ""} ${task.id === state.movingMyWorkTaskId ? "is-completing" : ""} ${task.id === state.restoringMyWorkTaskId ? "is-restoring" : ""}" data-select-my-work="${task.id}" data-my-work-reorder-row role="group" tabindex="-1" aria-label="${escapeAttr(task.title)}" aria-roledescription="sortable task" title="Hold for 1 second to move. Alt + Up or Down also moves this task."><input class="circle-check" type="checkbox" data-my-work-done="${task.id}" aria-label="Complete task: ${escapeAttr(task.title)}" ${task.done ? "checked" : ""} /><div><button type="button" class="my-work-open-task"><strong>${escapeHtml(task.title)}</strong></button><div class="subline">${task.steps?.filter((step) => step.done).length || 0} of ${task.steps?.length || 0} steps${task.done && task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}</div></div><button aria-pressed="${Boolean(task.favorite)}" class="${task.favorite ? "my-work-star active" : "my-work-star"}" data-toggle-my-work-star="${task.id}" aria-label="Favorite task">☆</button></div>`;
       const taskGroup = (key, tasks, empty) => `<div class="my-work-sort-group" data-my-work-sort-group="${escapeAttr(key)}">${tasks.map(taskRow).join("") || `<div class="my-work-empty">${empty}</div>`}</div>`;
-      const currentTaskMarkup = `${taskGroup("active", activeTasks, "No active tasks.")}<button class="my-work-section-toggle" data-toggle-my-work-completed="yes"><span>${state.myWorkCompletedOpen ? "⌄" : "›"} Completed</span><span class="my-work-section-count">${completedTasks.length}</span></button>${state.myWorkCompletedOpen ? taskGroup(completedGroup, completedTasks, "No tasks completed this month.") : ""}`;
+      const completedTaskMarkup = completedTasks.length ? `<button class="my-work-section-toggle" data-toggle-my-work-completed="yes"><span>${state.myWorkCompletedOpen ? "⌄" : "›"} Completed</span><span class="my-work-section-count">${completedTasks.length}</span></button>${state.myWorkCompletedOpen ? taskGroup(completedGroup, completedTasks, "No tasks completed this month.") : ""}` : "";
+      const currentTaskMarkup = `${taskGroup("active", activeTasks, "No active tasks.")}${completedTaskMarkup}`;
       const archiveYears = [...new Set(archiveGroups.map((group) => group.key.slice(0, 4)))];
       if (state.myWorkArchiveYear !== "all" && !archiveYears.includes(state.myWorkArchiveYear)) state.myWorkArchiveYear = "all";
       const archiveQuery = state.myWorkArchiveQuery.trim().toLocaleLowerCase("id-ID");
@@ -9430,7 +9580,7 @@
               <div class="my-work-task-list" data-my-work-scroll-context="${escapeAttr(scrollContext)}">
                 ${state.myWorkTab === "archived" ? archivedTaskMarkup : currentTaskMarkup}
               </div>
-              ${state.myWorkTab === "current" ? `<div class="my-work-composer"><span>+</span><input id="my-work-title" placeholder="Add a task. Press Enter" /></div>` : ""}
+              ${state.myWorkTab === "current" ? `<div class="my-work-composer"><span aria-hidden="true">+</span><input id="my-work-title" aria-label="Task title" placeholder="Add a task. Press Enter" /></div>` : ""}
             </div>
             ${showMyWorkDetail ? `<aside class="my-work-detail ${shouldAnimateDrawer ? "is-opening" : ""}" ${selected.deleting ? "inert" : ""}>
               <button class="my-work-detail-close" data-close-my-work-detail="yes" aria-label="Close task details" title="Close task details"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
@@ -9456,6 +9606,8 @@
             </aside>` : ""}
           </section>
         </div>${timeDialog}`);
+      const newComposer = root.querySelector("#my-work-title");
+      if (newComposer && composerDraft) newComposer.value = composerDraft;
       window.MyWorkReorder?.mount(root, { groups: myWorkOrderGroups, onReorder(key, ids) {
         state.myWorkOrder[key] = ids;
         myWorkOrderGroups[key] = ids;
@@ -12562,6 +12714,10 @@
     }
 
     document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        const more = document.querySelector('.case-more[aria-expanded="true"]');
+        if (more) { more.setAttribute("aria-expanded","false"); more.focus(); return; }
+      }
       if (!(event.target instanceof HTMLElement) || event.target.matches("input, textarea, select")) return;
       const row = event.target.closest("[data-keyboard-row]");
       if (!row || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return;
@@ -12649,6 +12805,9 @@
     document.addEventListener("click", async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      const more = target.closest(".case-more");
+      if (more) { more.setAttribute("aria-expanded",String(more.getAttribute("aria-expanded") !== "true")); return; }
+      document.querySelector('.case-more[aria-expanded="true"]')?.setAttribute("aria-expanded","false");
       if (target.closest("[data-retry-client-list]")) { loadSharedClients(true); return; }
       if (target.closest("[data-retry-client-history]")) { loadSharedMyWork(true,"all"); return; }
       if (target.closest("[data-retry-workspace-lists]")) { loadSharedClients(true); loadStaffDirectory(true); return; }
@@ -12852,7 +13011,7 @@
       if (target.closest("[data-test-push-notification]")) { await testPushNotification(); return; }
 
       if (profileTabTrigger) { state.profileTab = profileTabTrigger.getAttribute("data-profile-tab"); if (state.profileTab === "history") loadDeletedAnnouncements(true); commitWorkspaceNavigation("replace"); return; }
-      if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
+      if (addMyWorkTrigger) { const title = document.getElementById("my-work-title")?.value.trim(); if (!title) return; document.getElementById("my-work-title").value = ""; const task = { id: `task-${Date.now()}`, title, dueDate: "", done: false, completedAt: 0, createdAt: Date.now(), createdAtText: new Date().toISOString(), creatorName: state.selectedPic, steps: [], reminder: "", assignees: [], repeatRule: "none", note: "", pendingSync: true }; state.myWork.unshift(task); state.selectedMyWorkId = task.id; state.newMyWorkTaskId = task.id; commitUi("push"); saveMyWorkTaskToDatabase(task); return; }
       if (completeMyWorkTrigger) { const task = state.myWork.find((item) => item.id === completeMyWorkTrigger.getAttribute("data-my-work-done")); if (task) { task.done = completeMyWorkTrigger.checked; task.completedAt = task.done ? Date.now() : 0; state.movingMyWorkTaskId = task.done ? task.id : ""; state.restoringMyWorkTaskId = task.done ? "" : task.id; } commitUi("push"); if (task) saveMyWorkTaskToDatabase(task, { done: task.done }); return; }
       if (starMyWorkTrigger) {
         const task = state.myWork.find((item) => item.id === starMyWorkTrigger.getAttribute("data-toggle-my-work-star"));
@@ -14622,6 +14781,20 @@
     });
 
     document.addEventListener("change", (event) => {
+      if (event.target.matches?.(".phone-section-picker")) {
+        const picker = event.target, attribute = picker.dataset.sectionAttribute;
+        const owner = picker.closest("[id]");
+        [...picker.nextElementSibling.children].find(button => button.getAttribute(attribute) === picker.value)?.click();
+        owner?.querySelector(".phone-section-picker")?.focus({preventScroll:true});
+        return;
+      }
+      if (event.target.matches?.(".case-section-picker")) {
+        const picker = event.target;
+        const tab = [...picker.closest(".case-sheet-nav").querySelectorAll("[data-cases-tab]")].find(node => node.dataset.casesTab === picker.value);
+        tab?.click();
+        document.querySelector("#cases-view .case-section-picker")?.focus({preventScroll:true});
+        return;
+      }
       const target = event.target;
       if (target instanceof HTMLInputElement && target.matches("[data-my-work-step-title]")) {
         saveMyWorkStepTitle(target);
@@ -15325,10 +15498,11 @@
         document.querySelector("[data-open-announcement-inbox]")?.focus({ preventScroll: true });
         return;
       }
-      if (event.key === "Enter" && event.target?.id === "my-work-title") {
+      if (event.key === "Enter" && !event.isComposing && event.target?.id === "my-work-title") {
         event.preventDefault();
         const title = event.target.value.trim();
         if (title) {
+          event.target.value = "";
           const task = {
             id: `task-${Date.now()}`,
             title,

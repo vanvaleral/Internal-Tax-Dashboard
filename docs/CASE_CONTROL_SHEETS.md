@@ -32,9 +32,13 @@ When Archived Cases is open, its restore list has a bounded native scroll region
 alongside the remaining active-sheet space; it cannot push the whole frame down.
 The layout class is removed when navigating out of Cases, without changing Clients
 or other workspaces. No wheel handlers, scroll corrections, data mutations or
-database migration are involved. Mobile keeps its existing responsive layout;
-very short desktop windows (480px or less, including extreme zoom) use natural
-page scrolling so every control remains reachable.
+database migration are involved. At 600px or narrower, a single toolbar contains
+a section picker with counts, Add Case where applicable, and a More button for
+secondary actions. The same spreadsheet fields are arranged into cards.
+Each card shows key references and PICs; opening it reveals the other fields and
+timeline. Sort controls remain available above the cards. The page scrolls
+naturally, including in full-screen Cases. Very short desktop windows (480px
+or less, including extreme zoom) also use natural page scrolling.
 
 ## Interaction
 
@@ -317,5 +321,9 @@ Local regression tests verify reduced requests/repaints, not a guaranteed live
 under-one-second database response. No hosting-plan or region change is made.
 
 Regression coverage: `tests/case-control-sheet.test.ts` exercises rendering,
+including phone cards where the taxpayer name is the expand button. The collapsed
+card previews its main fields without opening an editor; expanding it reveals
+the existing controls and timeline without creating a separate case record.
+Other regression checks cover
 combined filters, sorting/reset, keyboard navigation, role restrictions,
 confirmed saves, conflict rollback, background refresh and new-client linkage.

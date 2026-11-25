@@ -40,6 +40,18 @@ async function dashboard(saved:any={},account="sort-user",mobile=false,reducedMo
   return {dom,w,writes,warnings,tasks,ids,row,move,savedUi,api:w.__workOrderTest};
 }
 
+test("phone task list offers the inline composer and keeps its draft through a refresh",async()=>{
+  const d=await dashboard({},"phone-composer",true);
+  try {
+    const doc=d.w.document;
+    assert.equal(doc.querySelector(".my-work-phone-add"),null);
+    doc.querySelector(".my-work-composer #my-work-title").value="Follow up with client";
+    d.api.renderMyWork();
+    assert.equal(doc.querySelector("#my-work-title").value,"Follow up with client");
+    assert.equal(d.writes.length,0);
+  } finally {d.dom.window.close();}
+});
+
 test("task titles are native controls, keyboard opening focuses details, and navigation avoids unrelated renders",async()=>{
   const d=await dashboard();try{
     const button=d.row("a").querySelector(".my-work-open-task");assert.equal(button.tagName,"BUTTON");assert.equal(button.textContent,"Task a");
@@ -234,6 +246,20 @@ test("starring without manual ordering keeps favorites-first defaults and comple
     d.row("completed-favorite").querySelector('[data-toggle-my-work-star="completed-favorite"]').click();await tick();
     assert.deepEqual(d.ids(),before);assert.equal(d.tasks.find(task=>task.id==="completed-favorite").done,true);
     assert.match(d.row("completed-favorite").parentElement.dataset.myWorkSortGroup,/^completed:/);assert.deepEqual(d.warnings,[]);
+  }finally{d.dom.window.close();}
+});
+
+test("Completed is visible only while the current list has finished tasks",async()=>{
+  const d=await dashboard();try{
+    const completedToggle=()=>d.w.document.querySelector("[data-toggle-my-work-completed]");
+    assert.equal(completedToggle(),null);
+    d.row("a").querySelector('[data-my-work-done="a"]').click();
+    await tick();
+    assert.equal(completedToggle().querySelector(".my-work-section-count").textContent,"1");
+    d.row("a").querySelector('[data-my-work-done="a"]').click();
+    await tick();
+    assert.equal(completedToggle(),null);
+    assert.ok(d.ids().includes("a"));
   }finally{d.dom.window.close();}
 });
 
